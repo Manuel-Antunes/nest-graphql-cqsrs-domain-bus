@@ -1,5 +1,6 @@
-import { EventBus, type IQueryHandler, ofType, QueryHandler } from '@nestjs/cqrs';
+import { EventBus, ofType } from '@nestjs/cqrs';
 import type { Observable } from 'rxjs';
+import { type ISubscriptionHandler, SubscriptionHandler } from '../../../cqsrs';
 import { PostCreatedEvent } from '../../../domain/post/event/post-created.event';
 import { OnPostCreatedSubscription } from './on-post-created.subscription';
 
@@ -11,14 +12,14 @@ import { OnPostCreatedSubscription } from './on-post-created.subscription';
  * é o operador que o próprio pacote exporta para as sagas. Nenhum emitter novo, nenhum PubSub: a
  * subscription GraphQL ouve o mesmo stream que o resto da aplicação.
  *
- * Como o `QueryBus.execute` faz `await handler.execute(query)` e um `Observable` não é *thenable*,
- * o resultado chega inteiro do outro lado — sem ser assinado.
+ * O handler devolve o `Observable` e acaba aqui: quem aplica o critério do assinante, compartilha o
+ * stream entre assinantes iguais e desliga tudo quando o último sai é o `SubscriptionBus`.
  */
-@QueryHandler(OnPostCreatedSubscription)
-export class OnPostCreatedSubscriptionHandler implements IQueryHandler<OnPostCreatedSubscription> {
+@SubscriptionHandler(OnPostCreatedSubscription)
+export class OnPostCreatedSubscriptionHandler implements ISubscriptionHandler<OnPostCreatedSubscription> {
   constructor(private readonly eventBus: EventBus) {}
 
-  async execute(): Promise<Observable<PostCreatedEvent>> {
+  subscribe(): Observable<PostCreatedEvent> {
     return this.eventBus.pipe(ofType(PostCreatedEvent));
   }
 }

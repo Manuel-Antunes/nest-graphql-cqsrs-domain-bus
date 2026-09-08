@@ -2,7 +2,17 @@
 
 POC: **NestJS 12** + **@nestjs/cqrs 12** + **MikroORM 7** + **@nestjs/graphql 14 (Apollo)** com subscriptions GraphQL alimentadas **pelo próprio `EventBus` do CQRS**, numa API DDD de posts e tags. É a reescrita em TypeScript do [axon-graphql-posts](https://github.com/Manuel-Antunes/axon-graphql-posts) (Axon Framework 5 + Reactor + Spring GraphQL), com a mesma estrutura e o mesmo schema.
 
-A ideia central: o `EventBus` do @nestjs/cqrs **é um `Observable`** do RxJS (um `Subject` por baixo) — o mesmo objeto em que os event handlers e as sagas se inscrevem. Uma subscription GraphQL é, no fundo, "devolva um async iterator". Então uma *subscription* é uma *query* cujo resultado é o `EventBus` filtrado por `ofType(...)`, e a única cola necessária é transformar esse `Observable` em `AsyncIterator`. O filtro por tópico (`onPostUpdated(postId)`) é o [`filter` nativo do `@Subscription`](https://docs.nestjs.com/graphql/subscriptions#filtering-subscriptions), avaliado por assinante.
+A ideia central: o `EventBus` do @nestjs/cqrs **é um `Observable`** do RxJS (um `Subject` por baixo) — o mesmo objeto em que os event handlers e as sagas se inscrevem. Uma subscription GraphQL é, no fundo, "devolva um async iterator". Então basta ligar um ao outro.
+
+Em cima disso, o projeto acrescenta a peça que o @nestjs/cqrs não tem: **CQSRS — Command, Query, *Subscription* Responsibility Segregation** (`src/cqsrs`). Um bus próprio para a terceira mensagem, com `subscribe` no lugar de `execute`:
+
+| | mensagem | decorator | handler | bus | resultado |
+|---|---|---|---|---|---|
+| command | `Command<T>` | `@CommandHandler` | `execute` | `CommandBus` | `Promise<T>` |
+| query | `Query<T>` | `@QueryHandler` | `execute` | `QueryBus` | `Promise<T>` |
+| **subscription** | **`Subscription<TEvent, TCriteria>`** | **`@SubscriptionHandler`** | **`subscribe`** | **`SubscriptionBus`** | **`Observable<TEvent>`** |
+
+E o filtro é da mensagem, não do transporte: toda `Subscription` tem um método `filter(event)`, e o critério que ele lê (`{ postId }`) **é também a chave** pela qual o bus acha o stream — dois assinantes de `onPostUpdated(postId: X)` recebem o mesmo `Observable` e custam **uma** inscrição no `EventBus`.
 
 Estado em **SQLite** via MikroORM; event store em memória (o próprio `EventBus`).
 
@@ -17,16 +27,21 @@ mutation createPost(input) ──► PostInputMapper.toCreateCommand(input)     
                      └─► post.commit()      [publica os eventos não-commitados no EventBus — DEPOIS de salvar]
                               │
                               ▼
-                  EventBus (Subject do RxJS) ── ofType(PostCreatedEvent) ──┬─► OnPostCreatedSubscriptionHandler
+                  EventBus (Subject do RxJS) ── ofType(PostCreatedEvent) ──┬─► OnPostCreatedSubscriptionHandler.subscribe()
                      │                                                    │      └─► PostView do payload ──► onPostCreated
                      │                                                    └─► AssignDefaultTagOnPostCreated (@Saga)
                      │                                                           ├─► tag "Untagged" no banco? não ──► CommandBus.execute(CreateTagCommand)
                      │                                                           └─► emite AssignTagToPostCommand ──► EventBus o executa
                      │                                                                    └─► Post.assignTag(...) ──► PostUpdatedEvent (com a tag)
-                     └── ofType(PostUpdatedEvent) ──► OnPostUpdatedSubscriptionHandler ──► PostView do payload
+                     └── ofType(PostUpdatedEvent) ──► OnPostUpdatedSubscriptionHandler.subscribe()
                                                                     │
                                                                     ▼
-                  PostSubscriptionResolver: observableToAsyncIterable(stream) ──► @Subscription({ filter, resolve })
+                  SubscriptionBus: filter(event) da própria mensagem + share por chave (id + critério)
+                                   um stream por critério; desliga quando o último assinante sai
+                                                                    │
+                                                                    ▼
+                  PostSubscriptionResolver: subscribeAsAsyncIterable(bus, new OnPostUpdatedSubscription({ postId }),
+                                                                     evento => PostView)  ──► @Subscription({ resolve })
                                                                     │
                                                                     ▼
                   Apollo ──► graphql-ws (WebSocket em /graphql) ──► { "data": { "onPostUpdated": { ... } } }
@@ -50,6 +65,7 @@ mutation createPost(input) ──► PostInputMapper.toCreateCommand(input)     
 As mesmas três regras da versão Java, e os mesmos três diretórios de raiz agrupados por papel:
 
 1. **Uma classe por handler.** Cada command, query e subscription tem a sua classe de handler, ao lado da mensagem que ela trata.
+4. **O filtro é da mensagem.** Quem pede uma subscription monta o *critério*; quem escreve a subscription decide o que ele *quer dizer*. O `filter` mora na classe da mensagem, na camada de aplicação — a interface nunca peneira stream.
 2. **O domínio dispara, a aplicação ouve.** Os eventos vivem em `domain/*/event`; quem os dispara são as entidades, por `apply(...)`. Quem os ouve mora em `application/post/event` (a saga) e `application/post/subscription` (as subscriptions).
 3. **O command decide e salva; o evento notifica e orquestra.** O handler chama o domínio, grava a entidade e só então faz `commit()`. A saga não grava nada: despacha commands.
 
@@ -86,15 +102,28 @@ src
 │   │   ├── command/create-post, update-post, assign-tag-to-post   (.command + .handler cada)
 │   │   ├── event/assign-default-tag-on-post-created.saga           # OUVE PostCreated, despacha commands
 │   │   ├── query/find-post, find-all-posts                        (.query + .handler cada)
-│   │   └── subscription/on-post-created, on-post-updated          # Query<Observable<evento>> + handler que liga ao EventBus
+│   │   └── subscription/on-post-created, on-post-updated          # Subscription<evento, critério> (com o filter)
+│   │                                                              #   + @SubscriptionHandler que liga ao EventBus
 │   └── tag/command/create-tag (.command + .handler)
 ├── infrastructure/persistence/sqlite            # escolhas de deploy; nenhuma regra de negócio
 │   ├── mikro-orm.config                         #   SQLite, ensureDatabase, POSTS_DB
 │   └── mikro-orm-post.repository, mikro-orm-tag.repository       # adapters das portas (findByCursor aqui)
-└── interfaces/graphql
-    ├── post-query.resolver, post-mutation.resolver, post-subscription.resolver
-    ├── post-tags.resolver                       #   campo Post.tags: cursor connection recortada em memória
-    └── observable-to-async-iterable             #   O helper. Observable → AsyncIterableIterator
+├── interfaces/graphql
+│   ├── post-query.resolver, post-mutation.resolver, post-subscription.resolver
+│   └── post-tags.resolver                       #   campo Post.tags: cursor connection recortada em memória
+│
+└── cqsrs                                        # CQSRS: a terceira mensagem. Não sabe o que é GraphQL
+    ├── cqsrs.module                             #   CqrsModule + SubscriptionBus, reexportando tudo
+    │                                            #   forRoot e forRootAsync (as 4 formas do Nest)
+    ├── subscription-bus                         #   subscribe(): acha o handler, aplica o filter, compartilha por chave
+    ├── classes/subscription                     #   Subscription<TEvent, TCriteria>: criteria (dado) + filter (regra) + key
+    ├── decorators/subscription-handler          #   @SubscriptionHandler(Sub) — as duas metadatas
+    ├── interfaces                               #   ISubscription, ISubscriptionHandler (subscribe → Observable), ISubscriptionBus…
+    ├── services/subscription-explorer           #   varre os providers no bootstrap, como o ExplorerService do cqrs
+    ├── exceptions                               #   handler não encontrado / handler inválido
+    └── helpers                                  #   subscription-key (o critério → chave estável)
+                                                 #   observable-to-async-iterable (Observable → AsyncIterableIterator)
+                                                 #   subscribe-as-async-iterable (o que um resolver chama)
 ```
 
 Schema gerado (code-first) em `schema.gql` na subida.
@@ -108,9 +137,9 @@ Schema gerado (code-first) em `schema.gql` na subida.
 | `@CommandHandler` em classe própria, `@InjectEntity Post` | `@CommandHandler(Cmd)` em classe própria; o handler carrega pelo repositório |
 | `ProcessingContext` por command (evento + linha commitam juntos) | `@CreateRequestContext()` do MikroORM: um fork do EntityManager por command; `flush` é a transação; `commit()` vem depois |
 | `@EventHandler` + `ProcessingContext.onAfterCommit(...)` despachando commands | `@Saga()`: `Observable<evento> → Observable<command>`, o `EventBus` executa o que sai |
-| `subscriptionQuery` + `QueryUpdateEmitter.emit(...)` | `Query<Observable<evento>>` cujo handler devolve `eventBus.pipe(ofType(Evento))` |
-| `Flux` no `@SubscriptionMapping` + SSE | `observableToAsyncIterable(stream)` no `@Subscription` + graphql-ws |
-| filtro por tópico avaliado no `emit` (`sub -> sub.matches(id)`) | `@Subscription({ filter: (payload, variables) => ... })` do @nestjs/graphql |
+| `subscriptionQuery` + `QueryUpdateEmitter.emit(...)` | `Subscription<Evento, Critério>` + `@SubscriptionHandler`; `subscriptionBus.subscribe(sub)` devolve `eventBus.pipe(ofType(Evento))` filtrado |
+| `Flux` no `@SubscriptionMapping` + SSE | `subscribeAsAsyncIterable(bus, sub, projeção)` no `@Subscription` + graphql-ws |
+| filtro por tópico avaliado no `emit` (`sub -> sub.matches(id)`) | `filter(event)` na própria `Subscription`, aplicado pelo bus dentro do stream — e o critério é a chave que compartilha o stream |
 | `ScrollSubrange` / `Window` do Spring Data | `em.findByCursor` do MikroORM: itens + `hasNextPage` + cursores prontos |
 | `@Embeddable record` com validação no construtor | schema Zod `.brand<'PostTitle'>()`: só o `parse` produz o tipo |
 | `@ElementCollection(LAZY)` + DataLoader | `p.embedded(TagRef).array()` — JSON na própria linha; não há N+1, não há DataLoader |
@@ -177,25 +206,49 @@ pnpm test:all
 ```
 
 - `post.entity.spec` / `tag.entity.spec` — domínio puro. O único colaborador é o próprio aggregate root: `getUncommittedEvents()` diz exatamente o que foi disparado, sem `EventPublisher`, sem `EventBus`, sem ORM. Os testes `the state returned by update is the same as sourcing the raised events` (via `loadFromHistory`) e `applying the same event twice leaves the same state` travam o contrato decidir/evoluir.
-- `create-post.handler.spec`, `update-post.handler.spec`, `assign-tag-to-post.handler.spec`, `create-tag.handler.spec` — um por handler, com `@nestjs/testing`. O fixture (`test/support/cqrs-testing-module.ts`) monta o `CqrsModule` de verdade, o MikroORM de verdade num SQLite em memória, os repositórios — e **só o handler do teste**, então uma dependência acidental entre dois deles quebra o teste. Não há repositório fake: como salvar é responsabilidade do command, o banco é quem prova que ele salvou, e um `RecordingEvents` pendurado no `EventBus` prova o que ele publicou.
+- `create-post.handler.spec`, `update-post.handler.spec`, `assign-tag-to-post.handler.spec`, `create-tag.handler.spec` — um por handler, com `@nestjs/testing`. O fixture (`test/support/cqrs-testing-module.ts`) monta o `CqsrsModule` de verdade, o MikroORM de verdade num SQLite em memória, os repositórios — e **só o handler do teste**, então uma dependência acidental entre dois deles quebra o teste. Não há repositório fake: como salvar é responsabilidade do command, o banco é quem prova que ele salvou, e um `RecordingEvents` pendurado no `EventBus` prova o que ele publicou.
 - `find-all-posts.handler.spec` — a mecânica da cursor connection de `posts`: a linha a mais que decide o `hasNextPage` nunca vaza, o `endCursor` de uma página é o `after` da seguinte.
 - `assign-default-tag-on-post-created.saga.spec` — a saga é uma função `Observable → Observable`: alimenta-se um `of(evento)` e colhem-se os commands. Cria a tag quando não existe, reusa quando existe, serializa dois posts criados ao mesmo tempo, e **sobrevive a uma falha** (sem o `catchError` por evento, o `EventBus` completaria o stream e nenhum post futuro ganharia tag).
 - `post-tags.resolver.spec` — o recorte em memória de `Post.tags`, que é a parte da connection que é lógica nossa.
-- `observable-to-async-iterable.spec` — o helper: entrega em ordem, `return()` cancela a inscrição **mesmo com um `next()` pendente**, erro propaga, um assinante GraphQL = uma inscrição no `EventBus`.
+- `subscription-bus.spec` — o `SubscriptionBus` num módulo Nest de verdade (`CqsrsModule.forRoot()`, explorer e tudo): roteia a mensagem para o seu `@SubscriptionHandler`, aplica o `filter` da mensagem dentro do stream, entrega **o mesmo `Observable`** para o mesmo critério (dois assinantes, uma inscrição no `EventBus`, o handler chamado uma vez só), separa critérios diferentes, desliga a fonte quando o último assinante sai e a religa sob demanda, e explode com `SubscriptionHandlerNotFoundException` quando ninguém trata a mensagem.
+- `cqsrs.module.spec` — o módulo: `forRootAsync` nas quatro formas (`useValue`, `useFactory` com `inject`, `useClass`, `useExisting`), as opções chegando **nos dois lados** (o `subscriptionPublisher` no `SubscriptionBus`, o `eventPublisher` no `EventBus` — prova de que o resto é repassado ao `CqrsModule`), a factory de quem chama rodando **uma vez só**, e o `@SubscriptionHandler` registrado no bootstrap também pelo caminho assíncrono.
+- `subscription-key.spec` — a chave: mesma coisa em qualquer ordem dá a mesma chave, `undefined` é o mesmo que ausente, `null` não é, arrays mantêm a ordem.
+- `on-post-updated.subscription.spec` — o filtro por tópico como o que ele é: regra de aplicação, testada sem subir bus nenhum.
+- `observable-to-async-iterable.spec` — o helper: entrega em ordem, `return()` cancela a inscrição **mesmo com um `next()` pendente**, erro propaga.
 - `domain-exception.filter.spec` — a tabela exceção → `extensions.code`.
-- `posts.e2e-spec` — o smoke test como teste: sobe o `AppModule` com SQLite em memória (`POSTS_DB` no `vitest.e2e.config.mts`), fala HTTP para queries/mutations e graphql-ws para subscriptions. Confere a ordem command → evento → entrega, a chegada da tag padrão por `onPostUpdated`, o filtro por tópico (o assinante filtrado vê só o seu post; o global vê tudo), os erros com código, as duas connections — e que desassinar tira o assinante do `EventBus` na hora, contando os `observers` do `Subject`.
+- `posts.e2e-spec` — o smoke test como teste: sobe o `AppModule` com SQLite em memória (`POSTS_DB` no `vitest.e2e.config.mts`), fala HTTP para queries/mutations e graphql-ws para subscriptions. Confere a ordem command → evento → entrega, a chegada da tag padrão por `onPostUpdated`, o filtro por tópico (o assinante filtrado vê só o seu post; o global vê tudo), os erros com código, as duas connections — que desassinar tira o assinante do `EventBus` na hora, contando os `observers` do `Subject`, e que **dois assinantes do mesmo tópico compartilham um stream só**: o `EventBus` não passa de um assinante, os dois recebem o mesmo payload, e a fonte só cai quando o segundo sai.
 
 ## Decisões que valem comentar
 
-**O `EventBus` é o emitter.** Não há `PubSub` do `graphql-subscriptions`, não há `Subject` novo, não há `@EventsHandler` que "emite" para as subscriptions. `ObservableBus` estende `Observable`, e `ofType` é o operador que o próprio @nestjs/cqrs exporta para as sagas. Uma subscription GraphQL ouve o mesmo stream que a saga da tag padrão. Cada assinante GraphQL é exatamente um `subscribe` no `Subject` — o e2e prova isso contando `eventBus.subject$.observers`.
+**O `EventBus` é o emitter.** Não há `PubSub` do `graphql-subscriptions`, não há `Subject` novo, não há `@EventsHandler` que "emite" para as subscriptions. `ObservableBus` estende `Observable`, e `ofType` é o operador que o próprio @nestjs/cqrs exporta para as sagas. Uma subscription GraphQL ouve o mesmo stream que a saga da tag padrão. Cada *stream* do `SubscriptionBus` é exatamente um `subscribe` no `Subject` — o e2e prova isso contando `eventBus.subject$.observers`.
 
-**Subscription é uma query cujo resultado é um stream.** No Axon era uma *subscription query* devolvendo `Flux`. Aqui `OnPostUpdatedSubscription` estende `Query<Observable<PostUpdatedEvent>>` e o handler devolve `this.eventBus.pipe(ofType(PostUpdatedEvent))`. Funciona porque `QueryBus.execute` faz `await handler.execute(query)`, e um `Observable` não é *thenable* — chega inteiro do outro lado. Decidir quais eventos alimentam qual subscription é regra da aplicação; a interface só converte o stream para o transporte.
+**Subscription é uma mensagem própria, não uma query.** A primeira versão modelava subscription como query: `OnPostUpdatedSubscription extends Query<Observable<PostUpdatedEvent>>`, e o `QueryBus.execute` devolvia o `Observable` inteiro porque um `Observable` não é *thenable* — `await` de um não-thenable devolve ele mesmo. Funcionava, mas por acidente: o contrato dizia "uma resposta e acabou" (`Promise<T>`) enquanto o valor era "um stream que fica aberto". E `execute` não é o verbo de quem se inscreve.
 
-**Um helper, e por que ele existe.** `observableToAsyncIterable` é o único código de cola do projeto. A primeira versão era um `ReadableStream` do Node (async-iterável por natureza, dez linhas) — e vazava assinantes: `ReadableStream`, `stream.Readable` e `async function*` **serializam `return()` atrás de um `next()` pendente**. Uma subscription GraphQL passa a vida esperando o próximo evento; quando o cliente desconecta, o graphql-js chama `return()`, que só resolveria no próximo evento. Até lá o assinante continuava vivo no `EventBus`. Um iterador com fila explícita resolve os `next()` pendentes com `done: true` na hora — é a mesma mecânica do `PubSubAsyncIterableIterator` do `graphql-subscriptions`, ligada a um `Observable` em vez de a um PubSub.
+Daí o `src/cqsrs`: `Subscription<TEvent, TCriteria>`, `@SubscriptionHandler`, `ISubscriptionHandler` com `subscribe(): Observable<TEvent>` e um `SubscriptionBus` com a mesma anatomia do `QueryBus` (um `Map` de handlers por id de mensagem, um publisher, um explorer que varre os providers no bootstrap) mais o que só um stream precisa: um `Map` do que está no ar. Decidir quais eventos alimentam qual subscription continua sendo regra da aplicação; a interface só converte o stream para o transporte.
 
-**O `filter` do `@Subscription` é o filtro por tópico.** `onPostUpdated(postId)` não filtra o `Observable`: ele é o mesmo para todos. O filtro é a opção `filter` do decorator, que recebe o payload e as variáveis **daquele assinante**. O Apollo driver do Nest o aplica com o `createAsyncIterator` do @nestjs/graphql, que chama `next()`/`return()` direto no iterador — por isso o resolver devolve um `AsyncIterableIterator` (iterator que também é iterable) e não só um iterable. `resolve: (payload) => payload` diz ao graphql-js que o payload é o valor, em vez de procurar `payload.onPostUpdated`.
+**Uma factory, não duas.** `CqsrsModule.forRootAsync` tem um problema que o `forRoot` não tem: as opções servem a dois módulos — o `CqsrsModule` (que só quer o `subscriptionPublisher`) e o `CqrsModule` embaixo (que quer todo o resto). O caminho ingênuo é passar as `CqsrsModuleAsyncOptions` para os dois, e aí a `useFactory` de quem chamou roda **duas vezes** — o que é no mínimo surpreendente, e no pior caso abre duas conexões. A saída é resolver as opções num módulo só (`CqsrsOptionsModule`, que as exporta pelo token `CQSRS_MODULE_OPTIONS`) e dar ao `CqrsModule.forRootAsync` uma factory que apenas repassa o que já foi resolvido. O mesmo objeto de módulo dinâmico entra nas duas listas de `imports`: o Nest identifica um módulo dinâmico pelo par (classe, metadata), então as duas referências são o mesmo módulo, com uma instância só. O `cqsrs.module.spec` trava isso contando as chamadas.
 
-**Por que Apollo, e não Mercurius.** A POC começou com Mercurius (Fastify), e tudo funcionava — inclusive o filtro. A diferença apareceu no desassinar: o `withFilter` do Mercurius é um `async function*` com `yield*`, e um async generator só processa `return()` depois que o `next()` pendente resolve. Um assinante filtrado que desconectava ficava pendurado no `EventBus` até o próximo `PostUpdatedEvent`. O `withFilter` do caminho Apollo é um iterador explícito; a inscrição cai na hora. Para uma POC sobre subscriptions, a limpeza imediata pesou mais que o Fastify.
+**O `SubscriptionBus` não é um `ObservableBus`.** Os três buses do @nestjs/cqrs *são* `Observable`s das mensagens que passam por eles. Este não pode ser: `ObservableBus` estende `Observable`, e `Observable` já tem um `subscribe` — que quer dizer outra coisa. Duas coisas diferentes não cabem no mesmo nome, e `subscribe(subscription)` é o método que dá sentido ao bus. O `Subject` continua lá, exposto como `subscriptions$` — mesmo stream, nome que não mente.
+
+**A cola entre push e pull, e por que ela existe.** `observableToAsyncIterable` é o que separa o CQSRS do transporte: o bus fala RxJS, o graphql-js quer um async iterator. A primeira versão era um `ReadableStream` do Node (async-iterável por natureza, dez linhas) — e vazava assinantes: `ReadableStream`, `stream.Readable` e `async function*` **serializam `return()` atrás de um `next()` pendente**. Uma subscription GraphQL passa a vida esperando o próximo evento; quando o cliente desconecta, o graphql-js chama `return()`, que só resolveria no próximo evento. Até lá o assinante continuava vivo no `EventBus`. Um iterador com fila explícita resolve os `next()` pendentes com `done: true` na hora — é a mesma mecânica do `PubSubAsyncIterableIterator` do `graphql-subscriptions`, ligada a um `Observable` em vez de a um PubSub.
+
+**O filtro é da mensagem, e o filtro é a chave.** `onPostUpdated(postId)` era o `filter` do `@Subscription` do @nestjs/graphql: o `Observable` era o mesmo para todos e o transporte peneirava por assinante. Agora o filtro é um método da própria mensagem, na camada de aplicação:
+
+```ts
+export class OnPostUpdatedSubscription extends Subscription<PostUpdatedEvent, { postId?: string | null }> {
+  override filter(event: PostUpdatedEvent): boolean {
+    return !this.criteria.postId || event.postId === this.criteria.postId;
+  }
+}
+```
+
+Uma subscription tem duas metades, e as duas são regra de aplicação: o **critério** (o dado — quais eventos interessam), que quem pede monta com os argumentos do protocolo, e o **filtro** (a regra — o que aquele critério quer dizer), que a aplicação escreve ao lado da mensagem. A interface diz *o quê*, a aplicação decide *como*, e o bus aplica sem saber nada do domínio: ele só chama `subscription.filter(event)`.
+
+O ganho de ter isso na mensagem é o `key`: o critério serializado de forma estável **é** a identidade do pedido. Dois assinantes de `onPostUpdated(postId: X)` pedem literalmente a mesma coisa, então recebem o mesmo `Observable` — o filtro roda uma vez para os dois e o `EventBus` enxerga um assinante só. É a diferença entre O(assinantes) e O(critérios distintos) de trabalho por evento. O `share({ resetOnRefCountZero: true })` fecha o ciclo: quando o último assinante de um critério sai, a inscrição na fonte cai junto, e o mapa do que está no ar se limpa sozinho (`finalize` tira a entrada, `defer` a repõe se alguém reassinar).
+
+`resolve: (payload) => payload` continua lá: diz ao graphql-js que o payload **é** o valor, em vez de procurar `payload.onPostUpdated`. E o resolver devolve um `AsyncIterableIterator` (iterator que também é iterable) porque um wrapper como o `withFilter` chama `next()`/`return()` direto no que o resolver devolveu, enquanto o graphql-js pede o `[Symbol.asyncIterator]()`.
+
+**Por que Apollo, e não Mercurius.** A POC começou com Mercurius (Fastify), e tudo funcionava — inclusive o filtro, que na época era o do `@Subscription`. A diferença apareceu no desassinar: o `withFilter` do Mercurius é um `async function*` com `yield*`, e um async generator só processa `return()` depois que o `next()` pendente resolve. Um assinante filtrado que desconectava ficava pendurado no `EventBus` até o próximo `PostUpdatedEvent`. O `withFilter` do caminho Apollo é um iterador explícito; a inscrição cai na hora. Para uma POC sobre subscriptions, a limpeza imediata pesou mais que o Fastify.
 
 **Uma classe por entidade, e o mixin no lugar certo.** `Post` é a entidade de domínio, o aggregate root do @nestjs/cqrs e o mapeamento do MikroORM (`PostSchema = defineEntity({ class: Post, ... })`), numa classe só. A base é `AggregateEntity = WithAggregateRoot(BaseEntity)`: a entidade já precisa herdar do `BaseEntity` do ORM, então `extends AggregateRoot` não serve — é exatamente o cenário para o qual o mixin existe. Uma constante compartilhada, e não um `WithAggregateRoot(...)` por entidade, porque o MikroORM descobre a classe-pai de cada entidade como entidade abstrata, e duas classes anônimas de nome `AggregateRoot` seriam ambíguas para ele. (Tentei antes `class Post extends WithAggregateRoot(PostSchema.class)` com `setClass`: a classe intermediária do mixin entra na cadeia de protótipos e a descoberta do ORM entra em loop — `Post extends AggregateRoot extends Post`.)
 
@@ -229,7 +282,8 @@ pnpm test:all
 
 ## Próximos passos possíveis
 
-- Event store de verdade: trocar o `DefaultPubSub` do `CqrsModule` por um `IEventPublisher` que apende antes de publicar (`CqrsModuleOptions.eventPublisher`), e `loadFromHistory` no repositório — o domínio já suporta replay.
+- Event store de verdade: trocar o `DefaultPubSub` por um `IEventPublisher` que apende antes de publicar (`eventPublisher` nas opções do `CqsrsModule`, repassadas ao `CqrsModule`), e `loadFromHistory` no repositório — o domínio já suporta replay.
+- Subscriptions entre processos: o `SubscriptionBus` já compartilha stream por chave dentro do processo; com mais de uma instância, o passo é um handler que ligue a mensagem a um stream distribuído (Redis, NATS) em vez do `EventBus` local — nada além do handler muda.
 - Mutations de tag (`createTag`, `assignTag`, `removeTag`) — command e agregado já existem; falta o `@Mutation`.
 - Projeção nos event handlers (tirar o `save` do command) para recuperar o read model derivado do stream.
 - Backpressure no helper (descartar ou limitar a fila) para assinantes lentos.

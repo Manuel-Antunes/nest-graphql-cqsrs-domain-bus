@@ -1,7 +1,6 @@
 import { MikroOrmModule } from '@mikro-orm/nestjs';
 import { Module } from '@nestjs/common';
 import { APP_FILTER } from '@nestjs/core';
-import { CqrsModule } from '@nestjs/cqrs';
 import { GraphQLModule } from '@nestjs/graphql';
 import { ApolloDriver, type ApolloDriverConfig } from '@nestjs/apollo';
 import { join } from 'node:path';
@@ -14,6 +13,7 @@ import { FindPostQueryHandler } from './application/post/query/find-post.handler
 import { OnPostCreatedSubscriptionHandler } from './application/post/subscription/on-post-created.handler';
 import { OnPostUpdatedSubscriptionHandler } from './application/post/subscription/on-post-updated.handler';
 import { CreateTagCommandHandler } from './application/tag/command/create-tag.handler';
+import { CqsrsModule } from './cqsrs';
 import { PostRepository } from './domain/post/post.repository';
 import { TagRepository } from './domain/tag/tag.repository';
 import { DomainExceptionFilter } from './exceptions/domain-exception.filter';
@@ -59,15 +59,16 @@ export const interfaceProviders = [
  * Um módulo só, com as camadas nos diretórios — a POC é pequena o bastante para isso. Os três
  * `forRoot` são as três peças de framework que o projeto integra:
  *
- * - `CqrsModule`: `CommandBus`, `QueryBus`, `EventBus` (o `Observable` que alimenta as subscriptions),
- *   `EventPublisher` e o registro de handlers e sagas;
+ * - `CqsrsModule`: o `CqrsModule` do Nest (`CommandBus`, `QueryBus`, `EventBus` — o `Observable` que
+ *   alimenta as subscriptions —, `EventPublisher` e o registro de handlers e sagas) **mais** o
+ *   `SubscriptionBus`, a terceira mensagem e o registro dos `@SubscriptionHandler`;
  * - `MikroOrmModule`: o ORM e o middleware que abre um contexto (fork do EntityManager) por request;
  * - `GraphQLModule` com o driver Apollo: schema code-first gerado dos decorators e subscriptions
  *   sobre WebSocket em `/graphql`, pelo protocolo graphql-ws.
  */
 @Module({
   imports: [
-    CqrsModule.forRoot(),
+    CqsrsModule.forRoot(),
     MikroOrmModule.forRoot(mikroOrmConfig()),
     GraphQLModule.forRoot<ApolloDriverConfig>({
       driver: ApolloDriver,

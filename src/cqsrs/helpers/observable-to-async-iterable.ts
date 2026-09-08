@@ -1,9 +1,10 @@
 import type { Observable, Subscription } from 'rxjs';
 
 /**
- * `Observable<T>` → `AsyncIterableIterator<T>`: a ponte entre o RxJS (o que o `EventBus` do
- * @nestjs/cqrs fala) e o graphql-js (que consome uma subscription como *async iterator*). O único
- * "helper" do projeto.
+ * `Observable<T>` → `AsyncIterableIterator<T>`: a ponte entre o RxJS (o que o `EventBus` e o
+ * `SubscriptionBus` falam) e um consumidor *pull*, como o graphql-js — que consome uma subscription
+ * como *async iterator*. É o que separa o CQSRS do transporte: o bus não sabe o que é GraphQL, e o
+ * resolver não sabe o que é RxJS.
  *
  * ## Por que não um `ReadableStream`, um `Readable` ou um `async function*`
  * Todos os três são async-iteráveis por natureza, mas **serializam `return()` atrás de um `next()`
@@ -15,14 +16,15 @@ import type { Observable, Subscription } from 'rxjs';
  * `graphql-subscriptions`, só que ligada a um Observable em vez de a um PubSub.
  *
  * ## Ciclo de vida
- * - a inscrição no Observable acontece aqui, na criação — o resolver de subscription é chamado uma
- *   vez por assinante GraphQL, então cada assinante é exatamente um assinante do `EventBus`;
+ * - a inscrição no Observable acontece aqui, na criação — o resolver é chamado uma vez por assinante
+ *   GraphQL, então cada assinante é exatamente uma inscrição no stream que o `SubscriptionBus` deu
+ *   (quantas inscrições *no `EventBus`* isso vira é decisão do bus, que compartilha por chave);
  * - `next`/`error`/`complete` do Observable alimentam a fila (ou atendem um `next()` que já espera);
  * - `return()` (cliente desconectou) e `throw()` cancelam a inscrição. Nada vaza.
  *
- * É um *iterator* que também é *iterable* (`[Symbol.asyncIterator]` devolve ele mesmo), porque o
- * `filter` do @nestjs/graphql chama `next()` direto no que o resolver devolveu, enquanto o graphql-js
- * sem filtro pede o `[Symbol.asyncIterator]()`.
+ * É um *iterator* que também é *iterable* (`[Symbol.asyncIterator]` devolve ele mesmo): o graphql-js
+ * pede o `[Symbol.asyncIterator]()`, e um wrapper como o `withFilter` chama `next()` direto no que o
+ * resolver devolveu. Os dois caminham sobre a mesma inscrição.
  *
  * Não há backpressure de verdade (o `EventBus` é push; a fila cresce), o mesmo contrato do PubSub em
  * memória — e o suficiente para uma POC.

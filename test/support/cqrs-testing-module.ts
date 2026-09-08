@@ -1,8 +1,9 @@
 import { EntityManager, MikroORM } from '@mikro-orm/core';
 import { MikroOrmModule } from '@mikro-orm/nestjs';
 import type { Provider } from '@nestjs/common';
-import { CqrsModule, EventBus, type IEvent } from '@nestjs/cqrs';
+import { EventBus, type IEvent } from '@nestjs/cqrs';
 import { Test, type TestingModule } from '@nestjs/testing';
+import { CqsrsModule } from '../../src/cqsrs';
 import { PostRepository } from '../../src/domain/post/post.repository';
 import { TagRepository } from '../../src/domain/tag/tag.repository';
 import { MikroOrmPostRepository } from '../../src/infrastructure/persistence/sqlite/mikro-orm-post.repository';
@@ -10,8 +11,9 @@ import { MikroOrmTagRepository } from '../../src/infrastructure/persistence/sqli
 import { mikroOrmConfig } from '../../src/infrastructure/persistence/sqlite/mikro-orm.config';
 
 /**
- * O "fixture" dos testes de handler: o `CqrsModule` de verdade (buses, `EventPublisher`), o MikroORM
- * de verdade num SQLite em memória, os dois repositórios — e **só os providers que o teste pede**.
+ * O "fixture" dos testes de handler: o `CqsrsModule` de verdade (os buses do @nestjs/cqrs, o
+ * `EventPublisher` e o `SubscriptionBus`), o MikroORM de verdade num SQLite em memória, os dois
+ * repositórios — e **só os providers que o teste pede**.
  * Cada teste monta só o handler que testa, então uma dependência acidental entre dois deles quebra o
  * teste. É o papel que o `AxonTestFixture` tinha na versão Java.
  *
@@ -20,7 +22,7 @@ import { mikroOrmConfig } from '../../src/infrastructure/persistence/sqlite/mikr
  */
 export async function createCqrsTestingModule(providers: Provider[]): Promise<TestingModule> {
   const module = await Test.createTestingModule({
-    imports: [CqrsModule.forRoot(), MikroOrmModule.forRoot(mikroOrmConfig(':memory:'))],
+    imports: [CqsrsModule.forRoot(), MikroOrmModule.forRoot(mikroOrmConfig(':memory:'))],
     providers: [
       ...providers,
       { provide: PostRepository, useClass: MikroOrmPostRepository },

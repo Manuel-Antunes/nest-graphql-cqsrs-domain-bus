@@ -2,6 +2,7 @@ import type { INestApplication } from '@nestjs/common';
 import { EventBus } from '@nestjs/cqrs';
 import { Test } from '@nestjs/testing';
 import { AppModule } from '../src/app.module';
+import { SubscriptionBus } from '../src/cqsrs';
 import { GraphqlClient, until } from './support/graphql-client';
 
 /**
@@ -14,8 +15,13 @@ describe('posts (e2e)', () => {
   let app: INestApplication;
   let client: GraphqlClient;
   let eventBus: EventBus;
-  /** Quantos assinantes o `EventBus` tem — cada subscription GraphQL ativa é exatamente um a mais. */
+  /**
+   * Quantos assinantes o `EventBus` tem. Cada *stream* do `SubscriptionBus` é exatamente um — o que
+   * não é o mesmo que cada assinante GraphQL: assinantes com o mesmo critério dividem um stream.
+   */
   const subscribers = () => eventBus.subject$.observers.length;
+  /** Cada `subscriptionBus.subscribe(...)` — ou seja, cada assinante GraphQL, compartilhando ou não. */
+  const asked: unknown[] = [];
 
   const POST_FIELDS = 'id title content author createdAt updatedAt version tags(first: 5) { edges { cursor node { id name } } pageInfo { hasNextPage } totalCount }';
   const createPost = async (title: string, content = 'oi', author = 'manuel') => {
@@ -49,6 +55,7 @@ describe('posts (e2e)', () => {
     await app.listen(0, '127.0.0.1');
     client = await GraphqlClient.for(app);
     eventBus = app.get(EventBus);
+    app.get(SubscriptionBus).subscriptions$.subscribe((subscription) => asked.push(subscription));
   });
 
   afterAll(async () => {
@@ -164,6 +171,35 @@ describe('posts (e2e)', () => {
       await all.release();
       await onlyA.release();
       expect(subscribers()).toBe(before);
+    });
+
+    it('two subscribers on the same topic share one stream, and one subscriber on the EventBus', async () => {
+      const post = await createPost('compartilhado');
+      const before = subscribers();
+      const askedBefore = asked.length;
+      const query = `subscription($postId: ID) { onPostUpdated(postId: $postId) { ${POST_FIELDS} } }`;
+
+      const first = client.subscribe<{ onPostUpdated: any }>(query, { postId: post.id });
+      await until(() => asked.length === askedBefore + 1);
+      expect(subscribers()).toBe(before + 1);
+      const second = client.subscribe<{ onPostUpdated: any }>(query, { postId: post.id });
+      await until(() => asked.length === askedBefore + 2);
+
+      // dois assinantes GraphQL, o mesmo critério: o `EventBus` continua enxergando um só
+      expect(subscribers()).toBe(before + 1);
+
+      await updatePost({ id: post.id, title: 'os dois veem' });
+      const [a] = await first.waitFor(1);
+      const [b] = await second.waitFor(1);
+      expect(a.onPostUpdated.title).toBe('os dois veem');
+      expect(b.onPostUpdated).toEqual(a.onPostUpdated);
+
+      // e o stream só é desligado quando o último dos dois sai
+      first.unsubscribe();
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      expect(subscribers()).toBe(before + 1);
+      second.unsubscribe();
+      await until(() => subscribers() === before);
     });
 
     it('unsubscribing removes the subscriber from the EventBus right away, filter or not', async () => {
