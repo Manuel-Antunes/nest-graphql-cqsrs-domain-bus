@@ -1,42 +1,46 @@
+import { CommandBus } from '@nestjs/cqrs';
 import type { TestingModule } from '@nestjs/testing';
 import { createCqrsTestingModule, freshEm, RecordingEvents } from '../../../../test/support/cqrs-testing-module';
-import { givenAPost, T0 } from '../../../../test/support/post-fixtures';
+import { givenAPost, givenATag, T0 } from '../../../../test/support/post-fixtures';
 import { PostUpdatedEvent } from '../../../domain/post/event/post-updated.event';
 import { InvalidPostException } from '../../../domain/post/exception/invalid-post.exception';
 import { PostNotFoundException } from '../../../domain/post/exception/post-not-found.exception';
 import { Post } from '../../../domain/post/post.entity';
 import { newPostId } from '../../../domain/post/vo/post-id';
+import { PostRequest } from '../../shared/post-request';
 import { UpdatePostCommand } from './update-post.command';
-import { UpdatePostCommandHandler } from './update-post.handler';
 
-describe('UpdatePostCommandHandler', () => {
+/** Request-scoped como todo command handler daqui: o caminho do teste é o `CommandBus`. */
+describe('UpdatePostCommand.Handler', () => {
   let module: TestingModule;
-  let handler: UpdatePostCommandHandler;
+  let commands: CommandBus;
   let events: RecordingEvents;
 
+  const execute = (command: UpdatePostCommand.UpdatePost) => commands.execute(command, new PostRequest(command.postId));
+
   beforeEach(async () => {
-    module = await createCqrsTestingModule([UpdatePostCommandHandler]);
-    handler = module.get(UpdatePostCommandHandler);
+    module = await createCqrsTestingModule([UpdatePostCommand.Handler]);
+    commands = module.get(CommandBus);
     events = new RecordingEvents(module);
   });
 
   afterEach(() => module.close());
 
   it('keeps untouched fields and publishes the resulting state', async () => {
-    const tag = { tagId: '5f7a1c7e-4d0b-4b7a-9e3c-1a2b3c4d5e6f', name: 'Untagged' };
+    const tag = await givenATag(module, 'Untagged');
     const post = await givenAPost(module, { tags: [tag] });
 
-    await handler.execute(new UpdatePostCommand(post.id, 'editado', null));
+    await execute(new UpdatePostCommand.UpdatePost(post.id, 'editado', null));
 
     expect(events.events).toEqual([
-      new PostUpdatedEvent(post.id, 'editado', 'oi', 'manuel', [tag], 3, T0, expect.any(Date)),
+      new PostUpdatedEvent(post.id, 'editado', 'oi', 'manuel', [{ tagId: tag.id, name: 'Untagged' }], 3, T0, expect.any(Date)),
     ]);
   });
 
   it('saves the post with the version bumped', async () => {
     const post = await givenAPost(module);
 
-    await handler.execute(new UpdatePostCommand(post.id, undefined, 'novo conteúdo'));
+    await execute(new UpdatePostCommand.UpdatePost(post.id, undefined, 'novo conteúdo'));
 
     const saved = await freshEm(module).findOneOrFail(Post, { id: post.id });
     expect(saved).toMatchObject({ title: 'Nest + GraphQL', content: 'novo conteúdo', version: 2 });
@@ -45,8 +49,8 @@ describe('UpdatePostCommandHandler', () => {
 
   it('reflects previous updates', async () => {
     const post = await givenAPost(module);
-    await handler.execute(new UpdatePostCommand(post.id, 'primeiro'));
-    await handler.execute(new UpdatePostCommand(post.id, 'segundo'));
+    await execute(new UpdatePostCommand.UpdatePost(post.id, 'primeiro'));
+    await execute(new UpdatePostCommand.UpdatePost(post.id, 'segundo'));
 
     const saved = await freshEm(module).findOneOrFail(Post, { id: post.id });
     expect(saved).toMatchObject({ title: 'segundo', version: 3 });
@@ -56,8 +60,8 @@ describe('UpdatePostCommandHandler', () => {
   it('rejects an update without changes and saves nothing', async () => {
     const post = await givenAPost(module);
 
-    await expect(handler.execute(new UpdatePostCommand(post.id))).rejects.toThrow(InvalidPostException);
-    await expect(handler.execute(new UpdatePostCommand(post.id, 'Nest + GraphQL', 'oi'))).rejects.toThrow(
+    await expect(execute(new UpdatePostCommand.UpdatePost(post.id))).rejects.toThrow(InvalidPostException);
+    await expect(execute(new UpdatePostCommand.UpdatePost(post.id, 'Nest + GraphQL', 'oi'))).rejects.toThrow(
       /update sem mudanças/,
     );
 
@@ -66,7 +70,7 @@ describe('UpdatePostCommandHandler', () => {
   });
 
   it('fails with PostNotFound when the post does not exist', async () => {
-    await expect(handler.execute(new UpdatePostCommand(newPostId(), 'x'))).rejects.toThrow(PostNotFoundException);
+    await expect(execute(new UpdatePostCommand.UpdatePost(newPostId(), 'x'))).rejects.toThrow(PostNotFoundException);
     expect(events.events).toEqual([]);
   });
 });

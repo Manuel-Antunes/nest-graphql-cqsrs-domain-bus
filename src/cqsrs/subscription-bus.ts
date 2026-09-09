@@ -155,7 +155,7 @@ export class SubscriptionBus<SubscriptionBase extends ISubscription = ISubscript
       return handler(subscription, asyncContext) as Observable<TEvent>;
     }).pipe(
       // O filtro da mensagem, antes do `share`: roda uma vez por stream, e não uma vez por assinante.
-      filter((event) => subscription.filter?.(event) ?? true),
+      filter((event) => subscription.match?.(event) ?? true),
       // Depois do `share` isto rodaria a cada assinante que sai; aqui roda quando o stream morre.
       finalize(() => {
         if (this.streams.get(key) === stream) {

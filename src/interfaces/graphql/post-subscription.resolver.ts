@@ -10,7 +10,7 @@ import { PostViewMapper } from '../../mapper/post-view.mapper';
  *
  * O resolver faz exatamente duas coisas, e as duas são tradução:
  *
- * 1. **argumentos do protocolo → critério da subscription** (`postId` → `new OnPostUpdatedSubscription({ postId })`);
+ * 1. **argumentos do protocolo → critério da subscription** (`postId` → `new OnPostUpdatedSubscription.OnPostUpdated({ postId })`);
  * 2. **evento do domínio → view do protocolo** (`PostUpdatedEvent` → `PostView`).
  *
  * O que ele não faz mais: filtrar. O filtro é o método da subscription, na camada de aplicação, e
@@ -35,7 +35,7 @@ export class PostSubscriptionResolver {
     resolve: (payload: PostView) => payload,
   })
   onPostCreated(): AsyncIterable<PostView> {
-    return subscribeAsAsyncIterable(this.subscriptionBus, new OnPostCreatedSubscription(), (event) =>
+    return subscribeAsAsyncIterable(this.subscriptionBus, new OnPostCreatedSubscription.OnPostCreated(), (event) =>
       this.viewMapper.fromCreatedEvent(event),
     );
   }
@@ -48,7 +48,7 @@ export class PostSubscriptionResolver {
   onPostUpdated(
     @Args('postId', { type: () => ID, nullable: true }) postId?: string | null,
   ): AsyncIterable<PostView> {
-    return subscribeAsAsyncIterable(this.subscriptionBus, new OnPostUpdatedSubscription({ postId }), (event) =>
+    return subscribeAsAsyncIterable(this.subscriptionBus, new OnPostUpdatedSubscription.OnPostUpdated({ postId }), (event) =>
       this.viewMapper.fromUpdatedEvent(event),
     );
   }

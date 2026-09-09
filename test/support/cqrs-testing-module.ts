@@ -41,12 +41,34 @@ export function freshEm(module: TestingModule): EntityManager {
 /** Grava eventos publicados no `EventBus` — o duplo de "quem ouve" para afirmar o que foi disparado. */
 export class RecordingEvents {
   readonly events: IEvent[] = [];
+  private readonly waiters: Array<() => void> = [];
 
   constructor(module: TestingModule) {
-    module.get(EventBus).subscribe((event) => this.events.push(event));
+    module.get(EventBus).subscribe((event) => {
+      this.events.push(event);
+      this.waiters.splice(0).forEach((wake) => wake());
+    });
   }
 
   ofType<T extends IEvent>(type: new (...args: never[]) => T): T[] {
     return this.events.filter((event): event is T => event instanceof type);
+  }
+
+  /**
+   * Espera até ter gravado `count` eventos. Para o que uma saga faz: o command devolve, e os eventos
+   * da cadeia que ele abriu chegam depois, no seu próprio tempo.
+   */
+  async waitFor(count: number, timeoutMs = 5000): Promise<IEvent[]> {
+    const deadline = Date.now() + timeoutMs;
+    while (this.events.length < count) {
+      if (Date.now() > deadline) {
+        throw new Error(`esperava ${count} eventos, gravei ${this.events.length}: ${this.events.map((e) => e.constructor.name)}`);
+      }
+      await new Promise<void>((resolve) => {
+        this.waiters.push(resolve);
+        setTimeout(resolve, 20);
+      });
+    }
+    return this.events;
   }
 }

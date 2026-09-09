@@ -7,7 +7,7 @@ import { PostView } from '../dto/graphql/post.view';
 /**
  * Domínio → `PostView` (domínio → protocolo). Três origens, um destino:
  *
- * - `fromPost`: a entidade, para queries e mutations;
+ * - `fromPost`: a entidade, para queries e mutations — exige `post.tags` populada (ver `PostRepository`);
  * - `fromCreatedEvent` / `fromUpdatedEvent`: o payload do evento, para as subscriptions — a view
  *   sai do que passou pelo `EventBus`, sem consultar o banco. `onPostCreated` publica sempre o post
  *   como ele nasceu (v1, sem tags); a tag padrão chega em seguida por `onPostUpdated`.
@@ -23,7 +23,7 @@ export class PostViewMapper {
       createdAt: post.createdAt,
       updatedAt: post.updatedAt,
       version: post.version,
-      tags: post.tags.map(({ tagId, name }) => ({ id: tagId, name })),
+      tags: post.tags.getItems().map((tag) => ({ id: tag.id, name: tag.name })),
     });
   }
 

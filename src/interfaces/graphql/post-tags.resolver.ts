@@ -1,6 +1,6 @@
 import { Cursor } from '@mikro-orm/core';
 import { Args, Int, Parent, ResolveField, Resolver } from '@nestjs/graphql';
-import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from '../../application/post/query/find-all-posts.query';
+import { FindAllPostsQuery } from '../../application/post/query/find-all-posts.query';
 import { TagConnection } from '../../dto/graphql/post.connection';
 import { PostView } from '../../dto/graphql/post.view';
 
@@ -26,7 +26,7 @@ export class PostTagsResolver {
     @Args('after', { type: () => String, nullable: true, description: 'Cursor da última tag já vista' })
     after?: string | null,
   ): TagConnection {
-    const limit = Math.min(Math.max(first ?? DEFAULT_PAGE_SIZE, 1), MAX_PAGE_SIZE);
+    const limit = Math.min(Math.max(first ?? FindAllPostsQuery.DEFAULT_PAGE_SIZE, 1), FindAllPostsQuery.MAX_PAGE_SIZE);
     const start = after ? Number(Cursor.decode(after)[0]) + 1 : 0;
     const edges = post.tags
       .slice(start, start + limit)

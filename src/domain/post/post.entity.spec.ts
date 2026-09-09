@@ -1,24 +1,53 @@
+import { MikroORM } from '@mikro-orm/core';
+import { defineConfig } from '@mikro-orm/sqlite';
+import { Tag, TagSchema } from '../tag/tag.entity';
+import { TagId } from '../tag/vo/tag-id';
 import { PostCreatedEvent } from './event/post-created.event';
 import { PostUpdatedEvent } from './event/post-updated.event';
 import { InvalidPostException } from './exception/invalid-post.exception';
-import { Post } from './post.entity';
+import { Post, PostSchema } from './post.entity';
 import { PostId } from './vo/post-id';
 
 /**
- * Domínio puro: nenhum Nest, nenhum ORM, nenhum bus. O único colaborador é o próprio aggregate root,
- * que guarda os eventos aplicados em `getUncommittedEvents()` — dá para afirmar exatamente o que foi
- * disparado sem `EventPublisher` nem `EventBus`.
+ * Domínio puro: nenhum Nest, nenhum bus, **nenhum banco**. O único colaborador é o próprio aggregate
+ * root, que guarda os eventos aplicados em `getUncommittedEvents()` — dá para afirmar exatamente o
+ * que foi disparado sem `EventPublisher` nem `EventBus`.
+ *
+ * O que mudou quando `Post.tags` virou uma relação: uma `Collection` não é uma estrutura de dados
+ * solta. Ela precisa saber a que propriedade do dono pertence, e descobre isso lendo a metadata do
+ * ORM (`Collection.property` → `wrap(owner).__meta`) — sem descoberta, qualquer `add`/`set` estoura
+ * `MetadataError`. Daí o `MikroORM.init` abaixo: ele existe **só para descobrir as entidades**. Sem
+ * `ensureDatabase`, nenhuma tabela é criada e nenhum dado é lido ou escrito — o SQLite em memória é
+ * um detalhe de que o driver precisa, não um banco que o teste use.
+ *
+ * É o preço da relação sobre o embeddable, e é o menor possível: `propagationOnPrototype: false` não
+ * serve, porque a flag é lida do config de um ORM **já inicializado** (`EntityHelper`) e não passa
+ * perto do getter que estoura.
  */
 describe('Post', () => {
+  let orm: MikroORM;
+
+  beforeAll(async () => {
+    orm = await MikroORM.init(defineConfig({ dbName: ':memory:', entities: [PostSchema, TagSchema] }));
+  });
+
+  afterAll(() => orm.close());
+
   const id = PostId.parse('0c1ee4d8-9b0d-4a8a-9d5f-2b1a5e7c3f10');
   const now = new Date('2026-09-08T12:00:00.000Z');
   const later = new Date('2026-09-08T12:05:00.000Z');
-  const tag = { tagId: '5f7a1c7e-4d0b-4b7a-9e3c-1a2b3c4d5e6f', name: 'Untagged' };
+  /** O agregado Tag em pessoa — é ele que `assignTag` recebe agora. */
+  const tag = () => Tag.create(TagId.parse('5f7a1c7e-4d0b-4b7a-9e3c-1a2b3c4d5e6f'), 'Untagged', now);
+  /** A mesma tag como ela atravessa o evento: primitivos, e só. */
+  const tagInEvent = { tagId: '5f7a1c7e-4d0b-4b7a-9e3c-1a2b3c4d5e6f', name: 'Untagged' };
 
   const aPost = () => Post.create(id, { title: 'Nest + GraphQL', content: 'oi', author: 'manuel' }, now);
-  /** O estado observável do Post, sem os internos do aggregate root nem o do ORM. */
+  /**
+   * O estado observável do Post, sem os internos do aggregate root nem o do ORM. As tags entram como
+   * **ids**: é o que a relação garante em qualquer caminho — do decide, do banco ou de um replay.
+   */
   const stateOf = ({ id, title, content, author, createdAt, updatedAt, version, tags }: Post) => ({
-    id, title, content, author, createdAt, updatedAt, version, tags,
+    id, title, content, author, createdAt, updatedAt, version, tags: tags.getIdentifiers(),
   });
 
   it('create normalizes, raises PostCreated and returns the post ready to save', () => {
@@ -32,8 +61,8 @@ describe('Post', () => {
       createdAt: now,
       updatedAt: now,
       version: 1,
-      tags: [],
     });
+    expect(post.hasNoTags()).toBe(true);
     expect(post.getUncommittedEvents()).toEqual([new PostCreatedEvent(id, 'Nest + GraphQL', 'oi', 'manuel', now)]);
   });
 
@@ -49,14 +78,15 @@ describe('Post', () => {
   });
 
   it('update raises PostUpdated with the resulting state and keeps the tags', () => {
-    const post = aPost().assignTag(tag, now);
+    const post = aPost().assignTag(tag(), now);
     post.uncommit();
 
     post.update({ title: 'editado' }, later);
 
-    expect(post).toMatchObject({ title: 'editado', content: 'oi', updatedAt: later, version: 3, tags: [tag] });
+    expect(post).toMatchObject({ title: 'editado', content: 'oi', updatedAt: later, version: 3 });
+    expect(post.tags.getIdentifiers()).toEqual([tagInEvent.tagId]);
     expect(post.getUncommittedEvents()).toEqual([
-      new PostUpdatedEvent(id, 'editado', 'oi', 'manuel', [tag], 3, now, later),
+      new PostUpdatedEvent(id, 'editado', 'oi', 'manuel', [tagInEvent], 3, now, later),
     ]);
   });
 
@@ -89,26 +119,26 @@ describe('Post', () => {
     const post = aPost();
     post.uncommit();
 
-    post.assignTag(tag, later);
+    post.assignTag(tag(), later);
 
-    expect(post.hasTag(tag.tagId)).toBe(true);
+    expect(post.hasTag(tagInEvent.tagId)).toBe(true);
     expect(post.hasNoTags()).toBe(false);
     expect(post.getUncommittedEvents()).toEqual([
-      new PostUpdatedEvent(id, 'Nest + GraphQL', 'oi', 'manuel', [tag], 2, now, later),
+      new PostUpdatedEvent(id, 'Nest + GraphQL', 'oi', 'manuel', [tagInEvent], 2, now, later),
     ]);
   });
 
   it('assigning the same tag twice is rejected', () => {
-    const post = aPost().assignTag(tag, later);
+    const post = aPost().assignTag(tag(), later);
     post.uncommit();
 
-    expect(() => post.assignTag(tag, later)).toThrow(/já tem a tag Untagged/);
+    expect(() => post.assignTag(tag(), later)).toThrow(/já tem a tag Untagged/);
     expect(post.getUncommittedEvents()).toEqual([]);
     expect(post.version).toBe(2);
   });
 
   it('the state returned by update is the same as sourcing the raised events', () => {
-    const decided = aPost().assignTag(tag, now).update({ content: 'editado' }, later);
+    const decided = aPost().assignTag(tag(), now).update({ content: 'editado' }, later);
 
     const sourced = new Post();
     sourced.loadFromHistory(decided.getUncommittedEvents());
@@ -119,7 +149,7 @@ describe('Post', () => {
 
   it('applying the same event twice leaves the same state', () => {
     const post = aPost();
-    const event = new PostUpdatedEvent(id, 'editado', 'oi', 'manuel', [tag], 2, now, later);
+    const event = new PostUpdatedEvent(id, 'editado', 'oi', 'manuel', [tagInEvent], 2, now, later);
 
     post.apply(event, { fromHistory: true });
     const once = stateOf(post);

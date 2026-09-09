@@ -13,7 +13,7 @@ import { observableToAsyncIterable } from './observable-to-async-iterable';
  * onPostUpdated(@Args('postId', { type: () => ID, nullable: true }) postId?: string | null) {
  *   return subscribeAsAsyncIterable(
  *     this.subscriptionBus,
- *     new OnPostUpdatedSubscription({ postId }),
+ *     new OnPostUpdatedSubscription.OnPostUpdated({ postId }),
  *     (event) => this.viewMapper.fromUpdatedEvent(event),
  *   );
  * }

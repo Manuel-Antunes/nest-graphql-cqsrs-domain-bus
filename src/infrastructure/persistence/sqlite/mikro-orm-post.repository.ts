@@ -21,8 +21,12 @@ export class MikroOrmPostRepository extends PostRepository {
     await this.em.persist(post).flush();
   }
 
+  /**
+   * `populate: ['tags']` porque `Post.tags` é uma relação: sem isso a coleção volta vazia e não
+   * carregada, e tanto montar a `PostView` quanto decidir um `assignTag` precisam dos nomes.
+   */
   findById(postId: PostId): Promise<Post | null> {
-    return this.em.findOne(Post, { id: postId });
+    return this.em.findOne(Post, { id: postId }, { populate: ['tags'] });
   }
 
   /**
@@ -35,6 +39,7 @@ export class MikroOrmPostRepository extends PostRepository {
       first: page.first,
       after: page.after ?? undefined,
       orderBy: { createdAt: 'asc', id: 'asc' },
+      populate: ['tags'],
     });
   }
 }

@@ -1,5 +1,5 @@
-import { type Type } from '@nestjs/common';
-import { Field, Int, ObjectType } from '@nestjs/graphql';
+import { type Type } from "@nestjs/common";
+import { Field, Int, ObjectType } from "@nestjs/graphql";
 
 /** `PageInfo` da spec de Relay cursor connections. */
 @ObjectType()
@@ -54,9 +54,15 @@ export function Connection<T>(classRef: Type<T>, name: string) {
     @Field(() => PageInfo)
     pageInfo: PageInfo;
 
-    @Field(() => Int, { nullable: true, description: 'Total de itens; null quando a fonte não conta' })
+    @Field(() => Int, {
+      nullable: true,
+      description: "Total de itens; null quando a fonte não conta",
+    })
     totalCount: number | null;
   }
-
-  return AbstractConnection;
+  const Connection: typeof AbstractConnection & {
+    EdgeType: typeof EdgeType;
+  } = AbstractConnection as any;
+  Connection.EdgeType = EdgeType;
+  return Connection;
 }

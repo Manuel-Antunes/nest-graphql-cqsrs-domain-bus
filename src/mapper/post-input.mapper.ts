@@ -13,11 +13,11 @@ import type { UpdatePostInput } from '../dto/graphql/update-post.input';
  */
 @Injectable()
 export class PostInputMapper {
-  toCreateCommand(input: CreatePostInput): CreatePostCommand {
-    return new CreatePostCommand(newPostId(), input.title, input.content, input.author);
+  toCreateCommand(input: CreatePostInput): CreatePostCommand.CreatePost {
+    return new CreatePostCommand.CreatePost(newPostId(), input.title, input.content, input.author);
   }
 
-  toUpdateCommand(input: UpdatePostInput): UpdatePostCommand {
-    return new UpdatePostCommand(PostId.parse(input.id), input.title, input.content);
+  toUpdateCommand(input: UpdatePostInput): UpdatePostCommand.UpdatePost {
+    return new UpdatePostCommand.UpdatePost(PostId.parse(input.id), input.title, input.content);
   }
 }

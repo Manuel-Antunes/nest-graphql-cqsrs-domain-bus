@@ -21,7 +21,7 @@ export class PostQueryResolver {
 
   @Query(() => PostView, { name: 'post', nullable: true, description: 'Um Post pelo id; null se não existir' })
   async post(@Args('id', { type: () => ID }) id: string): Promise<PostView | null> {
-    const post = await this.queryBus.execute(new FindPostQuery(PostId.parse(id)));
+    const post = await this.queryBus.execute(new FindPostQuery.FindPost(PostId.parse(id)));
     return post && this.viewMapper.fromPost(post);
   }
 
@@ -35,7 +35,7 @@ export class PostQueryResolver {
     @Args('after', { type: () => String, nullable: true, description: 'Cursor do último post já visto' })
     after?: string | null,
   ): Promise<PostConnection> {
-    const page = await this.queryBus.execute(new FindAllPostsQuery(first, after));
+    const page = await this.queryBus.execute(new FindAllPostsQuery.FindAllPosts(first, after));
     return {
       edges: page.items.map((post) => ({ cursor: page.from(post), node: this.viewMapper.fromPost(post) })),
       pageInfo: {

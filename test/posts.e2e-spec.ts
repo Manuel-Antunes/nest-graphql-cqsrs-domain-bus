@@ -1,7 +1,8 @@
 import type { INestApplication } from '@nestjs/common';
-import { EventBus } from '@nestjs/cqrs';
+import { EventBus, type IEvent } from '@nestjs/cqrs';
 import { Test } from '@nestjs/testing';
 import { AppModule } from '../src/app.module';
+import { PostRequest } from '../src/application/shared/post-request';
 import { SubscriptionBus } from '../src/cqsrs';
 import { GraphqlClient, until } from './support/graphql-client';
 
@@ -22,6 +23,11 @@ describe('posts (e2e)', () => {
   const subscribers = () => eventBus.subject$.observers.length;
   /** Cada `subscriptionBus.subscribe(...)` — ou seja, cada assinante GraphQL, compartilhando ou não. */
   const asked: unknown[] = [];
+  /** Tudo o que passou pelo `EventBus`, para inspecionar a request carimbada em cada evento. */
+  const published: IEvent[] = [];
+
+  /** A `PostRequest` carimbada num evento — o que o `AsyncContext` do @nestjs/cqrs propagou até ali. */
+  const requestOf = (event: IEvent) => PostRequest.of(event as object);
 
   const POST_FIELDS = 'id title content author createdAt updatedAt version tags(first: 5) { edges { cursor node { id name } } pageInfo { hasNextPage } totalCount }';
   const createPost = async (title: string, content = 'oi', author = 'manuel') => {
@@ -55,6 +61,7 @@ describe('posts (e2e)', () => {
     await app.listen(0, '127.0.0.1');
     client = await GraphqlClient.for(app);
     eventBus = app.get(EventBus);
+    eventBus.subscribe((event) => published.push(event));
     app.get(SubscriptionBus).subscriptions$.subscribe((subscription) => asked.push(subscription));
   });
 
@@ -94,6 +101,25 @@ describe('posts (e2e)', () => {
       });
       const { data } = await client.execute(`{ post(id: "${post.id}") { ${POST_FIELDS} } }`);
       expect(data!.post).toMatchObject({ version: 2, tags: { edges: [{ node: { name: 'Untagged' } }] } });
+      await updates.release();
+    });
+
+    it('propagates one request through the whole chain the mutation opened', async () => {
+      const updates = await subscribeUpdates();
+      const from = published.length;
+
+      const post = await createPost('uma request só');
+      await updates.waitFor(1); // a tag padrão, que é o fim da cadeia
+
+      const chain = published.slice(from).filter((event) => requestOf(event)?.postId === post.id);
+      const names = chain.map((event) => event.constructor.name);
+      // o command da borda abre a cadeia; o da saga a fecha
+      expect(names[0]).toBe('PostCreatedEvent');
+      expect(names.at(-1)).toBe('PostUpdatedEvent');
+      // e no meio, um TagCreatedEvent se a tag padrão ainda não existia neste banco
+      expect(names.slice(1, -1).every((name) => name === 'TagCreatedEvent')).toBe(true);
+      // handlers request-scoped diferentes, os da saga despachados fora da borda: o mesmo objeto em todos
+      expect(new Set(chain.map(requestOf)).size).toBe(1);
       await updates.release();
     });
 

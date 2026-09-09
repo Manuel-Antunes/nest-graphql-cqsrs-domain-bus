@@ -17,7 +17,7 @@ class CounterEvent {
 
 /** Uma subscription com critério: o filtro por tópico, escrito ao lado da mensagem. */
 class OnCounterSubscription extends Subscription<CounterEvent, { topic?: string | null }> {
-  override filter(event: CounterEvent): boolean {
+  override match(event: CounterEvent): boolean {
     return !this.criteria.topic || event.topic === this.criteria.topic;
   }
 }

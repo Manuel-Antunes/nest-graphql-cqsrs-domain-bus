@@ -58,7 +58,7 @@ export abstract class Subscription<TEvent, TCriteria = void> {
    * O filtro: roda uma vez por evento, dentro do stream, antes de ele chegar em qualquer assinante.
    * O padrão passa tudo — uma subscription sem critério não filtra nada.
    */
-  filter(_event: TEvent): boolean {
+  match(_event: TEvent): boolean {
     return true;
   }
 
