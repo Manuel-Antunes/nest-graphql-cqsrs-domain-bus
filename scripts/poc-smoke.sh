@@ -21,13 +21,13 @@ finish() {
 trap finish EXIT
 
 if [ "${SKIP_BUILD:-0}" != "1" ]; then
-  step "build: pnpm build"
-  pnpm build > "$LOG/01-build.txt" 2>&1 || { step "BUILD FALHOU — veja $LOG/01-build.txt"; exit 1; }
+  step "build: nest build api"
+  npx nest build api > "$LOG/01-build.txt" 2>&1 || { step "BUILD FALHOU — veja $LOG/01-build.txt"; exit 1; }
 fi
 
 rm -rf data
-step "start: node dist/main (porta $PORT)"
-PORT="$PORT" node dist/main > "$LOG/02-app.txt" 2>&1 &
+step "start: node dist/apps/api/main.js (porta $PORT)"
+PORT="$PORT" node dist/apps/api/main.js > "$LOG/02-app.txt" 2>&1 &
 APP_PID=$!
 
 for _ in $(seq 1 60); do

@@ -8,10 +8,17 @@ import { defineConfig } from 'vitest/config';
  * no Node 22.
  */
 export default defineConfig({
+  resolve: {
+    alias: {
+      '@app/cqsrs': new URL('./libs/cqsrs/src', import.meta.url).pathname,
+      '@app/messaging': new URL('./libs/messaging/src', import.meta.url).pathname,
+      '@app/order': new URL('./libs/order/src', import.meta.url).pathname,
+    },
+  },
   test: {
     globals: true,
     root: './',
-    include: ['src/**/*.spec.ts'],
+    include: ['apps/**/*.spec.ts', 'libs/**/*.spec.ts'],
     testTimeout: 15000,
     hookTimeout: 30000,
   },

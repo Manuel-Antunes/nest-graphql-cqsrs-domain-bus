@@ -1,0 +1,27 @@
+# Os dois brokers da coreografia. Portas deslocadas de propósito — ver libs/messaging/src/messaging-config.ts.
+#   pnpm infra:up    (docker compose up -d --wait)
+#   pnpm infra:down
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: cqsrs-redis
+    ports: ['6399:6379']
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: cqsrs-rabbit
+    ports: ['5699:5672', '15699:15672']
+    # Sem volume: a imagem declara VOLUME /var/lib/rabbitmq, e o volume anônimo que o compose cria
+    # sobe com dono errado — o Erlang não consegue ler o próprio .erlang.cookie (eacces). Esta infra
+    # é descartável (as filas são `durable: false`), então um tmpfs é mais correto que um volume.
+    tmpfs: ['/var/lib/rabbitmq:mode=1777']
+    healthcheck:
+      test: ['CMD', 'rabbitmq-diagnostics', '-q', 'ping']
+      interval: 3s
+      timeout: 5s
+      retries: 30
