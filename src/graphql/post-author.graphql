@@ -1,0 +1,28 @@
+# O campo `Post.author` — ↔ `PostAuthorResolver`.
+#
+# Ele era `author: String!`, o **nome** do autor copiado para a view. Agora é o `type Author`, como na
+# versão Axon: de um post dá para navegar para quem o escreveu, e de lá para os outros posts dele.
+#
+# ## O que a troca custou, e onde
+# A `PostView` passou a carregar `authorId` em vez do nome, e o autor é resolvido à parte. Nos
+# caminhos de leitura isso é **grátis**: o repositório já popula `author` junto do post
+# (`populate: ['tags', 'author']`), então o autor está no identity map e a resolução não emite
+# consulta nenhuma — há um teste que conta as queries e prende isso.
+#
+# O caminho que paga é a **subscription**. A view de `onPostCreated`/`onPostUpdated` nasce do payload
+# do evento, sem tocar o banco — é por isso que o evento carrega `authorId` *e* `authorName`. O nome
+# continua lá (é o retrato do momento, e um fato gravado não muda de ideia), mas já não basta para o
+# protocolo: um `Author` tem e-mail, e e-mail não é fato sobre um post. Então quem pedir `author` numa
+# subscription paga uma consulta — o que é o preço certo por pedir um dado que não está no evento.
+
+extend type Post {
+  """
+  Quem escreveu. Resolvido a partir do `authorId` que a `PostView` carrega.
+
+  É sempre um `Author` (nunca um `Reader`): a coluna `posts.author_id` aponta para `authors`, então a
+  chave estrangeira já garante o que o `!` promete.
+
+  Dá para navegar de volta para os outros posts dele — ver `Author.posts`.
+  """
+  author: Author!
+}

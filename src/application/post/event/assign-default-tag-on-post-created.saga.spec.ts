@@ -1,10 +1,11 @@
 import type { TestingModule } from '@nestjs/testing';
 import { firstValueFrom, of, toArray } from 'rxjs';
-import { createCqrsTestingModule, freshEm } from '../../../../test/support/cqrs-testing-module';
+import { createCqrsTestingModule, freshEm, inRequestContext } from '../../../../test/support/cqrs-testing-module';
 import { givenATag } from '../../../../test/support/post-fixtures';
 import { PostCreatedEvent } from '../../../domain/post/event/post-created.event';
-import { newPostId, PostId } from '../../../domain/post/vo/post-id';
+import { PostId } from '../../../domain/post/vo/post-id';
 import { Tag } from '../../../domain/tag/tag.entity';
+import { TagId } from '../../../domain/tag/vo/tag-id';
 import { TagName } from '../../../domain/tag/vo/tag-name';
 import { TagRepository } from '../../../domain/tag/tag.repository';
 import { PostRequest } from '../../shared/post-request';
@@ -21,14 +22,15 @@ describe('AssignDefaultTagOnPostCreated', () => {
   let module: TestingModule;
   let saga: AssignDefaultTagOnPostCreated;
 
-  const postCreated = () => new PostCreatedEvent(newPostId(), 'Nest + GraphQL', 'oi', 'manuel', new Date());
+  const postCreated = () => new PostCreatedEvent(PostId.generate().value, 'Nest + GraphQL', 'oi', 'u1', 'manuel', new Date());
   /** O mesmo evento, como ele sai de um command handler: carimbado com a request que o pediu. */
   const postCreatedIn = (request: PostRequest) => {
-    const event = new PostCreatedEvent(request.postId, 'Nest + GraphQL', 'oi', 'manuel', new Date());
+    const event = new PostCreatedEvent(request.postId.value, 'Nest + GraphQL', 'oi', 'u1', 'manuel', new Date());
     request.attachTo(event);
     return event;
   };
-  const commandsFor = (...events: PostCreatedEvent[]) => firstValueFrom(saga.assignDefaultTag(of(...events)).pipe(toArray()));
+  const commandsFor = (...events: PostCreatedEvent[]) =>
+    inRequestContext(module, () => firstValueFrom(saga.assignDefaultTag(of(...events)).pipe(toArray())));
 
   beforeEach(async () => {
     module = await createCqrsTestingModule([AssignDefaultTagOnPostCreated, CreateTagCommand.Handler]);
@@ -51,7 +53,7 @@ describe('AssignDefaultTagOnPostCreated', () => {
 
     const commands = await commandsFor(postCreated());
 
-    expect(commands).toEqual([new AssignTagToPostCommand.AssignTagToPost(expect.any(String), existing.id)]);
+    expect(commands).toEqual([new AssignTagToPostCommand.AssignTagToPost(expect.any(PostId), existing.id)]);
     expect(await freshEm(module).count(Tag)).toBe(1);
   });
 
@@ -61,7 +63,7 @@ describe('AssignDefaultTagOnPostCreated', () => {
     const commands = await commandsFor(a, b);
 
     expect(await freshEm(module).count(Tag)).toBe(1);
-    expect(commands.map((c) => (c as AssignTagToPostCommand.AssignTagToPost).postId)).toEqual([a.postId, b.postId]);
+    expect(commands.map((c) => (c as AssignTagToPostCommand.AssignTagToPost).postId.value)).toEqual([a.postId, b.postId]);
   });
 
   it('ignores other events', async () => {
@@ -69,7 +71,7 @@ describe('AssignDefaultTagOnPostCreated', () => {
   });
 
   it('takes the PostId from the request that came with the event, not from the payload', async () => {
-    const request = new PostRequest(newPostId());
+    const request = new PostRequest(PostId.generate());
 
     const [command] = (await commandsFor(postCreatedIn(request))) as AssignTagToPostCommand.AssignTagToPost[];
 
@@ -78,7 +80,7 @@ describe('AssignDefaultTagOnPostCreated', () => {
   });
 
   it('stamps the command it returns with that same request, so the chain continues in it', async () => {
-    const request = new PostRequest(newPostId());
+    const request = new PostRequest(PostId.generate());
 
     const [command] = await commandsFor(postCreatedIn(request));
 
@@ -90,8 +92,8 @@ describe('AssignDefaultTagOnPostCreated', () => {
 
     const [command] = (await commandsFor(event)) as AssignTagToPostCommand.AssignTagToPost[];
 
-    expect(command.postId).toBe(PostId.parse(event.postId));
-    expect(PostRequest.of(command as object)?.postId).toBe(PostId.parse(event.postId));
+    expect(command.postId.equals(event.postId)).toBe(true);
+    expect(PostRequest.of(command as object)?.postId.equals(event.postId)).toBe(true);
   });
 
   it('survives a failure on one post and keeps serving the next', async () => {
@@ -108,6 +110,6 @@ describe('AssignDefaultTagOnPostCreated', () => {
 
     const commands = await commandsFor(failed, served);
 
-    expect(commands).toEqual([new AssignTagToPostCommand.AssignTagToPost(PostId.parse(served.postId), expect.any(String))]);
+    expect(commands).toEqual([new AssignTagToPostCommand.AssignTagToPost(PostId.parse(served.postId), expect.any(TagId))]);
   });
 });

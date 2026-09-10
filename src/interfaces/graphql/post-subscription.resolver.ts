@@ -1,9 +1,10 @@
-import { Args, ID, Resolver, Subscription } from '@nestjs/graphql';
+import { AllowAnonymous } from '@thallesp/nestjs-better-auth';
+import { Args, Resolver, Subscription } from '@nestjs/graphql';
 import { subscribeAsAsyncIterable, SubscriptionBus } from '../../cqsrs';
 import { OnPostCreatedSubscription } from '../../application/post/subscription/on-post-created.subscription';
 import { OnPostUpdatedSubscription } from '../../application/post/subscription/on-post-updated.subscription';
 import { PostView } from '../../dto/graphql/post.view';
-import { PostViewMapper } from '../../mapper/post-view.mapper';
+import { PostViewMapper } from '../mapper/post-view.mapper';
 
 /**
  * Camada de interface das **subscriptions** GraphQL — a borda do `SubscriptionBus`.
@@ -22,32 +23,29 @@ import { PostViewMapper } from '../../mapper/post-view.mapper';
  * Por padrão o graphql-js procura o campo pelo nome dentro do payload (`payload.onPostUpdated`).
  * Como o iterador entrega a `PostView` direto, `resolve` diz que o payload **é** o valor.
  */
-@Resolver(() => PostView)
+/**
+ * **Lacuna conhecida:** na versão Axon toda operação exige autenticação — o `leitor@example.com`
+ * existe justamente para demonstrar acesso só de leitura. Aqui as leituras estão abertas porque a
+ * sessão ainda não é propagada pela conexão WebSocket das subscriptions, e deixar metade autenticada
+ * seria pior que assumir a dívida por escrito. As escritas já exigem sessão e papel.
+ */
+@AllowAnonymous()
+@Resolver('Post')
 export class PostSubscriptionResolver {
   constructor(
     private readonly subscriptionBus: SubscriptionBus,
     private readonly viewMapper: PostViewMapper,
   ) {}
 
-  @Subscription(() => PostView, {
-    name: 'onPostCreated',
-    description: 'Emite a cada PostCreated (tópico global)',
-    resolve: (payload: PostView) => payload,
-  })
+  @Subscription('onPostCreated', { resolve: (payload: PostView) => payload })
   onPostCreated(): AsyncIterable<PostView> {
     return subscribeAsAsyncIterable(this.subscriptionBus, new OnPostCreatedSubscription.OnPostCreated(), (event) =>
       this.viewMapper.fromCreatedEvent(event),
     );
   }
 
-  @Subscription(() => PostView, {
-    name: 'onPostUpdated',
-    description: 'Emite a cada PostUpdated; postId filtra por tópico (null = todos)',
-    resolve: (payload: PostView) => payload,
-  })
-  onPostUpdated(
-    @Args('postId', { type: () => ID, nullable: true }) postId?: string | null,
-  ): AsyncIterable<PostView> {
+  @Subscription('onPostUpdated', { resolve: (payload: PostView) => payload })
+  onPostUpdated(@Args('postId') postId?: string | null): AsyncIterable<PostView> {
     return subscribeAsAsyncIterable(this.subscriptionBus, new OnPostUpdatedSubscription.OnPostUpdated({ postId }), (event) =>
       this.viewMapper.fromUpdatedEvent(event),
     );

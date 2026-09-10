@@ -1,13 +1,12 @@
 import { EntityManager } from '@mikro-orm/core';
-import { CreateRequestContext } from '@mikro-orm/decorators/legacy';
 import { Injectable, Logger } from '@nestjs/common';
 import { CommandBus, type ICommand, type IEvent, ofType, Saga } from '@nestjs/cqrs';
-import { EMPTY, type Observable, catchError, concatMap, defer, map } from 'rxjs';
+import { catchError, concatMap, defer, EMPTY, map, type Observable } from 'rxjs';
 import { PostCreatedEvent } from '../../../domain/post/event/post-created.event';
 import { PostId } from '../../../domain/post/vo/post-id';
 import { DEFAULT_TAG_NAME } from '../../../domain/tag/tag.entity';
 import { TagRepository } from '../../../domain/tag/tag.repository';
-import { newTagId, type TagId } from '../../../domain/tag/vo/tag-id';
+import { TagId } from '../../../domain/tag/vo/tag-id';
 import { TagName } from '../../../domain/tag/vo/tag-name';
 import { PostRequest } from '../../shared/post-request';
 import { CreateTagCommand } from '../../tag/command/create-tag.command';
@@ -63,7 +62,6 @@ export class AssignDefaultTagOnPostCreated {
   private readonly logger = new Logger(AssignDefaultTagOnPostCreated.name);
 
   constructor(
-    private readonly em: EntityManager,
     private readonly tags: TagRepository,
     private readonly commandBus: CommandBus,
   ) {}
@@ -95,13 +93,12 @@ export class AssignDefaultTagOnPostCreated {
    * @param request A request do post que disparou a saga — repassada ao `CreateTagCommand` para que
    * o `TagCreatedEvent` nasça na mesma cadeia.
    */
-  @CreateRequestContext()
   private async defaultTagId(request: PostRequest): Promise<TagId> {
     const existing = await this.tags.findByName(TagName.parse(DEFAULT_TAG_NAME));
     if (existing) {
       return existing.id;
     }
-    const tagId = newTagId();
+    const tagId = TagId.generate();
     this.logger.debug(`nenhuma tag ${DEFAULT_TAG_NAME} no banco — criando ${tagId} para o post ${request.postId}`);
     return this.commandBus.execute(new CreateTagCommand.CreateTag(tagId, DEFAULT_TAG_NAME), request);
   }

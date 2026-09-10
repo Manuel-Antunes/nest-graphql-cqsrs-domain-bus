@@ -1,0 +1,17 @@
+# As leituras — ↔ `PostQueryResolver`.
+
+type Query {
+  """Um Post pelo id; null se não existir"""
+  post(id: ID!): Post
+
+  """
+  Posts em ordem de criação, como Relay cursor connection (só para frente: first/after)
+  """
+  posts(
+    """Quantos posts trazer; ausente = 20"""
+    first: Int
+
+    """Cursor do último post já visto"""
+    after: String
+  ): PostConnection!
+}

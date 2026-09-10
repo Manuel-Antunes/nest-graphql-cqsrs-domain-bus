@@ -7,7 +7,7 @@ import { OnPostUpdatedSubscription } from './on-post-updated.subscription';
  */
 describe('OnPostUpdatedSubscription.OnPostUpdated', () => {
   const event = (postId: string) =>
-    new PostUpdatedEvent(postId, 'título', 'conteúdo', 'manuel', [], 2, new Date(), new Date());
+    new PostUpdatedEvent(postId, 'título', 'conteúdo', 'u1', 'manuel', [], 2, new Date(), new Date());
 
   it('without a postId, every updated post is of interest', () => {
     const subscription = new OnPostUpdatedSubscription.OnPostUpdated({});

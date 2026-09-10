@@ -121,6 +121,27 @@ describe('CqsrsModule.forRootAsync', () => {
     expect(received).toEqual([new Pinged(1)]);
   });
 
+  /**
+   * Uma factory que não depende de nada é a forma mais curta de configurar o módulo — e a que passa
+   * pelo `inject: options.inject ?? []`. Sem o fallback, o Nest receberia `undefined` onde espera uma
+   * lista e a factory nem chegaria a rodar.
+   */
+  it('accepts a useFactory with no dependencies to inject', async () => {
+    let calls = 0;
+    const app = await bootstrap([
+      CqsrsModule.forRootAsync({
+        useFactory: () => {
+          calls += 1;
+          return options;
+        },
+      }),
+    ]);
+
+    expect(calls).toBe(1);
+    expect(app.get(SubscriptionBus).publisher).toBe(subscriptionPublisher);
+    expect(app.get(EventBus).publisher).toBe(eventPublisher);
+  });
+
   it('refuses a configuration that says nothing about where the options come from', () => {
     expect(() => CqsrsModule.forRootAsync({})).toThrow(/useValue, useFactory, useClass, or useExisting/);
   });

@@ -8,7 +8,7 @@ import type { DomainEvent } from '../../shared/domain-event';
  * `Post.onPostUpdatedEvent` idempotente: aplicar o mesmo evento duas vezes deixa a entidade no mesmo
  * lugar que aplicá-lo uma vez.
  *
- * Diferente da versão Java, `author` e `createdAt` também viajam no evento, mesmo sem mudar: é o que
+ * Diferente da versão Java, o autor e o `createdAt` também viajam no evento, mesmo sem mudar: é o que
  * permite a subscription `onPostUpdated` montar a `PostView` inteira a partir do payload, sem ler o
  * banco — e portanto sem precisar de um contexto de EntityManager dentro de uma conexão WebSocket.
  */
@@ -17,7 +17,8 @@ export class PostUpdatedEvent implements DomainEvent {
     readonly postId: string,
     readonly title: string,
     readonly content: string,
-    readonly author: string,
+    readonly authorId: string,
+    readonly authorName: string,
     readonly tags: readonly PostUpdatedEventTag[],
     readonly version: number,
     readonly createdAt: Date,

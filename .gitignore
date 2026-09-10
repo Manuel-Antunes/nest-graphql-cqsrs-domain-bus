@@ -1,7 +1,9 @@
 node_modules/
 dist/
 data/
-.poc-logs/
-schema.gql
 *.tsbuildinfo
 .DS_Store
+
+# artefatos de cobertura
+coverage/
+.vitest/

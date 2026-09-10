@@ -1,5 +1,5 @@
 import type { TestingModule } from '@nestjs/testing';
-import { createCqrsTestingModule } from '../../../../test/support/cqrs-testing-module';
+import { createCqrsTestingModule, inRequestContext } from '../../../../test/support/cqrs-testing-module';
 import { givenAPost, T0 } from '../../../../test/support/post-fixtures';
 import { FindAllPostsQuery } from './find-all-posts.query';
 
@@ -23,9 +23,9 @@ describe('FindAllPostsQuery.Handler', () => {
   afterEach(() => module.close());
 
   it('returns exactly the requested page and flags that there is more', async () => {
-    const page = await handler.execute(new FindAllPostsQuery.FindAllPosts(2));
+    const page = await inRequestContext(module, () => handler.execute(new FindAllPostsQuery.FindAllPosts(2)));
 
-    expect(page.items.map((p) => p.title)).toEqual(['primeiro', 'segundo']);
+    expect(page.items.map((p) => p.title.value)).toEqual(['primeiro', 'segundo']);
     expect(page.hasNextPage).toBe(true);
     expect(page.hasPrevPage).toBe(false);
     expect(page.totalCount).toBe(3);
@@ -33,28 +33,28 @@ describe('FindAllPostsQuery.Handler', () => {
   });
 
   it('a cursor points at the last seen row so the next page starts after it', async () => {
-    const first = await handler.execute(new FindAllPostsQuery.FindAllPosts(2));
+    const first = await inRequestContext(module, () => handler.execute(new FindAllPostsQuery.FindAllPosts(2)));
 
-    const second = await handler.execute(new FindAllPostsQuery.FindAllPosts(2, first.endCursor));
+    const second = await inRequestContext(module, () => handler.execute(new FindAllPostsQuery.FindAllPosts(2, first.endCursor)));
 
-    expect(second.items.map((p) => p.title)).toEqual(['terceiro']);
+    expect(second.items.map((p) => p.title.value)).toEqual(['terceiro']);
     expect(second.hasNextPage).toBe(false);
     expect(second.hasPrevPage).toBe(true);
   });
 
   it('the last full page knows there is nothing after it', async () => {
-    const page = await handler.execute(new FindAllPostsQuery.FindAllPosts(3));
+    const page = await inRequestContext(module, () => handler.execute(new FindAllPostsQuery.FindAllPosts(3)));
 
     expect(page.items).toHaveLength(3);
     expect(page.hasNextPage).toBe(false);
   });
 
   it('the cursor of each edge is the cursor of that row', async () => {
-    const all = await handler.execute(new FindAllPostsQuery.FindAllPosts(3));
+    const all = await inRequestContext(module, () => handler.execute(new FindAllPostsQuery.FindAllPosts(3)));
 
-    const afterFirst = await handler.execute(new FindAllPostsQuery.FindAllPosts(3, all.from(all.items[0])));
+    const afterFirst = await inRequestContext(module, () => handler.execute(new FindAllPostsQuery.FindAllPosts(3, all.from(all.items[0]))));
 
-    expect(afterFirst.items.map((p) => p.title)).toEqual(['segundo', 'terceiro']);
+    expect(afterFirst.items.map((p) => p.title.value)).toEqual(['segundo', 'terceiro']);
   });
 
   it('without a first the page size is the default, and it is capped at the maximum', () => {

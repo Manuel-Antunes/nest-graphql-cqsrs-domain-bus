@@ -1,90 +1,93 @@
-import { MikroOrmModule } from '@mikro-orm/nestjs';
-import { Module } from '@nestjs/common';
-import { APP_FILTER } from '@nestjs/core';
-import { GraphQLModule } from '@nestjs/graphql';
-import { ApolloDriver, type ApolloDriverConfig } from '@nestjs/apollo';
-import { join } from 'node:path';
-import { AssignTagToPostCommand } from './application/post/command/assign-tag-to-post.command';
-import { CreatePostCommand } from './application/post/command/create-post.command';
-import { UpdatePostCommand } from './application/post/command/update-post.command';
-import { AssignDefaultTagOnPostCreated } from './application/post/event/assign-default-tag-on-post-created.saga';
-import { FindAllPostsQuery } from './application/post/query/find-all-posts.query';
-import { FindPostQuery } from './application/post/query/find-post.query';
-import { OnPostCreatedSubscription } from './application/post/subscription/on-post-created.subscription';
-import { OnPostUpdatedSubscription } from './application/post/subscription/on-post-updated.subscription';
-import { CreateTagCommand } from './application/tag/command/create-tag.command';
-import { CqsrsModule } from './cqsrs';
-import { PostRepository } from './domain/post/post.repository';
-import { TagRepository } from './domain/tag/tag.repository';
-import { DomainExceptionFilter } from './exceptions/domain-exception.filter';
-import { MikroOrmPostRepository } from './infrastructure/persistence/sqlite/mikro-orm-post.repository';
-import { MikroOrmTagRepository } from './infrastructure/persistence/sqlite/mikro-orm-tag.repository';
-import { mikroOrmConfig } from './infrastructure/persistence/sqlite/mikro-orm.config';
-import { PostMutationResolver } from './interfaces/graphql/post-mutation.resolver';
-import { PostQueryResolver } from './interfaces/graphql/post-query.resolver';
-import { PostSubscriptionResolver } from './interfaces/graphql/post-subscription.resolver';
-import { PostTagsResolver } from './interfaces/graphql/post-tags.resolver';
-import { PostInputMapper } from './mapper/post-input.mapper';
-import { PostViewMapper } from './mapper/post-view.mapper';
+import { MikroORM, RequestContext } from "@mikro-orm/core";
+import { MikroOrmModule } from "@mikro-orm/nestjs";
+import { Module } from "@nestjs/common";
+import { AuthModule } from "@thallesp/nestjs-better-auth";
+import { GraphQLISODateTime, GraphQLModule } from "@nestjs/graphql";
+import { ApolloDriver, type ApolloDriverConfig } from "@nestjs/apollo";
+import { join } from "node:path";
+import { CqsrsModule } from "./cqsrs";
+import { createAuth } from "./infrastructure/auth/auth";
+import { mikroOrmConfig } from "./infrastructure/persistence/sqlite/mikro-orm.config";
+import { InterfacesModule } from "./interfaces/interfaces.module";
 
 /**
- * A aplicação: os handlers, a saga e as portas → adapters. Compartilhado com os testes e2e.
+ * O composition root: as quatro peças de framework que o projeto integra, e a borda da aplicação.
  *
- * Cada `X.Handler` vem do namespace da mensagem que ele trata — a fatia inteira (mensagem + handler)
- * mora num arquivo só, e o registro é a única linha que fala do handler fora dele. É por isso que a
- * lista abaixo lê como um índice dos casos de uso.
- */
-export const applicationProviders = [
-  // aplicação — um handler por command / query / subscription, e a saga
-  CreatePostCommand.Handler,
-  UpdatePostCommand.Handler,
-  AssignTagToPostCommand.Handler,
-  CreateTagCommand.Handler,
-  FindPostQuery.Handler,
-  FindAllPostsQuery.Handler,
-  OnPostCreatedSubscription.Handler,
-  OnPostUpdatedSubscription.Handler,
-  AssignDefaultTagOnPostCreated,
-  // portas do domínio → adapters de infraestrutura
-  { provide: PostRepository, useClass: MikroOrmPostRepository },
-  { provide: TagRepository, useClass: MikroOrmTagRepository },
-];
-
-/** A borda GraphQL: resolvers, mappers e a tradução de erros. */
-export const interfaceProviders = [
-  PostQueryResolver,
-  PostMutationResolver,
-  PostSubscriptionResolver,
-  PostTagsResolver,
-  PostInputMapper,
-  PostViewMapper,
-  { provide: APP_FILTER, useClass: DomainExceptionFilter },
-];
-
-/**
- * Um módulo só, com as camadas nos diretórios — a POC é pequena o bastante para isso. Os três
- * `forRoot` são as três peças de framework que o projeto integra:
+ * ## As camadas
+ *
+ * Cada uma é um módulo, no seu próprio diretório, e cada um importa **só** o de baixo:
+ *
+ * ```
+ * InterfacesModule   (src/interfaces/)    resolvers, mappers, pipes, APP_FILTER
+ *        ↓ imports
+ * ApplicationModule  (src/application/)   handlers, saga, UserProvisioning
+ *        ↓ imports
+ * PersistenceModule  (src/infrastructure/persistence/)   portas do domínio → adapters do MikroORM
+ * ```
+ *
+ * Só o `InterfacesModule` aparece nos `imports` abaixo: os outros dois entram por transitividade, na
+ * ordem em que as dependências mandam. É de propósito — se o root listasse os três, a corrente
+ * deixaria de ser visível, e a ordem passaria a ser uma coincidência em vez de uma consequência.
+ *
+ * O que a divisão compra não é arrumação: é que a fronteira passa a ser **verificada**. Enquanto
+ * tudo era uma lista plana de providers, um resolver podia injetar `PostRepository` direto e ninguém
+ * daria por isso. Agora não resolve: as portas só saem do `PersistenceModule` para quem o importa, e
+ * a única coisa que a borda recebe da aplicação é o `UserProvisioning` que o `SessionUserPipe` pede.
+ *
+ * O que **não** mudou é a descoberta dos handlers: os explorers do @nestjs/cqrs e do `CqsrsModule`
+ * varrem o `ModulesContainer`, então commands, queries, subscriptions e sagas continuam a registrar-se
+ * onde quer que morem.
+ *
+ * ## As peças de framework
  *
  * - `CqsrsModule`: o `CqrsModule` do Nest (`CommandBus`, `QueryBus`, `EventBus` — o `Observable` que
  *   alimenta as subscriptions —, `EventPublisher` e o registro de handlers e sagas) **mais** o
  *   `SubscriptionBus`, a terceira mensagem e o registro dos `@SubscriptionHandler`;
  * - `MikroOrmModule`: o ORM e o middleware que abre um contexto (fork do EntityManager) por request;
- * - `GraphQLModule` com o driver Apollo: schema code-first gerado dos decorators e subscriptions
- *   sobre WebSocket em `/graphql`, pelo protocolo graphql-ws.
+ * - `AuthModule`: o Better Auth ligado ao ORM;
+ * - `GraphQLModule` com o driver Apollo: schema **schema-first**, carregado de `src/graphql/`, e
+ *   subscriptions sobre WebSocket em `/graphql`, pelo protocolo graphql-ws.
+ *
+ * Os dois primeiros são `global`, e é por isso que os módulos de camada não precisam importá-los:
+ * `CqsrsModule.forRoot()` traz `global: true`, e o `MikroOrmCoreModule` é `@Global()`.
  */
 @Module({
   imports: [
     CqsrsModule.forRoot(),
     MikroOrmModule.forRoot(mikroOrmConfig()),
+    AuthModule.forRootAsync({
+      imports: [MikroOrmModule],
+      inject: [MikroORM],
+      useFactory: (orm: MikroORM) => ({
+        auth: createAuth(orm),
+        middleware: (_req: unknown, _res: unknown, next: () => void) =>
+          RequestContext.create(orm.em, next),
+      }),
+    }),
     GraphQLModule.forRoot<ApolloDriverConfig>({
       driver: ApolloDriver,
-      autoSchemaFile: join(process.cwd(), 'schema.gql'),
-      sortSchema: true,
+      /**
+       * **Schema-first**: o SDL é a fonte, e não a saída. Nada de `autoSchemaFile` — o que o
+       * protocolo promete está escrito em `src/graphql/`, um arquivo por responsabilidade, e os
+       * resolvers se ligam a ele pelo nome (`@Resolver('Post')`, `@Query('posts')`).
+       *
+       * `typePaths` é um glob, e o Nest concatena tudo o que ele casar (`mergeTypeDefs`) — é o que
+       * permite `type Query` num arquivo, `type Mutation` noutro e `extend type Post` num terceiro.
+       * A raiz é `__dirname` e não `process.cwd()` porque o schema anda **junto do código**:
+       * `src/graphql/` quando os testes rodam pelo Vitest, `dist/graphql/` em produção, porque o
+       * `nest-cli.json` copia os `.graphql` como asset.
+       *
+       * `resolvers` é onde um escalar do SDL ganha implementação. `scalar DateTime` é só um nome até
+       * alguém dizer como ele serializa — aqui, o `GraphQLISODateTime` do próprio @nestjs/graphql,
+       * o mesmo que o code-first pendurava no `@Field(() => GraphQLISODateTime)`.
+       */
+      typePaths: [join(__dirname, "graphql", "**/*.graphql")],
+      resolvers: { DateTime: GraphQLISODateTime },
       graphiql: true,
-      subscriptions: { 'graphql-ws': true },
+      subscriptions: { "graphql-ws": true },
       includeStacktraceInErrorResponses: false,
     }),
+    InterfacesModule,
   ],
-  providers: [...applicationProviders, ...interfaceProviders],
 })
 export class AppModule {}

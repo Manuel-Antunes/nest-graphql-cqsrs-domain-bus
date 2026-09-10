@@ -1,5 +1,4 @@
-import { EntityManager } from '@mikro-orm/core';
-import { CreateRequestContext } from '@mikro-orm/decorators/legacy';
+import { EntityManager, ref, rel } from '@mikro-orm/core';
 import { Inject, Scope } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
 import { type AsyncContext, Command, CommandHandler, EventPublisher, type ICommandHandler } from '@nestjs/cqrs';
@@ -7,6 +6,9 @@ import { PostAlreadyExistsException } from '../../../domain/post/exception/post-
 import { Post } from '../../../domain/post/post.entity';
 import { PostRepository } from '../../../domain/post/post.repository';
 import type { PostId } from '../../../domain/post/vo/post-id';
+import { Author } from '../../../domain/user/author.entity';
+import type { UserId } from '../../../domain/user/vo/user-id';
+import type { UserName } from '../../../domain/user/vo/user-name';
 
 /**
  * A fatia de `CreatePost`: a **mensagem** e o **handler** dela, num arquivo só, sob um namespace.
@@ -27,13 +29,19 @@ export namespace CreatePostCommand {
    *
    * O id vem de fora (gerado por quem despacha), como no Axon: o command já aponta para a entidade que
    * vai existir, o handler pode rejeitar um id repetido, e é esse id que vira a chave da `PostRequest`.
+   *
+   * O autor **não** vem do corpo da requisição: vem da sessão, e o resolver o tira de lá — já como
+   * `Author`, porque é lá que a guarda de papel roda. O command carrega o **retrato** dele: o id, que
+   * vira a referência, e o nome, que é o que o `PostCreatedEvent` registra. Carregar o agregado não é
+   * preciso, e a chave estrangeira garante melhor do que a consulta garantia — ver `Post.create`.
    */
   export class CreatePost extends Command<PostId> {
     constructor(
       readonly postId: PostId,
       readonly title: string,
       readonly content: string,
-      readonly author: string,
+      readonly authorId: UserId,
+      readonly authorName: UserName,
     ) {
       super();
     }
@@ -50,12 +58,11 @@ export namespace CreatePostCommand {
    * A ordem importa: quem ouve o evento (saga da tag padrão, subscriptions) só é avisado depois que o
    * post está no banco. É o equivalente do "emit sai depois do commit" do Axon.
    *
-   * ## `@CreateRequestContext()`
-   * Cada command roda na **sua** unidade de trabalho: um fork do EntityManager só dele, criado pelo
-   * decorator do MikroORM. Sem isso, um command despachado por uma saga herdaria (pelo AsyncLocalStorage)
-   * o contexto da request HTTP que publicou o evento, e dois fluxos concorrentes dividiriam o mesmo
-   * identity map. É **metade** do `ProcessingContext` por command do Axon — a transacional —, dita com
-   * a ferramenta do ORM.
+   * ## O contexto do ORM vem da borda
+   * Este handler **não** abre uma unidade de trabalho própria. O contexto é o da requisição, aberto
+   * pelo middleware que o `MikroOrmModule.forRoot` registra, e é o mesmo do resolver, dos outros
+   * commands da mesma requisição e da saga que os eventos dela acordam — um identity map por
+   * requisição, e não um por mensagem. É **metade** do `ProcessingContext` do Axon — a transacional.
    *
    * ## `{ scope: Scope.REQUEST }` e `@Inject(REQUEST)`
    * A outra metade, e a que o ORM não dá: a **identidade** do pedido. O `@CommandHandler` repassa suas
@@ -73,7 +80,6 @@ export namespace CreatePostCommand {
   @CommandHandler(CreatePost, { scope: Scope.REQUEST })
   export class Handler implements ICommandHandler<CreatePost> {
     constructor(
-      private readonly em: EntityManager,
       private readonly posts: PostRepository,
       private readonly publisher: EventPublisher,
       /**
@@ -84,16 +90,20 @@ export namespace CreatePostCommand {
        */
       @Inject(REQUEST) private readonly request: AsyncContext,
     ) {}
-
-    @CreateRequestContext()
     async execute(command: CreatePost): Promise<PostId> {
       if (await this.posts.findById(command.postId)) {
         throw new PostAlreadyExistsException(command.postId);
       }
+      // Nenhuma leitura do agregado `User`: o autor já veio decidido da borda, e o que falta é só a
+      // referência que a coluna `author_id` guarda. Se o id não existir ou não for de um autor, quem
+      // recusa é a chave estrangeira — e o `MikroOrmExceptionFilter` a traduz na borda.
+      const author = ref(rel(Author, command.authorId));
       const post = this.publisher.mergeObjectContext(
         Post.create(
           command.postId,
-          { title: command.title, content: command.content, author: command.author },
+          { title: command.title, content: command.content },
+          author,
+          command.authorName,
           new Date(),
         ),
         this.request,

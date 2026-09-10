@@ -1,4 +1,8 @@
+import { TagId } from '../../domain/tag/vo/tag-id';
+import { PostId } from '../../domain/post/vo/post-id';
+import { UserId } from '../../domain/user/vo/user-id';
 import { PostView } from '../../dto/graphql/post.view';
+import { TagView } from '../../dto/graphql/tag.view';
 import { PostTagsResolver } from './post-tags.resolver';
 
 /**
@@ -7,14 +11,26 @@ import { PostTagsResolver } from './post-tags.resolver';
  */
 describe('PostTagsResolver', () => {
   const resolver = new PostTagsResolver();
-  const post = Object.assign(new PostView(), {
-    tags: ['a', 'b', 'c', 'd', 'e'].map((name, i) => ({ id: `tag-${i}`, name })),
-  });
+
+  /** Uma view como o `PostViewMapper` a entrega: campos como value objects, tags como `TagView`. */
+  const viewWith = (names: string[]) =>
+    new PostView({
+      id: PostId.generate(),
+      title: 'um post',
+      content: 'conteúdo',
+      authorId: UserId.generate().value,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      version: 1,
+      tags: names.map((name) => new TagView({ id: TagId.generate(), name })),
+    });
+
+  const post = viewWith(['a', 'b', 'c', 'd', 'e']);
 
   it('slice cuts the page and flags that there is more', () => {
     const page = resolver.tags(post, 2);
 
-    expect(page.edges.map((e) => e.node.name)).toEqual(['a', 'b']);
+    expect(page.edges.map((e) => e.node.name.value)).toEqual(['a', 'b']);
     expect(page.pageInfo).toMatchObject({ hasNextPage: true, hasPreviousPage: false });
     expect(page.totalCount).toBe(5);
   });
@@ -24,14 +40,14 @@ describe('PostTagsResolver', () => {
 
     const second = resolver.tags(post, 2, first.pageInfo.endCursor);
 
-    expect(second.edges.map((e) => e.node.name)).toEqual(['c', 'd']);
+    expect(second.edges.map((e) => e.node.name.value)).toEqual(['c', 'd']);
     expect(second.pageInfo).toMatchObject({ hasNextPage: true, hasPreviousPage: true });
   });
 
   it('the last page has no next', () => {
     const page = resolver.tags(post, 2, resolver.tags(post, 4).pageInfo.endCursor);
 
-    expect(page.edges.map((e) => e.node.name)).toEqual(['e']);
+    expect(page.edges.map((e) => e.node.name.value)).toEqual(['e']);
     expect(page.pageInfo.hasNextPage).toBe(false);
   });
 
@@ -43,7 +59,7 @@ describe('PostTagsResolver', () => {
   });
 
   it('an empty list is an empty page', () => {
-    const page = resolver.tags(Object.assign(new PostView(), { tags: [] }));
+    const page = resolver.tags(viewWith([]));
 
     expect(page.edges).toEqual([]);
     expect(page.pageInfo).toEqual({ hasNextPage: false, hasPreviousPage: false, startCursor: null, endCursor: null });
@@ -54,6 +70,6 @@ describe('PostTagsResolver', () => {
     const second = resolver.tags(post, 3, first.pageInfo.endCursor);
 
     expect(second.edges[0].cursor).not.toEqual(first.edges[0].cursor);
-    expect(resolver.tags(post, 1, second.edges[0].cursor).edges[0].node.name).toBe('e');
+    expect(resolver.tags(post, 1, second.edges[0].cursor).edges[0].node.name.value).toBe('e');
   });
 });

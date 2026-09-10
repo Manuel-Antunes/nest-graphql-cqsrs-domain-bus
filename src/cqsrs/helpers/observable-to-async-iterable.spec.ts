@@ -81,4 +81,54 @@ describe('observableToAsyncIterable', () => {
     expect((await iterator.next()).value).toBe(1);
     expect((await iterator.next()).value).toBe(2);
   });
+
+  /**
+   * `throw()` é a outra porta de saída do protocolo de iterador: um consumidor que aborta com um
+   * erro. Como o `return()`, ela precisa cancelar a inscrição **na hora** — senão o assinante fica
+   * pendurado no `EventBus` depois de já ter desistido.
+   */
+  it('throw() cancels the subscription and rejects with the error it was given', async () => {
+    const source = new Subject<number>();
+    const iterator = observableToAsyncIterable(source);
+    expect(source.observed).toBe(true);
+
+    await expect(iterator.throw?.(new Error('abortado'))).rejects.toThrow('abortado');
+
+    expect(source.observed).toBe(false);
+    expect(await iterator.next()).toEqual({ value: undefined, done: true });
+  });
+
+  it('throw() resolves a pending next() as done instead of leaving it hanging', async () => {
+    const source = new Subject<number>();
+    const iterator = observableToAsyncIterable(source);
+    const pending = iterator.next();
+
+    await expect(iterator.throw?.(new Error('abortado'))).rejects.toThrow('abortado');
+
+    expect(await pending).toEqual({ value: undefined, done: true });
+  });
+
+  /** Fechar duas vezes é o caso normal: o graphql-js chama `return()` de um stream já completado. */
+  it('closing an already finished iterator is a no-op', async () => {
+    const source = new Subject<number>();
+    const iterator = observableToAsyncIterable(source);
+    source.complete();
+    expect(source.observed).toBe(false);
+
+    await iterator.return?.();
+    await iterator.return?.();
+
+    expect(await iterator.next()).toEqual({ value: undefined, done: true });
+  });
+
+  /** Um valor bufferizado antes do erro ainda é entregue: só depois dele a rejeição aparece. */
+  it('delivers what was buffered before the error, then rejects', async () => {
+    const source = new Subject<number>();
+    const iterator = observableToAsyncIterable(source);
+    source.next(1);
+    source.error(new Error('boom'));
+
+    expect((await iterator.next()).value).toBe(1);
+    await expect(iterator.next()).rejects.toThrow('boom');
+  });
 });

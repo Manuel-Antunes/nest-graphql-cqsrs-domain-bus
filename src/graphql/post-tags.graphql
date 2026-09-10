@@ -1,0 +1,16 @@
+# O campo `Post.tags` — ↔ `PostTagsResolver`.
+#
+# Ele entra por `extend type Post` de propósito: o campo não sai da `PostView`, sai de um resolver
+# que recorta a lista em memória e devolve uma cursor connection. Separar o campo do tipo é o que faz
+# o schema dizer isso — quem lê `post.graphql` vê o read model; quem lê aqui vê o que é computado.
+
+extend type Post {
+  """Tags do post, como Relay cursor connection"""
+  tags(
+    """Quantas tags trazer; ausente = 20"""
+    first: Int
+
+    """Cursor da última tag já vista"""
+    after: String
+  ): TagConnection!
+}

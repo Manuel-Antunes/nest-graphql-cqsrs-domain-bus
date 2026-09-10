@@ -1,7 +1,8 @@
 import { Cursor } from '@mikro-orm/core';
-import { Args, Int, Parent, ResolveField, Resolver } from '@nestjs/graphql';
+import { AllowAnonymous } from '@thallesp/nestjs-better-auth';
+import { Args, Parent, ResolveField, Resolver } from '@nestjs/graphql';
 import { FindAllPostsQuery } from '../../application/post/query/find-all-posts.query';
-import { TagConnection } from '../../dto/graphql/post.connection';
+import type { TagConnection } from '../../dto/graphql/post.connection';
 import { PostView } from '../../dto/graphql/post.view';
 
 /**
@@ -16,15 +17,20 @@ import { PostView } from '../../dto/graphql/post.view';
  * Os cursores usam o mesmo codec do `Cursor` do MikroORM que a connection de `posts` usa
  * (`Cursor.encode`/`Cursor.decode`): base64 do valor de ordenação — aqui, a posição absoluta da tag.
  */
-@Resolver(() => PostView)
+/**
+ * **Lacuna conhecida:** na versão Axon toda operação exige autenticação — o `leitor@example.com`
+ * existe justamente para demonstrar acesso só de leitura. Aqui as leituras estão abertas porque a
+ * sessão ainda não é propagada pela conexão WebSocket das subscriptions, e deixar metade autenticada
+ * seria pior que assumir a dívida por escrito. As escritas já exigem sessão e papel.
+ */
+@AllowAnonymous()
+@Resolver('Post')
 export class PostTagsResolver {
-  @ResolveField(() => TagConnection, { name: 'tags', description: 'Tags do post, como Relay cursor connection' })
+  @ResolveField('tags')
   tags(
     @Parent() post: PostView,
-    @Args('first', { type: () => Int, nullable: true, description: 'Quantas tags trazer; ausente = 20' })
-    first?: number | null,
-    @Args('after', { type: () => String, nullable: true, description: 'Cursor da última tag já vista' })
-    after?: string | null,
+    @Args('first') first?: number | null,
+    @Args('after') after?: string | null,
   ): TagConnection {
     const limit = Math.min(Math.max(first ?? FindAllPostsQuery.DEFAULT_PAGE_SIZE, 1), FindAllPostsQuery.MAX_PAGE_SIZE);
     const start = after ? Number(Cursor.decode(after)[0]) + 1 : 0;

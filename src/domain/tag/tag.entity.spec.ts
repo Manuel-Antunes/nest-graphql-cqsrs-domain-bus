@@ -11,8 +11,8 @@ describe('Tag', () => {
   it('create normalizes, raises TagCreated and returns the tag', () => {
     const tag = Tag.create(id, '  Untagged ', now);
 
-    expect(tag).toMatchObject({ id, name: 'Untagged', createdAt: now });
-    expect(tag.getUncommittedEvents()).toEqual([new TagCreatedEvent(id, 'Untagged', now)]);
+    expect(tag).toMatchObject({ id, name: TagName.parse('Untagged'), createdAt: now });
+    expect(tag.getUncommittedEvents()).toEqual([new TagCreatedEvent(id.value, 'Untagged', now)]);
   });
 
   it('create with a blank name raises nothing', () => {
@@ -21,7 +21,7 @@ describe('Tag', () => {
   });
 
   it('the name value object trims and rejects the empty string', () => {
-    expect(TagName.parse('  dev  ')).toBe('dev');
+    expect(TagName.parse('  dev  ').value).toBe('dev');
     expect(TagName.safeParse('').success).toBe(false);
   });
 });

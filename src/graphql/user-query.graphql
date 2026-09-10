@@ -1,0 +1,34 @@
+# A leitura de quem está logado — ↔ `UserQueryResolver`.
+#
+# `extend type Query` e não `type Query`: a raiz é declarada em `post-query.graphql`, e o
+# `mergeTypeDefs` do Nest junta os dois. Quem lê este arquivo vê o que a identidade acrescenta à raiz,
+# sem precisar reabrir o bloco dos posts.
+
+extend type Query {
+  """
+  Quem está logado.
+
+  Exige sessão — sem o cookie do Better Auth o guard global recusa antes de o resolver rodar, que é o
+  `@PreAuthorize("isAuthenticated()")` da versão Axon. Repare que não há argumento: o alvo é sempre
+  quem está pedindo.
+
+  Na primeira vez que uma credencial nova aparece, o perfil de domínio é criado — ou religado ao que
+  já existe, pelo email — sem que o cliente peça nada: é o provisionamento *just-in-time* do
+  `UserProvisioning`. No caminho normal isso já aconteceu no sign-up, pelo hook, e aqui é só leitura.
+
+  Devolve a **interface**: use um fragmento para alcançar o que só existe no `Author`.
+
+      me {
+        id
+        name
+        email
+        ... on Author {
+          posts(first: 5) { edges { node { title } } totalCount }
+        }
+      }
+
+  Para um `Reader`, o mesmo fragmento simplesmente não casa — e a resposta vem sem `posts`, em vez de
+  vir com uma lista vazia.
+  """
+  me: User!
+}

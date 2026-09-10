@@ -1,9 +1,10 @@
 import { AsyncContext, CommandBus } from '@nestjs/cqrs';
 import type { TestingModule } from '@nestjs/testing';
-import { createCqrsTestingModule, RecordingEvents } from '../../../test/support/cqrs-testing-module';
+import { createCqrsTestingModule, RecordingEvents, inRequestContext } from '../../../test/support/cqrs-testing-module';
+import { givenAnAuthor } from '../../../test/support/post-fixtures';
 import { PostCreatedEvent } from '../../domain/post/event/post-created.event';
 import { PostUpdatedEvent } from '../../domain/post/event/post-updated.event';
-import { newPostId } from '../../domain/post/vo/post-id';
+import { PostId } from '../../domain/post/vo/post-id';
 import { TagCreatedEvent } from '../../domain/tag/event/tag-created.event';
 import { AssignTagToPostCommand } from '../post/command/assign-tag-to-post.command';
 import { CreatePostCommand } from '../post/command/create-post.command';
@@ -24,6 +25,7 @@ describe('PostRequest', () => {
   let module: TestingModule;
   let commands: CommandBus;
   let events: RecordingEvents;
+  let author: Awaited<ReturnType<typeof givenAnAuthor>>;
 
   beforeEach(async () => {
     module = await createCqrsTestingModule([
@@ -33,16 +35,19 @@ describe('PostRequest', () => {
       AssignDefaultTagOnPostCreated,
     ]);
     commands = module.get(CommandBus);
+    author = await givenAnAuthor(module);
     events = new RecordingEvents(module);
   });
 
   afterEach(() => module.close());
 
   it('is the same object on every event of the chain the request opened', async () => {
-    const postId = newPostId();
+    const postId = PostId.generate();
     const request = new PostRequest(postId);
 
-    await commands.execute(new CreatePostCommand.CreatePost(postId, 'Nest + GraphQL', 'oi', 'manuel'), request);
+    await inRequestContext(module, () =>
+      commands.execute(new CreatePostCommand.CreatePost(postId, 'Nest + GraphQL', 'oi', author.id, author.name), request),
+    );
     // PostCreated (o command), TagCreated e PostUpdated (a saga, depois)
     const [created, tagCreated, updated] = await events.waitFor(3);
 
@@ -58,30 +63,36 @@ describe('PostRequest', () => {
   });
 
   it('carries the PostId as a value object, not as the primitive on the payload', async () => {
-    const postId = newPostId();
+    const postId = PostId.generate();
 
-    await commands.execute(new CreatePostCommand.CreatePost(postId, 'Nest + GraphQL', 'oi', 'manuel'), new PostRequest(postId));
+    await inRequestContext(module, () =>
+      commands.execute(new CreatePostCommand.CreatePost(postId, 'Nest + GraphQL', 'oi', author.id, author.name), new PostRequest(postId)),
+    );
     const [created] = await events.waitFor(1);
 
     // O payload é primitivo (contrato, atravessa processo); a chave anda por fora, já validada.
-    expect((created as PostCreatedEvent).postId).toBe(postId as string);
+    expect((created as PostCreatedEvent).postId).toBe(postId.value);
     expect(PostRequest.of(created)?.postId).toBe(postId);
   });
 
   it('rides along as metadata: it does not show up in what the event compares as', async () => {
-    const postId = newPostId();
+    const postId = PostId.generate();
 
-    await commands.execute(new CreatePostCommand.CreatePost(postId, 'Nest + GraphQL', 'oi', 'manuel'), new PostRequest(postId));
+    await inRequestContext(module, () =>
+      commands.execute(new CreatePostCommand.CreatePost(postId, 'Nest + GraphQL', 'oi', author.id, author.name), new PostRequest(postId)),
+    );
     const [created] = await events.waitFor(1);
 
-    expect(created).toEqual(new PostCreatedEvent(postId, 'Nest + GraphQL', 'oi', 'manuel', expect.any(Date)));
-    expect(Object.keys(created as object)).toEqual(['postId', 'title', 'content', 'author', 'occurredAt']);
+    expect(created).toEqual(new PostCreatedEvent(postId.value, 'Nest + GraphQL', 'oi', author.id.value, 'manuel', expect.any(Date)));
+    expect(Object.keys(created as object)).toEqual(['postId', 'title', 'content', 'authorId', 'authorName', 'occurredAt']);
   });
 
   it('a command dispatched without one still runs — on the anonymous context the CommandBus creates', async () => {
-    const postId = newPostId();
+    const postId = PostId.generate();
 
-    await commands.execute(new CreatePostCommand.CreatePost(postId, 'sem request', 'oi', 'manuel'));
+    await inRequestContext(module, () =>
+      commands.execute(new CreatePostCommand.CreatePost(postId, 'sem request', 'oi', author.id, author.name)),
+    );
     const [created] = await events.waitFor(1);
 
     expect(AsyncContext.of(created)).toBeInstanceOf(AsyncContext);

@@ -1,15 +1,16 @@
-import { defineEntity, p } from '@mikro-orm/core';
-import { AggregateEntity } from '../shared/aggregate-entity';
-import { TagCreatedEvent } from './event/tag-created.event';
-import { InvalidTagException } from './exception/invalid-tag.exception';
-import { TagId } from './vo/tag-id';
-import { TagName } from './vo/tag-name';
+import { BaseEntity } from "@mikro-orm/core";
+import { WithAggregateRoot } from "@nestjs/cqrs";
+import { TagCreatedEvent } from "./event/tag-created.event";
+import { InvalidTagException } from "./exception/invalid-tag.exception";
+import { TagId } from "./vo/tag-id";
+import { TagName } from "./vo/tag-name";
 
 /** Nome da tag atribuída a um post que não tem nenhuma outra. */
-export const DEFAULT_TAG_NAME = 'Untagged';
+export const DEFAULT_TAG_NAME = "Untagged";
 
 /**
- * A Tag: como o `Post`, uma classe só — entidade de domínio, aggregate root e mapeamento do ORM.
+ * A Tag: como o `Post`, entidade de domínio e aggregate root numa classe só. O mapeamento do ORM
+ * mora em `infrastructure/persistence/sqlite/entities/tag-orm.entity`, apontando para esta mesma classe.
  *
  * Agregado independente. Um Post guarda apenas uma cópia do id e do nome (`TagRef`); nenhuma relação
  * do ORM liga os dois, para que a fronteira de consistência de cada um continue sendo só a sua.
@@ -17,7 +18,7 @@ export const DEFAULT_TAG_NAME = 'Untagged';
  * Hoje uma Tag só nasce — não há evento que a renomeie ou apague, então todo o estado vem do
  * `TagCreatedEvent`.
  */
-export class Tag extends AggregateEntity<TagCreatedEvent> {
+export class Tag extends WithAggregateRoot(BaseEntity)<TagCreatedEvent> {
   id!: TagId;
   name!: TagName;
   createdAt!: Date;
@@ -36,7 +37,7 @@ export class Tag extends AggregateEntity<TagCreatedEvent> {
       throw InvalidTagException.fromZod(parsed.error);
     }
     const tag = new Tag();
-    tag.apply(new TagCreatedEvent(id, parsed.data, now));
+    tag.apply(new TagCreatedEvent(id.value, parsed.data.value, now));
     return tag;
   }
 
@@ -48,14 +49,3 @@ export class Tag extends AggregateEntity<TagCreatedEvent> {
     this.createdAt = event.occurredAt;
   }
 }
-
-export const TagSchema = defineEntity({
-  class: Tag,
-  tableName: 'tags',
-  forceConstructor: true,
-  properties: {
-    id: p.string().primary().length(36),
-    name: p.string().length(50).unique(),
-    createdAt: p.datetime(),
-  },
-});

@@ -1,0 +1,12 @@
+# Os streams — ↔ `PostSubscriptionResolver`.
+#
+# `postId` em `onPostUpdated` é o critério, não um filtro do resolver: ele vira a chave de tópico da
+# `OnPostUpdatedSubscription`, e quem assina um post já recebe do `SubscriptionBus` só os eventos dele.
+
+type Subscription {
+  """Emite a cada PostCreated (tópico global)"""
+  onPostCreated: Post!
+
+  """Emite a cada PostUpdated; postId filtra por tópico (null = todos)"""
+  onPostUpdated(postId: ID): Post!
+}

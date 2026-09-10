@@ -1,9 +1,11 @@
 import swc from 'unplugin-swc';
 import { defineConfig } from 'vitest/config';
+import { coverage } from './vitest.coverage.mts';
 
 /** Os e2e sobem a aplicação inteira (Fastify + Mercurius + SQLite em memória) e falam com ela por HTTP e WebSocket. */
 export default defineConfig({
   test: {
+    coverage,
     globals: true,
     root: './',
     include: ['test/**/*.e2e-spec.ts'],

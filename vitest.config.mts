@@ -1,5 +1,6 @@
 import swc from 'unplugin-swc';
 import { defineConfig } from 'vitest/config';
+import { coverage } from './vitest.coverage.mts';
 
 /**
  * Vitest + SWC: é a receita da documentação do Nest (docs.nestjs.com/recipes/swc#vitest). O SWC entra
@@ -9,6 +10,7 @@ import { defineConfig } from 'vitest/config';
  */
 export default defineConfig({
   test: {
+    coverage,
     globals: true,
     root: './',
     include: ['src/**/*.spec.ts'],

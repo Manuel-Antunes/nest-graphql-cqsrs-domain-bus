@@ -1,7 +1,7 @@
 {
   "name": "nest-graphql-posts",
   "version": "0.1.0",
-  "description": "POC: NestJS + @nestjs/cqrs + MikroORM v7 + GraphQL (Apollo) com subscriptions alimentadas pelo EventBus do CQRS — reescrita em TypeScript do axon-graphql-posts",
+  "description": "POC: NestJS + @nestjs/cqrs + MikroORM v7 + GraphQL (Apollo) com subscriptions alimentadas pelo EventBus do CQRS \u2014 reescrita em TypeScript do axon-graphql-posts",
   "private": true,
   "license": "MIT",
   "author": "Manuel Antunes",
@@ -15,7 +15,11 @@
     "test:watch": "vitest",
     "test:e2e": "vitest run --config vitest.e2e.config.mts",
     "test:all": "vitest run && vitest run --config vitest.e2e.config.mts",
-    "smoke": "bash scripts/poc-smoke.sh"
+    "test:cov": "vitest run --coverage",
+    "test:e2e:cov": "vitest run --config vitest.e2e.config.mts --coverage",
+    "test:cov:all": "pnpm run test:cov:unit-blob && pnpm run test:cov:e2e-blob && vitest --merge-reports --coverage",
+    "test:cov:unit-blob": "vitest run --coverage --reporter=blob --outputFile=.vitest/blob/unit.json",
+    "test:cov:e2e-blob": "vitest run --config vitest.e2e.config.mts --coverage --reporter=blob --outputFile=.vitest/blob/e2e.json"
   },
   "packageManager": "pnpm@10.28.0",
   "pnpm": {
@@ -23,11 +27,16 @@
       "better-sqlite3",
       "@swc/core",
       "esbuild"
-    ]
+    ],
+    "overrides": {
+      "@better-auth/utils": "0.4.2"
+    }
   },
   "dependencies": {
     "@apollo/server": "^5.5.1",
     "@as-integrations/express5": "^1.1.2",
+    "@better-auth/oauth-provider": "^1.7.3",
+    "@casl/ability": "^7.0.1",
     "@mikro-orm/core": "^7.2.0",
     "@mikro-orm/decorators": "^7.2.0",
     "@mikro-orm/nestjs": "^7.1.0",
@@ -38,6 +47,12 @@
     "@nestjs/cqrs": "^12.0.0",
     "@nestjs/graphql": "^14.0.0",
     "@nestjs/platform-express": "^12.0.1",
+    "@thallesp/nestjs-better-auth": "^2.8.0",
+    "better-auth": "^1.7.3",
+    "better-auth-mikro-orm": "1.0.0-next.2",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.15.1",
+    "dset": "^3.1.4",
     "graphql": "^16.14.2",
     "graphql-subscriptions": "^3.0.0",
     "reflect-metadata": "^0.2.2",
@@ -50,6 +65,7 @@
     "@swc/core": "^1.16.2",
     "@types/node": "^26.5.0",
     "@types/ws": "^8.18.1",
+    "@vitest/coverage-v8": "^5.0.0",
     "graphql-ws": "^6.2.1",
     "typescript": "^6.0.3",
     "unplugin-swc": "^1.6.0",

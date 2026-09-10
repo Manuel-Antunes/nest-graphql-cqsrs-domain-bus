@@ -1,4 +1,4 @@
-import { EntityManager, MikroORM } from '@mikro-orm/core';
+import { EntityManager, MikroORM, RequestContext } from '@mikro-orm/core';
 import { MikroOrmModule } from '@mikro-orm/nestjs';
 import type { Provider } from '@nestjs/common';
 import { EventBus, type IEvent } from '@nestjs/cqrs';
@@ -6,8 +6,10 @@ import { Test, type TestingModule } from '@nestjs/testing';
 import { CqsrsModule } from '../../src/cqsrs';
 import { PostRepository } from '../../src/domain/post/post.repository';
 import { TagRepository } from '../../src/domain/tag/tag.repository';
-import { MikroOrmPostRepository } from '../../src/infrastructure/persistence/sqlite/mikro-orm-post.repository';
-import { MikroOrmTagRepository } from '../../src/infrastructure/persistence/sqlite/mikro-orm-tag.repository';
+import { UserRepository } from '../../src/domain/user/user.repository';
+import { MikroOrmPostRepository } from '../../src/infrastructure/persistence/sqlite/repositories/mikro-orm-post.repository';
+import { MikroOrmTagRepository } from '../../src/infrastructure/persistence/sqlite/repositories/mikro-orm-tag.repository';
+import { MikroOrmUserRepository } from '../../src/infrastructure/persistence/sqlite/repositories/mikro-orm-user.repository';
 import { mikroOrmConfig } from '../../src/infrastructure/persistence/sqlite/mikro-orm.config';
 
 /**
@@ -27,10 +29,26 @@ export async function createCqrsTestingModule(providers: Provider[]): Promise<Te
       ...providers,
       { provide: PostRepository, useClass: MikroOrmPostRepository },
       { provide: TagRepository, useClass: MikroOrmTagRepository },
+      { provide: UserRepository, useClass: MikroOrmUserRepository },
     ],
   }).compile();
   await module.init();
   return module;
+}
+
+/**
+ * Roda algo **dentro de um contexto de request**, como o middleware do MikroORM faz na produção.
+ *
+ * Desde que os command handlers deixaram de abrir um fork por command (`@CreateRequestContext()`), o
+ * contexto passou a nascer na **borda** — o `MikroOrmModule.forMiddleware()` no `app.module`. Num
+ * teste não há requisição HTTP, então a borda é isto: um contexto por interação, e o mesmo para o
+ * command, para os eventos que ele publica e para os commands que a saga despacha em cima deles.
+ *
+ * É também o que faz o teste exercitar o caminho de produção em vez de um mais frouxo: sem contexto,
+ * `allowGlobalContext: false` recusaria a primeira consulta.
+ */
+export function inRequestContext<T>(module: TestingModule, work: () => Promise<T>): Promise<T> {
+  return RequestContext.create(module.get(MikroORM).em, work);
 }
 
 /** Um EntityManager novo, fora de qualquer contexto de command: lê o que está de fato gravado. */

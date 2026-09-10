@@ -1,0 +1,55 @@
+# A hierarquia de usuário no protocolo — o espelho de `src/domain/user/`.
+#
+# `User` é **interface**, e não `type`, pela mesma razão que o agregado é abstrato: o que uma pessoa
+# pode fazer aqui é decidido pelo **tipo** dela, não por um campo. `Reader` e `Author` são os dois
+# tipos concretos, os mesmos que `Users.emptyFor` escolhe a partir do papel — ver `user.factory`.
+#
+# Quem traduz a classe de domínio no nome do schema é o `__resolveType` do `UserQueryResolver`, e é
+# isso que faz `me { ... on Author { … } }` valer como pergunta: a resposta vem de haver uma linha em
+# `authors`, e não de um booleano que alguém possa forjar no token.
+#
+# ## O que não está aqui, e por quê
+# A versão Axon declara `accounts: [Account!]!` nesta interface e um `bio: String!` no `Author`.
+# Nenhum dos dois existe deste lado:
+#
+# - **conta** é assunto do provedor. Ligar a credencial do Google a quem já tinha senha é o
+#   `account.accountLinking` do Better Auth, e o que atravessa a fronteira é **uma** identidade já
+#   resolvida (ver `IdentityProvider`). Espelhar a tabela `account` aqui seria manter uma segunda
+#   verdade em sincronia sem ganhar resposta nenhuma;
+# - **bio** é uma coluna que o `Author` de lá tem e o daqui não tem. Quando tiver, entra aqui.
+#
+# Sobra exatamente o que o domínio distingue: um Author tem posts, um Reader não. E a diferença é
+# visível no schema como a **ausência do campo** — não como uma lista que volta vazia.
+
+"""
+Quem tem conta. Interface, e não tipo, porque a hierarquia do domínio é polimórfica.
+"""
+interface User {
+  id: ID!
+  name: String!
+  email: String!
+}
+
+"""
+Usuário que só lê: autentica, vê posts, assina atualizações. É o `Reader` do domínio — linha em
+`users`, linha em `readers`, e nenhum campo a mais.
+
+Não escrever não é uma permissão que falta: é um campo que não existe.
+"""
+type Reader implements User {
+  id: ID!
+  name: String!
+  email: String!
+}
+
+"""
+Usuário que escreve. É o `Author` do domínio: na herança multi-tabela (`inheritance: 'tpt'`), linha em
+`users` **e** linha em `authors`.
+
+O campo `posts` não está declarado aqui — ele tem resolver próprio, e mora em `author-posts.graphql`.
+"""
+type Author implements User {
+  id: ID!
+  name: String!
+  email: String!
+}

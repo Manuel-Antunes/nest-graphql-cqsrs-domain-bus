@@ -1,0 +1,10 @@
+# Os escalares do protocolo.
+#
+# No SDL um `scalar` é só um NOME — quem diz como ele serializa é o mapa `resolvers` do
+# `GraphQLModule` (ver `src/app.module.ts`), onde `DateTime` recebe o `GraphQLISODateTime` do próprio
+# @nestjs/graphql. Declarar aqui e não implementar lá quebra na subida.
+
+"""
+A date-time string at UTC, such as 2019-12-03T09:54:33Z, compliant with the date-time format.
+"""
+scalar DateTime

@@ -1,5 +1,3 @@
-import { EntityManager } from '@mikro-orm/core';
-import { CreateRequestContext } from '@mikro-orm/decorators/legacy';
 import { Inject, Scope } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
 import { type AsyncContext, Command, CommandHandler, EventPublisher, type ICommandHandler } from '@nestjs/cqrs';
@@ -33,13 +31,10 @@ export namespace UpdatePostCommand {
   @CommandHandler(UpdatePost, { scope: Scope.REQUEST })
   export class Handler implements ICommandHandler<UpdatePost> {
     constructor(
-      private readonly em: EntityManager,
       private readonly posts: PostRepository,
       private readonly publisher: EventPublisher,
       @Inject(REQUEST) private readonly request: AsyncContext,
     ) {}
-
-    @CreateRequestContext()
     async execute(command: UpdatePost): Promise<void> {
       const post = await this.posts.findById(command.postId);
       if (!post) {

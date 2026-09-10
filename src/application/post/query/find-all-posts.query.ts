@@ -1,5 +1,4 @@
 import { type Cursor, EntityManager } from '@mikro-orm/core';
-import { EnsureRequestContext } from '@mikro-orm/decorators/legacy';
 import { type IQueryHandler, Query, QueryHandler } from '@nestjs/cqrs';
 import type { Post } from '../../../domain/post/post.entity';
 import { PostRepository } from '../../../domain/post/post.repository';
@@ -32,11 +31,8 @@ export namespace FindAllPostsQuery {
   @QueryHandler(FindAllPosts)
   export class Handler implements IQueryHandler<FindAllPosts> {
     constructor(
-      private readonly em: EntityManager,
       private readonly posts: PostRepository,
     ) {}
-
-    @EnsureRequestContext()
     async execute(query: FindAllPosts): Promise<Cursor<Post>> {
       return this.posts.findAll({ first: query.first, after: query.after });
     }

@@ -1,0 +1,27 @@
+# As escritas — ↔ `PostMutationResolver`.
+#
+# Os `input` moram aqui, e não junto do `type Post`, porque é isto que eles são: os argumentos destas
+# duas mutations. Repare no que nenhum deles tem — o autor. Ele vem da sessão, não do corpo.
+
+type Mutation {
+  """Despacha CreatePostCommand e devolve o Post já gravado"""
+  createPost(input: CreatePostInput!): Post!
+
+  """Despacha UpdatePostCommand e devolve o Post já gravado"""
+  updatePost(input: UpdatePostInput!): Post!
+}
+
+input CreatePostInput {
+  title: String!
+  content: String!
+}
+
+input UpdatePostInput {
+  id: ID!
+
+  """null = manter o título atual"""
+  title: String
+
+  """null = manter o conteúdo atual"""
+  content: String
+}

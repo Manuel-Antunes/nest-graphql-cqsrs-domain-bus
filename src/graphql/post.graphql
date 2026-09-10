@@ -1,0 +1,35 @@
+# O read model de um Post no protocolo, e a connection que o pagina.
+#
+# Do outro lado está a `PostView` (`src/dto/graphql/post.view.ts`) — um DTO sem nenhum decorator de
+# GraphQL. A costura entre os dois é o NOME dos campos: o resolver padrão do graphql-js lê a
+# propriedade e o escalar a serializa, e é assim que um `PostTitle` vira `String!` sem ninguém mapear.
+#
+# `Post.tags` e `Post.author` não estão aqui: os dois têm resolver próprio, e por isso moram em
+# `post-tags.graphql` e `post-author.graphql`.
+
+"""
+Read model de um Post. Mesmo shape em queries, mutations e subscriptions.
+"""
+type Post {
+  id: ID!
+  title: String!
+  content: String!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+
+  """Quantidade de eventos aplicados (1 = só criado)"""
+  version: Int!
+}
+
+type PostConnection {
+  edges: [PostEdge!]!
+  pageInfo: PageInfo!
+
+  """Total de itens; null quando a fonte não conta"""
+  totalCount: Int
+}
+
+type PostEdge {
+  cursor: String!
+  node: Post!
+}

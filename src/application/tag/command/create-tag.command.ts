@@ -1,5 +1,3 @@
-import { EntityManager } from '@mikro-orm/core';
-import { CreateRequestContext } from '@mikro-orm/decorators/legacy';
 import { Inject, Scope } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
 import { type AsyncContext, Command, CommandHandler, EventPublisher, type ICommandHandler } from '@nestjs/cqrs';
@@ -31,13 +29,10 @@ export namespace CreateTagCommand {
   @CommandHandler(CreateTag, { scope: Scope.REQUEST })
   export class Handler implements ICommandHandler<CreateTag> {
     constructor(
-      private readonly em: EntityManager,
       private readonly tags: TagRepository,
       private readonly publisher: EventPublisher,
       @Inject(REQUEST) private readonly request: AsyncContext,
     ) {}
-
-    @CreateRequestContext()
     async execute(command: CreateTag): Promise<TagId> {
       if (await this.tags.findById(command.tagId)) {
         throw new TagAlreadyExistsException(command.tagId);

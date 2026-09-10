@@ -1,0 +1,29 @@
+# O campo `Author.posts` — ↔ `AuthorPostsResolver`.
+#
+# Ele entra por `extend type Author` pela mesma razão que `Post.tags` entra por `extend type Post`: o
+# campo não sai da view que o `me` devolveu, sai de um resolver que pagina no banco. Quem lê
+# `user.graphql` vê o read model; quem lê aqui vê o que custa uma consulta.
+#
+# É também o campo que justifica a interface existir. `me` devolve `User`; alcançar `posts` obriga o
+# cliente a dizer `... on Author`, e o servidor a ter mesmo um Author para casar — o "casting" é do
+# protocolo, mas quem o decide é o tipo que saiu do banco.
+
+extend type Author {
+  """
+  Posts deste autor, **do mais recente para o mais antigo**, como Relay cursor connection.
+
+  A ordem é o contrário da de `Query.posts` (por criação, crescente) de propósito: ali a pergunta é
+  "o que existe", e o feed se lê do começo; aqui é "o que esta pessoa publicou", e a resposta útil
+  começa pelo fim.
+
+  A paginação é por keyset, a mesma de `Query.posts` e pelo mesmo `em.findByCursor` — um autor
+  produtivo acumula milhares de posts, e pedir os 20 primeiros precisa custar 20.
+  """
+  posts(
+    """Quantos posts trazer; ausente = 20"""
+    first: Int
+
+    """Cursor do último post já visto"""
+    after: String
+  ): PostConnection!
+}

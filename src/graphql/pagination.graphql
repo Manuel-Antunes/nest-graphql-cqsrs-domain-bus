@@ -1,0 +1,12 @@
+# O vocabulário de paginação da spec de Relay — a parte que não é de nenhum agregado.
+#
+# `PageInfo` é compartilhado pelas duas connections do projeto (`posts` e `Post.tags`); cada uma
+# declara o seu `<Nome>Connection`/`<Nome>Edge` no arquivo do agregado a que pertence, porque é lá
+# que o `node` tem tipo.
+
+type PageInfo {
+  hasNextPage: Boolean!
+  hasPreviousPage: Boolean!
+  startCursor: String
+  endCursor: String
+}
