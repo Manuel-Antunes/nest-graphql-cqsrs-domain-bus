@@ -1,9 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import { z } from 'zod';
 import { ValidatedDto } from '../../../validated-dto/mixins';
+import { UserIdSchema } from '../schemas/user-id.schema';
 
-/** Identidade do User — ver {@link PostId} para o porquê de um value object gerado. */
-export class UserId extends ValidatedDto.Scalar(z.uuid().brand<'UserId'>()) {
+export class UserId extends ValidatedDto.Scalar(UserIdSchema) {
   static generate(): UserId {
     return UserId.parse(randomUUID());
   }

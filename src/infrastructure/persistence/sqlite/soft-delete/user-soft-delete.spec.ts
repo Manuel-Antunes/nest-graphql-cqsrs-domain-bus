@@ -3,25 +3,13 @@ import { defineConfig } from '@mikro-orm/sqlite';
 import { AUTHOR_ROLE, User } from '../../../../domain/user/user.entity';
 import { Author } from '../../../../domain/user/author.entity';
 import { PostSchema } from '../entities/post-orm.entity';
-import { ACTIVE_FILTER } from '../entities/soft-delete-orm.entity';
+import { ACTIVE_FILTER } from './soft-delete-orm.entity';
 import { SoftDeleteSubscriber } from './soft-delete.subscriber';
 import { TagSchema } from '../entities/tag-orm.entity';
 import { AuthorSchema, ReaderSchema, UserSchema } from '../entities/user-orm.entity';
 import { UserId } from '../../../../domain/user/vo/user-id';
 import { MikroOrmUserRepository } from '../repositories/mikro-orm-user.repository';
 
-/**
- * A exclusão lógica do `User` contra o **banco**, e não contra objetos.
- *
- * É a contraparte do `UserSoftDeleteJpaTest` da versão Java, e existe pelo mesmo motivo: os outros
- * testes de soft delete provam as regras do mixin, não o SQL que sai. E é no SQL que mora a parte
- * frágil — numa herança multi-tabela apagar toca **duas** tabelas, e sem o subscriber a linha de
- * `authors` seria removida de verdade enquanto a de `users` só ficava marcada. O autor voltaria de um
- * restore como se fosse um leitor.
- *
- * É o tipo de bug que nenhum teste de unidade pega e que só aparece no ciclo apagar → restaurar
- * inteiro.
- */
 describe('soft delete do User, contra o banco', () => {
   let orm: MikroORM;
   let users: MikroOrmUserRepository;
@@ -50,7 +38,6 @@ describe('soft delete do User, contra o banco', () => {
 
   afterEach(() => orm.close(true));
 
-  /** Conta a linha sem passar pelo mapeamento — é o único jeito de enxergar o que o filtro esconde. */
   const rawCount = async (table: string, where: string): Promise<number> => {
     const [row] = await orm.em
       .fork()
@@ -70,17 +57,14 @@ describe('soft delete do User, contra o banco', () => {
     it('marca em vez de remover', async () => {
       await removeThroughOrm();
 
-      // some das consultas…
       expect(await users.findById(authorId)).toBeNull();
       expect(await users.findActiveByEmail(EMAIL as never)).toBeNull();
-      // …mas a linha continua lá, marcada
       expect(await rawCount('users', `id = '${authorId.value}' and deleted_at is not null`)).toBe(1);
     });
 
     it('a linha da tabela filha sobrevive ao delete', async () => {
       await removeThroughOrm();
 
-      // é o subscriber que segura isto: sem ele, o DELETE da tabela da herança passaria
       expect(await rawCount('authors', `id = '${authorId.value}'`)).toBe(1);
     });
 
@@ -99,7 +83,6 @@ describe('soft delete do User, contra o banco', () => {
 
   describe('apagar pelo domínio (o mixin)', () => {
     it('marcar pelo agregado e salvar tem o mesmo efeito', async () => {
-      // o outro caminho: o domínio decide, o save persiste. Não passa por subscriber nenhum
       const em = orm.em.fork();
       const user = await em.findOneOrFail(User, { id: authorId });
       user.softDelete(NOW);

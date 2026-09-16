@@ -1,18 +1,19 @@
 /**
- * O critério de filtro de uma subscription → uma chave estável.
+ * A subscription's filter criteria → a stable key.
  *
- * É a peça que faz "o filtro é a chave": duas subscriptions do mesmo tipo pedidas com o mesmo
- * critério produzem a mesma string, e é por essa string que o `SubscriptionBus` acha (ou cria) o
- * stream que já está no ar. Por isso a serialização precisa ser *estável*, e não só correta:
+ * This is the piece that makes "the filter is the key": two subscriptions of the same type requested
+ * with the same criteria produce the same string, and it is by that string that the `SubscriptionBus`
+ * finds (or creates) the stream already on the air. That is why the serialization has to be *stable*,
+ * not merely correct:
  *
- * - as chaves de cada objeto saem ordenadas, então `{ postId, author }` e `{ author, postId }` — a
- *   mesma coisa, montada em duas ordens diferentes — dão a mesma chave;
- * - `undefined` some (é o que o `JSON.stringify` faz com propriedade de valor `undefined`), então
- *   `{ postId: undefined }` e `{}` são o mesmo critério — que é o que "sem filtro" quer dizer;
- * - um critério `void` (subscription sem filtro nenhum) vira a string `'void'`, porque
- *   `JSON.stringify(undefined)` devolve `undefined`, não uma string.
+ * - every object's keys come out sorted, so `{ postId, author }` and `{ author, postId }` — the same
+ *   thing, assembled in two different orders — yield the same key;
+ * - `undefined` disappears (what `JSON.stringify` does with a property whose value is `undefined`), so
+ *   `{ postId: undefined }` and `{}` are the same criteria — which is what "no filter" means;
+ * - `void` criteria (a subscription with no filter at all) become the string `'void'`, because
+ *   `JSON.stringify(undefined)` returns `undefined`, not a string.
  *
- * Arrays não são reordenados: a ordem deles é informação.
+ * Arrays are not reordered: their order is information.
  */
 export function subscriptionKey(criteria: unknown): string {
   const serialized = JSON.stringify(criteria, (_key, value) =>

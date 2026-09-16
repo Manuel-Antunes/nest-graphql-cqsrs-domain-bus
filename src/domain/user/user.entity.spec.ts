@@ -20,15 +20,6 @@ import { Email } from './vo/email';
 import { UserId } from './vo/user-id';
 import { UserName } from './vo/user-name';
 
-/**
- * Domínio puro: nenhum Nest, nenhum bus, **nenhum banco**. O único colaborador é o aggregate root.
- *
- * O `MikroORM.init` abaixo existe **só para descobrir as entidades** — sem `ensureDatabase`, nenhuma
- * tabela criada, nada lido ou escrito. É o mesmo preço que o `post.entity.spec` já pagava por causa
- * da `Collection` de tags, e agora vale aqui pelo mesmo motivo: `supersededBy`/`supersedes` são
- * `Ref<User>`, e `rel()` monta a referência pelo `EntityFactory` — sem metadata, o id não é
- * preenchido. É o custo de preferir relacionamento a id solto, e ele é este.
- */
 describe('User', () => {
   let orm: MikroORM;
 
@@ -48,10 +39,8 @@ describe('User', () => {
   const now = new Date('2026-09-08T12:00:00.000Z');
   const later = new Date('2026-09-08T12:05:00.000Z');
   const input = { email: 'Manuel@Example.com ', name: ' Manuel ' };
-  /** O estado observável, sem os internos do aggregate root. */
   const stateOf = ({ id, email, name, createdAt, version, supersededBy, supersedes, deletedAt }: User) => ({
     id, email, name, createdAt, version, deletedAt,
-    // referências entram pelo id: duas `Ref` do mesmo user são objetos diferentes
     supersededBy: supersededBy?.id ?? null,
     supersedes: supersedes?.id ?? null,
   });
@@ -92,14 +81,6 @@ describe('User', () => {
     });
   });
 
-  /**
-   * Decidir e evoluir chegam ao mesmo estado — a mesma afirmação que o `post.entity.spec` faz, e pelo
-   * mesmo motivo: `register` termina chamando os `on<Evento>`, então "o que o command gravou" e "o que
-   * sai de um replay" não podem divergir.
-   *
-   * Repare em como o replay é feito: `new Reader()` e `loadFromHistory`. Não há construtor nomeado
-   * para isso, porque a classe é escolhida por quem chama — nos dois caminhos.
-   */
   describe('reconstituir devolve o que decidir montou', () => {
     it('um Reader replica o estado que a decisão montou', () => {
       const decided = Reader.register(id, input, null, now);

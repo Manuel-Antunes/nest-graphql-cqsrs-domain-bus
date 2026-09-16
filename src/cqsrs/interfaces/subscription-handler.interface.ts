@@ -3,29 +3,29 @@ import type { Subscription } from '../classes/subscription';
 import type { ISubscription } from './subscription.interface';
 
 /**
- * O contrato de um handler de subscription — o irmão do `IQueryHandler`, com a única diferença que
- * importa: **`subscribe` devolve um `Observable`, não uma `Promise`**.
+ * A subscription handler's contract — sibling to `IQueryHandler`, with the one difference that
+ * matters: **`subscribe` returns an `Observable`, not a `Promise`**.
  *
- * Um handler de subscription não *responde*: ele **liga** a mensagem a uma fonte de eventos (na
- * prática, o `EventBus` filtrado por `ofType(...)`) e devolve esse stream. Ele não precisa aplicar o
- * critério do assinante — disso cuida o `SubscriptionBus`, chamando `subscription.filter(event)`.
+ * A subscription handler does not *answer*: it **wires** the message to an event source (in practice,
+ * the `EventBus` filtered by `ofType(...)`) and returns that stream. It does not need to apply the
+ * subscriber's criteria — the `SubscriptionBus` takes care of that, calling `subscription.match(event)`.
  *
- * Quando a mensagem estende `Subscription<TEvent>`, o tipo do evento é inferido dela e o
- * `Observable<TEvent>` de volta é conferido pelo compilador.
+ * When the message extends `Subscription<TEvent>`, the event type is inferred from it and the returned
+ * `Observable<TEvent>` is checked by the compiler.
  */
 export type ISubscriptionHandler<T extends ISubscription = any, TEvent = any> =
   T extends Subscription<infer InferredEvent, any>
     ? {
         /**
-         * Abre o stream desta subscription.
-         * @param subscription A subscription pedida (com o critério de quem pediu).
+         * Opens this subscription's stream.
+         * @param subscription The requested subscription (carrying the requester's criteria).
          */
         subscribe(subscription: T): Observable<InferredEvent>;
       }
     : {
         /**
-         * Abre o stream desta subscription.
-         * @param subscription A subscription pedida (com o critério de quem pediu).
+         * Opens this subscription's stream.
+         * @param subscription The requested subscription (carrying the requester's criteria).
          */
         subscribe(subscription: T): Observable<TEvent>;
       };

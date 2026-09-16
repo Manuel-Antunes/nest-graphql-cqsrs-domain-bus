@@ -5,14 +5,6 @@ import type { Author } from '../../../domain/user/author.entity';
 import { UserId } from '../../../domain/user/vo/user-id';
 import { FindPostsByAuthorQuery } from './find-posts-by-author.query';
 
-/**
- * A cursor connection de `Author.posts` contra o banco: o recorte por autor, a ordem **decrescente**
- * (que é o contrário de `posts`), e que as relações que a view precisa voltam populadas.
- *
- * Esse último ponto é o que justifica este método existir na porta em vez de o campo usar o
- * `Author.posted` do agregado: sem `populate`, `post.tags` volta não inicializada e o
- * mapeamento `Post → PostView` estoura na borda — longe daqui, e num lugar onde a causa não aparece.
- */
 describe('FindPostsByAuthorQuery.Handler', () => {
   let module: TestingModule;
   let handler: FindPostsByAuthorQuery.Handler;
@@ -53,10 +45,6 @@ describe('FindPostsByAuthorQuery.Handler', () => {
     expect(second.hasPrevPage).toBe(true);
   });
 
-  /**
-   * O recorte é por chave estrangeira: os posts de outro autor não entram, e o `totalCount` conta só
-   * os deste — um `count` sem o mesmo `where` seria o total da tabela.
-   */
   it('não traz os posts de outro autor, nem os conta', async () => {
     const outro = await givenAnAuthor(module);
     await givenAPost(module, { title: 'de outra pessoa', author: outro });
@@ -67,7 +55,6 @@ describe('FindPostsByAuthorQuery.Handler', () => {
     expect(mine.totalCount).toBe(3);
   });
 
-  /** Um id que não é de autor nenhum devolve vazio — e não um erro que confirme quem existe. */
   it('um id desconhecido é uma página vazia', async () => {
     const empty = await inRequestContext(module, () =>
       handler.execute(new FindPostsByAuthorQuery.FindPostsByAuthor(UserId.generate(), 10)),
@@ -78,10 +65,6 @@ describe('FindPostsByAuthorQuery.Handler', () => {
     expect(empty.hasNextPage).toBe(false);
   });
 
-  /**
-   * As duas relações que o `Post → PostView` lê: `tags` como coleção inicializada e `author` como
-   * referência carregada. É o contrato que a borda depende, e por isso ele é afirmado aqui.
-   */
   it('os posts voltam com tags e author populados, prontos para a view', async () => {
     const { items } = await page(1);
 

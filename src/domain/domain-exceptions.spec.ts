@@ -4,8 +4,8 @@ import { PostNotFoundException } from './post/exception/post-not-found.exception
 import { PostNotWrittenByException } from './post/exception/post-not-written-by.exception';
 import { InvalidPostException } from './post/exception/invalid-post.exception';
 import { PostId } from './post/vo/post-id';
-import { AlreadyDeletedException } from './shared/already-deleted.exception';
-import { NotDeletedException } from './shared/not-deleted.exception';
+import { AlreadyDeletedException } from './shared/soft-delete/already-deleted.exception';
+import { NotDeletedException } from './shared/soft-delete/not-deleted.exception';
 import { InvalidTagException } from './tag/exception/invalid-tag.exception';
 import { TagAlreadyExistsException } from './tag/exception/tag-already-exists.exception';
 import { TagNotFoundException } from './tag/exception/tag-not-found.exception';
@@ -14,19 +14,6 @@ import { InvalidUserException } from './user/exception/invalid-user.exception';
 import { NotAnAuthorException } from './user/exception/not-an-author.exception';
 import { UserId } from './user/vo/user-id';
 
-/**
- * As exceções do domínio como **dados**, e não só como falhas.
- *
- * Elas são lidas em três lugares diferentes, e cada um depende de uma metade distinta:
- *
- * - o `DomainExceptionFilter` roteia pelo **`name`** — se ele mudar, uma recusa de negócio vira 500;
- * - o cliente do GraphQL lê a **mensagem** — ou, quando a recusa veio de um `safeParse`, a **`cause`**
- *   que a exceção carrega: é lá que moram as issues campo a campo, e quem as imprime é o filtro;
- * - quem trata a exceção lê o **campo tipado** (`postId`, `userId`) sem reparsear a mensagem.
- *
- * O caso do {@link NotAnAuthorException} é o que mais pede teste: ele tem duas formas de propósito, e
- * a sem id é vaga **para não virar um oráculo** de quais usuários existem.
- */
 describe('exceções do domínio', () => {
   const postId = PostId.parse('0c1ee4d8-9b0d-4a8a-9d5f-2b1a5e7c3f10');
   const tagId = TagId.parse('5f7a1c7e-4d0b-4b7a-9e3c-1a2b3c4d5e6f');
@@ -34,10 +21,8 @@ describe('exceções do domínio', () => {
 
   describe('Post', () => {
     it('PostNotFound nomeia o id e guarda o value object', () => {
-      // Arrange / Act
       const error = new PostNotFoundException(postId);
 
-      // Assert
       expect(error).toBeInstanceOf(Error);
       expect(error.name).toBe('PostNotFoundException');
       expect(error.message).toBe(`post ${postId.value} não existe`);
@@ -45,38 +30,27 @@ describe('exceções do domínio', () => {
     });
 
     it('PostAlreadyExists nomeia o id que colidiu', () => {
-      // Arrange / Act
       const error = new PostAlreadyExistsException(postId);
 
-      // Assert
       expect(error.name).toBe('PostAlreadyExistsException');
       expect(error.message).toBe(`post ${postId.value} já existe`);
       expect(error.postId).toBe(postId);
     });
 
     it('PostNotWrittenBy carrega os dois lados da recusa: o post e quem tentou', () => {
-      // Arrange / Act
       const error = new PostNotWrittenByException(postId, userId);
 
-      // Assert
       expect(error.name).toBe('PostNotWrittenByException');
       expect(error.message).toBe(`post ${postId.value} não foi escrito por ${userId.value}`);
       expect(error.postId).toBe(postId);
       expect(error.userId).toBe(userId);
     });
 
-    /**
-     * A exceção **não traduz** o `safeParse`: ela o pendura como `cause`. A mensagem nomeia a
-     * invariante, e as issues continuam sendo dados até a borda decidir como imprimi-las.
-     */
     it('InvalidPost nomeia a invariante e guarda o ZodError como causa', () => {
-      // Arrange
       const result = z.object({ title: z.string().min(1, 'title não pode ser vazio') }).safeParse({ title: '' });
 
-      // Act
       const error = new InvalidPostException('post inválido', { cause: result.error });
 
-      // Assert
       expect(error).toBeInstanceOf(InvalidPostException);
       expect(error.name).toBe('InvalidPostException');
       expect(error.message).toBe('post inválido');
@@ -86,7 +60,6 @@ describe('exceções do domínio', () => {
 
   describe('Tag', () => {
     it('TagNotFound e TagAlreadyExists nomeiam o id', () => {
-      // Assert
       expect(new TagNotFoundException(tagId).message).toBe(`tag ${tagId.value} não existe`);
       expect(new TagNotFoundException(tagId).tagId).toBe(tagId);
       expect(new TagAlreadyExistsException(tagId).message).toBe(`tag ${tagId.value} já existe`);
@@ -94,60 +67,40 @@ describe('exceções do domínio', () => {
     });
 
     it('InvalidTag guarda as issues na causa', () => {
-      // Arrange
       const result = z.string().min(1, 'nome da tag não pode ser vazio').safeParse('');
 
-      // Act
       const error = new InvalidTagException('nome de tag inválido', { cause: result.error });
 
-      // Assert
       expect(error.message).toBe('nome de tag inválido');
       expect(error.cause).toBe(result.error);
     });
   });
 
   describe('User', () => {
-    /**
-     * A forma **com id** é a guarda de borda: quem a recebe é o próprio usuário, então a mensagem pode
-     * nomeá-lo.
-     */
     it('NotAnAuthor com id nomeia quem tentou escrever', () => {
-      // Arrange / Act
       const error = new NotAnAuthorException(userId);
 
-      // Assert
       expect(error.name).toBe('NotAnAuthorException');
       expect(error.message).toBe(`user ${userId.value} não é autor: não escreve posts`);
       expect(error.userId).toBe(userId);
     });
 
-    /**
-     * A forma **sem id** é a violação da chave estrangeira traduzida. Ela dispara tanto para um id
-     * inexistente quanto para um id de leitor, e a mensagem não distingue os dois de propósito —
-     * distinguir transformaria a recusa num oráculo de quais usuários existem.
-     */
     it('NotAnAuthor sem id não diz qual dos dois casos foi', () => {
-      // Arrange / Act
       const error = new NotAnAuthorException();
 
-      // Assert
       expect(error.message).toBe('o autor informado não existe ou não pode escrever');
       expect(error.message).not.toContain(userId.value);
       expect(error.userId).toBeUndefined();
     });
 
     it('InvalidUser aceita mensagem direta e, quando há, a causa que a originou', () => {
-      // Arrange
       const result = z.object({ email: z.email('email inválido') }).safeParse({ email: 'x' });
 
-      // Act
       const doDominio = new InvalidUserException('promoção impossível');
       const doParse = new InvalidUserException('user inválido', { cause: result.error });
 
-      // Assert
       expect(doDominio.message).toBe('promoção impossível');
       expect(doDominio.name).toBe('InvalidUserException');
-      // Uma recusa que não veio de parse não inventa causa nenhuma — a causa é opcional.
       expect(doDominio.cause).toBeUndefined();
       expect(doParse.cause).toBe(result.error);
     });
@@ -155,11 +108,9 @@ describe('exceções do domínio', () => {
 
   describe('soft delete', () => {
     it('as duas recusas imprimem a identidade da entidade', () => {
-      // Arrange / Act
       const already = new AlreadyDeletedException(`post ${postId.value}`);
       const notYet = new NotDeletedException(`post ${postId.value}`);
 
-      // Assert
       expect(already.name).toBe('AlreadyDeletedException');
       expect(already.message).toBe(`já está apagado: post ${postId.value}`);
       expect(already.entity).toBe(`post ${postId.value}`);

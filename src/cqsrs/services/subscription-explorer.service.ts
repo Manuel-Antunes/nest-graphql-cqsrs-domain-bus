@@ -6,13 +6,12 @@ import { SUBSCRIPTION_HANDLER_METADATA } from '../decorators/constants';
 import type { ISubscriptionHandler } from '../interfaces/subscription-handler.interface';
 
 /**
- * Varre os providers de todos os módulos atrás dos anotados com `@SubscriptionHandler` — o mesmo
- * papel que o `ExplorerService` do @nestjs/cqrs cumpre para commands, queries, events e sagas, e
- * pela mesma mecânica (a metadata na classe). Roda uma vez, no `onApplicationBootstrap` do
- * `CqsrsModule`.
+ * Scans every module's providers for those annotated with `@SubscriptionHandler` — the same role
+ * @nestjs/cqrs's `ExplorerService` plays for commands, queries, events and sagas, through the same
+ * mechanics (class metadata). Runs once, in `CqsrsModule`'s `onApplicationBootstrap`.
  *
- * Devolve `InstanceWrapper`s, e não instâncias, porque é o wrapper que sabe se o handler é estático
- * ou request-scoped — a diferença que o `SubscriptionBus.bind` precisa fazer.
+ * Returns `InstanceWrapper`s rather than instances, because it is the wrapper that knows whether the
+ * handler is static or request-scoped — the distinction `SubscriptionBus.bind` has to make.
  */
 @Injectable()
 export class SubscriptionExplorerService {
@@ -22,7 +21,7 @@ export class SubscriptionExplorerService {
     return [...this.modulesContainer.values()]
       .flatMap((moduleRef) => [...moduleRef.providers.values()])
       .filter((wrapper) => {
-        /** `wrapper.inject` (factory provider) já tem instância; os demais têm `metatype`. */
+        /** `wrapper.inject` (a factory provider) already has an instance; the rest have `metatype`. */
         const classRef = (wrapper.instance?.constructor ?? wrapper.metatype) as Type | null | undefined;
         return !!classRef && !!Reflect.getMetadata(SUBSCRIPTION_HANDLER_METADATA, classRef);
       }) as InstanceWrapper<ISubscriptionHandler>[];

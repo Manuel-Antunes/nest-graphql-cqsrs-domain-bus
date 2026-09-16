@@ -13,14 +13,6 @@ import { AUTHOR_ROLE, User } from './user.entity';
 import { Author } from './author.entity';
 import { UserId } from './vo/user-id';
 
-/**
- * Os posts vistos do lado do autor.
- *
- * O que estes testes defendem não é só que a coleção funciona — é que ela **não** carrega tudo. A
- * versão Java desta aplicação não tem esta coleção justamente por esse medo ("um autor produtivo tem
- * milhares de posts, e uma coleção mapeada é um convite a carregar todos"). Ter a coleção e não
- * aceitar o convite é o contrato do `Author`, e é o que está travado aqui.
- */
 describe('Author e os posts dele', () => {
   let orm: MikroORM;
   const now = new Date('2026-09-08T12:00:00.000Z');
@@ -37,7 +29,6 @@ describe('Author e os posts dele', () => {
 
   afterAll(() => orm.close(true));
 
-  /** Um autor com N posts, escritos em instantes crescentes para a ordem ser observável. */
   const givenAnAuthorWith = async (titles: string[]): Promise<UserId> => {
     const em = orm.em.fork();
     const user = Author.register(
@@ -50,8 +41,6 @@ describe('Author e os posts dele', () => {
       throw new Error('AUTHOR_ROLE precisa nascer Author');
     }
     user.uncommit();
-    // O autor primeiro: a chave estrangeira de `posts.author_id` aponta para `authors`, e a linha da
-    // subclasse precisa existir antes. Na produção isso é dado — o autor vem da sessão.
     await em.persist(user).flush();
 
     const writing = orm.em.fork();
@@ -97,7 +86,6 @@ describe('Author e os posts dele', () => {
     expect(page.map((post) => post.title.value)).toEqual(['primeiro']);
   });
 
-  /** O ponto todo: a página vai ao banco com `limit`, e a coleção continua sem ter carregado nada. */
   it('paginar não inicializa a coleção', async () => {
     const id = await givenAnAuthorWith(['a', 'b', 'c']);
     const author = await loadAuthor(id);

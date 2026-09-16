@@ -1,8 +1,3 @@
-# A Tag no protocolo, e a connection que a pagina dentro de um Post.
-#
-# Não há `Query.tag`: a tag só é alcançável por um post. O agregado existe (tem id e eventos
-# próprios), mas a borda ainda não o expõe sozinho — e o schema é onde isso fica dito.
-
 """Uma tag. Agregado próprio: tem id e eventos independentes do post."""
 type Tag {
   id: ID!

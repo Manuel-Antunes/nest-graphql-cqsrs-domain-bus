@@ -6,9 +6,7 @@ import { Tag } from '../../../domain/tag/tag.entity';
 import { TagRepository } from '../../../domain/tag/tag.repository';
 import type { TagId } from '../../../domain/tag/vo/tag-id';
 
-/** A fatia de `CreateTag`: a mensagem e o handler dela — ver `CreatePostCommand` para o padrão. */
 export namespace CreateTagCommand {
-  /** Command: criar uma Tag. Como no Post, o id vem de quem despacha. */
   export class CreateTag extends Command<TagId> {
     constructor(
       readonly tagId: TagId,
@@ -18,14 +16,6 @@ export namespace CreateTagCommand {
     }
   }
 
-  /**
-   * Handler de `CreateTag`: rejeita id repetido, cria pela entidade, salva, publica.
-   *
-   * Request-scoped, e é aqui que a propagação mostra que atravessa **agregado**: a tag padrão nasce
-   * dentro da request de um post — a saga despacha este command passando adiante o contexto do
-   * `PostCreatedEvent` —, então o `TagCreatedEvent` sai carimbado com a mesma `PostRequest` que o
-   * `PostCreatedEvent` e o `PostUpdatedEvent` daquela cadeia. Uma request, um `PostId`, três eventos.
-   */
   @CommandHandler(CreateTag, { scope: Scope.REQUEST })
   export class Handler implements ICommandHandler<CreateTag> {
     constructor(

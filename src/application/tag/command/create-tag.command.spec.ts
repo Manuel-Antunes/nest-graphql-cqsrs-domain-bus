@@ -12,11 +12,6 @@ import { TagName } from '../../../domain/tag/vo/tag-name';
 import { PostRequest } from '../../shared/post-request';
 import { CreateTagCommand } from './create-tag.command';
 
-/**
- * Request-scoped como todo command handler daqui: o caminho do teste é o `CommandBus`. A request de
- * uma tag é a do post que a pediu — quem despacha este command em produção é a saga, repassando o
- * contexto que veio no `PostCreatedEvent`.
- */
 describe('CreateTagCommand.Handler', () => {
   let module: TestingModule;
   let commands: CommandBus;

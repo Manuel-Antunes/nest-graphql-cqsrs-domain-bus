@@ -3,9 +3,9 @@ import type { ISubscription } from '../interfaces/subscription.interface';
 import type { ISubscriptionPublisher } from '../interfaces/subscription-publisher.interface';
 
 /**
- * O publisher padrão: empurra cada subscription pedida para o `Subject` do próprio `SubscriptionBus`
- * — o que torna o bus um `Observable` de "alguém se inscreveu em quê". O espelho do
- * `DefaultQueryPubSub` do @nestjs/cqrs; trocável pela opção `subscriptionPublisher` do módulo.
+ * The default publisher: pushes every requested subscription into the `SubscriptionBus`'s own
+ * `Subject` — which turns the bus into an `Observable` of "who subscribed to what". The mirror of
+ * @nestjs/cqrs's `DefaultQueryPubSub`; swappable through the module's `subscriptionPublisher` option.
  */
 export class DefaultSubscriptionPubSub<SubscriptionBase extends ISubscription>
   implements ISubscriptionPublisher<SubscriptionBase>

@@ -5,7 +5,6 @@ import { TagRepository } from '../../../../domain/tag/tag.repository';
 import type { TagId } from '../../../../domain/tag/vo/tag-id';
 import type { TagName } from '../../../../domain/tag/vo/tag-name';
 
-/** Adapter da porta `TagRepository` sobre o MikroORM. */
 @Injectable()
 export class MikroOrmTagRepository extends TagRepository {
   constructor(private readonly em: EntityManager) {

@@ -28,7 +28,6 @@ class OnPingedHandler implements ISubscriptionHandler<OnPinged> {
   }
 }
 
-/** Publishers só para provar identidade: se o bus recebeu *este* objeto, a opção chegou nele. */
 const subscriptionPublisher: ISubscriptionPublisher = { publish: () => {} };
 const eventPublisher: IEventPublisher = { publish: <T extends IEvent>(_event: T) => {} };
 const options: CqsrsModuleOptions = { subscriptionPublisher, eventPublisher };
@@ -79,11 +78,8 @@ describe('CqsrsModule.forRootAsync', () => {
       }),
     ]);
 
-    // a factory de quem chama roda uma vez só, mesmo servindo ao CqsrsModule e ao CqrsModule embaixo
     expect(calls).toBe(1);
-    // a opção do CQSRS chegou no SubscriptionBus…
     expect(app.get(SubscriptionBus).publisher).toBe(subscriptionPublisher);
-    // …e as do CQRS foram repassadas inteiras para o CqrsModule
     expect(app.get(EventBus).publisher).toBe(eventPublisher);
   });
 
@@ -121,11 +117,6 @@ describe('CqsrsModule.forRootAsync', () => {
     expect(received).toEqual([new Pinged(1)]);
   });
 
-  /**
-   * Uma factory que não depende de nada é a forma mais curta de configurar o módulo — e a que passa
-   * pelo `inject: options.inject ?? []`. Sem o fallback, o Nest receberia `undefined` onde espera uma
-   * lista e a factory nem chegaria a rodar.
-   */
   it('accepts a useFactory with no dependencies to inject', async () => {
     let calls = 0;
     const app = await bootstrap([

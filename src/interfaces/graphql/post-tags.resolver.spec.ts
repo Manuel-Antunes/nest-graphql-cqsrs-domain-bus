@@ -5,19 +5,9 @@ import { PostView } from '../../dto/graphql/post.view';
 import { TagView } from '../../dto/graphql/tag.view';
 import { PostTagsResolver } from './post-tags.resolver';
 
-/**
- * O **recorte** de `Post.tags`, que é a parte da cursor connection que é lógica nossa e não do
- * MikroORM (a de `posts` é do `em.findByCursor`, coberta no `FindAllPostsQueryHandler`).
- *
- * Só o recorte: o envelope — edges, `pageInfo`, `totalCount` — saiu daqui junto com o comportamento, e
- * está no `connection.interceptor.spec`. É o mesmo movimento que `Query.posts` e `Author.posts` já
- * tinham feito, e o efeito é o de sempre: os flags de paginação são afirmados **uma vez**, e valem
- * para as três connections do schema.
- */
 describe('PostTagsResolver', () => {
   const resolver = new PostTagsResolver();
 
-  /** Uma view como o `PostProfile` a entrega: campos como value objects, tags como `TagView`. */
   const viewWith = (names: string[]) =>
     new PostView({
       id: PostId.generate(),
@@ -75,7 +65,6 @@ describe('PostTagsResolver', () => {
     expect(page).toMatchObject({ hasNextPage: false, hasPrevPage: false, startCursor: null, endCursor: null });
   });
 
-  /** O cursor é a **posição absoluta**, e não a posição dentro da página. */
   it('cada item leva o cursor da sua posição absoluta', () => {
     const first = resolver.tags(post, 3);
     const second = resolver.tags(post, 3, first.endCursor);

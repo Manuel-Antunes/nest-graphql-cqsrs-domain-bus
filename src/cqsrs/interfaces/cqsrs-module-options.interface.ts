@@ -3,36 +3,36 @@ import type { CqrsModuleOptions } from '@nestjs/cqrs';
 import type { ISubscriptionPublisher } from './subscription-publisher.interface';
 
 /**
- * As opções do `CqsrsModule`: as do `CqrsModule` (repassadas inteiras para ele) mais a única peça
- * que o CQSRS acrescenta.
+ * The `CqsrsModule` options: the `CqrsModule` ones (forwarded to it wholesale) plus the single piece
+ * CQSRS adds.
  */
 export interface CqsrsModuleOptions extends CqrsModuleOptions {
   /**
-   * Para onde anunciar cada subscription pedida.
-   * @default DefaultSubscriptionPubSub (em memória, o `Subject` do próprio bus)
+   * Where to announce every requested subscription.
+   * @default DefaultSubscriptionPubSub (in memory, the bus's own `Subject`)
    */
   subscriptionPublisher?: ISubscriptionPublisher;
 }
 
-/** Quem sabe montar as opções do CQSRS — o alvo de `useClass` / `useExisting` no `forRootAsync`. */
+/** Whoever knows how to build the CQSRS options — the target of `useClass` / `useExisting` in `forRootAsync`. */
 export interface CqsrsModuleOptionsFactory {
   createCqsrsOptions(): Promise<CqsrsModuleOptions> | CqsrsModuleOptions;
 }
 
 /**
- * As opções do `CqsrsModule.forRootAsync`, nas quatro formas de sempre do Nest. Espelha o
- * `CqrsModuleAsyncOptions` do @nestjs/cqrs, com uma diferença: aqui o `extraProviders` é de fato
- * registrado (no módulo de opções, junto de quem depende dele).
+ * The `CqsrsModule.forRootAsync` options, in Nest's usual four shapes. Mirrors @nestjs/cqrs's
+ * `CqrsModuleAsyncOptions`, with one difference: here `extraProviders` is actually registered (in the
+ * options module, alongside whoever depends on it).
  */
 export interface CqsrsModuleAsyncOptions {
-  /** Módulos que exportam o que a factory injeta (um `ConfigModule`, por exemplo). */
+  /** Modules exporting whatever the factory injects (a `ConfigModule`, for instance). */
   imports?: any[];
   useExisting?: Type<CqsrsModuleOptionsFactory>;
   useClass?: Type<CqsrsModuleOptionsFactory>;
   useFactory?: (...args: any[]) => Promise<CqsrsModuleOptions> | CqsrsModuleOptions;
   useValue?: CqsrsModuleOptions;
-  /** O que injetar na `useFactory`. */
+  /** What to inject into `useFactory`. */
   inject?: any[];
-  /** Providers extras registrados ao lado das opções — úteis para o que a factory injeta. */
+  /** Extra providers registered alongside the options — useful for whatever the factory injects. */
   extraProviders?: Provider[];
 }

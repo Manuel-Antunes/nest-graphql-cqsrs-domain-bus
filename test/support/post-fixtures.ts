@@ -12,13 +12,6 @@ import { freshEm } from './cqrs-testing-module';
 
 export const T0 = new Date('2026-09-08T12:00:00.000Z');
 
-/**
- * Grava um Post direto no banco (sem command), como o "given" de um teste de handler.
- *
- * As tags entram como o agregado `Tag`, e recarregadas **no mesmo fork**: `Post.tags` é uma relação
- * m:n, e ligar a um objeto vindo de outro EntityManager misturaria identity maps. Quem chama passa
- * as Tags que `givenATag` gravou; a fixture as busca de novo aqui.
- */
 export async function givenAPost(
   module: TestingModule,
   overrides: { id?: PostId; title?: string; content?: string; author?: Author; createdAt?: Date; tags?: Tag[] } = {},
@@ -43,14 +36,10 @@ export async function givenAPost(
   return post;
 }
 
-/**
- * Grava um Author direto no banco (sem command). Todo Post precisa de um: a relação é obrigatória.
- */
 export async function givenAnAuthor(module: TestingModule, email = `autor+${UserId.generate()}@example.com`, name = 'manuel'): Promise<Author> {
   return givenAnAuthorIn(freshEm(module), email, name);
 }
 
-/** Grava um Reader — quem lê mas não escreve. */
 export async function givenAReader(module: TestingModule, email = `leitor+${UserId.generate()}@example.com`, name = 'leitor'): Promise<User> {
   const em = freshEm(module);
   const reader = Reader.register(UserId.generate(), { email, name }, null, T0);
@@ -69,7 +58,6 @@ async function givenAnAuthorIn(em: ReturnType<typeof freshEm>, email: string, na
   return author;
 }
 
-/** Grava uma Tag direto no banco. */
 export async function givenATag(module: TestingModule, name = 'Untagged', id: TagId = TagId.generate()): Promise<Tag> {
   const tag = Tag.create(id, name, T0);
   tag.uncommit();

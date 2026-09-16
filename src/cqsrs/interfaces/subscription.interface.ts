@@ -1,5 +1,5 @@
 /**
- * Marcador de uma mensagem de subscription — o equivalente do `IQuery`/`ICommand` do @nestjs/cqrs.
- * Vazio de propósito: quem quiser as garantias de tipo estende a classe `Subscription<TEvent>`.
+ * Marker for a subscription message — the equivalent of @nestjs/cqrs's `IQuery`/`ICommand`. Empty on
+ * purpose: whoever wants the type guarantees extends the `Subscription<TEvent>` class.
  */
 export interface ISubscription {}

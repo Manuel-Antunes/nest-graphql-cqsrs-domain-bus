@@ -1,4 +1,4 @@
-/** A classe está anotada com `@SubscriptionHandler`, mas não é um handler de subscription. */
+/** The class is annotated with `@SubscriptionHandler`, but is not a subscription handler. */
 export class InvalidSubscriptionHandlerException extends Error {
   constructor() {
     super(

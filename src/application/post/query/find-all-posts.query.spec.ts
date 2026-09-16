@@ -3,11 +3,6 @@ import { createCqrsTestingModule, inRequestContext } from '../../../../test/supp
 import { givenAPost, T0 } from '../../../../test/support/post-fixtures';
 import { FindAllPostsQuery } from './find-all-posts.query';
 
-/**
- * A mecânica da cursor connection de `posts`, que é do `em.findByCursor`: a linha a mais que decide o
- * `hasNextPage` nunca vaza, o `endCursor` de uma página é o `after` da seguinte, e a ordem é
- * `createdAt, id`.
- */
 describe('FindAllPostsQuery.Handler', () => {
   let module: TestingModule;
   let handler: FindAllPostsQuery.Handler;

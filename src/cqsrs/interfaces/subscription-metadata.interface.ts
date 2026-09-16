@@ -1,4 +1,4 @@
-/** O que o `@SubscriptionHandler` grava na *classe da subscription*: o id pelo qual o bus a acha. */
+/** What `@SubscriptionHandler` stores on the *subscription class*: the id the bus finds it by. */
 export interface SubscriptionMetadata {
   id: string;
 }

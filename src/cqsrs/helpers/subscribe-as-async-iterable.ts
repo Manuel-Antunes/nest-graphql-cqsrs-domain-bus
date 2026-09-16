@@ -4,9 +4,9 @@ import type { ISubscriptionBus } from '../interfaces/subscription-bus.interface'
 import { observableToAsyncIterable } from './observable-to-async-iterable';
 
 /**
- * O helper da camada de interface: pede a subscription ao bus, projeta cada evento para a forma do
- * protocolo e devolve o async iterable que o transporte consome. É a linha inteira de um resolver de
- * subscription GraphQL:
+ * The interface layer's helper: asks the bus for the subscription, projects each event into the
+ * protocol's shape and returns the async iterable the transport consumes. It is the entire body of a
+ * GraphQL subscription resolver:
  *
  * ```ts
  * @Subscription(() => PostView, { name: 'onPostUpdated', resolve: (payload: PostView) => payload })
@@ -19,16 +19,16 @@ import { observableToAsyncIterable } from './observable-to-async-iterable';
  * }
  * ```
  *
- * Repare no que a interface faz e no que ela não faz: ela **monta o critério** com os argumentos do
- * protocolo (`postId`) e **traduz o evento** para a view. Ela não filtra — o filtro é o método da
- * subscription, na camada de aplicação, e roda dentro do stream. Sem `filter` no `@Subscription`,
- * sem `filter()` no Observable do resolver.
+ * Note what the interface does and what it does not: it **assembles the criteria** from the protocol's
+ * arguments (`postId`) and **translates the event** into the view. It does not filter — the filter is
+ * the subscription's `match` method, in the application layer, and it runs inside the stream. No
+ * `filter` on `@Subscription`, no `filter()` on the resolver's Observable.
  *
- * Nada aqui importa GraphQL: um async iterable é o contrato de qualquer consumidor *pull*.
+ * Nothing here imports GraphQL: an async iterable is the contract of any *pull* consumer.
  *
- * @param bus O `SubscriptionBus`.
- * @param subscription A subscription pedida, já com o critério.
- * @param project Evento → o que o assinante recebe. O padrão entrega o evento como veio.
+ * @param bus The `SubscriptionBus`.
+ * @param subscription The requested subscription, criteria included.
+ * @param project Event → what the subscriber receives. The default hands the event over untouched.
  */
 export function subscribeAsAsyncIterable<TEvent, TOut = TEvent>(
   bus: ISubscriptionBus,

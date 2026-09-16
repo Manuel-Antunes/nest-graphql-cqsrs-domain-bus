@@ -5,19 +5,19 @@ import type { ISubscription } from '../interfaces/subscription.interface';
 import { SUBSCRIPTION_HANDLER_METADATA, SUBSCRIPTION_METADATA } from './constants';
 
 /**
- * Marca a classe como o handler de uma subscription — o `@QueryHandler` das subscriptions, com a
- * mesma mecânica de duas pontas:
+ * Marks the class as a subscription's handler — the `@QueryHandler` of subscriptions, with the same
+ * two-ended mechanics:
  *
- * - na **classe da subscription**, grava um `id` (uma vez só, `hasOwnMetadata`): é a identidade que
- *   sobrevive a nomes iguais em módulos diferentes, e é por ela que o bus faz o roteamento;
- * - na **classe do handler**, grava a subscription que ele trata: é o que o
- *   `SubscriptionExplorerService` varre nos providers no bootstrap.
+ * - on the **subscription class**, it stores an `id` (once only, `hasOwnMetadata`): the identity that
+ *   survives identical names in different modules, and what the bus routes by;
+ * - on the **handler class**, it stores the subscription it handles: what the
+ *   `SubscriptionExplorerService` scans the providers for at bootstrap.
  *
- * A classe decorada precisa implementar `ISubscriptionHandler` — ou seja, ter um `subscribe` que
- * devolve um `Observable`.
+ * The decorated class must implement `ISubscriptionHandler` — that is, have a `subscribe` returning an
+ * `Observable`.
  *
- * @param subscription A *classe* da subscription tratada por este handler.
- * @param options Opções repassadas ao `@Injectable` (escopo, por exemplo).
+ * @param subscription The subscription *class* handled by this handler.
+ * @param options Options forwarded to `@Injectable` (scope, for instance).
  */
 export const SubscriptionHandler = (subscription: ISubscription, options?: InjectableOptions): ClassDecorator => {
   return (target) => {

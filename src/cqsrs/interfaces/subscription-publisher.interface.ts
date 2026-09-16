@@ -1,9 +1,9 @@
 import type { ISubscription } from './subscription.interface';
 
 /**
- * Para onde o `SubscriptionBus` anuncia cada subscription pedida — o espelho do `IQueryPublisher`.
- * O padrão (`DefaultSubscriptionPubSub`) empurra para o `Subject` do próprio bus, que é o que torna
- * o `SubscriptionBus` um `Observable` de "alguém se inscreveu em quê".
+ * Where the `SubscriptionBus` announces every requested subscription — the mirror of `IQueryPublisher`.
+ * The default (`DefaultSubscriptionPubSub`) pushes into the bus's own `Subject`, which is what turns
+ * the `SubscriptionBus` into an `Observable` of "who subscribed to what".
  */
 export interface ISubscriptionPublisher<SubscriptionBase extends ISubscription = ISubscription> {
   publish<T extends SubscriptionBase = SubscriptionBase>(subscription: T): any;

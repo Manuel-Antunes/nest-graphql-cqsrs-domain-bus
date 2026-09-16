@@ -1,70 +1,71 @@
 import { subscriptionKey } from '../helpers/subscription-key';
 import { EVENT_TYPE_SYMBOL } from './constants';
 
-/** O tipo do evento que uma subscription entrega. */
+/** The type of event a subscription delivers. */
 export type SubscriptionEvent<S> = S extends Subscription<infer TEvent, any> ? TEvent : never;
 
 /**
- * O tipo do critério de filtro de uma subscription — o que a camada de interface precisa montar para
- * pedi-la. `SubscriptionCriteria<OnPostUpdatedSubscription>` é `{ postId?: string | null }`.
+ * The type of a subscription's filter criteria — what the interface layer has to assemble in order to
+ * request it. `SubscriptionCriteria<OnPostUpdatedSubscription>` is `{ postId?: string | null }`.
  */
 export type SubscriptionCriteria<S> = S extends Subscription<any, infer TCriteria> ? TCriteria : never;
 
 /**
- * A mensagem de uma subscription: "me avise a cada evento assim, que case com este critério".
+ * A subscription message: "notify me on every event of this kind that matches these criteria".
  *
- * É a terceira mensagem do CQSRS, irmã do `Command<T>` e do `Query<T>` do @nestjs/cqrs — e a
- * diferença entre ela e uma query é o que justifica um bus próprio: uma query é *uma* resposta e
- * acabou (`Promise<T>`); uma subscription é um stream que fica aberto (`Observable<TEvent>`) até o
- * assinante ir embora. `execute` não descreve isso; `subscribe` descreve.
+ * It is the third CQSRS message, sibling to @nestjs/cqrs's `Command<T>` and `Query<T>` — and the
+ * difference between it and a query is what justifies a bus of its own: a query is *one* answer and
+ * it is over (`Promise<T>`); a subscription is a stream that stays open (`Observable<TEvent>`) until
+ * the subscriber leaves. `execute` does not describe that; `subscribe` does.
  *
- * ## O filtro mora aqui, e não na camada de interface
- * Uma subscription tem duas metades, e as duas são regra de aplicação:
+ * ## The filter lives here, not in the interface layer
+ * A subscription has two halves, and both are application rules:
  *
- * - **o critério** (`criteria`), o *dado*: quais eventos interessam. Quem o preenche é quem pede —
- *   normalmente a camada de interface, com os argumentos do protocolo (os `@Args` do GraphQL);
- * - **o filtro** (`filter`), a *regra*: o que aquele critério quer dizer diante de um evento. Quem a
- *   escreve é a aplicação, aqui, ao lado da mensagem.
+ * - **the criteria** (`criteria`), the *data*: which events are of interest. Whoever requests the
+ *   subscription fills it in — normally the interface layer, from the protocol's arguments (GraphQL's
+ *   `@Args`);
+ * - **the filter** (`match`), the *rule*: what those criteria mean when faced with an event. The
+ *   application writes it, here, next to the message.
  *
- * A interface diz *o quê*, a aplicação decide *como* — nenhuma das duas sabe da outra. E como o
- * `filter` é um método da própria mensagem, o `SubscriptionBus` aplica o filtro no stream sem saber
- * nada sobre o domínio: ele só chama `subscription.filter(event)`.
+ * The interface says *what*, the application decides *how* — neither knows about the other. And
+ * because `match` is a method on the message itself, the `SubscriptionBus` applies the filter to the
+ * stream while knowing nothing about the domain: it just calls `subscription.match(event)`.
  *
- * ## O critério também é a chave
- * `key` é o critério serializado de forma estável ({@link subscriptionKey}). É o que o bus usa para
- * achar um stream que já esteja no ar: dois assinantes que pedem a mesma subscription com o mesmo
- * critério pedem, literalmente, a mesma coisa — então recebem o mesmo `Observable`, e o `EventBus`
- * enxerga um assinante só. É por isso que o critério é um campo, e não propriedades soltas na
- * subclasse: o que entra na chave fica explícito.
+ * ## The criteria are also the key
+ * `key` is the criteria serialized stably ({@link subscriptionKey}). It is what the bus uses to find a
+ * stream already on the air: two subscribers requesting the same subscription with the same criteria
+ * are literally requesting the same thing — so they get the same `Observable`, and the `EventBus` sees
+ * a single subscriber. That is why the criteria are one field rather than loose properties on the
+ * subclass: what goes into the key is explicit.
  *
  * ```ts
  * export class OnPostUpdatedSubscription extends Subscription<PostUpdatedEvent, { postId?: string | null }> {
- *   override filter(event: PostUpdatedEvent): boolean {
+ *   override match(event: PostUpdatedEvent): boolean {
  *     return !this.criteria.postId || event.postId === this.criteria.postId;
  *   }
  * }
  * ```
  *
- * Sem critério nenhum, `TCriteria` fica `void` e o construtor pode ser chamado vazio:
+ * With no criteria at all, `TCriteria` is `void` and the constructor can be called empty:
  * `class OnPostCreatedSubscription extends Subscription<PostCreatedEvent> {}` → `new OnPostCreatedSubscription()`.
  */
 export abstract class Subscription<TEvent, TCriteria = void> {
-  /** Só o tipo — ver {@link EVENT_TYPE_SYMBOL}. Nunca é lido em runtime. */
+  /** Type only — see {@link EVENT_TYPE_SYMBOL}. Never read at runtime. */
   readonly [EVENT_TYPE_SYMBOL]: TEvent;
 
   constructor(readonly criteria: TCriteria) {}
 
   /**
-   * O filtro: roda uma vez por evento, dentro do stream, antes de ele chegar em qualquer assinante.
-   * O padrão passa tudo — uma subscription sem critério não filtra nada.
+   * The filter: runs once per event, inside the stream, before it reaches any subscriber. The default
+   * lets everything through — a subscription with no criteria filters nothing.
    */
   match(_event: TEvent): boolean {
     return true;
   }
 
   /**
-   * A identidade desta subscription *como pedido*: o tipo mais o critério. Duas instâncias com a
-   * mesma chave são intercambiáveis, e o bus as atende com um stream só.
+   * This subscription's identity *as a request*: the type plus the criteria. Two instances with the
+   * same key are interchangeable, and the bus serves them from a single stream.
    */
   get key(): string {
     return `${this.constructor.name}(${subscriptionKey(this.criteria)})`;

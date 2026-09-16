@@ -13,17 +13,11 @@ import { CreateTagCommand } from '../../tag/command/create-tag.command';
 import { AssignTagToPostCommand } from '../command/assign-tag-to-post.command';
 import { AssignDefaultTagOnPostCreated } from './assign-default-tag-on-post-created.saga';
 
-/**
- * A saga é uma função `Observable<evento> → Observable<command>`: dá para testá-la alimentando um
- * `of(evento)` e colhendo os commands, sem passar pelo `EventBus`. O `CreateTagCommand.Handler` entra
- * de verdade porque a saga o despacha pelo `CommandBus`.
- */
 describe('AssignDefaultTagOnPostCreated', () => {
   let module: TestingModule;
   let saga: AssignDefaultTagOnPostCreated;
 
   const postCreated = () => new PostCreatedEvent(PostId.generate().value, 'Nest + GraphQL', 'oi', 'u1', 'manuel', new Date());
-  /** O mesmo evento, como ele sai de um command handler: carimbado com a request que o pediu. */
   const postCreatedIn = (request: PostRequest) => {
     const event = new PostCreatedEvent(request.postId.value, 'Nest + GraphQL', 'oi', 'u1', 'manuel', new Date());
     request.attachTo(event);
@@ -75,7 +69,6 @@ describe('AssignDefaultTagOnPostCreated', () => {
 
     const [command] = (await commandsFor(postCreatedIn(request))) as AssignTagToPostCommand.AssignTagToPost[];
 
-    // o mesmo value object que a borda gerou, e não um PostId.parse do primitivo do evento
     expect(command.postId).toBe(request.postId);
   });
 

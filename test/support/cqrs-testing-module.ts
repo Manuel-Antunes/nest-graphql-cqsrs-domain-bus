@@ -12,16 +12,6 @@ import { MikroOrmTagRepository } from '../../src/infrastructure/persistence/sqli
 import { MikroOrmUserRepository } from '../../src/infrastructure/persistence/sqlite/repositories/mikro-orm-user.repository';
 import { mikroOrmConfig } from '../../src/infrastructure/persistence/sqlite/mikro-orm.config';
 
-/**
- * O "fixture" dos testes de handler: o `CqsrsModule` de verdade (os buses do @nestjs/cqrs, o
- * `EventPublisher` e o `SubscriptionBus`), o MikroORM de verdade num SQLite em memória, os dois
- * repositórios — e **só os providers que o teste pede**.
- * Cada teste monta só o handler que testa, então uma dependência acidental entre dois deles quebra o
- * teste. É o papel que o `AxonTestFixture` tinha na versão Java.
- *
- * Um SQLite em memória sobe em milissegundos, então não há repositório fake: como salvar é
- * responsabilidade do command, o banco de verdade é o que prova que ele salvou — e o quê.
- */
 export async function createCqrsTestingModule(providers: Provider[]): Promise<TestingModule> {
   const module = await Test.createTestingModule({
     imports: [CqsrsModule.forRoot(), MikroOrmModule.forRoot(mikroOrmConfig(':memory:'))],
@@ -36,27 +26,14 @@ export async function createCqrsTestingModule(providers: Provider[]): Promise<Te
   return module;
 }
 
-/**
- * Roda algo **dentro de um contexto de request**, como o middleware do MikroORM faz na produção.
- *
- * Desde que os command handlers deixaram de abrir um fork por command (`@CreateRequestContext()`), o
- * contexto passou a nascer na **borda** — o `MikroOrmModule.forMiddleware()` no `app.module`. Num
- * teste não há requisição HTTP, então a borda é isto: um contexto por interação, e o mesmo para o
- * command, para os eventos que ele publica e para os commands que a saga despacha em cima deles.
- *
- * É também o que faz o teste exercitar o caminho de produção em vez de um mais frouxo: sem contexto,
- * `allowGlobalContext: false` recusaria a primeira consulta.
- */
 export function inRequestContext<T>(module: TestingModule, work: () => Promise<T>): Promise<T> {
   return RequestContext.create(module.get(MikroORM).em, work);
 }
 
-/** Um EntityManager novo, fora de qualquer contexto de command: lê o que está de fato gravado. */
 export function freshEm(module: TestingModule): EntityManager {
   return module.get(MikroORM).em.fork();
 }
 
-/** Grava eventos publicados no `EventBus` — o duplo de "quem ouve" para afirmar o que foi disparado. */
 export class RecordingEvents {
   readonly events: IEvent[] = [];
   private readonly waiters: Array<() => void> = [];
@@ -72,10 +49,6 @@ export class RecordingEvents {
     return this.events.filter((event): event is T => event instanceof type);
   }
 
-  /**
-   * Espera até ter gravado `count` eventos. Para o que uma saga faz: o command devolve, e os eventos
-   * da cadeia que ele abriu chegam depois, no seu próprio tempo.
-   */
   async waitFor(count: number, timeoutMs = 5000): Promise<IEvent[]> {
     const deadline = Date.now() + timeoutMs;
     while (this.events.length < count) {

@@ -1,16 +1,16 @@
 /**
  * CQSRS — Command, Query, **Subscription** Responsibility Segregation.
  *
- * A terceira mensagem do CQRS, com as mesmas peças que o @nestjs/cqrs dá às outras duas:
+ * The third CQRS message, with the same pieces @nestjs/cqrs gives the other two:
  *
- * | | mensagem | decorator | contrato do handler | bus | resultado |
+ * | | message | decorator | handler contract | bus | result |
  * |---|---|---|---|---|---|
  * | command | `Command<T>` | `@CommandHandler` | `execute` | `CommandBus` | `Promise<T>` |
  * | query | `Query<T>` | `@QueryHandler` | `execute` | `QueryBus` | `Promise<T>` |
  * | **subscription** | **`Subscription<TEvent, TCriteria>`** | **`@SubscriptionHandler`** | **`subscribe`** | **`SubscriptionBus`** | **`Observable<TEvent>`** |
  *
- * Tudo o que é específico das subscriptions mora aqui, e nada aqui sabe o que é GraphQL: o pacote
- * fala RxJS de um lado e async iterable do outro.
+ * Everything subscription-specific lives here, and nothing here knows what GraphQL is: the package
+ * speaks RxJS on one side and async iterables on the other.
  */
 export * from './classes';
 export * from './constants';

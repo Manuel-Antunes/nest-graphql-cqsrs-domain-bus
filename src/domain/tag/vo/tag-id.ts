@@ -1,9 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import { z } from 'zod';
 import { ValidatedDto } from '../../../validated-dto/mixins';
+import { TagIdSchema } from '../schemas/tag-id.schema';
 
-/** Identidade da Tag — ver {@link PostId} para o porquê de um value object gerado. */
-export class TagId extends ValidatedDto.Scalar(z.uuid().brand<'TagId'>()) {
+export class TagId extends ValidatedDto.Scalar(TagIdSchema) {
   static generate(): TagId {
     return TagId.parse(randomUUID());
   }

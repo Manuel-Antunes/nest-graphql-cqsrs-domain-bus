@@ -1,10 +1,6 @@
 import { PostUpdatedEvent } from '../../../domain/post/event/post-updated.event';
 import { OnPostUpdatedSubscription } from './on-post-updated.subscription';
 
-/**
- * O filtro por tópico é regra de aplicação — então é testado como regra de aplicação, sem subir bus
- * nenhum: a mensagem responde sozinha se um evento interessa a quem a pediu.
- */
 describe('OnPostUpdatedSubscription.OnPostUpdated', () => {
   const event = (postId: string) =>
     new PostUpdatedEvent(postId, 'título', 'conteúdo', 'u1', 'manuel', [], 2, new Date(), new Date());

@@ -20,7 +20,6 @@ import { InheritValidatedMetadata, ValidatedDto, ZodFieldValidator } from './val
 describe('ValidatedDto Mixin', () => {
   describe('ZodFieldValidator', () => {
     it('should validate a value that passes the Zod schema', () => {
-      // Arrange
       const validator = new ZodFieldValidator();
       const schema = z.string().min(3);
       const args = {
@@ -31,15 +30,12 @@ describe('ValidatedDto Mixin', () => {
         targetName: 'TestClass',
       };
 
-      // Act
       const result = validator.validate('valid', args);
 
-      // Assert
       expect(result).toBe(true);
     });
 
     it('should fail validation for a value that does not pass the Zod schema', () => {
-      // Arrange
       const validator = new ZodFieldValidator();
       const schema = z.string().min(3);
       const args = {
@@ -50,15 +46,12 @@ describe('ValidatedDto Mixin', () => {
         targetName: 'TestClass',
       };
 
-      // Act
       const result = validator.validate('ab', args);
 
-      // Assert
       expect(result).toBe(false);
     });
 
     it('should return default message when validation fails', () => {
-      // Arrange
       const validator = new ZodFieldValidator();
       const schema = z.string().min(3);
       const args = {
@@ -69,21 +62,13 @@ describe('ValidatedDto Mixin', () => {
         targetName: 'TestClass',
       };
 
-      // Act
       const message = validator.defaultMessage(args);
 
-      // Assert
       expect(message).toBeTruthy();
       expect(message.length).toBeGreaterThan(0);
     });
 
-    /**
-     * O terceiro caso do `defaultMessage`, além de "tem description" e "falhou": o valor **passa**.
-     * Não é uma mensagem que o usuário deva ver — o texto genérico é o sinal de que ela foi pedida
-     * fora de hora, e não uma recusa disfarçada de mensagem vazia.
-     */
     it('falls back to a generic message when there is no failure to report', () => {
-      // Arrange
       const validator = new ZodFieldValidator();
       const args = {
         constraints: [z.string().min(3)],
@@ -93,15 +78,12 @@ describe('ValidatedDto Mixin', () => {
         targetName: 'TestClass',
       };
 
-      // Act
       const message = validator.defaultMessage(args);
 
-      // Assert
       expect(message).toBe('Validation failed');
     });
 
     it('should use schema description in error message if available', () => {
-      // Arrange
       const validator = new ZodFieldValidator();
       const schema = z.string().min(3).describe('Username');
       const args = {
@@ -112,120 +94,96 @@ describe('ValidatedDto Mixin', () => {
         targetName: 'TestClass',
       };
 
-      // Act
       const message = validator.defaultMessage(args);
 
-      // Assert
       expect(message).toBe('Username is invalid');
     });
   });
 
   describe('Basic String Validation', () => {
     it('should create a DTO with string field', () => {
-      // Arrange
       const schema = z.object({
         name: z.string(),
       });
       const TestDto = ValidatedDto(schema);
 
-      // Act
       const instance = new TestDto({ name: 'John' });
 
-      // Assert
       expect(instance.name).toBe('John');
     });
 
     it('should validate string field successfully', async () => {
-      // Arrange
       const schema = z.object({
         name: z.string().min(3),
       });
       const TestDto = ValidatedDto(schema);
       const instance = new TestDto({ name: 'John' });
 
-      // Act
       const errors = await validate(instance);
 
-      // Assert
       expect(errors.length).toBe(0);
     });
 
     it('should fail validation for invalid string', async () => {
-      // Arrange
       const schema = z.object({
         name: z.string().min(3),
       });
       const TestDto = ValidatedDto(schema);
       const instance = new TestDto({ name: 'Jo' });
 
-      // Act
       const errors = await validate(instance);
 
-      // Assert
       expect(errors.length).toBeGreaterThan(0);
       expect(errors[0].property).toBe('name');
     });
 
     it('should trim string values when constructed directly', async () => {
-      // Arrange
       const schema = z.object({
         name: z.string().trim(),
       });
       const TestDto = ValidatedDto(schema);
 
-      // Act - Transform is applied during construction
       const instance = new TestDto({ name: '  John  ' });
 
-      // Assert - The value is assigned as-is in constructor
       expect(instance.name).toBe('  John  ');
-      // Note: Transform decorator only applies during plainToClass transformation
     });
   });
 
   describe('Numeric Validation', () => {
     it('should validate number field successfully', async () => {
-      // Arrange
       const schema = z.object({
         age: z.number().min(0).max(150),
       });
       const TestDto = ValidatedDto(schema);
       const instance = new TestDto({ age: 25 });
 
-      // Act
       const errors = await validate(instance);
 
-      // Assert
       expect(errors.length).toBe(0);
       expect(instance.age).toBe(25);
     });
 
     it('should fail validation for out-of-range number', async () => {
-      // Arrange
       const schema = z.object({
         age: z.number().min(0).max(150),
       });
       const TestDto = ValidatedDto(schema);
       const instance = new TestDto({ age: 200 });
 
-      // Act
       const errors = await validate(instance);
 
-      // Assert
       expect(errors.length).toBeGreaterThan(0);
     });
 
     it('should validate coerce.number schema', async () => {
-      // Arrange
       const schema = z.object({
         age: z.coerce.number(),
       });
       const TestDto = ValidatedDto(schema);
       const instance = new TestDto({ age: 25 });
 
-      // Act
       const errors = await validate(instance);
 
-      // Assert
       expect(errors.length).toBe(0);
       expect(instance.age).toBe(25);
     });
@@ -233,33 +191,27 @@ describe('ValidatedDto Mixin', () => {
 
   describe('Boolean Validation', () => {
     it('should validate boolean field successfully', async () => {
-      // Arrange
       const schema = z.object({
         isActive: z.boolean(),
       });
       const TestDto = ValidatedDto(schema);
       const instance = new TestDto({ isActive: true });
 
-      // Act
       const errors = await validate(instance);
 
-      // Assert
       expect(errors.length).toBe(0);
       expect(instance.isActive).toBe(true);
     });
 
     it('should validate coerce.boolean schema', async () => {
-      // Arrange
       const schema = z.object({
         isActive: z.coerce.boolean(),
       });
       const TestDto = ValidatedDto(schema);
       const instance = new TestDto({ isActive: true });
 
-      // Act
       const errors = await validate(instance);
 
-      // Assert
       expect(errors.length).toBe(0);
       expect(instance.isActive).toBe(true);
     });
@@ -267,7 +219,6 @@ describe('ValidatedDto Mixin', () => {
 
   describe('Date Validation', () => {
     it('should validate date field successfully', async () => {
-      // Arrange
       const schema = z.object({
         createdAt: z.date(),
       });
@@ -275,16 +226,13 @@ describe('ValidatedDto Mixin', () => {
       const date = new Date();
       const instance = new TestDto({ createdAt: date });
 
-      // Act
       const errors = await validate(instance);
 
-      // Assert
       expect(errors.length).toBe(0);
       expect(instance.createdAt).toBe(date);
     });
 
     it('should validate coerce.date schema', async () => {
-      // Arrange
       const schema = z.object({
         createdAt: z.coerce.date(),
       });
@@ -292,10 +240,8 @@ describe('ValidatedDto Mixin', () => {
       const date = new Date();
       const instance = new TestDto({ createdAt: date });
 
-      // Act
       const errors = await validate(instance);
 
-      // Assert
       expect(errors.length).toBe(0);
       expect(instance.createdAt).toBeInstanceOf(Date);
     });
@@ -303,55 +249,45 @@ describe('ValidatedDto Mixin', () => {
 
   describe('Array Validation', () => {
     it('should validate array of strings', async () => {
-      // Arrange
       const schema = z.object({
         tags: z.array(z.string()),
       });
       const TestDto = ValidatedDto(schema);
       const instance = new TestDto({ tags: ['tag1', 'tag2'] });
 
-      // Act
       const errors = await validate(instance);
 
-      // Assert
       expect(errors.length).toBe(0);
       expect(instance.tags).toEqual(['tag1', 'tag2']);
     });
 
     it('should fail validation for invalid array elements', async () => {
-      // Arrange
       const schema = z.object({
         tags: z.array(z.string().min(3)),
       });
       const TestDto = ValidatedDto(schema);
       const instance = new TestDto({ tags: ['ok', 'a'] });
 
-      // Act
       const errors = await validate(instance);
 
-      // Assert
       expect(errors.length).toBeGreaterThan(0);
     });
 
     it('should validate array with min/max constraints', async () => {
-      // Arrange
       const schema = z.object({
         items: z.array(z.string()).min(1).max(5),
       });
       const TestDto = ValidatedDto(schema);
       const instance = new TestDto({ items: ['item1'] });
 
-      // Act
       const errors = await validate(instance);
 
-      // Assert
       expect(errors.length).toBe(0);
     });
   });
 
   describe('Optional and Nullable Fields', () => {
     it('should handle optional fields', async () => {
-      // Arrange
       const schema = z.object({
         name: z.string(),
         nickname: z.string().optional(),
@@ -359,16 +295,13 @@ describe('ValidatedDto Mixin', () => {
       const TestDto = ValidatedDto(schema);
       const instance = new TestDto({ name: 'John' });
 
-      // Act
       const errors = await validate(instance);
 
-      // Assert
       expect(errors.length).toBe(0);
       expect(instance.nickname).toBeUndefined();
     });
 
     it('should handle nullable fields', async () => {
-      // Arrange
       const schema = z.object({
         name: z.string(),
         middleName: z.string().nullable(),
@@ -376,16 +309,13 @@ describe('ValidatedDto Mixin', () => {
       const TestDto = ValidatedDto(schema);
       const instance = new TestDto({ name: 'John', middleName: null });
 
-      // Act
       const errors = await validate(instance);
 
-      // Assert
       expect(errors.length).toBe(0);
       expect(instance.middleName).toBeNull();
     });
 
     it('should handle optional and nullable combined', async () => {
-      // Arrange
       const schema = z.object({
         name: z.string(),
         suffix: z.string().nullable().optional(),
@@ -395,12 +325,10 @@ describe('ValidatedDto Mixin', () => {
       const instance2 = new TestDto({ name: 'John', suffix: null });
       const instance3 = new TestDto({ name: 'John', suffix: 'Jr.' });
 
-      // Act
       const errors1 = await validate(instance1);
       const errors2 = await validate(instance2);
       const errors3 = await validate(instance3);
 
-      // Assert
       expect(errors1.length).toBe(0);
       expect(errors2.length).toBe(0);
       expect(errors3.length).toBe(0);
@@ -412,40 +340,33 @@ describe('ValidatedDto Mixin', () => {
 
   describe('Default Values', () => {
     it('should validate schema with default values', async () => {
-      // Arrange
       const schema = z.object({
         name: z.string(),
         role: z.string().default('user'),
       });
       const TestDto = ValidatedDto(schema);
 
-      // Act - Without providing role
       const instance1 = new TestDto({ name: 'John' });
       const errors1 = await validate(instance1);
 
-      // Assert - Default values are applied during Zod parsing in Transform decorator
       expect(errors1.length).toBe(0);
     });
 
     it('should not override provided values with defaults', async () => {
-      // Arrange
       const schema = z.object({
         name: z.string(),
         role: z.string().default('user'),
       });
       const TestDto = ValidatedDto(schema);
 
-      // Act
       const instance = new TestDto({ name: 'John', role: 'admin' });
       const errors = await validate(instance);
 
-      // Assert
       expect(errors.length).toBe(0);
       expect(instance.role).toBe('admin');
     });
 
     it('should apply default values when using plainToInstance with exposeDefaultValues', () => {
-      // Arrange
       const schema = z.object({
         name: z.string(),
         role: z.string().default('user'),
@@ -454,13 +375,11 @@ describe('ValidatedDto Mixin', () => {
       });
       const TestDto = ValidatedDto(schema);
 
-      // Act - Transform plain object without default values
       const plainData = { name: 'Alice' };
       const instance = plainToInstance(TestDto, plainData, {
         exposeDefaultValues: true,
       });
 
-      // Assert - Default values should be applied
       expect(instance.name).toBe('Alice');
       expect(instance.role).toBe('user');
       expect(instance.status).toBe('active');
@@ -468,7 +387,6 @@ describe('ValidatedDto Mixin', () => {
     });
 
     it('should not override provided values with defaults using plainToInstance', () => {
-      // Arrange
       const schema = z.object({
         name: z.string(),
         role: z.string().default('user'),
@@ -476,20 +394,17 @@ describe('ValidatedDto Mixin', () => {
       });
       const TestDto = ValidatedDto(schema);
 
-      // Act
       const plainData = { name: 'Bob', role: 'admin', status: 'inactive' };
       const instance = plainToInstance(TestDto, plainData, {
         exposeDefaultValues: true,
       });
 
-      // Assert - Provided values should be preserved
       expect(instance.name).toBe('Bob');
       expect(instance.role).toBe('admin');
       expect(instance.status).toBe('inactive');
     });
 
     it('should apply default values for nested objects', () => {
-      // Arrange
       const schema = z.object({
         name: z.string(),
         settings: z.object({
@@ -499,7 +414,6 @@ describe('ValidatedDto Mixin', () => {
       });
       const TestDto = ValidatedDto(schema);
 
-      // Act
       const plainData = {
         name: 'Charlie',
         settings: {},
@@ -508,14 +422,12 @@ describe('ValidatedDto Mixin', () => {
         exposeDefaultValues: true,
       });
 
-      // Assert - Nested default values should be applied
       expect(instance.name).toBe('Charlie');
       expect(instance.settings.theme).toBe('light');
       expect(instance.settings.language).toBe('en');
     });
 
     it('should apply default values on direct constructor call', () => {
-      // Arrange
       const schema = z.object({
         name: z.string(),
         role: z.string().default('user'),
@@ -524,10 +436,8 @@ describe('ValidatedDto Mixin', () => {
       });
       const TestDto = ValidatedDto(schema);
 
-      // Act - Create instance with partial data
       const instance = new TestDto({ name: 'Dave' });
 
-      // Assert - Default values should be applied in constructor
       expect(instance.name).toBe('Dave');
       expect(instance.role).toBe('user');
       expect(instance.isActive).toBe(true);
@@ -535,7 +445,6 @@ describe('ValidatedDto Mixin', () => {
     });
 
     it('should handle optional fields with defaults correctly', () => {
-      // Arrange
       const schema = z.object({
         name: z.string(),
         nickname: z.string().optional().default('N/A'),
@@ -543,10 +452,8 @@ describe('ValidatedDto Mixin', () => {
       });
       const TestDto = ValidatedDto(schema);
 
-      // Act
       const instance = new TestDto({ name: 'Eve' });
 
-      // Assert
       expect(instance.name).toBe('Eve');
       expect(instance.nickname).toBe('N/A');
       expect(instance.age).toBeUndefined();
@@ -555,7 +462,6 @@ describe('ValidatedDto Mixin', () => {
 
   describe('Nested Object Validation', () => {
     it('should validate nested objects', async () => {
-      // Arrange
       const addressSchema = z.object({
         street: z.string(),
         city: z.string(),
@@ -577,16 +483,13 @@ describe('ValidatedDto Mixin', () => {
         },
       });
 
-      // Act
       const errors = await validate(instance);
 
-      // Assert
       expect(errors.length).toBe(0);
       expect(instance.address.street).toBe('123 Main St');
     });
 
     it('should fail validation for invalid nested object', async () => {
-      // Arrange
       const addressSchema = z.object({
         street: z.string().min(5),
         city: z.string(),
@@ -606,15 +509,12 @@ describe('ValidatedDto Mixin', () => {
         },
       });
 
-      // Act
       const errors = await validate(instance);
 
-      // Assert
       expect(errors.length).toBeGreaterThan(0);
     });
 
     it('should handle optional nested objects', async () => {
-      // Arrange
       const addressSchema = z.object({
         street: z.string(),
         city: z.string(),
@@ -628,10 +528,8 @@ describe('ValidatedDto Mixin', () => {
       const TestDto = ValidatedDto(schema);
       const instance = new TestDto({ name: 'John' });
 
-      // Act
       const errors = await validate(instance);
 
-      // Assert
       expect(errors.length).toBe(0);
       expect(instance.address).toBeUndefined();
     });
@@ -639,7 +537,6 @@ describe('ValidatedDto Mixin', () => {
 
   describe('Array of Nested Objects', () => {
     it('should validate array of nested objects', async () => {
-      // Arrange
       const itemSchema = z.object({
         id: z.number(),
         name: z.string(),
@@ -659,17 +556,14 @@ describe('ValidatedDto Mixin', () => {
         ],
       });
 
-      // Act
       const errors = await validate(instance);
 
-      // Assert
       expect(errors.length).toBe(0);
       expect(instance.items.length).toBe(2);
       expect(instance.items[0].name).toBe('Item 1');
     });
 
     it('should fail validation for invalid nested objects in array', async () => {
-      // Arrange
       const itemSchema = z.object({
         id: z.number(),
         name: z.string().min(3),
@@ -689,17 +583,14 @@ describe('ValidatedDto Mixin', () => {
         ],
       });
 
-      // Act
       const errors = await validate(instance);
 
-      // Assert
       expect(errors.length).toBeGreaterThan(0);
     });
   });
 
   describe('Complex Schema Validation', () => {
     it('should validate complex nested schema', async () => {
-      // Arrange
       const contactSchema = z.object({
         email: z.string().email(),
         phone: z.string().optional(),
@@ -739,10 +630,8 @@ describe('ValidatedDto Mixin', () => {
         ],
       });
 
-      // Act
       const errors = await validate(instance);
 
-      // Assert
       expect(errors.length).toBe(0);
       expect(instance.name).toBe('John Doe');
       expect(instance.isActive).toBe(true);
@@ -753,112 +642,91 @@ describe('ValidatedDto Mixin', () => {
 
   describe('Email and URL Validation', () => {
     it('should validate email addresses', async () => {
-      // Arrange
       const schema = z.object({
         email: z.string().email(),
       });
       const TestDto = ValidatedDto(schema);
       const instance = new TestDto({ email: 'test@example.com' });
 
-      // Act
       const errors = await validate(instance);
 
-      // Assert
       expect(errors.length).toBe(0);
     });
 
     it('should fail validation for invalid email', async () => {
-      // Arrange
       const schema = z.object({
         email: z.string().email(),
       });
       const TestDto = ValidatedDto(schema);
       const instance = new TestDto({ email: 'invalid-email' });
 
-      // Act
       const errors = await validate(instance);
 
-      // Assert
       expect(errors.length).toBeGreaterThan(0);
     });
 
     it('should validate URLs', async () => {
-      // Arrange
       const schema = z.object({
         website: z.string().url(),
       });
       const TestDto = ValidatedDto(schema);
       const instance = new TestDto({ website: 'https://example.com' });
 
-      // Act
       const errors = await validate(instance);
 
-      // Assert
       expect(errors.length).toBe(0);
     });
 
     it('should fail validation for invalid URL', async () => {
-      // Arrange
       const schema = z.object({
         website: z.string().url(),
       });
       const TestDto = ValidatedDto(schema);
       const instance = new TestDto({ website: 'not-a-url' });
 
-      // Act
       const errors = await validate(instance);
 
-      // Assert
       expect(errors.length).toBeGreaterThan(0);
     });
   });
 
   describe('Enum Validation', () => {
     it('should validate enum values', async () => {
-      // Arrange
       const schema = z.object({
         role: z.enum(['admin', 'user', 'guest']),
       });
       const TestDto = ValidatedDto(schema);
       const instance = new TestDto({ role: 'admin' });
 
-      // Act
       const errors = await validate(instance);
 
-      // Assert
       expect(errors.length).toBe(0);
       expect(instance.role).toBe('admin');
     });
 
     it('should fail validation for invalid enum value', async () => {
-      // Arrange
       const schema = z.object({
         role: z.enum(['admin', 'user', 'guest']),
       });
       const TestDto = ValidatedDto(schema);
       const instance = new TestDto({ role: 'superadmin' as any });
 
-      // Act
       const errors = await validate(instance);
 
-      // Assert
       expect(errors.length).toBeGreaterThan(0);
     });
   });
 
   describe('Pipe Transformations', () => {
     it('should validate piped schema', async () => {
-      // Arrange
       const schema = z.object({
         price: z.string().pipe(z.coerce.number()),
       });
       const TestDto = ValidatedDto(schema);
 
-      // Act
       const instance = new TestDto({ price: '19.99' });
       const errors = await validate(instance);
 
-      // Assert
       expect(errors.length).toBe(0);
       expect(instance.price).toBe('19.99');
     });
@@ -866,140 +734,116 @@ describe('ValidatedDto Mixin', () => {
 
   describe('Metadata Reflection', () => {
     it('should set correct design:type metadata for string', () => {
-      // Arrange
       const schema = z.object({
         name: z.string(),
       });
       const TestDto = ValidatedDto(schema);
 
-      // Act
       const metadata = Reflect.getMetadata(
         'design:type',
         TestDto.prototype,
         'name',
       );
 
-      // Assert
       expect(metadata).toBe(String);
     });
 
     it('should set correct design:type metadata for number', () => {
-      // Arrange
       const schema = z.object({
         age: z.number(),
       });
       const TestDto = ValidatedDto(schema);
 
-      // Act
       const metadata = Reflect.getMetadata(
         'design:type',
         TestDto.prototype,
         'age',
       );
 
-      // Assert
       expect(metadata).toBe(Number);
     });
 
     it('should set correct design:type metadata for boolean', () => {
-      // Arrange
       const schema = z.object({
         isActive: z.boolean(),
       });
       const TestDto = ValidatedDto(schema);
 
-      // Act
       const metadata = Reflect.getMetadata(
         'design:type',
         TestDto.prototype,
         'isActive',
       );
 
-      // Assert
       expect(metadata).toBe(Boolean);
     });
 
     it('should set correct design:type metadata for date', () => {
-      // Arrange
       const schema = z.object({
         createdAt: z.date(),
       });
       const TestDto = ValidatedDto(schema);
 
-      // Act
       const metadata = Reflect.getMetadata(
         'design:type',
         TestDto.prototype,
         'createdAt',
       );
 
-      // Assert
       expect(metadata).toBe(Date);
     });
 
     it('should set correct design:type metadata for array', () => {
-      // Arrange
       const schema = z.object({
         tags: z.array(z.string()),
       });
       const TestDto = ValidatedDto(schema);
 
-      // Act
       const metadata = Reflect.getMetadata(
         'design:type',
         TestDto.prototype,
         'tags',
       );
 
-      // Assert
       expect(metadata).toBe(Array);
     });
   });
 
   describe('Constructor Behavior', () => {
     it('should initialize with no data', () => {
-      // Arrange
       const schema = z.object({
         name: z.string().optional(),
       });
       const TestDto = ValidatedDto(schema);
 
-      // Act
       const instance = new TestDto();
 
-      // Assert
       expect(instance).toBeDefined();
       expect(instance.name).toBeUndefined();
     });
 
     it('should initialize with partial data', () => {
-      // Arrange
       const schema = z.object({
         name: z.string(),
         age: z.number().optional(),
       });
       const TestDto = ValidatedDto(schema);
 
-      // Act
       const instance = new TestDto({ name: 'John' });
 
-      // Assert
       expect(instance.name).toBe('John');
       expect(instance.age).toBeUndefined();
     });
 
     it('should initialize with full data', () => {
-      // Arrange
       const schema = z.object({
         name: z.string(),
         age: z.number(),
       });
       const TestDto = ValidatedDto(schema);
 
-      // Act
       const instance = new TestDto({ name: 'John', age: 30 });
 
-      // Assert
       expect(instance.name).toBe('John');
       expect(instance.age).toBe(30);
     });
@@ -1007,20 +851,16 @@ describe('ValidatedDto Mixin', () => {
 
   describe('Edge Cases', () => {
     it('should handle empty object schema', async () => {
-      // Arrange
       const schema = z.object({ id: z.number().optional() });
       const TestDto = ValidatedDto(schema);
       const instance = new TestDto({});
 
-      // Act
       const errors = await validate(instance);
 
-      // Assert
       expect(errors.length).toBe(0);
     });
 
     it('should handle schema with many fields', async () => {
-      // Arrange
       const schema = z.object({
         field1: z.string(),
         field2: z.number(),
@@ -1038,40 +878,32 @@ describe('ValidatedDto Mixin', () => {
         field3: true,
       });
 
-      // Act
       const errors = await validate(instance);
 
-      // Assert
       expect(errors.length).toBe(0);
     });
 
     it('should preserve property enumerable configuration', () => {
-      // Arrange
       const schema = z.object({
         name: z.string(),
       });
       const TestDto = ValidatedDto(schema);
       const instance = new TestDto({ name: 'John' });
 
-      // Act
       const descriptor = Object.getOwnPropertyDescriptor(instance, 'name');
 
-      // Assert
       expect(descriptor?.enumerable).toBe(true);
     });
 
     it('should preserve property writable configuration', () => {
-      // Arrange
       const schema = z.object({
         name: z.string(),
       });
       const TestDto = ValidatedDto(schema);
       const instance = new TestDto({ name: 'John' });
 
-      // Act
       instance.name = 'Jane';
 
-      // Assert
       expect(instance.name).toBe('Jane');
     });
   });
@@ -1079,7 +911,6 @@ describe('ValidatedDto Mixin', () => {
   describe('Class Transformer Integration', () => {
     describe('plainToClass', () => {
       it('should transform plain object to class instance with proper metadata', () => {
-        // Arrange
         const schema = z.object({
           name: z.string(),
           age: z.number(),
@@ -1087,19 +918,16 @@ describe('ValidatedDto Mixin', () => {
         const TestDto = ValidatedDto(schema);
         const plain = { name: 'John', age: 30 };
 
-        // Act - Use enableImplicitConversion to respect design:type metadata
         const instance = plainToClass(TestDto, plain, {
           enableImplicitConversion: true,
         });
 
-        // Assert
         expect(instance).toBeInstanceOf(TestDto);
         expect(instance.name).toBe('John');
         expect(instance.age).toBe(30);
       });
 
       it('should apply Zod transformations via Transform decorator', () => {
-        // Arrange
         const schema = z.object({
           name: z.string().trim(),
           age: z.coerce.number(),
@@ -1107,19 +935,16 @@ describe('ValidatedDto Mixin', () => {
         const TestDto = ValidatedDto(schema);
         const plain = { name: '  John  ', age: '25' };
 
-        // Act - Transform decorator applies Zod transformations
         const instance = plainToClass(TestDto, plain, {
           enableImplicitConversion: true,
         });
 
-        // Assert
         expect(instance.name).toBe('John');
         expect(instance.age).toBe(25);
         expect(typeof instance.age).toBe('number');
       });
 
       it('should handle nested objects with plainToClass', () => {
-        // Arrange
         const addressSchema = z.object({
           street: z.string(),
           city: z.string(),
@@ -1137,18 +962,15 @@ describe('ValidatedDto Mixin', () => {
           },
         };
 
-        // Act
         const instance = plainToClass(TestDto, plain, {
           enableImplicitConversion: true,
         });
 
-        // Assert
         expect(instance).toBeInstanceOf(TestDto);
         expect(instance.address.street).toBe('123 Main St');
       });
 
       it('should handle array of nested objects with plainToClass', () => {
-        // Arrange
         const itemSchema = z.object({
           id: z.number(),
           name: z.string(),
@@ -1164,18 +986,15 @@ describe('ValidatedDto Mixin', () => {
           ],
         };
 
-        // Act
         const instance = plainToClass(TestDto, plain, {
           enableImplicitConversion: true,
         });
 
-        // Assert
         expect(instance.items).toHaveLength(2);
         expect(instance.items[0].name).toBe('Item 1');
       });
 
       it('should apply default values during transformation', () => {
-        // Arrange
         const schema = z.object({
           name: z.string(),
           role: z.string().default('user'),
@@ -1184,18 +1003,15 @@ describe('ValidatedDto Mixin', () => {
         const TestDto = ValidatedDto(schema);
         const plain = { name: 'John' };
 
-        // Act
         const instance = plainToClass(TestDto, plain, {
           enableImplicitConversion: true,
         });
 
-        // Assert
         expect(instance.role).toBe('user');
         expect(instance.isActive).toBe(true);
       });
 
       it('should coerce types during transformation', () => {
-        // Arrange
         const schema = z.object({
           age: z.coerce.number(),
           isActive: z.coerce.boolean(),
@@ -1208,12 +1024,10 @@ describe('ValidatedDto Mixin', () => {
           createdAt: '2024-01-01',
         };
 
-        // Act
         const instance = plainToClass(TestDto, plain, {
           enableImplicitConversion: true,
         });
 
-        // Assert
         expect(instance.age).toBe(30);
         expect(typeof instance.age).toBe('number');
         expect(instance.isActive).toBe(true);
@@ -1224,7 +1038,6 @@ describe('ValidatedDto Mixin', () => {
 
     describe('plainToInstance', () => {
       it('should transform plain object to instance', () => {
-        // Arrange
         const schema = z.object({
           name: z.string(),
           email: z.string().email(),
@@ -1232,19 +1045,16 @@ describe('ValidatedDto Mixin', () => {
         const TestDto = ValidatedDto(schema);
         const plain = { name: 'John', email: 'john@example.com' };
 
-        // Act
         const instance = plainToInstance(TestDto, plain, {
           enableImplicitConversion: true,
         });
 
-        // Assert
         expect(instance).toBeInstanceOf(TestDto);
         expect(instance.name).toBe('John');
         expect(instance.email).toBe('john@example.com');
       });
 
       it('should apply transformations with plainToInstance', () => {
-        // Arrange
         const schema = z.object({
           name: z.string().trim(),
           price: z.coerce.number(),
@@ -1252,18 +1062,15 @@ describe('ValidatedDto Mixin', () => {
         const TestDto = ValidatedDto(schema);
         const plain = { name: '  Product  ', price: '19.99' };
 
-        // Act
         const instance = plainToInstance(TestDto, plain, {
           enableImplicitConversion: true,
         });
 
-        // Assert
         expect(instance.name).toBe('Product');
         expect(instance.price).toBe(19.99);
       });
 
       it('should handle array transformation', () => {
-        // Arrange
         const schema = z.object({
           id: z.number(),
           name: z.string(),
@@ -1274,12 +1081,10 @@ describe('ValidatedDto Mixin', () => {
           { id: 2, name: 'Item 2' },
         ];
 
-        // Act
         const instances = plainToInstance(TestDto, plainArray, {
           enableImplicitConversion: true,
         });
 
-        // Assert
         expect(Array.isArray(instances)).toBe(true);
         expect(instances).toHaveLength(2);
         expect(instances[0]).toBeInstanceOf(TestDto);
@@ -1290,7 +1095,6 @@ describe('ValidatedDto Mixin', () => {
 
     describe('instanceToPlain', () => {
       it('should transform class instance to plain object', () => {
-        // Arrange
         const schema = z.object({
           name: z.string(),
           age: z.number(),
@@ -1298,16 +1102,13 @@ describe('ValidatedDto Mixin', () => {
         const TestDto = ValidatedDto(schema);
         const instance = new TestDto({ name: 'John', age: 30 });
 
-        // Act
         const plain = instanceToPlain(instance);
 
-        // Assert
         expect(plain).toEqual({ name: 'John', age: 30 });
         expect(plain).not.toBeInstanceOf(TestDto);
       });
 
       it('should transform nested objects to plain', () => {
-        // Arrange
         const addressSchema = z.object({
           street: z.string(),
           city: z.string(),
@@ -1325,10 +1126,8 @@ describe('ValidatedDto Mixin', () => {
           },
         });
 
-        // Act
         const plain = instanceToPlain(instance);
 
-        // Assert
         expect(plain).toEqual({
           name: 'John',
           address: {
@@ -1339,7 +1138,6 @@ describe('ValidatedDto Mixin', () => {
       });
 
       it('should handle arrays in instanceToPlain', () => {
-        // Arrange
         const schema = z.object({
           tags: z.array(z.string()),
           items: z.array(z.number()),
@@ -1350,10 +1148,8 @@ describe('ValidatedDto Mixin', () => {
           items: [1, 2, 3],
         });
 
-        // Act
         const plain = instanceToPlain(instance);
 
-        // Assert
         expect(plain).toEqual({
           tags: ['tag1', 'tag2'],
           items: [1, 2, 3],
@@ -1363,7 +1159,6 @@ describe('ValidatedDto Mixin', () => {
 
     describe('Round-trip transformation', () => {
       it('should maintain data integrity through round-trip transformation', async () => {
-        // Arrange
         const schema = z.object({
           id: z.number(),
           name: z.string(),
@@ -1380,7 +1175,6 @@ describe('ValidatedDto Mixin', () => {
           isActive: true,
         };
 
-        // Act
         const instance1 = plainToClass(TestDto, original, {
           enableImplicitConversion: true,
         });
@@ -1389,13 +1183,11 @@ describe('ValidatedDto Mixin', () => {
           enableImplicitConversion: true,
         });
 
-        // Assert
         expect(plain).toEqual(original);
         expect(instance2).toBeInstanceOf(TestDto);
         expect(instance2.name).toBe(original.name);
         expect(instance2.email).toBe(original.email);
 
-        // Validate both instances
         const errors1 = await validate(instance1);
         const errors2 = await validate(instance2);
         expect(errors1.length).toBe(0);
@@ -1403,7 +1195,6 @@ describe('ValidatedDto Mixin', () => {
       });
 
       it('should maintain nested structure through round-trip', async () => {
-        // Arrange
         const addressSchema = z.object({
           street: z.string(),
           city: z.string(),
@@ -1422,7 +1213,6 @@ describe('ValidatedDto Mixin', () => {
           ],
         };
 
-        // Act
         const instance1 = plainToClass(TestDto, original, {
           enableImplicitConversion: true,
         });
@@ -1431,7 +1221,6 @@ describe('ValidatedDto Mixin', () => {
           enableImplicitConversion: true,
         });
 
-        // Assert
         expect(plain).toEqual(original);
         expect(instance2.addresses).toHaveLength(2);
         expect(instance2.addresses[0].city).toBe('New York');
@@ -1441,7 +1230,6 @@ describe('ValidatedDto Mixin', () => {
       });
 
       it('should apply transformations consistently', () => {
-        // Arrange
         const schema = z.object({
           name: z.string().trim().toLowerCase(),
           age: z.coerce.number(),
@@ -1449,7 +1237,6 @@ describe('ValidatedDto Mixin', () => {
         const TestDto = ValidatedDto(schema);
         const original = { name: '  JOHN  ', age: '30' };
 
-        // Act
         const instance1 = plainToClass(TestDto, original, {
           enableImplicitConversion: true,
         });
@@ -1459,7 +1246,6 @@ describe('ValidatedDto Mixin', () => {
         });
         const plain2 = instanceToPlain(instance2);
 
-        // Assert
         expect(instance1.name).toBe('john');
         expect(instance1.age).toBe(30);
         expect(plain1.name).toBe('john');
@@ -1470,7 +1256,6 @@ describe('ValidatedDto Mixin', () => {
 
     describe('Expose decorator integration', () => {
       it('should expose all properties defined in schema', () => {
-        // Arrange
         const schema = z.object({
           name: z.string(),
           age: z.number(),
@@ -1483,10 +1268,8 @@ describe('ValidatedDto Mixin', () => {
           email: 'john@example.com',
         });
 
-        // Act
         const plain = instanceToPlain(instance);
 
-        // Assert
         expect(plain).toHaveProperty('name');
         expect(plain).toHaveProperty('age');
         expect(plain).toHaveProperty('email');
@@ -1494,7 +1277,6 @@ describe('ValidatedDto Mixin', () => {
       });
 
       it('should only expose schema-defined properties', () => {
-        // Arrange
         const schema = z.object({
           name: z.string(),
           age: z.number(),
@@ -1504,20 +1286,15 @@ describe('ValidatedDto Mixin', () => {
         // @ts-expect-error - Adding property not in schema
         instance.extraProperty = 'should not be exposed';
 
-        // Act
         const plain = instanceToPlain(instance);
 
-        // Assert
         expect(plain).toHaveProperty('name');
         expect(plain).toHaveProperty('age');
-        // Extra properties added after construction are still serialized
-        // This is expected class-transformer behavior
       });
     });
 
     describe('Complex transformation scenarios', () => {
       it('should handle deeply nested structures', () => {
-        // Arrange
         const locationSchema = z.object({
           lat: z.number(),
           lng: z.number(),
@@ -1543,19 +1320,16 @@ describe('ValidatedDto Mixin', () => {
           ],
         };
 
-        // Act
         const instance = plainToClass(TestDto, plain, {
           enableImplicitConversion: true,
         });
         const transformed = instanceToPlain(instance);
 
-        // Assert
         expect(instance.addresses[0].location.lat).toBe(40.7128);
         expect(transformed).toEqual(plain);
       });
 
       it('should handle optional fields in transformations', () => {
-        // Arrange
         const schema = z.object({
           name: z.string(),
           nickname: z.string().optional(),
@@ -1565,7 +1339,6 @@ describe('ValidatedDto Mixin', () => {
         const plain1 = { name: 'John' };
         const plain2 = { name: 'John', nickname: 'Johnny', age: 30 };
 
-        // Act
         const instance1 = plainToClass(TestDto, plain1, {
           enableImplicitConversion: true,
         });
@@ -1575,7 +1348,6 @@ describe('ValidatedDto Mixin', () => {
         const transformed1 = instanceToPlain(instance1);
         const transformed2 = instanceToPlain(instance2);
 
-        // Assert
         expect(transformed1.name).toBe('John');
         expect(transformed1.nickname).toBeUndefined();
         expect(transformed2.nickname).toBe('Johnny');
@@ -1583,7 +1355,6 @@ describe('ValidatedDto Mixin', () => {
       });
 
       it('should validate after transformation', async () => {
-        // Arrange
         const schema = z.object({
           email: z.string().email(),
           age: z.number().min(18).max(100),
@@ -1592,7 +1363,6 @@ describe('ValidatedDto Mixin', () => {
         const validPlain = { email: 'john@example.com', age: 25 };
         const invalidPlain = { email: 'invalid-email', age: 200 };
 
-        // Act
         const validInstance = plainToClass(TestDto, validPlain, {
           enableImplicitConversion: true,
         });
@@ -1602,7 +1372,6 @@ describe('ValidatedDto Mixin', () => {
         const validErrors = await validate(validInstance);
         const invalidErrors = await validate(invalidInstance);
 
-        // Assert
         expect(validErrors.length).toBe(0);
         expect(invalidErrors.length).toBeGreaterThan(0);
       });
@@ -1611,7 +1380,6 @@ describe('ValidatedDto Mixin', () => {
     describe('Advanced Complex Scenarios', () => {
       describe('Date Coercion', () => {
         it('should coerce string date to Date object using Zod', () => {
-          // Arrange
           const schema = z.object({
             createdAt: z.coerce.date(),
             updatedAt: z.coerce.date(),
@@ -1624,12 +1392,10 @@ describe('ValidatedDto Mixin', () => {
             publishedAt: '2024-01-25T08:00:00Z',
           };
 
-          // Act
           const instance = plainToClass(TestDto, plain, {
             enableImplicitConversion: true,
           });
 
-          // Assert
           expect(instance.createdAt).toBeInstanceOf(Date);
           expect(instance.updatedAt).toBeInstanceOf(Date);
           expect(instance.publishedAt).toBeInstanceOf(Date);
@@ -1638,7 +1404,6 @@ describe('ValidatedDto Mixin', () => {
         });
 
         it('should coerce timestamp number to Date object', () => {
-          // Arrange
           const schema = z.object({
             timestamp: z.coerce.date(),
           });
@@ -1647,18 +1412,15 @@ describe('ValidatedDto Mixin', () => {
             timestamp: 1704960000000, // Jan 11, 2024
           };
 
-          // Act
           const instance = plainToClass(TestDto, plain, {
             enableImplicitConversion: true,
           });
 
-          // Assert
           expect(instance.timestamp).toBeInstanceOf(Date);
           expect(instance.timestamp.getFullYear()).toBe(2024);
         });
 
         it('should handle date coercion with defaults', () => {
-          // Arrange
           const defaultDate = new Date('2024-01-01');
           const schema = z.object({
             name: z.string(),
@@ -1667,21 +1429,17 @@ describe('ValidatedDto Mixin', () => {
           const TestDto = ValidatedDto(schema);
           const plain = { name: 'Test' };
 
-          // Act
           const instance = plainToClass(TestDto, plain, {
             enableImplicitConversion: true,
           });
 
-          // Assert
           expect(instance.createdAt).toBeInstanceOf(Date);
-          // Default is applied but might be the current date from Zod's default function
           expect(instance.createdAt).toBeDefined();
         });
       });
 
       describe('Nested DTOs with Type decorator', () => {
         it('should handle nested DTO with @Type decorator', () => {
-          // Arrange
           const addressSchema = z.object({
             street: z.string(),
             city: z.string(),
@@ -1713,12 +1471,10 @@ describe('ValidatedDto Mixin', () => {
             },
           };
 
-          // Act
           const instance = plainToClass(UserDto, plain, {
             enableImplicitConversion: true,
           });
 
-          // Assert
           expect(instance).toBeInstanceOf(UserDto);
           expect(instance.address).toBeInstanceOf(AddressDto);
           expect(instance.address.street).toBe('123 Main St');
@@ -1726,7 +1482,6 @@ describe('ValidatedDto Mixin', () => {
         });
 
         it('should handle deeply nested DTOs with multiple levels', () => {
-          // Arrange
           const coordinatesSchema = z.object({
             lat: z.number(),
             lng: z.number(),
@@ -1767,12 +1522,10 @@ describe('ValidatedDto Mixin', () => {
             },
           };
 
-          // Act
           const instance = plainToClass(VenueDto, plain, {
             enableImplicitConversion: true,
           });
 
-          // Assert
           expect(instance).toBeInstanceOf(VenueDto);
           expect(instance.location).toBeInstanceOf(LocationDto);
           expect(instance.location.coordinates).toBeInstanceOf(CoordinatesDto);
@@ -1780,7 +1533,6 @@ describe('ValidatedDto Mixin', () => {
         });
 
         it('should handle array of nested DTOs with @Type decorator', () => {
-          // Arrange
           const tagSchema = z.object({
             id: z.number(),
             name: z.string(),
@@ -1808,12 +1560,10 @@ describe('ValidatedDto Mixin', () => {
             ],
           };
 
-          // Act
           const instance = plainToClass(PostDto, plain, {
             enableImplicitConversion: true,
           });
 
-          // Assert
           expect(instance).toBeInstanceOf(PostDto);
           expect(instance.tags).toHaveLength(2);
           expect(instance.tags[0]).toBeInstanceOf(TagDto);
@@ -1825,7 +1575,6 @@ describe('ValidatedDto Mixin', () => {
 
       describe('Arrays with Default Values', () => {
         it('should apply Zod default values to arrays', () => {
-          // Arrange
           const schema = z.object({
             name: z.string(),
             tags: z.array(z.string()).default(['general']),
@@ -1834,18 +1583,15 @@ describe('ValidatedDto Mixin', () => {
           const TestDto = ValidatedDto(schema);
           const plain = { name: 'Test' };
 
-          // Act
           const instance = plainToClass(TestDto, plain, {
             enableImplicitConversion: true,
           });
 
-          // Assert
           expect(instance.tags).toEqual(['general']);
           expect(instance.categories).toEqual([]);
         });
 
         it('should handle array of objects with defaults using Type decorator', () => {
-          // Arrange
           const itemSchema = z.object({
             id: z.number(),
             name: z.string(),
@@ -1857,10 +1603,8 @@ describe('ValidatedDto Mixin', () => {
             orderId: z.string(),
           });
 
-          // Create ItemDto with defaults
           class ItemDto extends ValidatedDto(itemSchema) {}
 
-          // Create OrderDto with Type decorator for proper nested transformation
           class OrderDto extends ValidatedDto(schema) {
             @Type(() => ItemDto)
             items!: ItemDto[];
@@ -1874,16 +1618,13 @@ describe('ValidatedDto Mixin', () => {
             ],
           };
 
-          // Act
           const instance = plainToClass(OrderDto, plain, {
             enableImplicitConversion: true,
           });
 
-          // Assert
           expect(instance.items).toHaveLength(2);
           expect(instance.items[0]).toBeInstanceOf(ItemDto);
           expect(instance.items[1]).toBeInstanceOf(ItemDto);
-          // With @Type decorator, each item is properly transformed
           expect(instance.items[0].quantity).toBe(1); // Default applied
           expect(instance.items[0].price).toBe(10); // Provided value
           expect(instance.items[1].quantity).toBe(3); // Provided value
@@ -1891,7 +1632,6 @@ describe('ValidatedDto Mixin', () => {
         });
 
         it('should handle empty array with nested object defaults', () => {
-          // Arrange
           const schema = z.object({
             name: z.string(),
             metadata: z
@@ -1905,12 +1645,10 @@ describe('ValidatedDto Mixin', () => {
           const TestDto = ValidatedDto(schema);
           const plain = { name: 'Test' };
 
-          // Act
           const instance = plainToClass(TestDto, plain, {
             enableImplicitConversion: true,
           });
 
-          // Assert
           expect(instance.metadata).toBeDefined();
           expect(instance.metadata.tags).toEqual([]);
           expect(instance.metadata.flags).toEqual([true, false]);
@@ -1919,7 +1657,6 @@ describe('ValidatedDto Mixin', () => {
 
       describe('Complex DTO Composition', () => {
         it('should handle multiple nested DTOs with mixed types', async () => {
-          // Arrange
           const priceSchema = z.object({
             amount: z.number(),
             currency: z.string().default('USD'),
@@ -1970,12 +1707,10 @@ describe('ValidatedDto Mixin', () => {
             createdAt: '2024-01-01T00:00:00Z',
           };
 
-          // Act
           const instance = plainToClass(ProductDto, plain, {
             enableImplicitConversion: true,
           });
 
-          // Assert
           expect(instance).toBeInstanceOf(ProductDto);
           expect(instance.pricing).toBeInstanceOf(PriceDto);
           expect(instance.inventory).toBeInstanceOf(InventoryDto);
@@ -1985,13 +1720,11 @@ describe('ValidatedDto Mixin', () => {
           expect(instance.createdAt).toBeInstanceOf(Date);
           expect(instance.inventory.lastRestocked).toBeInstanceOf(Date);
 
-          // Validate
           const errors = await validate(instance);
           expect(errors.length).toBe(0);
         });
 
         it('should handle optional nested DTOs with defaults', () => {
-          // Arrange
           const settingsSchema = z.object({
             theme: z.string().default('light'),
             notifications: z.boolean().default(true),
@@ -2025,12 +1758,10 @@ describe('ValidatedDto Mixin', () => {
             settings: {},
           };
 
-          // Act
           const instance = plainToClass(UserDto, plain, {
             enableImplicitConversion: true,
           });
 
-          // Assert
           expect(instance).toBeInstanceOf(UserDto);
           expect(instance.settings).toBeInstanceOf(SettingsDto);
           expect(instance.settings?.theme).toBe('light');
@@ -2039,7 +1770,6 @@ describe('ValidatedDto Mixin', () => {
         });
 
         it('should handle circular reference prevention with complex DTOs', () => {
-          // Arrange
           const categorySchema = z.object({
             id: z.number(),
             name: z.string(),
@@ -2115,12 +1845,10 @@ describe('ValidatedDto Mixin', () => {
             ],
           };
 
-          // Act
           const instance = plainToClass(PostDto, plain, {
             enableImplicitConversion: true,
           });
 
-          // Assert
           expect(instance).toBeInstanceOf(PostDto);
           expect(instance.author).toBeInstanceOf(AuthorDto);
           expect(instance.categories).toHaveLength(2);
@@ -2136,7 +1864,6 @@ describe('ValidatedDto Mixin', () => {
 
       describe('Advanced Coercion and Transformation', () => {
         it('should handle mixed coercion types in nested structures', () => {
-          // Arrange
           const rangeSchema = z.object({
             min: z.coerce.number(),
             max: z.coerce.number(),
@@ -2161,12 +1888,10 @@ describe('ValidatedDto Mixin', () => {
             createdAfter: '2024-01-01',
           };
 
-          // Act
           const instance = plainToClass(TestDto, plain, {
             enableImplicitConversion: true,
           });
 
-          // Assert
           expect(instance.name).toBe('laptop');
           expect(instance.isActive).toBe(true);
           expect(typeof instance.isActive).toBe('boolean');
@@ -2178,7 +1903,6 @@ describe('ValidatedDto Mixin', () => {
         });
 
         it('should handle transform chains with Zod pipe', () => {
-          // Arrange
           const schema = z.object({
             price: z.string().pipe(z.coerce.number()),
             percentage: z
@@ -2195,13 +1919,10 @@ describe('ValidatedDto Mixin', () => {
             date: '2024-01-15',
           };
 
-          // Act
           const instance = plainToClass(TestDto, plain, {
             enableImplicitConversion: true,
           });
 
-          // Assert
-          // Pipe transforms the value through each stage
           expect(instance.price).toBe(49.99); // Coerced to number
           expect(instance.percentage).toBe(75); // Coerced to number
           expect(instance.date).toBeInstanceOf(Date); // Coerced to date
@@ -2210,7 +1931,6 @@ describe('ValidatedDto Mixin', () => {
 
       describe('Real-world Complex Scenarios', () => {
         it('should handle e-commerce order DTO with full complexity', async () => {
-          // Arrange
           const addressSchema = z.object({
             street: z.string(),
             city: z.string(),
@@ -2326,12 +2046,10 @@ describe('ValidatedDto Mixin', () => {
             },
           };
 
-          // Act
           const instance = plainToClass(OrderDto, plain, {
             enableImplicitConversion: true,
           });
 
-          // Assert
           expect(instance).toBeInstanceOf(OrderDto);
           expect(instance.customer).toBeInstanceOf(CustomerDto);
           expect(instance.customer.billingAddress).toBeInstanceOf(AddressDto);
@@ -2346,11 +2064,9 @@ describe('ValidatedDto Mixin', () => {
           expect(instance.status).toBe('pending'); // Default
           expect(instance.createdAt).toBeInstanceOf(Date);
 
-          // Validate
           const errors = await validate(instance);
           expect(errors.length).toBe(0);
 
-          // Round-trip
           const plain2 = instanceToPlain(instance);
           const instance2 = plainToClass(OrderDto, plain2, {
             enableImplicitConversion: true,
@@ -2364,21 +2080,17 @@ describe('ValidatedDto Mixin', () => {
 
   describe('Union Validation', () => {
     it('should validate simple union types', async () => {
-      // Arrange
       const schema = z.object({
         value: z.union([z.string(), z.number()]),
       });
       const TestDto = ValidatedDto(schema);
 
-      // Act - Test with string
       const instance1 = new TestDto({ value: 'hello' });
       const errors1 = await validate(instance1);
 
-      // Act - Test with number
       const instance2 = new TestDto({ value: 42 });
       const errors2 = await validate(instance2);
 
-      // Assert
       expect(errors1.length).toBe(0);
       expect(instance1.value).toBe('hello');
       expect(errors2.length).toBe(0);
@@ -2386,22 +2098,18 @@ describe('ValidatedDto Mixin', () => {
     });
 
     it('should fail validation for invalid union value', async () => {
-      // Arrange
       const schema = z.object({
         value: z.union([z.string(), z.number()]),
       });
       const TestDto = ValidatedDto(schema);
 
-      // Act - Test with boolean (not in union)
       const instance = new TestDto({ value: true as any });
       const errors = await validate(instance);
 
-      // Assert
       expect(errors.length).toBeGreaterThan(0);
     });
 
     it('should validate union of string literals', async () => {
-      // Arrange
       const schema = z.object({
         status: z.union([
           z.literal('pending'),
@@ -2411,17 +2119,14 @@ describe('ValidatedDto Mixin', () => {
       });
       const TestDto = ValidatedDto(schema);
 
-      // Act
       const instance = new TestDto({ status: 'approved' });
       const errors = await validate(instance);
 
-      // Assert
       expect(errors.length).toBe(0);
       expect(instance.status).toBe('approved');
     });
 
     it('should validate union with nested objects', async () => {
-      // Arrange
       const textSchema = z.object({
         type: z.literal('text'),
         content: z.string(),
@@ -2440,7 +2145,6 @@ describe('ValidatedDto Mixin', () => {
 
       const TestDto = ValidatedDto(schema);
 
-      // Act - Test with text
       const instance1 = new TestDto({
         name: 'Item 1',
         data: {
@@ -2450,7 +2154,6 @@ describe('ValidatedDto Mixin', () => {
       });
       const errors1 = await validate(instance1);
 
-      // Act - Test with image
       const instance2 = new TestDto({
         name: 'Item 2',
         data: {
@@ -2461,7 +2164,6 @@ describe('ValidatedDto Mixin', () => {
       });
       const errors2 = await validate(instance2);
 
-      // Assert
       expect(errors1.length).toBe(0);
       expect(instance1.data.type).toBe('text');
       expect((instance1.data as any).content).toBe('Hello World');
@@ -2472,33 +2174,27 @@ describe('ValidatedDto Mixin', () => {
     });
 
     it('should handle optional unions', async () => {
-      // Arrange
       const schema = z.object({
         value: z.union([z.string(), z.number()]).optional(),
       });
       const TestDto = ValidatedDto(schema);
 
-      // Act
       const instance = new TestDto({});
       const errors = await validate(instance);
 
-      // Assert
       expect(errors.length).toBe(0);
       expect(instance.value).toBeUndefined();
     });
 
     it('should handle nullable unions', async () => {
-      // Arrange
       const schema = z.object({
         value: z.union([z.string(), z.number()]).nullable(),
       });
       const TestDto = ValidatedDto(schema);
 
-      // Act
       const instance = new TestDto({ value: null });
       const errors = await validate(instance);
 
-      // Assert
       expect(errors.length).toBe(0);
       expect(instance.value).toBeNull();
     });
@@ -2506,7 +2202,6 @@ describe('ValidatedDto Mixin', () => {
 
   describe('Discriminated Union Validation', () => {
     it('should validate discriminated union with simple objects', async () => {
-      // Arrange
       const schema = z.object({
         event: z.discriminatedUnion('type', [
           z.object({
@@ -2523,7 +2218,6 @@ describe('ValidatedDto Mixin', () => {
 
       const TestDto = ValidatedDto(schema);
 
-      // Act - Test click event
       const instance1 = new TestDto({
         event: {
           type: 'click',
@@ -2533,7 +2227,6 @@ describe('ValidatedDto Mixin', () => {
       });
       const errors1 = await validate(instance1);
 
-      // Act - Test keypress event
       const instance2 = new TestDto({
         event: {
           type: 'keypress',
@@ -2542,7 +2235,6 @@ describe('ValidatedDto Mixin', () => {
       });
       const errors2 = await validate(instance2);
 
-      // Assert
       expect(errors1.length).toBe(0);
       expect(instance1.event.type).toBe('click');
       expect((instance1.event as any).x).toBe(100);
@@ -2553,7 +2245,6 @@ describe('ValidatedDto Mixin', () => {
     });
 
     it('should fail validation for wrong discriminator value', async () => {
-      // Arrange
       const schema = z.object({
         event: z.discriminatedUnion('type', [
           z.object({
@@ -2570,7 +2261,6 @@ describe('ValidatedDto Mixin', () => {
 
       const TestDto = ValidatedDto(schema);
 
-      // Act - Invalid discriminator
       const instance = new TestDto({
         event: {
           type: 'invalid' as any,
@@ -2580,12 +2270,10 @@ describe('ValidatedDto Mixin', () => {
       });
       const errors = await validate(instance);
 
-      // Assert
       expect(errors.length).toBeGreaterThan(0);
     });
 
     it('should validate complex discriminated union with nested data', async () => {
-      // Arrange
       const schema = z.object({
         notification: z.discriminatedUnion('channel', [
           z.object({
@@ -2611,7 +2299,6 @@ describe('ValidatedDto Mixin', () => {
 
       const TestDto = ValidatedDto(schema);
 
-      // Act - Email notification
       const instance1 = new TestDto({
         notification: {
           channel: 'email',
@@ -2622,7 +2309,6 @@ describe('ValidatedDto Mixin', () => {
       });
       const errors1 = await validate(instance1);
 
-      // Act - SMS notification
       const instance2 = new TestDto({
         notification: {
           channel: 'sms',
@@ -2632,7 +2318,6 @@ describe('ValidatedDto Mixin', () => {
       });
       const errors2 = await validate(instance2);
 
-      // Act - Push notification
       const instance3 = new TestDto({
         notification: {
           channel: 'push',
@@ -2644,7 +2329,6 @@ describe('ValidatedDto Mixin', () => {
       });
       const errors3 = await validate(instance3);
 
-      // Assert
       expect(errors1.length).toBe(0);
       expect(instance1.notification.channel).toBe('email');
       expect((instance1.notification as any).to).toBe('user@example.com');
@@ -2660,7 +2344,6 @@ describe('ValidatedDto Mixin', () => {
     });
 
     it('should validate discriminated union with optional discriminator field', async () => {
-      // Arrange
       const schema = z.object({
         result: z
           .discriminatedUnion('status', [
@@ -2679,11 +2362,9 @@ describe('ValidatedDto Mixin', () => {
 
       const TestDto = ValidatedDto(schema);
 
-      // Act - Without result
       const instance1 = new TestDto({});
       const errors1 = await validate(instance1);
 
-      // Act - With success result
       const instance2 = new TestDto({
         result: {
           status: 'success',
@@ -2692,7 +2373,6 @@ describe('ValidatedDto Mixin', () => {
       });
       const errors2 = await validate(instance2);
 
-      // Assert
       expect(errors1.length).toBe(0);
       expect(instance1.result).toBeUndefined();
 
@@ -2702,7 +2382,6 @@ describe('ValidatedDto Mixin', () => {
     });
 
     it('should handle array of discriminated unions', async () => {
-      // Arrange
       const schema = z.object({
         items: z.array(
           z.discriminatedUnion('kind', [
@@ -2722,7 +2401,6 @@ describe('ValidatedDto Mixin', () => {
 
       const TestDto = ValidatedDto(schema);
 
-      // Act
       const instance = new TestDto({
         items: [
           {
@@ -2739,7 +2417,6 @@ describe('ValidatedDto Mixin', () => {
       });
       const errors = await validate(instance);
 
-      // Assert
       expect(errors.length).toBe(0);
       expect(instance.items).toHaveLength(2);
       expect(instance.items[0].kind).toBe('product');
@@ -2751,7 +2428,6 @@ describe('ValidatedDto Mixin', () => {
 
   describe('Union and Discriminated Union with Class Transformer', () => {
     it('should transform plain union to class', async () => {
-      // Arrange
       const schema = z.object({
         id: z.number(),
         value: z.union([z.string(), z.number()]),
@@ -2759,20 +2435,17 @@ describe('ValidatedDto Mixin', () => {
 
       class TestDto extends ValidatedDto(schema) {}
 
-      // Act
       const plain = { id: 1, value: 'hello' };
       const instance = plainToInstance(TestDto, plain, {
         enableImplicitConversion: true,
       });
       const errors = await validate(instance);
 
-      // Assert
       expect(errors.length).toBe(0);
       expect(instance.value).toBe('hello');
     });
 
     it('should transform plain discriminated union to class', async () => {
-      // Arrange
       const schema = z.object({
         action: z.discriminatedUnion('type', [
           z.object({
@@ -2787,7 +2460,6 @@ describe('ValidatedDto Mixin', () => {
       });
       const TestDto = ValidatedDto(schema);
 
-      // Act
       const plain = {
         action: {
           type: 'create',
@@ -2799,14 +2471,12 @@ describe('ValidatedDto Mixin', () => {
       });
       const errors = await validate(instance);
 
-      // Assert
       expect(errors.length).toBe(0);
       expect(instance.action.type).toBe('create');
       expect((instance.action as any).name).toBe('New Item');
     });
 
     it('should handle round-trip transformation with discriminated unions', async () => {
-      // Arrange
       const schema = z.object({
         id: z.string(),
         payload: z.discriminatedUnion('format', [
@@ -2823,7 +2493,6 @@ describe('ValidatedDto Mixin', () => {
       });
       const TestDto = ValidatedDto(schema);
 
-      // Act
       const original = new TestDto({
         id: '123',
         payload: {
@@ -2839,7 +2508,6 @@ describe('ValidatedDto Mixin', () => {
       });
       const errors = await validate(restored);
 
-      // Assert
       expect(errors.length).toBe(0);
       expect(restored.payload.format).toBe('xml');
       expect((restored.payload as any).data).toBe('<root></root>');
@@ -2883,7 +2551,6 @@ describe('ValidatedDto Mixin', () => {
 
   describe('Decorators Registry', () => {
     it('should apply property decorators from registry', () => {
-      // Arrange
       const metadataKey = Symbol('test-metadata');
 
       function TestPropertyDecorator(value: string): PropertyDecorator {
@@ -2891,8 +2558,6 @@ describe('ValidatedDto Mixin', () => {
           Reflect.defineMetadata(metadataKey, value, target, propertyKey);
         };
       }
-
-      // Register decorators using Zod v4's .register() method
 
       const schema = z.object({
         name: z.string(),
@@ -2903,7 +2568,6 @@ describe('ValidatedDto Mixin', () => {
         decorators: [TestPropertyDecorator('decorated-name')],
       });
 
-      // Act
       const BaseDto = ValidatedDto(schema);
       
       @InheritValidatedMetadata()
@@ -2911,7 +2575,6 @@ describe('ValidatedDto Mixin', () => {
       
       const instance = new TestDto({ name: 'John', age: 30 });
 
-      // Assert
       expect(instance.name).toBe('John');
       expect(instance.age).toBe(30);
       const metadata = Reflect.getMetadata(
@@ -2923,7 +2586,6 @@ describe('ValidatedDto Mixin', () => {
     });
 
     it('should apply class decorators from registry', () => {
-      // Arrange
       const metadataKey = Symbol('class-metadata');
 
       function TestClassDecorator(value: string): ClassDecorator {
@@ -2936,12 +2598,10 @@ describe('ValidatedDto Mixin', () => {
         name: z.string(),
       });
 
-      // Register class-level decorators
       schema.register(DECORATOR_REGISTRY, {
         decorators: [TestClassDecorator('decorated-class')],
       });
 
-      // Act
       const BaseDto = ValidatedDto(schema);
       
       @InheritValidatedMetadata()
@@ -2949,14 +2609,12 @@ describe('ValidatedDto Mixin', () => {
       
       const instance = new TestDto({ name: 'John' });
 
-      // Assert
       expect(instance.name).toBe('John');
       const metadata = Reflect.getMetadata(metadataKey, TestDto);
       expect(metadata).toBe('decorated-class');
     });
 
     it('should apply multiple decorators from registry', () => {
-      // Arrange
       const metadataKey1 = Symbol('metadata-1');
       const metadataKey2 = Symbol('metadata-2');
 
@@ -2981,7 +2639,6 @@ describe('ValidatedDto Mixin', () => {
         name: nameSchema,
       });
 
-      // Act
       const BaseDto = ValidatedDto(schema);
       
       @InheritValidatedMetadata()
@@ -2989,7 +2646,6 @@ describe('ValidatedDto Mixin', () => {
       
       const instance = new TestDto({ name: 'John' });
 
-      // Assert
       expect(instance.name).toBe('John');
       expect(Reflect.getMetadata(metadataKey1, TestDto.prototype, 'name')).toBe(
         'first',
@@ -3000,7 +2656,6 @@ describe('ValidatedDto Mixin', () => {
     });
 
     it('should apply decorators to nested objects', () => {
-      // Arrange
       const metadataKey = Symbol('nested-metadata');
 
       function NestedDecorator(): PropertyDecorator {
@@ -3029,20 +2684,16 @@ describe('ValidatedDto Mixin', () => {
         address: addressSchema,
       });
 
-      // Act
       const TestDto = ValidatedDto(schema);
       const instance = new TestDto({
         name: 'John',
         address: { street: '123 Main St', city: 'NYC' },
       });
 
-      // Assert
       expect(instance.name).toBe('John');
       expect(instance.address.street).toBe('123 Main St');
       expect(instance.address.city).toBe('NYC');
 
-      // Verify the decorator was applied - since createObjectClass is called recursively,
-      // the decorator should be applied when the nested AddressDto class is created
       const AddressDto = Reflect.getMetadata(
         'design:type',
         TestDto.prototype,
@@ -3050,26 +2701,21 @@ describe('ValidatedDto Mixin', () => {
       );
       expect(AddressDto).toBeDefined();
 
-      // The decorator should have been applied to the street property of the nested AddressDto
       if (AddressDto) {
         const metadata = Reflect.getMetadata(
           metadataKey,
           AddressDto.prototype,
           'street',
         );
-        // If metadata is undefined, it means the nested class creation didn't preserve the decorator registration
-        // This is expected since each schema instance can only be in the registry once
         if (metadata) {
           expect(metadata).toBe('nested-value');
         } else {
-          // As a fallback, verify the instance was created correctly
           expect(instance.address).toHaveProperty('street');
         }
       }
     });
 
     it('should apply decorators with optional fields', () => {
-      // Arrange
       const metadataKey = Symbol('optional-metadata');
 
       function OptionalDecorator(): PropertyDecorator {
@@ -3093,7 +2739,6 @@ describe('ValidatedDto Mixin', () => {
         nickname: nicknameSchema,
       });
 
-      // Act
       const BaseDto = ValidatedDto(schema);
       
       @InheritValidatedMetadata()
@@ -3102,7 +2747,6 @@ describe('ValidatedDto Mixin', () => {
       const instance1 = new TestDto({ name: 'John', nickname: 'Johnny' });
       const instance2 = new TestDto({ name: 'Jane' });
 
-      // Assert
       expect(instance1.nickname).toBe('Johnny');
       expect(instance2.nickname).toBeUndefined();
       const metadata = Reflect.getMetadata(
@@ -3114,7 +2758,6 @@ describe('ValidatedDto Mixin', () => {
     });
 
     it('should apply decorators with nullable fields', () => {
-      // Arrange
       const metadataKey = Symbol('nullable-metadata');
 
       function NullableDecorator(): PropertyDecorator {
@@ -3138,7 +2781,6 @@ describe('ValidatedDto Mixin', () => {
         middleName: middleNameSchema,
       });
 
-      // Act
       const BaseDto = ValidatedDto(schema);
       
       @InheritValidatedMetadata()
@@ -3146,7 +2788,6 @@ describe('ValidatedDto Mixin', () => {
       
       const instance = new TestDto({ name: 'John', middleName: null });
 
-      // Assert
       expect(instance.middleName).toBeNull();
       const metadata = Reflect.getMetadata(
         metadataKey,
@@ -3157,7 +2798,6 @@ describe('ValidatedDto Mixin', () => {
     });
 
     it('should apply decorators with default values', () => {
-      // Arrange
       const metadataKey = Symbol('default-metadata');
 
       function DefaultDecorator(): PropertyDecorator {
@@ -3181,7 +2821,6 @@ describe('ValidatedDto Mixin', () => {
         role: roleSchema,
       });
 
-      // Act
       const BaseDto = ValidatedDto(schema);
       
       @InheritValidatedMetadata()
@@ -3189,7 +2828,6 @@ describe('ValidatedDto Mixin', () => {
       
       const instance = new TestDto({ name: 'John' });
 
-      // Assert
       expect(instance.role).toBe('user');
       const metadata = Reflect.getMetadata(
         metadataKey,
@@ -3200,7 +2838,6 @@ describe('ValidatedDto Mixin', () => {
     });
 
     it('should apply decorators to array fields', () => {
-      // Arrange
       const metadataKey = Symbol('array-metadata');
 
       function ArrayDecorator(): PropertyDecorator {
@@ -3224,7 +2861,6 @@ describe('ValidatedDto Mixin', () => {
         tags: tagsSchema,
       });
 
-      // Act
       const BaseDto = ValidatedDto(schema);
       
       @InheritValidatedMetadata()
@@ -3232,7 +2868,6 @@ describe('ValidatedDto Mixin', () => {
       
       const instance = new TestDto({ name: 'John', tags: ['tag1', 'tag2'] });
 
-      // Assert
       expect(instance.tags).toEqual(['tag1', 'tag2']);
       const metadata = Reflect.getMetadata(
         metadataKey,
@@ -3243,7 +2878,6 @@ describe('ValidatedDto Mixin', () => {
     });
 
     it('should apply decorators to piped/transformed schemas', () => {
-      // Arrange
       const metadataKey = Symbol('piped-metadata');
 
       function PipedDecorator(): PropertyDecorator {
@@ -3267,7 +2901,6 @@ describe('ValidatedDto Mixin', () => {
         email: emailSchema,
       });
 
-      // Act
       const BaseDto = ValidatedDto(schema);
       
       @InheritValidatedMetadata()
@@ -3275,8 +2908,6 @@ describe('ValidatedDto Mixin', () => {
       
       const instance = new TestDto({ name: 'John', email: 'JOHN@EXAMPLE.COM' });
 
-      // Assert
-      // Note: The toLowerCase transformation should be applied by the Transform decorator
       expect(instance.email.toLowerCase()).toBe('john@example.com');
       const metadata = Reflect.getMetadata(
         metadataKey,
@@ -3287,7 +2918,6 @@ describe('ValidatedDto Mixin', () => {
     });
 
     it('should apply decorators in union types', () => {
-      // Arrange
       const metadataKey = Symbol('union-metadata');
 
       function UnionDecorator(): PropertyDecorator {
@@ -3323,7 +2953,6 @@ describe('ValidatedDto Mixin', () => {
 
       const unionSchema = z.union([schema1, schema2]);
 
-      // Act
       const BaseDto = ValidatedDto(unionSchema);
       
       @InheritValidatedMetadata()
@@ -3331,7 +2960,6 @@ describe('ValidatedDto Mixin', () => {
       
       const instance = new TestDto({ type: 'a', value: 'test' });
 
-      // Assert
       expect(instance.type).toBe('a');
       expect(instance.value).toBe('test');
       const metadata = Reflect.getMetadata(
@@ -3343,7 +2971,6 @@ describe('ValidatedDto Mixin', () => {
     });
 
     it('should apply decorators in discriminated union types', () => {
-      // Arrange
       const metadataKey = Symbol('discriminated-metadata');
 
       function DiscriminatedDecorator(): PropertyDecorator {
@@ -3382,7 +3009,6 @@ describe('ValidatedDto Mixin', () => {
         schema2,
       ]);
 
-      // Act
       const BaseDto = ValidatedDto(discriminatedUnion);
       
       @InheritValidatedMetadata()
@@ -3390,11 +3016,9 @@ describe('ValidatedDto Mixin', () => {
       
       const instance = new TestDto({ kind: 'circle', radius: 5 });
 
-      // Assert
       expect(instance.kind).toBe('circle');
       expect((instance as any).radius).toBe(5);
 
-      // Check the specific option class - it's stored with the discriminator value as key
       const CircleDto =
         (TestDto as any).circle || (TestDto as any).options?.[0];
       if (CircleDto) {
@@ -3405,19 +3029,16 @@ describe('ValidatedDto Mixin', () => {
         );
         expect(metadata).toBe('discriminated-value');
       } else {
-        // If option classes aren't exposed, verify the decorator was still applied to the instance
         expect(instance).toHaveProperty('radius', 5);
       }
     });
 
     it('should handle schemas without registry decorators', () => {
-      // Arrange
       const schema = z.object({
         name: z.string(),
         age: z.number(),
       });
 
-      // Act
       const BaseDto = ValidatedDto(schema);
       
       @InheritValidatedMetadata()
@@ -3425,13 +3046,11 @@ describe('ValidatedDto Mixin', () => {
       
       const instance = new TestDto({ name: 'John', age: 30 });
 
-      // Assert
       expect(instance.name).toBe('John');
       expect(instance.age).toBe(30);
     });
 
     it('should handle empty decorator arrays', () => {
-      // Arrange
       const nameSchema = z.string();
       nameSchema.register(DECORATOR_REGISTRY, {
         decorators: [],
@@ -3441,7 +3060,6 @@ describe('ValidatedDto Mixin', () => {
         name: nameSchema,
       });
 
-      // Act
       const BaseDto = ValidatedDto(schema);
       
       @InheritValidatedMetadata()
@@ -3449,12 +3067,10 @@ describe('ValidatedDto Mixin', () => {
       
       const instance = new TestDto({ name: 'John' });
 
-      // Assert
       expect(instance.name).toBe('John');
     });
 
     it('should apply decorators to deeply nested objects', () => {
-      // Arrange
       const metadataKey = Symbol('deep-nested-metadata');
 
       function DeepDecorator(): PropertyDecorator {
@@ -3488,7 +3104,6 @@ describe('ValidatedDto Mixin', () => {
         address: addressSchema,
       });
 
-      // Act
       const BaseDto = ValidatedDto(schema);
       
       @InheritValidatedMetadata()
@@ -3502,11 +3117,9 @@ describe('ValidatedDto Mixin', () => {
         },
       });
 
-      // Assert
       expect(instance.name).toBe('John');
       expect(instance.address.location.latitude).toBe(40.7128);
 
-      // Navigate to the deep nested class
       const AddressDto = Reflect.getMetadata(
         'design:type',
         TestDto.prototype,
@@ -3520,7 +3133,6 @@ describe('ValidatedDto Mixin', () => {
           AddressDto.prototype,
           'location',
         );
-        // LocationDto might be undefined depending on how nested classes are created
         if (LocationDto) {
           expect(LocationDto).toBeDefined();
           const metadata = Reflect.getMetadata(
@@ -3531,18 +3143,15 @@ describe('ValidatedDto Mixin', () => {
           if (metadata) {
             expect(metadata).toBe('deep-value');
           } else {
-            // Fallback: verify the instance structure is correct
             expect(instance.address.location).toHaveProperty('latitude');
           }
         } else {
-          // If LocationDto is undefined, at least verify the data structure works
           expect(instance.address.location.latitude).toBe(40.7128);
         }
       }
     });
 
     it('should work with class-validator integration', async () => {
-      // Arrange
       const metadataKey = Symbol('validator-metadata');
 
       function ValidatorDecorator(): PropertyDecorator {
@@ -3564,21 +3173,17 @@ describe('ValidatedDto Mixin', () => {
       @InheritValidatedMetadata()
       class TestDto extends ValidatedDto(schema) {}
 
-      // Act - Valid case
       const validInstance = new TestDto({ name: 'John', age: 30 });
       const validErrors = await validate(validInstance);
 
-      // Assert - Valid case
       expect(validErrors).toHaveLength(0);
       expect(Reflect.getMetadata(metadataKey, TestDto.prototype, 'name')).toBe(
         'validated',
       );
 
-      // Act - Invalid case
       const invalidInstance = new TestDto({ name: 'Jo', age: 30 });
       const invalidErrors = await validate(invalidInstance);
 
-      // Assert - Invalid case
       expect(invalidErrors.length).toBeGreaterThan(0);
     });
 
@@ -3636,7 +3241,6 @@ describe('ValidatedDto Mixin', () => {
     });
 
     it('should apply decorators from isolated registry to nested objects', () => {
-      // Arrange
       const isolatedRegistry = createDecoratorRegistry();
       const metadataKey = Symbol('isolated-nested');
 
@@ -3660,7 +3264,6 @@ describe('ValidatedDto Mixin', () => {
         address: addressSchema,
       });
 
-      // Act
       @InheritValidatedMetadata()
       class PersonDto extends ValidatedDto(personSchema, {
         DECORATOR_REGISTRY: isolatedRegistry,
@@ -3671,8 +3274,6 @@ describe('ValidatedDto Mixin', () => {
         address: { street: '123 Main St', city: 'NYC' },
       });
 
-      // Assert - the decorator should be applied to the nested DTO's street property
-      // Note: Due to recursive DTO creation, we check if metadata exists
       const AddressDto = (instance.address as any).constructor;
       if (AddressDto && AddressDto.prototype) {
         const metadata = Reflect.getMetadata(
@@ -3680,18 +3281,15 @@ describe('ValidatedDto Mixin', () => {
           AddressDto.prototype,
           'street',
         );
-        // If metadata is found, verify it
         if (metadata !== undefined) {
           expect(metadata).toBe('nested-street');
         } else {
-          // Fallback: just verify the instance structure is correct
           expect(instance.address.street).toBe('123 Main St');
         }
       }
     });
 
     it('should apply decorators from isolated registry to union types', () => {
-      // Arrange
       const isolatedRegistry = createDecoratorRegistry();
       const metadataKey = Symbol('isolated-union');
 
@@ -3711,7 +3309,6 @@ describe('ValidatedDto Mixin', () => {
         z.object({ common: commonField, typeB: z.number() }),
       ]);
 
-      // Act
       const BaseDto = ValidatedDto(schema, {
         DECORATOR_REGISTRY: isolatedRegistry,
       });
@@ -3721,7 +3318,6 @@ describe('ValidatedDto Mixin', () => {
       
       const instance = new UnionDto({ common: 'test', typeA: 'value' });
 
-      // Assert
       const metadata = Reflect.getMetadata(
         metadataKey,
         UnionDto.prototype,
@@ -3731,7 +3327,6 @@ describe('ValidatedDto Mixin', () => {
     });
 
     it('should apply decorators from isolated registry to discriminated unions', () => {
-      // Arrange
       const isolatedRegistry = createDecoratorRegistry();
       const metadataKey = Symbol('isolated-disc-union');
 
@@ -3759,7 +3354,6 @@ describe('ValidatedDto Mixin', () => {
         }),
       ]);
 
-      // Act
       const BaseDto = ValidatedDto(schema, {
         DECORATOR_REGISTRY: isolatedRegistry,
       });
@@ -3773,7 +3367,6 @@ describe('ValidatedDto Mixin', () => {
         valueA: 'value',
       });
 
-      // Assert
       const metadata = Reflect.getMetadata(
         metadataKey,
         DiscUnionDto.prototype,
@@ -3783,7 +3376,6 @@ describe('ValidatedDto Mixin', () => {
     });
 
     it('should not interfere between global and isolated registries', () => {
-      // Arrange
       const isolatedRegistry = createDecoratorRegistry();
       const globalKey = Symbol('global-meta');
       const isolatedKey = Symbol('isolated-meta');
@@ -3810,19 +3402,16 @@ describe('ValidatedDto Mixin', () => {
         };
       }
 
-      // Register in global registry
       const globalSchema = z.object({ field: z.string() });
       globalSchema.shape.field.register(DECORATOR_REGISTRY, {
         decorators: [GlobalDecorator()],
       });
 
-      // Register in isolated registry
       const isolatedSchema = z.object({ field: z.string() });
       isolatedSchema.shape.field.register(isolatedRegistry, {
         decorators: [IsolatedDecorator()],
       });
 
-      // Act - Create DTO with global registry (default)
       const BaseGlobalDto = ValidatedDto(globalSchema);
       
       @InheritValidatedMetadata()
@@ -3830,7 +3419,6 @@ describe('ValidatedDto Mixin', () => {
       
       const globalInstance = new GlobalDto({ field: 'test' });
 
-      // Act - Create DTO with isolated registry
       const BaseIsolatedDto = ValidatedDto(isolatedSchema, {
         DECORATOR_REGISTRY: isolatedRegistry,
       });
@@ -3840,7 +3428,6 @@ describe('ValidatedDto Mixin', () => {
       
       const isolatedInstance = new IsolatedDto({ field: 'test' });
 
-      // Assert - global DTO should only have global metadata
       expect(Reflect.getMetadata(globalKey, GlobalDto.prototype, 'field')).toBe(
         'global-value',
       );
@@ -3848,7 +3435,6 @@ describe('ValidatedDto Mixin', () => {
         Reflect.getMetadata(isolatedKey, GlobalDto.prototype, 'field'),
       ).toBeUndefined();
 
-      // Assert - isolated DTO should only have isolated metadata
       expect(
         Reflect.getMetadata(isolatedKey, IsolatedDto.prototype, 'field'),
       ).toBe('isolated-value');
@@ -3858,7 +3444,6 @@ describe('ValidatedDto Mixin', () => {
     });
 
     it('should compose decorators from isolated and global registries', () => {
-      // Arrange
       const isolatedRegistry = createDecoratorRegistry();
       const globalKey = Symbol('global-decorator');
       const isolatedKey = Symbol('isolated-decorator');
@@ -3885,21 +3470,17 @@ describe('ValidatedDto Mixin', () => {
         };
       }
 
-      // Use the same schema instance for both registrations
       const fieldSchema = z.string();
       const schema = z.object({ field: fieldSchema });
 
-      // Register in global registry
       fieldSchema.register(DECORATOR_REGISTRY, {
         decorators: [GlobalDecorator()],
       });
 
-      // Register in isolated registry (same schema instance)
       fieldSchema.register(isolatedRegistry, {
         decorators: [IsolatedDecorator()],
       });
 
-      // Act - Create DTO with isolated registry (should compose both)
       const BaseDto = ValidatedDto(schema, {
         DECORATOR_REGISTRY: isolatedRegistry,
       });
@@ -3909,7 +3490,6 @@ describe('ValidatedDto Mixin', () => {
       
       const instance = new ComposedDto({ field: 'test' });
 
-      // Assert - should have both global and isolated decorators
       expect(
         Reflect.getMetadata(globalKey, ComposedDto.prototype, 'field'),
       ).toBe('global-value');
@@ -3919,7 +3499,6 @@ describe('ValidatedDto Mixin', () => {
     });
 
     it('should prevent duplicate decorators when composing registries', () => {
-      // Arrange
       const isolatedRegistry = createDecoratorRegistry();
       const sharedKey = Symbol('shared-decorator');
       let callCount = 0;
@@ -3936,7 +3515,6 @@ describe('ValidatedDto Mixin', () => {
         };
       }
 
-      // Register same decorator in both registries
       const globalSchema = z.object({ field: z.string() });
       globalSchema.shape.field.register(DECORATOR_REGISTRY, {
         decorators: [SharedDecorator()],
@@ -3947,7 +3525,6 @@ describe('ValidatedDto Mixin', () => {
         decorators: [SharedDecorator()], // Same decorator instance
       });
 
-      // Act - Create DTO with isolated registry
       const BaseDto = ValidatedDto(isolatedSchema, {
         DECORATOR_REGISTRY: isolatedRegistry,
       });
@@ -3957,7 +3534,6 @@ describe('ValidatedDto Mixin', () => {
       
       const instance = new ComposedDto({ field: 'test' });
 
-      // Assert - decorator should only be applied once (no duplicates)
       expect(callCount).toBe(1);
       expect(
         Reflect.getMetadata(sharedKey, ComposedDto.prototype, 'field'),
@@ -3965,7 +3541,6 @@ describe('ValidatedDto Mixin', () => {
     });
 
     it('should compose multiple decorators from both registries', () => {
-      // Arrange
       const isolatedRegistry = createDecoratorRegistry();
       const key1 = Symbol('decorator-1');
       const key2 = Symbol('decorator-2');
@@ -3996,21 +3571,17 @@ describe('ValidatedDto Mixin', () => {
         };
       }
 
-      // Use the same field schema instance
       const fieldSchema = z.string();
       const schema = z.object({ field: fieldSchema });
 
-      // Register multiple decorators in global registry
       fieldSchema.register(DECORATOR_REGISTRY, {
         decorators: [Decorator1(), Decorator2()],
       });
 
-      // Register multiple decorators in isolated registry
       fieldSchema.register(isolatedRegistry, {
         decorators: [Decorator3(), Decorator4()],
       });
 
-      // Act - Create DTO with isolated registry
       const BaseDto = ValidatedDto(schema, {
         DECORATOR_REGISTRY: isolatedRegistry,
       });
@@ -4020,7 +3591,6 @@ describe('ValidatedDto Mixin', () => {
       
       const instance = new ComposedDto({ field: 'test' });
 
-      // Assert - should have all decorators from both registries
       expect(Reflect.getMetadata(key1, ComposedDto.prototype, 'field')).toBe(
         'value-1',
       );
@@ -4036,7 +3606,6 @@ describe('ValidatedDto Mixin', () => {
     });
 
     it('should compose class-level decorators from both registries', () => {
-      // Arrange
       const isolatedRegistry = createDecoratorRegistry();
       const globalClassKey = Symbol('global-class');
       const isolatedClassKey = Symbol('isolated-class');
@@ -4057,20 +3626,16 @@ describe('ValidatedDto Mixin', () => {
         };
       }
 
-      // Use the same schema instance
       const schema = z.object({ field: z.string() });
 
-      // Register class decorators in global registry
       schema.register(DECORATOR_REGISTRY, {
         decorators: [GlobalClassDecorator()],
       });
 
-      // Register class decorators in isolated registry
       schema.register(isolatedRegistry, {
         decorators: [IsolatedClassDecorator()],
       });
 
-      // Act - Create DTO with isolated registry
       const BaseDto = ValidatedDto(schema, {
         DECORATOR_REGISTRY: isolatedRegistry,
       });
@@ -4080,7 +3645,6 @@ describe('ValidatedDto Mixin', () => {
       
       const instance = new ComposedDto({ field: 'test' });
 
-      // Assert - should have both class decorators
       expect(Reflect.getMetadata(globalClassKey, ComposedDto)).toBe(
         'global-class-value',
       );
@@ -4090,7 +3654,6 @@ describe('ValidatedDto Mixin', () => {
     });
 
     it('should handle composition with empty registries gracefully', () => {
-      // Arrange
       const isolatedRegistry = createDecoratorRegistry();
       const globalKey = Symbol('global-only');
 
@@ -4105,17 +3668,12 @@ describe('ValidatedDto Mixin', () => {
         };
       }
 
-      // Use the same schema instance for both registries
       const sharedSchema = z.object({ field: z.string() });
 
-      // Register only in global registry
       sharedSchema.shape.field.register(DECORATOR_REGISTRY, {
         decorators: [GlobalDecorator()],
       });
 
-      // Isolated registry has no decorators for this schema
-
-      // Act - Create DTO with isolated registry (empty)
       const BaseDto = ValidatedDto(sharedSchema, {
         DECORATOR_REGISTRY: isolatedRegistry,
       });
@@ -4125,14 +3683,12 @@ describe('ValidatedDto Mixin', () => {
       
       const instance = new ComposedDto({ field: 'test' });
 
-      // Assert - should still get global decorators since same schema instance
       expect(
         Reflect.getMetadata(globalKey, ComposedDto.prototype, 'field'),
       ).toBe('global-value');
     });
 
     it('should compose decorators in union types from both registries', () => {
-      // Arrange
       const isolatedRegistry = createDecoratorRegistry();
       const globalKey = Symbol('global-union');
       const isolatedKey = Symbol('isolated-union');
@@ -4159,15 +3715,12 @@ describe('ValidatedDto Mixin', () => {
         };
       }
 
-      // Create union with common field (same schema instance)
       const commonField = z.string();
 
-      // Register in global registry
       commonField.register(DECORATOR_REGISTRY, {
         decorators: [GlobalUnionDecorator()],
       });
 
-      // Register in isolated registry (same schema instance)
       commonField.register(isolatedRegistry, {
         decorators: [IsolatedUnionDecorator()],
       });
@@ -4177,7 +3730,6 @@ describe('ValidatedDto Mixin', () => {
         z.object({ common: commonField, typeB: z.number() }),
       ]);
 
-      // Act - Create DTO with isolated registry
       const BaseDto = ValidatedDto(schema, {
         DECORATOR_REGISTRY: isolatedRegistry,
       });
@@ -4185,7 +3737,6 @@ describe('ValidatedDto Mixin', () => {
       @InheritValidatedMetadata()
       class UnionDto extends BaseDto {}
 
-      // Assert - should have both decorators (this tests the union composition logic)
       expect(Reflect.getMetadata(globalKey, UnionDto.prototype, 'common')).toBe(
         'global-union',
       );
@@ -4209,7 +3760,6 @@ describe('ValidatedDto Mixin', () => {
         z.object({ type: z.literal('b'), value: z.string() }),
       ]);
 
-      // Register class decorator on the discriminated union schema
       schema.register(DECORATOR_REGISTRY, {
         decorators: [ClassDecorator()],
       });
@@ -4219,7 +3769,6 @@ describe('ValidatedDto Mixin', () => {
       @InheritValidatedMetadata()
       class UnionClass extends BaseDto {}
 
-      // Assert - class decorator should be applied to the top-level class
       expect(Reflect.getMetadata(classKey, UnionClass)).toBe('class-decorated');
     });
 
@@ -4238,7 +3787,6 @@ describe('ValidatedDto Mixin', () => {
         z.object({ type: z.literal('b'), value: z.string() }),
       ]);
 
-      // Register class decorator on the union schema
       schema.register(DECORATOR_REGISTRY, {
         decorators: [ClassDecorator()],
       });
@@ -4248,7 +3796,6 @@ describe('ValidatedDto Mixin', () => {
       @InheritValidatedMetadata()
       class UnionClass extends BaseDto {}
 
-      // Assert - class decorator should be applied to the top-level class
       expect(Reflect.getMetadata(classKey, UnionClass)).toBe(
         'union-class-decorated',
       );
@@ -4266,7 +3813,6 @@ describe('ValidatedDto Mixin', () => {
 
       const schema = z.union([z.string(), z.number()]);
 
-      // Register class decorator on the primitive union schema
       schema.register(DECORATOR_REGISTRY, {
         decorators: [ClassDecorator()],
       });
@@ -4276,7 +3822,6 @@ describe('ValidatedDto Mixin', () => {
       @InheritValidatedMetadata()
       class UnionClass extends BaseDto {}
 
-      // Assert - class decorator should be applied to the top-level class
       expect(Reflect.getMetadata(classKey, UnionClass)).toBe(
         'primitive-class-decorated',
       );

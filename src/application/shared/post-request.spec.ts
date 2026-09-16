@@ -12,15 +12,6 @@ import { AssignDefaultTagOnPostCreated } from '../post/event/assign-default-tag-
 import { CreateTagCommand } from '../tag/command/create-tag.command';
 import { PostRequest } from './post-request';
 
-/**
- * A propagação da request, montada de ponta a ponta: os quatro command handlers e a saga no mesmo
- * módulo, um `CreatePostCommand` despachado como o resolver o despacha, e a pergunta que dá nome ao
- * arquivo — **um pedido, quantas requests?**
- *
- * A cadeia tem três eventos e três handlers diferentes, dois deles despachados pela saga e nenhum
- * deles pela borda. Se a propagação funciona, os três eventos saem carimbados com o **mesmo objeto**,
- * e o `PostId` que a saga usa é o value object que a borda gerou — não um `parse` do payload.
- */
 describe('PostRequest', () => {
   let module: TestingModule;
   let commands: CommandBus;
@@ -48,7 +39,6 @@ describe('PostRequest', () => {
     await inRequestContext(module, () =>
       commands.execute(new CreatePostCommand.CreatePost(postId, 'Nest + GraphQL', 'oi', author.id, author.name), request),
     );
-    // PostCreated (o command), TagCreated e PostUpdated (a saga, depois)
     const [created, tagCreated, updated] = await events.waitFor(3);
 
     expect([created, tagCreated, updated].map((e) => e.constructor)).toEqual([
@@ -70,7 +60,6 @@ describe('PostRequest', () => {
     );
     const [created] = await events.waitFor(1);
 
-    // O payload é primitivo (contrato, atravessa processo); a chave anda por fora, já validada.
     expect((created as PostCreatedEvent).postId).toBe(postId.value);
     expect(PostRequest.of(created)?.postId).toBe(postId);
   });

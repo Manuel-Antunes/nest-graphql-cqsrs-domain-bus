@@ -10,7 +10,6 @@ const TagViewSchema = z.object({
   name: TagName.field({ DECORATOR_REGISTRY: AUTOMAP_REGISTRY, decorators: [AutoMap()] }),
 });
 
-
 @InheritValidatedMetadata()
 export class TagView extends ValidatedDto(TagViewSchema, {
   DECORATOR_REGISTRY: AUTOMAP_REGISTRY,

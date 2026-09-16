@@ -8,12 +8,7 @@ import { TagNotFoundException } from '../../../domain/tag/exception/tag-not-foun
 import { TagRepository } from '../../../domain/tag/tag.repository';
 import type { TagId } from '../../../domain/tag/vo/tag-id';
 
-/** A fatia de `AssignTagToPost`: a mensagem e o handler dela — ver `CreatePostCommand` para o padrão. */
 export namespace AssignTagToPostCommand {
-  /**
-   * Command: assinalar uma Tag existente a um Post. Carrega os dois ids; o handler carrega a Tag para
-   * copiar o nome dela para dentro do Post (`TagRef`), porque agregado referencia agregado por identidade.
-   */
   export class AssignTagToPost extends Command<void> {
     constructor(
       readonly postId: PostId,
@@ -23,20 +18,6 @@ export namespace AssignTagToPostCommand {
     }
   }
 
-  /**
-   * Handler de `AssignTagToPost`: carrega a Tag, pede ao Post que a assinale — o que dispara um
-   * `PostUpdatedEvent` com a tag na lista — salva e publica.
-   *
-   * A Tag entra no domínio como **agregado**, não como cópia: `post.assignTag(tag, ...)` recebe a
-   * entidade, a relação m:n a guarda, e é dela que sai o nome que viaja no evento. Por isso o Post
-   * precisa vir com as tags populadas — `MikroOrmPostRepository.findById` cuida disso.
-   *
-   * Este é o handler que fecha o ciclo da propagação: quem despacha o command é a saga, não a borda, e
-   * mesmo assim ele roda **na request que criou o post**. A saga carimba o command com o contexto que
-   * veio no `PostCreatedEvent` (`request.attachTo(command)`), o `CommandBus` resolve este handler
-   * naquele `ContextId`, e o `PostUpdatedEvent` que sai daqui sai com o mesmo carimbo — o cliente vê a
-   * tag chegar pelo `onPostUpdated` como parte da mesma cadeia que a sua mutation abriu.
-   */
   @CommandHandler(AssignTagToPost, { scope: Scope.REQUEST })
   export class Handler implements ICommandHandler<AssignTagToPost> {
     constructor(

@@ -1,42 +1,43 @@
 import type { Observable, Subscription } from 'rxjs';
 
 /**
- * `Observable<T>` → `AsyncIterableIterator<T>`: a ponte entre o RxJS (o que o `EventBus` e o
- * `SubscriptionBus` falam) e um consumidor *pull*, como o graphql-js — que consome uma subscription
- * como *async iterator*. É o que separa o CQSRS do transporte: o bus não sabe o que é GraphQL, e o
- * resolver não sabe o que é RxJS.
+ * `Observable<T>` → `AsyncIterableIterator<T>`: the bridge between RxJS (what the `EventBus` and the
+ * `SubscriptionBus` speak) and a *pull* consumer such as graphql-js — which consumes a subscription as
+ * an *async iterator*. It is what separates CQSRS from the transport: the bus does not know what
+ * GraphQL is, and the resolver does not know what RxJS is.
  *
- * ## Por que não um `ReadableStream`, um `Readable` ou um `async function*`
- * Todos os três são async-iteráveis por natureza, mas **serializam `return()` atrás de um `next()`
- * pendente**: uma subscription GraphQL passa a vida inteira esperando o próximo evento, e quando o
- * cliente desconecta o graphql-js chama `return()` — que só resolveria quando o próximo evento
- * chegasse. Até lá, o assinante continuaria vivo no `EventBus`. Um iterador com fila explícita não
- * tem esse problema: `return()` resolve os `next()` pendentes com `done: true` na hora e cancela a
- * inscrição no Observable. É a mesma mecânica do `PubSubAsyncIterableIterator` do
- * `graphql-subscriptions`, só que ligada a um Observable em vez de a um PubSub.
+ * ## Why not a `ReadableStream`, a `Readable` or an `async function*`
+ * All three are async-iterable by nature, but they **serialize `return()` behind a pending `next()`**:
+ * a GraphQL subscription spends its whole life waiting for the next event, and when the client
+ * disconnects graphql-js calls `return()` — which would only resolve once the next event arrived.
+ * Until then the subscriber would stay alive on the `EventBus`. An iterator with an explicit queue does
+ * not have that problem: `return()` resolves pending `next()` calls with `done: true` immediately and
+ * cancels the Observable subscription. Same mechanics as `graphql-subscriptions`'s
+ * `PubSubAsyncIterableIterator`, only wired to an Observable instead of a PubSub.
  *
- * ## Ciclo de vida
- * - a inscrição no Observable acontece aqui, na criação — o resolver é chamado uma vez por assinante
- *   GraphQL, então cada assinante é exatamente uma inscrição no stream que o `SubscriptionBus` deu
- *   (quantas inscrições *no `EventBus`* isso vira é decisão do bus, que compartilha por chave);
- * - `next`/`error`/`complete` do Observable alimentam a fila (ou atendem um `next()` que já espera);
- * - `return()` (cliente desconectou) e `throw()` cancelam a inscrição. Nada vaza.
+ * ## Lifecycle
+ * - the Observable subscription happens here, on creation — the resolver is called once per GraphQL
+ *   subscriber, so each subscriber is exactly one subscription to the stream the `SubscriptionBus`
+ *   handed out (how many `EventBus` subscriptions that becomes is the bus's decision, which shares by
+ *   key);
+ * - the Observable's `next`/`error`/`complete` feed the queue (or serve a `next()` already waiting);
+ * - `return()` (client disconnected) and `throw()` cancel the subscription. Nothing leaks.
  *
- * É um *iterator* que também é *iterable* (`[Symbol.asyncIterator]` devolve ele mesmo): o graphql-js
- * pede o `[Symbol.asyncIterator]()`, e um wrapper como o `withFilter` chama `next()` direto no que o
- * resolver devolveu. Os dois caminham sobre a mesma inscrição.
+ * It is an *iterator* that is also *iterable* (`[Symbol.asyncIterator]` returns itself): graphql-js
+ * asks for `[Symbol.asyncIterator]()`, while a wrapper such as `withFilter` calls `next()` directly on
+ * whatever the resolver returned. Both walk over the same subscription.
  *
- * Não há backpressure de verdade (o `EventBus` é push; a fila cresce), o mesmo contrato do PubSub em
- * memória — e o suficiente para uma POC.
+ * There is no real backpressure (the `EventBus` is push; the queue grows), the same contract as the
+ * in-memory PubSub — and enough for a proof of concept.
  */
 export function observableToAsyncIterable<T>(source: Observable<T>): AsyncIterableIterator<T> {
-  /** Valores emitidos que ninguém pediu ainda. */
+  /** Emitted values nobody has asked for yet. */
   const buffered: T[] = [];
-  /** `next()` chamados que ainda não têm valor para devolver. */
+  /** `next()` calls that do not have a value to return yet. */
   const waiting: Array<{ resolve: (result: IteratorResult<T>) => void; reject: (error: unknown) => void }> = [];
   let finished = false;
   let failure: { error: unknown } | undefined;
-  /** `let`, e não `const`: um Observable pode errar ou completar de forma síncrona, ainda dentro do `subscribe`. */
+  /** `let`, not `const`: an Observable may error or complete synchronously, still inside `subscribe`. */
   let subscription: Subscription | undefined;
   const done = (): IteratorResult<T> => ({ value: undefined, done: true });
 

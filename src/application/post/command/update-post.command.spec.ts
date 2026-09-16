@@ -12,7 +12,6 @@ import { PostId } from '../../../domain/post/vo/post-id';
 import { PostRequest } from '../../shared/post-request';
 import { UpdatePostCommand } from './update-post.command';
 
-/** Request-scoped como todo command handler daqui: o caminho do teste é o `CommandBus`. */
 describe('UpdatePostCommand.Handler', () => {
   let module: TestingModule;
   let commands: CommandBus;

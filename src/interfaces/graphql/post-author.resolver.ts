@@ -8,44 +8,10 @@ import { NotAnAuthorException } from '../../domain/user/exception/not-an-author.
 import { AuthorView } from '../../dto/graphql/user.view';
 import type { PostView } from '../../dto/graphql/post.view';
 
-/**
- * O campo `Post.author`: o `authorId` da view trocado pelo `Author` do protocolo.
- *
- * Ele é o que transformou `Post` e `Author` num **grafo** em vez de duas listas: de um post navega-se
- * para quem o escreveu, e de lá para os outros posts dele. Antes daqui, `author` era um `String!` — o
- * nome copiado para a view —, e navegar não era possível porque não havia identidade do outro lado.
- *
- * ## O que ele custa: nada, no caminho que importa
- * Numa leitura (`post`, `posts`, o retorno de uma mutation) o repositório popula o autor junto do post,
- * então ele está no identity map do EntityManager daquela requisição e o `findById` do handler é
- * servido de memória — **zero consultas**, e há um teste que as conta para que isto não deixe de ser
- * verdade em silêncio.
- *
- * Numa **subscription** é uma consulta por payload: a view nasce do evento, sem tocar o banco, e o
- * evento carrega `authorId` e `authorName` mas não e-mail — e-mail não é fato sobre um post. Quem pede
- * `author` ali está pedindo algo que não está no evento, e paga por isso.
- *
- * ## O N+1 que isto abriu, e que ainda não está fechado
- * `posts(first: 20) { author { … } }` é grátis pelo populate. `posts(first: 20) { author { posts … } }`
- * **não é**: cada `Author.posts` é a sua própria consulta paginada, então são 20. É o mesmo N+1 que a
- * versão Axon resolve com um DataLoader em `Author.posts`, e aqui ele passou a existir exatamente agora
- * — antes deste campo não havia caminho do protocolo que chegasse a N autores. A saída nativa é o
- * `dataloader: DataloaderType.ALL` (já ligado no config) aplicado a um acesso por relação em vez de uma
- * consulta por autor; fica anotado, e a fronteira destas classes não muda.
- *
- * O `type Author!` do schema e a chave estrangeira `posts.author_id → authors.id` já decidiram os dois
- * lados, então aqui não há despacho polimórfico a fazer — o `me` é o caso oposto.
- */
 @Resolver('Post')
 export class PostAuthorResolver {
   constructor(private readonly queryBus: QueryBus) {}
 
-  /**
-   * @throws NotAnAuthorException se o autor não for mais um autor ativo — o que só acontece se ele
-   * tiver sido apagado entre o evento e a resolução. Nas leituras a janela não existe: o filtro
-   * `active` se aplica à relação (`autoJoinRefsForFilters`), então um post de autor apagado não volta
-   * da consulta para começo de conversa.
-   */
   @ResolveField('author')
   @UseInterceptors(MapInterceptor(Author, AuthorView))
   async author(@Parent() post: PostView): Promise<Author> {

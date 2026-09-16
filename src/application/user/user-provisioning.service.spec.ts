@@ -13,18 +13,6 @@ import { UnknownIdentityException } from '../../domain/user/exception/unknown-id
 import type { CredentialId } from '../../domain/user/vo/credential-id';
 import { UserProvisioning } from './user-provisioning.service';
 
-/**
- * O provisionamento contra o banco de verdade e um provedor de identidade **falso** — e,
- * principalmente, a **promoção**.
- *
- * Ela é a sequência mais delicada do agregado: encerrar um stream e abrir outro com o mesmo email.
- * E desde que `supersededBy`/`supersedes` viraram relacionamentos, ela também é a única operação do
- * sistema que grava **duas linhas que apontam uma para a outra** — o que a chave estrangeira agora
- * arbitra. Sem este teste, a ordem de gravação seria uma suposição.
- *
- * O provedor falso é o que a porta comprou: nenhum destes testes importa `better-auth`, e o serviço
- * não nota a diferença. Ver {@link FakeIdentityProvider}.
- */
 describe('UserProvisioning', () => {
   let module: TestingModule;
   let provisioning: UserProvisioning;
@@ -33,20 +21,11 @@ describe('UserProvisioning', () => {
 
   const EMAIL = 'manuel@example.com';
 
-  /** Registra a credencial no provedor, como um sign-up faria. */
   const signUp = (role: string | null = null) => {
     credentialId = identities.signUp(EMAIL, 'Manuel', role);
     return credentialId;
   };
 
-  /**
-   * Um `provision` = **uma requisição**.
-   *
-   * O contexto do ORM nasce na borda (o middleware que o `MikroOrmModule.forRoot` registra), e não
-   * num `@CreateRequestContext()` por método. Num teste não há requisição HTTP, então a borda é
-   * isto — e chamar duas vezes é o que de fato acontece: dois acessos, dois contextos, e o segundo
-   * enxerga o que o primeiro gravou.
-   */
   const provision = (id: CredentialId = credentialId) =>
     inRequestContext(module, () => provisioning.provision(id));
 
@@ -95,13 +74,6 @@ describe('UserProvisioning', () => {
     expect(await freshEm(module).count(User)).toBe(0);
   });
 
-  /**
-   * A ligação de contas por **email** — que agora acontece em dois lugares, e é bom saber qual é
-   * qual. Do lado do provedor, o `account.accountLinking` prende uma credencial nova à identidade
-   * que já existe. Do lado daqui, uma identidade cujo email já tem perfil reaproveita esse perfil.
-   * O segundo é o que este teste cobre, e é o que garante que trocar a origem da credencial não
-   * cria uma segunda pessoa — com outros posts e outras subscriptions.
-   */
   it('outra credencial com o mesmo email reaproveita o perfil que já existe', async () => {
     const first = await provision();
 
@@ -113,7 +85,6 @@ describe('UserProvisioning', () => {
   });
 
   describe('promoção: encerrar um stream e abrir outro', () => {
-    /** O papel muda **no provedor** — é de lá que a promoção nasce. */
     const promote = async () => {
       await identities.grantRole(credentialId, AUTHOR_ROLE);
       return provision();
@@ -129,10 +100,6 @@ describe('UserProvisioning', () => {
       expect(await freshEm(module).count(User)).toBe(2);
     });
 
-    /**
-     * O que a chave estrangeira passou a garantir: o `superseded_by` do stream encerrado aponta para
-     * uma linha que **existe**. Antes, com um `UserId` solto, nada impedia apontar para o vazio.
-     */
     it('as duas linhas apontam uma para a outra, e as referências resolvem', async () => {
       const reader = await provision();
       const author = await promote();
@@ -143,7 +110,6 @@ describe('UserProvisioning', () => {
 
       expect(closed.supersededBy?.id.equals(author.id)).toBe(true);
       expect(opened.supersedes?.id.equals(reader.id)).toBe(true);
-      // a referência é para a raiz abstrata, mas o que volta é o tipo concreto
       expect(await closed.supersededBy!.load()).toBeInstanceOf(Author);
       expect(await opened.supersedes!.load()).toBeInstanceOf(Reader);
     });
@@ -168,12 +134,6 @@ describe('UserProvisioning', () => {
       expect(await freshEm(module).count(User)).toBe(2);
     });
 
-    /**
-     * A credencial **não** é recriada na promoção: é a mesma pessoa, com a mesma senha. O que a liga
-     * ao perfil novo é o email, que a promoção preserva — o stream encerrado deixa de ser ativo, e
-     * `findActiveByEmail` passa a achar o `Author`. É por isso que a requisição seguinte, com o
-     * mesmo cookie de sempre, já entra como autor.
-     */
     it('a mesma credencial passa a responder pelo perfil promovido', async () => {
       await provision();
 
@@ -185,40 +145,15 @@ describe('UserProvisioning', () => {
     });
   });
 
-  /**
-   * A janela de falha da promoção — e o que dá para afirmar sobre ela hoje.
-   *
-   * O `pendingPromotionId` existe para detectar um stream encerrado cujo sucessor não existe e
-   * **retomar aquele id**. Os testes abaixo cobrem os dois casos em que ele decide *não* retomar,
-   * que são os que de fato acontecem:
-   *
-   * - a promoção terminou (o sucessor está lá) — nada a retomar;
-   * - nunca houve promoção — o registro é comum.
-   *
-   * O terceiro caso, o do órfão de verdade, **não é alcançável neste schema**: `supersededBy` é um
-   * `manyToOne` para a raiz abstrata da herança multi-tabela, então o ORM precisa do join para saber
-   * se aquela linha é `Reader` ou `Author` — e, sem a linha do sucessor, a propriedade hidrata como
-   * `null` em vez de uma referência pendurada. A guarda que abre a retomada (`if (!orphan?.supersededBy)`)
-   * vê `null` exatamente no cenário que ela deveria detectar. Somado a isso, a FK do sucessor é
-   * `ON DELETE SET NULL` e o `saveAll` grava os dois numa transação só. Não há teste aqui para esse
-   * caminho porque não há como chegar nele sem forjar um estado impossível.
-   */
   describe('quando não há promoção a retomar', () => {
-    /**
-     * Uma promoção que terminou deixa o `supersededBy` anotado do mesmo jeito que uma interrompida —
-     * o que separa as duas é o sucessor existir. Confundi-las criaria um perfil novo a cada login.
-     */
     it('uma promoção que terminou não é retomada, e o Author é reaproveitado', async () => {
-      // Arrange
       await provision();
       await identities.grantRole(credentialId, AUTHOR_ROLE);
       const author = await provision();
       const warn = vi.spyOn((provisioning as any).logger, 'warn').mockImplementation(() => undefined);
 
-      // Act
       const again = await provision();
 
-      // Assert
       expect(again.id.equals(author.id)).toBe(true);
       expect(warn).not.toHaveBeenCalled();
       expect(await freshEm(module).count(User)).toBe(2);
@@ -226,13 +161,10 @@ describe('UserProvisioning', () => {
     });
 
     it('sem nenhuma promoção no histórico, o registro nasce com id novo e sem supersedes', async () => {
-      // Arrange
       signUp(AUTHOR_ROLE);
 
-      // Act
       const user = await provision();
 
-      // Assert
       expect(user).toBeInstanceOf(Author);
       expect(user.supersedes ?? null).toBeNull();
       expect(await freshEm(module).count(User)).toBe(1);

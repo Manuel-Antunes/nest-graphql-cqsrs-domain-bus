@@ -26,7 +26,6 @@ import { type ScalarFieldOptions, type ScalarValueObjectStatic, type ValidatedSc
  */
 export function InheritValidatedMetadata(): ClassDecorator {
   return function (target: any) {
-    // Check if the parent class has the metadata copy helper
     const parentClass = Object.getPrototypeOf(target);
     if (
       parentClass &&
@@ -37,7 +36,6 @@ export function InheritValidatedMetadata(): ClassDecorator {
   };
 }
 
-// --- 1. Zod 4 Validator ---
 @ValidatorConstraint({ name: 'ZodFieldValidator', async: false })
 export class ZodFieldValidator implements ValidatorConstraintInterface {
   validate(value: unknown, args: ValidationArguments) {
@@ -50,8 +48,6 @@ export class ZodFieldValidator implements ValidatorConstraintInterface {
     const [schema] = args.constraints;
     const result = schema.safeParse(args.value);
 
-    // ZOD 4 STANDARD:
-    // If the schema has a description, use it as the error label
     if (schema.description) {
       return `${schema.description} is invalid`;
     }
@@ -63,8 +59,6 @@ export class ZodFieldValidator implements ValidatorConstraintInterface {
   }
 }
 
-// --- 2. Helper Functions ---
-
 /**
  * Extract decorators from a schema's registry data
  * Uses Zod v4's registry system via DECORATOR_REGISTRY
@@ -74,12 +68,9 @@ function getRegistryDecorators(
   DECORATOR_REGISTRY: DECORATOR_REGISTRY_TYPE = GLOBAL_DECORATOR_REGISTRY,
 ): Array<PropertyDecorator | ClassDecorator> {
   try {
-    // Import the DECORATOR_REGISTRY dynamically to avoid circular dependencies
-    // The registry must be imported from the consuming code
     const registryData = DECORATOR_REGISTRY.get(schema);
     const decorators: Array<PropertyDecorator | ClassDecorator> = [];
 
-    // Start with isolated registry decorators if they exist
     if (registryData && Array.isArray(registryData.decorators)) {
       decorators.push(
         ...(registryData.decorators as Array<
@@ -88,7 +79,6 @@ function getRegistryDecorators(
       );
     }
 
-    // Always include global decorators when using isolated registry, preventing duplicates
     if (DECORATOR_REGISTRY !== GLOBAL_DECORATOR_REGISTRY) {
       const globalDecorators = GLOBAL_DECORATOR_REGISTRY.get(schema);
       if (globalDecorators && Array.isArray(globalDecorators.decorators)) {
@@ -103,7 +93,6 @@ function getRegistryDecorators(
 
     return decorators;
   } catch (e) {
-    // Registry not available or malformed
   }
   return [];
 }
@@ -136,13 +125,11 @@ function unwrapSchema(schema: z.ZodType): z.ZodType {
 function getDesignType(schema: z.ZodType<any>): any {
   const unwrapped = unwrapSchema(schema);
 
-  // Handle unions by returning the first option's type or Object
   if (unwrapped instanceof z.ZodUnion) {
     const firstOption = unwrapped.options[0];
     return firstOption ? getDesignType(firstOption as z.ZodType) : Object;
   }
 
-  // Handle discriminated unions similarly
   if (unwrapped instanceof z.ZodDiscriminatedUnion) {
     const firstOption = Array.from(unwrapped.options.values())[0];
     return firstOption ? getDesignType(firstOption as z.ZodType<any>) : Object;
@@ -157,16 +144,16 @@ function getDesignType(schema: z.ZodType<any>): any {
 }
 
 /**
- * O que um campo embutido guarda: a classe do value object e se ele vem numa lista.
+ * What an embedded field holds: the value object class, and whether it arrives inside a list.
  *
- * `z.array(PostId.field())` embute o mesmo value object, item a item — daí o `isArray`.
+ * `z.array(PostId.field())` embeds the same value object item by item — hence `isArray`.
  */
 interface EmbeddedField {
   binding: EmbeddedBinding;
   isArray: boolean;
 }
 
-/** Descobre se um campo é um `VO.field()` — direto ou dentro de um array. */
+/** Works out whether a field is a `VO.field()` — directly, or inside an array. */
 function embeddedFieldOf(
   innerType: z.ZodType,
   registry?: Parameters<typeof getEmbedded>[1],
@@ -184,7 +171,7 @@ function embeddedFieldOf(
   return undefined;
 }
 
-/** Valor cru (ou já pronto) → a instância do value object. Nulos passam intactos. */
+/** Raw value (or an already-built one) → the value object instance. Nulls pass through untouched. */
 function materializeEmbedded(field: EmbeddedField, value: unknown): unknown {
   if (value === null || value === undefined) {
     return value;
@@ -199,11 +186,11 @@ function materializeEmbedded(field: EmbeddedField, value: unknown): unknown {
 }
 
 /**
- * A instância do value object → o que vai no JSON.
+ * The value object instance → what goes into JSON.
  *
- * O escalar **colapsa** para o valor cru: um `PostId` sai como `"uuid"`, e não como `{ value: … }`.
- * É a diferença entre um `@Embeddable` de uma coluna só e um de várias — o segundo continua sendo um
- * objeto, e quem o achata é o próprio class-transformer.
+ * A scalar **collapses** to the raw value: a `PostId` comes out as `"uuid"`, not as `{ value: … }`.
+ * That is the difference between a single-column `@Embeddable` and a multi-column one — the latter
+ * stays an object, and class-transformer itself is what flattens it.
  */
 function plainifyEmbedded(
   field: EmbeddedField,
@@ -223,7 +210,6 @@ function plainifyEmbedded(
     : instanceToPlain(value, options);
 }
 
-// --- 3. Core Logic: Create Object Class ---
 /**
  * Internal helper to create a validated DTO class for a ZodObject schema.
  * This is extracted to support both direct usage and union composition.
@@ -240,10 +226,8 @@ const createObjectClass = <T extends z.ZodRawShape>(
   const { exposeAll, maxObjectDepth } = options;
   const shape = schema.shape;
 
-  // Pre-create union classes once to ensure consistent references
   const unionClassCache = new Map<string, any>();
 
-  // Campos embutidos (`VO.field()`): o mixin precisa da classe para construir e para colapsar.
   const embeddedFields = new Map<string, EmbeddedField>();
 
   for (const key of Object.keys(shape)) {
@@ -254,7 +238,6 @@ const createObjectClass = <T extends z.ZodRawShape>(
       embeddedFields.set(key, embedded);
     }
 
-    // Pre-create union classes for nested unions
     if (
       innerType instanceof z.ZodUnion ||
       innerType instanceof z.ZodDiscriminatedUnion
@@ -272,16 +255,11 @@ const createObjectClass = <T extends z.ZodRawShape>(
   class GeneratedDto {
     constructor(data?: Partial<z.input<typeof schema>>) {
       if (data) {
-        // Apply data, which will trigger setters if any
         Object.assign(this, data);
 
-        // For discriminated unions and unions as nested properties,
-        // we need to instantiate them here since Transform decorators
-        // only run during plainToInstance/instanceToPlain operations
         for (const key of Object.keys(shape)) {
           if ((data as any)[key] !== undefined && unionClassCache.has(key)) {
             const value = (data as any)[key];
-            // Only instantiate if not already an instance
             if (
               value &&
               typeof value === 'object' &&
@@ -294,7 +272,6 @@ const createObjectClass = <T extends z.ZodRawShape>(
         }
       }
 
-      // Apply Zod defaults for fields not provided in data
       for (const key of Object.keys(shape)) {
         if ((this as any)[key] === undefined) {
           const fieldSchema = shape[key] as z.ZodType;
@@ -305,9 +282,6 @@ const createObjectClass = <T extends z.ZodRawShape>(
         }
       }
 
-      // Value objects embutidos: o `new` monta a classe, e não só copia o valor cru. Vem depois dos
-      // defaults de propósito — um `.default('x')` do Zod entrega o valor cru (ele não reparseia o
-      // default), e é aqui que ele vira value object também.
       for (const [key, embedded] of embeddedFields) {
         const current = (this as any)[key];
         if (current !== undefined) {
@@ -317,7 +291,6 @@ const createObjectClass = <T extends z.ZodRawShape>(
     }
   }
 
-  // Ensure the prototype has the correct constructor reference
   Object.defineProperty(GeneratedDto.prototype, 'constructor', {
     value: GeneratedDto,
     writable: true,
@@ -330,24 +303,15 @@ const createObjectClass = <T extends z.ZodRawShape>(
     const innerType = unwrapSchema(fieldSchema);
     const embedded = embeddedFields.get(key);
 
-    // Metadata: Expose
     if (exposeAll) {
       Expose()(GeneratedDto.prototype, key);
     }
 
-    // Metadata: Validate
     Validate(ZodFieldValidator, [fieldSchema])(GeneratedDto.prototype, key);
 
-    // NOTE: Registry decorators are NOT applied here.
-    // They will be applied by @InheritValidatedMetadata() decorator on the child class.
-
-    // Value object embutido de objeto (`@Embeddable` de várias colunas): é um DTO aninhado como
-    // qualquer outro, então quem entra e sai dele é o `@Type` — só a classe é que passa a ser a
-    // concreta, e não uma gerada na hora a partir do shape.
     if (embedded && embedded.binding.kind === 'object') {
       Type(() => embedded.binding.target as any)(GeneratedDto.prototype, key);
     }
-    // Handle nested objects
     else if (innerType instanceof z.ZodObject && maxObjectDepth > 0) {
       const NestedClass = createObjectClass(innerType, {
         exposeAll,
@@ -357,7 +321,6 @@ const createObjectClass = <T extends z.ZodRawShape>(
       });
       Type(() => NestedClass)(GeneratedDto.prototype, key);
     }
-    // Handle arrays of nested objects
     else if (
       innerType instanceof z.ZodArray &&
       innerType.element instanceof z.ZodObject
@@ -370,23 +333,19 @@ const createObjectClass = <T extends z.ZodRawShape>(
       });
       Type(() => NestedClass)(GeneratedDto.prototype, key);
     }
-    // Handle unions in fields - use the cached union class
     else if (innerType instanceof z.ZodUnion) {
       const UnionClass = unionClassCache.get(key)!;
       Type(() => UnionClass)(GeneratedDto.prototype, key);
     }
-    // Handle discriminated unions in fields - use the cached union class
     else if (innerType instanceof z.ZodDiscriminatedUnion) {
       const UnionClass = unionClassCache.get(key)!;
       Type(() => UnionClass)(GeneratedDto.prototype, key);
     }
-    // Handle arrays of unions
     else if (
       innerType instanceof z.ZodArray &&
       (innerType.element instanceof z.ZodUnion ||
         innerType.element instanceof z.ZodDiscriminatedUnion)
     ) {
-      // For arrays, we still need to create a new class since it's not cached
       const UnionClass = ValidatedDto(innerType.element, {
         exposeAll,
         maxObjectDepth: maxObjectDepth - 1,
@@ -394,10 +353,7 @@ const createObjectClass = <T extends z.ZodRawShape>(
       Type(() => UnionClass)(GeneratedDto.prototype, key);
     }
 
-    // Transform using Zod SafeParse to apply trim(), coerce(), etc.
     Transform(({ value, obj, type, options }) => {
-      // If value is undefined and not present in the source object,
-      // try to apply Zod defaults by parsing undefined
       if (value === undefined && !(key in obj)) {
         const result = fieldSchema.safeParse(undefined);
         return result.success
@@ -407,15 +363,12 @@ const createObjectClass = <T extends z.ZodRawShape>(
           : undefined;
       }
 
-      // Value object embutido: a serialização colapsa para o valor cru e a desserialização monta a
-      // classe. É a tradução que faz `PostId` atravessar o protocolo como `"uuid"` e voltar `PostId`.
       if (embedded) {
         return type === TransformationType.CLASS_TO_PLAIN
           ? plainifyEmbedded(embedded, value, options)
           : materializeEmbedded(embedded, value);
       }
 
-      // Handle unions and discriminated unions
       if (
         innerType instanceof z.ZodUnion ||
         innerType instanceof z.ZodDiscriminatedUnion
@@ -429,29 +382,24 @@ const createObjectClass = <T extends z.ZodRawShape>(
                 ).options.values(),
               );
 
-        // Check if all options are primitives (not ZodObject)
         const allPrimitives = options.every(
           (opt) => !(opt instanceof z.ZodObject),
         );
 
         if (allPrimitives) {
-          // Primitive union: validate and return raw value
           const result = fieldSchema.safeParse(value);
           return result.success ? result.data : value;
         }
 
-        // Object union: instantiate union class if needed
         if (
           value &&
           typeof value === 'object' &&
           value.constructor !== Object &&
           value.constructor !== Array
         ) {
-          // Already an instance, return as-is
           return value;
         }
 
-        // Use cached union class or fallback (shouldn't happen if cache is working)
         const UnionClass =
           unionClassCache.get(key) ||
           ValidatedDto(innerType, {
@@ -465,8 +413,6 @@ const createObjectClass = <T extends z.ZodRawShape>(
       return result.success ? result.data : value;
     })(GeneratedDto.prototype, key);
 
-    // Num campo embutido o `design:type` é a **classe** do value object — é o que um
-    // `emitDecoratorMetadata` poria se o DTO tivesse sido escrito à mão com `id!: PostId`.
     const designType = embedded
       ? embedded.isArray
         ? Array
@@ -481,7 +427,6 @@ const createObjectClass = <T extends z.ZodRawShape>(
       );
     }
   }
-  // Apply class-level decorators from schema registry
   const classDecorators = getRegistryDecorators(
     schema,
     options.DECORATOR_REGISTRY,
@@ -492,29 +437,23 @@ const createObjectClass = <T extends z.ZodRawShape>(
     }
   });
 
-  // Helper function to copy metadata from GeneratedDto to any extending class
-  // This is crucial for GraphQL and other frameworks that inspect the final class
   const OriginalClass = GeneratedDto;
   (OriginalClass as any).__copyMetadataToChild = function (childClass: any) {
     const childProto = childClass.prototype;
     const parentProto = OriginalClass.prototype;
 
-    // Copy all metadata keys from parent to child for each property
     for (const key of Object.keys(shape)) {
-      // Copy design:type metadata
       const designType = Reflect.getMetadata('design:type', parentProto, key);
       if (designType) {
         Reflect.defineMetadata('design:type', designType, childProto, key);
       }
 
-      // Copy all other metadata keys that might have been set by decorators
       const metadataKeys = Reflect.getMetadataKeys(parentProto, key);
       metadataKeys.forEach((metadataKey) => {
         const metadata = Reflect.getMetadata(metadataKey, parentProto, key);
         Reflect.defineMetadata(metadataKey, metadata, childProto, key);
       });
 
-      // Apply registry decorators to the child class
       const fieldSchema = shape[key] as z.ZodType;
       const decorators = getRegistryDecorators(
         fieldSchema,
@@ -527,7 +466,6 @@ const createObjectClass = <T extends z.ZodRawShape>(
       });
     }
 
-    // Apply schema-level decorators (class decorators) to the child class
     const schemaDecorators = getRegistryDecorators(
       schema,
       options.DECORATOR_REGISTRY,
@@ -538,7 +476,6 @@ const createObjectClass = <T extends z.ZodRawShape>(
       }
     });
 
-    // Copy class-level metadata
     const classMetadataKeys = Reflect.getMetadataKeys(OriginalClass);
     classMetadataKeys.forEach((metadataKey) => {
       const metadata = Reflect.getMetadata(metadataKey, OriginalClass);
@@ -546,7 +483,6 @@ const createObjectClass = <T extends z.ZodRawShape>(
     });
   };
 
-  // Store schema and registry as static properties for child class decorator to access
   (GeneratedDto as any).__schema = schema;
   (GeneratedDto as any).__registry = options.DECORATOR_REGISTRY;
 
@@ -555,24 +491,23 @@ const createObjectClass = <T extends z.ZodRawShape>(
   ) => z.infer<typeof schema>;
 };
 
-// --- 4. Main Factory (with Union Support) ---
 export interface ValidatedDtoOptions {
   exposeAll?: boolean;
   maxObjectDepth?: number;
   DECORATOR_REGISTRY?: DECORATOR_REGISTRY_TYPE;
-  /** Onde procurar os value objects embutidos. O global cobre o caso normal. */
+  /** Where to look for embedded value objects. The global one covers the normal case. */
   EMBEDDED_REGISTRY?: EMBEDDED_REGISTRY_TYPE;
 }
 
 /**
- * `Omit` que **distribui** sobre uma união, em vez de achatá-la nas chaves comuns.
+ * An `Omit` that **distributes** over a union, instead of flattening it down to the common keys.
  *
- * O `Omit` normal é `Pick<T, Exclude<keyof T, K>>`, e `keyof (A | B)` é só a interseção das chaves —
- * então um schema de união discriminada perdia, no tipo do **construtor**, tudo que não fosse comum a
- * todas as variantes. Distribuindo, cada variante é recortada por si.
+ * The normal `Omit` is `Pick<T, Exclude<keyof T, K>>`, and `keyof (A | B)` is only the intersection of
+ * the keys — so a discriminated-union schema used to lose, in the **constructor**'s type, everything
+ * that was not common to every variant. By distributing, each variant is cut on its own.
  *
- * Vale só para a entrada: o tipo da **instância** continua achatado de propósito, porque uma união
- * não serve de classe base (`class X extends ValidatedDto(uniao) {}` precisa de um tipo de objeto).
+ * It applies to input only: the **instance** type stays flattened on purpose, because a union cannot
+ * serve as a base class (`class X extends ValidatedDto(union) {}` needs an object type).
  */
 type DistributiveOmit<T, K extends PropertyKey> = T extends any ? Omit<T, K> : never;
 
@@ -598,7 +533,6 @@ export function ValidatedDto<Schema extends z.ZodType<any>, Extras = {}>(
     EMBEDDED_REGISTRY: embeddedRegistry,
   } = options ?? {};
 
-  // --- CASE A: Standard Object (Original Behavior) ---
   if (schema instanceof z.ZodObject) {
     return createObjectClass(schema, {
       exposeAll,
@@ -608,19 +542,16 @@ export function ValidatedDto<Schema extends z.ZodType<any>, Extras = {}>(
     }) as any;
   }
 
-  // --- CASE B: Discriminated Union (Optimized) ---
   if (schema instanceof z.ZodDiscriminatedUnion) {
     const discriminator = (schema._def as any).discriminator as string;
     const optionMap = new Map<string, any>();
     const optionSchemas: z.ZodObject<any>[] = [];
 
-    // Pre-generate a class for every option in the union
     ((schema._def as any).options as z.ZodTypeAny[]).forEach((option: any) => {
       if (!(option instanceof z.ZodObject)) return;
 
       optionSchemas.push(option);
 
-      // Extract the discriminator value
       const unwrapped = unwrapSchema(option.shape[discriminator]);
 
       if (unwrapped instanceof z.ZodLiteral) {
@@ -639,7 +570,6 @@ export function ValidatedDto<Schema extends z.ZodType<any>, Extras = {}>(
         }
       }
     }); // Collect ALL properties from ALL options (union of all properties)
-    // Collect ALL properties from ALL options (for class-transformer serialization)
     const allProperties = new Map<string, z.ZodType>();
 
     for (const option of optionSchemas) {
@@ -650,28 +580,22 @@ export function ValidatedDto<Schema extends z.ZodType<any>, Extras = {}>(
       }
     }
 
-    // Create factory class with ALL union properties decorated
     class DiscriminatedUnionFactory {
       constructor(data: any) {
         const value = data?.[discriminator];
         const TargetClass = optionMap.get(value);
 
         if (TargetClass) {
-          // Create instance of the specific class (already has full validation)
           const instance = new TargetClass(data);
-          // Copy all properties from the matched instance
           Object.assign(this, instance);
-          // Set the prototype for instanceof checks
           Object.setPrototypeOf(this, TargetClass.prototype);
           return this as any;
         }
 
-        // Fallback: assign data for potential validation errors
         if (data) Object.assign(this, data);
       }
     }
 
-    // Ensure the prototype has the correct constructor reference
     Object.defineProperty(DiscriminatedUnionFactory.prototype, 'constructor', {
       value: DiscriminatedUnionFactory,
       writable: true,
@@ -679,7 +603,6 @@ export function ValidatedDto<Schema extends z.ZodType<any>, Extras = {}>(
       configurable: true,
     });
 
-    // Decorate all properties for class-transformer compatibility
     for (const [key, fieldSchema] of allProperties) {
       if (exposeAll) {
         Expose()(DiscriminatedUnionFactory.prototype, key);
@@ -689,9 +612,6 @@ export function ValidatedDto<Schema extends z.ZodType<any>, Extras = {}>(
         DiscriminatedUnionFactory.prototype,
         key,
       );
-
-      // NOTE: Registry decorators are NOT applied here.
-      // They will be applied by @InheritValidatedMetadata() decorator on the child class.
 
       const designType = getDesignType(fieldSchema);
       if (designType) {
@@ -704,34 +624,28 @@ export function ValidatedDto<Schema extends z.ZodType<any>, Extras = {}>(
       }
     }
 
-    // Store schema, registry, and properties for child class decorator to access
     (DiscriminatedUnionFactory as any).__schema = schema;
     (DiscriminatedUnionFactory as any).__registry = DECORATOR_REGISTRY;
     (DiscriminatedUnionFactory as any).__allProperties = allProperties;
 
-    // Helper function to copy metadata to child class (for InheritValidatedMetadata decorator)
     (DiscriminatedUnionFactory as any).__copyMetadataToChild = function (
       childClass: any,
     ) {
       const childProto = childClass.prototype;
       const parentProto = DiscriminatedUnionFactory.prototype;
 
-      // Copy metadata for all union properties
       for (const [key] of allProperties) {
-        // Copy design:type metadata
         const designType = Reflect.getMetadata('design:type', parentProto, key);
         if (designType) {
           Reflect.defineMetadata('design:type', designType, childProto, key);
         }
 
-        // Copy all other metadata keys
         const metadataKeys = Reflect.getMetadataKeys(parentProto, key);
         metadataKeys.forEach((metadataKey) => {
           const metadata = Reflect.getMetadata(metadataKey, parentProto, key);
           Reflect.defineMetadata(metadataKey, metadata, childProto, key);
         });
 
-        // Apply registry decorators to the child class
         const fieldSchema = allProperties.get(key);
         if (fieldSchema) {
           const decorators = getRegistryDecorators(
@@ -746,7 +660,6 @@ export function ValidatedDto<Schema extends z.ZodType<any>, Extras = {}>(
         }
       }
 
-      // Apply schema-level decorators (class decorators) to the child class
       const schemaDecorators = getRegistryDecorators(
         schema,
         DECORATOR_REGISTRY,
@@ -757,7 +670,6 @@ export function ValidatedDto<Schema extends z.ZodType<any>, Extras = {}>(
         }
       });
 
-      // Copy class-level metadata
       const classMetadataKeys = Reflect.getMetadataKeys(
         DiscriminatedUnionFactory,
       );
@@ -773,14 +685,12 @@ export function ValidatedDto<Schema extends z.ZodType<any>, Extras = {}>(
     return DiscriminatedUnionFactory as any;
   }
 
-  // --- CASE C: Standard Union (Fallback) ---
   if (schema instanceof z.ZodUnion) {
     const unionOptions = (schema._def as any).options as z.ZodTypeAny[];
     const objectOptions = unionOptions.filter(
       (opt) => opt instanceof z.ZodObject,
     );
 
-    // If ALL options are primitives (no objects), create a simple wrapper
     if (objectOptions.length === 0) {
       class PrimitiveUnionWrapper {
         value: any;
@@ -790,7 +700,6 @@ export function ValidatedDto<Schema extends z.ZodType<any>, Extras = {}>(
         }
       }
 
-      // Ensure the prototype has the correct constructor reference
       Object.defineProperty(PrimitiveUnionWrapper.prototype, 'constructor', {
         value: PrimitiveUnionWrapper,
         writable: true,
@@ -798,7 +707,6 @@ export function ValidatedDto<Schema extends z.ZodType<any>, Extras = {}>(
         configurable: true,
       });
 
-      // Define the property on the prototype so it exists as an "own property"
       if (
         !Object.prototype.hasOwnProperty.call(
           PrimitiveUnionWrapper.prototype,
@@ -813,7 +721,6 @@ export function ValidatedDto<Schema extends z.ZodType<any>, Extras = {}>(
         });
       }
 
-      // Apply decorator manually to avoid TypeScript decorator resolution issues
       Validate(ZodFieldValidator, [schema])(
         PrimitiveUnionWrapper.prototype,
         'value',
@@ -822,16 +729,13 @@ export function ValidatedDto<Schema extends z.ZodType<any>, Extras = {}>(
       const WrapperClass = PrimitiveUnionWrapper as any;
       WrapperClass.options = [];
 
-      // Store schema and registry for child class decorator to access
       WrapperClass.__schema = schema;
       WrapperClass.__registry = DECORATOR_REGISTRY;
 
-      // Helper function to copy metadata to child class (for InheritValidatedMetadata decorator)
       WrapperClass.__copyMetadataToChild = function (childClass: any) {
         const childProto = childClass.prototype;
         const parentProto = PrimitiveUnionWrapper.prototype;
 
-        // Copy metadata for the 'value' property
         const designType = Reflect.getMetadata(
           'design:type',
           parentProto,
@@ -856,7 +760,6 @@ export function ValidatedDto<Schema extends z.ZodType<any>, Extras = {}>(
           Reflect.defineMetadata(metadataKey, metadata, childProto, 'value');
         });
 
-        // Apply schema-level decorators (class decorators) to the child class
         const schemaDecorators = getRegistryDecorators(
           schema,
           DECORATOR_REGISTRY,
@@ -867,7 +770,6 @@ export function ValidatedDto<Schema extends z.ZodType<any>, Extras = {}>(
           }
         });
 
-        // Copy class-level metadata
         const classMetadataKeys = Reflect.getMetadataKeys(
           PrimitiveUnionWrapper,
         );
@@ -883,12 +785,10 @@ export function ValidatedDto<Schema extends z.ZodType<any>, Extras = {}>(
       return WrapperClass;
     }
 
-    // If there are ZodObject options, create classes for them
     const optionClasses = objectOptions.map((opt: z.ZodObject<any>) =>
       createObjectClass(opt, { exposeAll, maxObjectDepth, DECORATOR_REGISTRY }),
     );
 
-    // Extract intersection properties (common to all object options)
     const intersectionKeys = new Set<string>();
     const firstShape = (objectOptions[0] as z.ZodObject<any>).shape;
     const firstKeys = Object.keys(firstShape);
@@ -902,10 +802,8 @@ export function ValidatedDto<Schema extends z.ZodType<any>, Extras = {}>(
       }
     });
 
-    // Create a proper union base class with intersection properties
     class UnionBase {
       constructor(data: any) {
-        // Try to find which schema matches the data
         const matchIndex = unionOptions.findIndex(
           (opt) => opt.safeParse(data).success,
         );
@@ -922,20 +820,16 @@ export function ValidatedDto<Schema extends z.ZodType<any>, Extras = {}>(
           if (classIndex >= 0 && optionClasses[classIndex]) {
             const TargetClass = optionClasses[classIndex];
             const instance = new TargetClass(data);
-            // Copy all properties from the matched instance
             Object.assign(this, instance);
-            // Set the prototype for instanceof checks
             Object.setPrototypeOf(this, TargetClass.prototype);
             return this as any;
           }
         }
 
-        // Fallback: just assign data
         if (data) Object.assign(this, data);
       }
     }
 
-    // Ensure the prototype has the correct constructor reference
     Object.defineProperty(UnionBase.prototype, 'constructor', {
       value: UnionBase,
       writable: true,
@@ -943,9 +837,7 @@ export function ValidatedDto<Schema extends z.ZodType<any>, Extras = {}>(
       configurable: true,
     });
 
-    // Add intersection properties with validation to the base class
     intersectionKeys.forEach((key) => {
-      // Get the schema from the first option (they should all be compatible for intersection)
       const firstOption = objectOptions[0] as z.ZodObject<any>;
       const fieldSchema = firstOption.shape[key];
 
@@ -954,9 +846,6 @@ export function ValidatedDto<Schema extends z.ZodType<any>, Extras = {}>(
       }
 
       Validate(ZodFieldValidator, [fieldSchema])(UnionBase.prototype, key);
-
-      // NOTE: Registry decorators are NOT applied here.
-      // They will be applied by @InheritValidatedMetadata() decorator on the child class.
 
       const designType = getDesignType(fieldSchema);
       if (designType) {
@@ -969,44 +858,35 @@ export function ValidatedDto<Schema extends z.ZodType<any>, Extras = {}>(
       }
     });
 
-    // Expose option classes as static properties
     const UnionFactory = UnionBase as any;
     optionClasses.forEach((OptionClass, index) => {
-      // Use a generic name or try to extract from schema
       const optionName = `Option${index}`;
       UnionFactory[optionName] = OptionClass;
     });
 
-    // Also expose all options as an array
     UnionFactory.options = optionClasses;
 
-    // Store schema, registry, and metadata for child class decorator to access
     UnionFactory.__schema = schema;
     UnionFactory.__registry = DECORATOR_REGISTRY;
     UnionFactory.__intersectionKeys = intersectionKeys;
     UnionFactory.__firstShape = firstShape;
 
-    // Helper function to copy metadata to child class (for InheritValidatedMetadata decorator)
     UnionFactory.__copyMetadataToChild = function (childClass: any) {
       const childProto = childClass.prototype;
       const parentProto = UnionBase.prototype;
 
-      // Copy metadata for all intersection properties
       intersectionKeys.forEach((key) => {
-        // Copy design:type metadata
         const designType = Reflect.getMetadata('design:type', parentProto, key);
         if (designType) {
           Reflect.defineMetadata('design:type', designType, childProto, key);
         }
 
-        // Copy all other metadata keys
         const metadataKeys = Reflect.getMetadataKeys(parentProto, key);
         metadataKeys.forEach((metadataKey) => {
           const metadata = Reflect.getMetadata(metadataKey, parentProto, key);
           Reflect.defineMetadata(metadataKey, metadata, childProto, key);
         });
 
-        // Apply registry decorators to the child class
         const fieldSchema = firstShape[key];
         if (fieldSchema) {
           const decorators = getRegistryDecorators(
@@ -1021,7 +901,6 @@ export function ValidatedDto<Schema extends z.ZodType<any>, Extras = {}>(
         }
       });
 
-      // Apply schema-level decorators (class decorators) to the child class
       const schemaDecorators = getRegistryDecorators(
         schema,
         DECORATOR_REGISTRY,
@@ -1032,7 +911,6 @@ export function ValidatedDto<Schema extends z.ZodType<any>, Extras = {}>(
         }
       });
 
-      // Copy class-level metadata
       const classMetadataKeys = Reflect.getMetadataKeys(UnionBase);
       classMetadataKeys.forEach((metadataKey) => {
         const metadata = Reflect.getMetadata(metadataKey, UnionBase);
@@ -1043,16 +921,12 @@ export function ValidatedDto<Schema extends z.ZodType<any>, Extras = {}>(
     return UnionFactory;
   }
 
-  // If none of the above, throw error
   throw new Error(
     'ValidatedDto only supports ZodObject, ZodUnion, or ZodDiscriminatedUnion schemas',
   );
 }
 
-
-// --- 5. Embeddable: o value object de vários campos ---------------------------------------------
-
-/** Igualdade de valor, cobrindo value objects, datas, listas e objetos aninhados. */
+/** Value equality, covering value objects, dates, lists and nested objects. */
 function valuesEqual(a: unknown, b: unknown): boolean {
   if (a === b) {
     return true;
@@ -1060,7 +934,6 @@ function valuesEqual(a: unknown, b: unknown): boolean {
   if (a === null || a === undefined || b === null || b === undefined) {
     return a === b;
   }
-  // Quem sabe se comparar, se compara: escalares e embeddables têm `equals` próprio.
   if (typeof (a as any).equals === 'function') {
     return (a as any).equals(b);
   }
@@ -1082,18 +955,18 @@ function valuesEqual(a: unknown, b: unknown): boolean {
 }
 
 /**
- * Marca no protótipo que uma classe é um value object de vários campos. Mesmo papel do
- * `SCALAR_VALUE_OBJECT`: cada `Embeddable` gera uma base própria, então não há `instanceof` comum.
+ * Marks on the prototype that a class is a multi-field value object. Same role as
+ * `SCALAR_VALUE_OBJECT`: every `Embeddable` generates its own base, so there is no common `instanceof`.
  */
 export const EMBEDDABLE_VALUE_OBJECT = Symbol.for('validated-dto:embeddable');
 
-/** A parte de instância que um `Embeddable` acrescenta ao DTO gerado. */
+/** The instance side an `Embeddable` adds to the generated DTO. */
 export interface EmbeddableValueObject<Out> {
-  /** Igualdade **de valor**, campo a campo — o `equals` de um `record` do Java. */
+  /** **Value** equality, field by field — the `equals` of a Java `record`. */
   equals(other: unknown): boolean;
-  /** Uma cópia com alguns campos trocados. O value object não muda: ele é substituído. */
+  /** A copy with some fields swapped. The value object does not change: it is replaced. */
   with(changes: Partial<Out>): this;
-  /** O objeto pronto para JSON, com os escalares embutidos já colapsados. */
+  /** The object ready for JSON, with embedded scalars already collapsed. */
   toJSON(): Record<string, unknown>;
   isValid(): boolean;
   validationError(): z.ZodError | undefined;
@@ -1103,11 +976,11 @@ export interface EmbeddableValueObject<Out> {
 type AnyEmbeddableConstructor = abstract new (...args: any[]) => any;
 
 /**
- * Gera a classe de um **value object de vários campos** — o `@Embeddable record` do Java.
+ * Generates a **multi-field value object** class — Java's `@Embeddable record`.
  *
- * É o `ValidatedDto` mais a identidade de value object: `equals` por valor, `with` para copiar
- * trocando um campo, `toJSON`, e o `field()` que o embute em outro DTO já como *esta* classe (e não
- * como uma classe anônima remontada a partir do shape).
+ * It is `ValidatedDto` plus value object identity: `equals` by value, `with` to copy while swapping a
+ * field, `toJSON`, and the `field()` that embeds it into another DTO as *this* class (rather than as an
+ * anonymous class reassembled from the shape).
  *
  * ```ts
  * export class Money extends ValidatedDto.Embeddable(
@@ -1171,8 +1044,6 @@ export function Embeddable<Schema extends z.ZodObject<any>>(
         if (other === null || typeof other !== 'object') {
           return false;
         }
-        // Um embeddable de **outra** família nunca é igual, ainda que o shape coincida: um `Money`
-        // não é um `Weight`. Um objeto cru com os mesmos campos, sim — é o valor que se compara.
         if ((other as any)[EMBEDDABLE_VALUE_OBJECT] === true && !(other instanceof Base)) {
           return false;
         }
@@ -1273,13 +1144,11 @@ export function Embeddable<Schema extends z.ZodObject<any>>(
   return Base;
 }
 
-/** `field()` de um embeddable é estável por classe, como o do escalar. */
+/** An embeddable's `field()` is stable per class, like the scalar's. */
 const EMBEDDABLE_FIELD_CACHE = new WeakMap<object, z.ZodType>();
 
-// --- 6. A fachada: ValidatedDto.Scalar / .Embeddable / .embed -----------------------------------
-
 /**
- * O value object de **um valor só** — ver {@link ValidatedScalar}.
+ * The **single-value** value object — see {@link ValidatedScalar}.
  *
  * ```ts
  * export class PostId extends ValidatedDto.Scalar(PostIdSchema) {}
@@ -1290,7 +1159,7 @@ ValidatedDto.Scalar = ValidatedScalar as <Schema extends z.ZodType<any, any>>(
   options?: ValidatedScalarOptions,
 ) => ScalarValueObjectStatic<z.output<Schema>, z.input<Schema>, Schema>;
 /**
- * Embute um value object num shape de DTO `.
+ * Embeds a value object into a DTO shape.
  *
  * ```ts
  * const PostViewSchema = z.object({

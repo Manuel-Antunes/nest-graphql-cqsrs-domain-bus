@@ -15,16 +15,10 @@ import { UserName } from '../../../domain/user/vo/user-name';
 import { PostRequest } from '../../shared/post-request';
 import { CreatePostCommand } from './create-post.command';
 
-/**
- * O handler é `{ scope: Scope.REQUEST }`, então não existe "a" instância dele para pegar do módulo:
- * o teste despacha pelo `CommandBus`, que é quem resolve o handler no `ContextId` da `PostRequest` —
- * o mesmo caminho que o `PostMutationResolver` percorre.
- */
 describe('CreatePostCommand.Handler', () => {
   let module: TestingModule;
   let commands: CommandBus;
   let events: RecordingEvents;
-  /** Todo post precisa de um autor: a relação com `User` é obrigatória. */
   let author: Awaited<ReturnType<typeof givenAnAuthor>>;
 
   const execute = (command: CreatePostCommand.CreatePost) =>
@@ -86,16 +80,6 @@ describe('CreatePostCommand.Handler', () => {
     expect(await freshEm(module).count(Post)).toBe(1);
   });
 
-  /**
-   * O handler **não** lê o agregado `User`: o autor já veio decidido da borda, e o que segue é só o
-   * retrato dele. Quem recusa um id que não é de autor é a chave estrangeira `posts.author_id →
-   * authors.id` — e estes dois testes são o que torna essa confiança verificável.
-   *
-   * Recusar no banco é melhor do que checar antes por duas razões. A primeira é de corretude: um
-   * SELECT antes do INSERT tem uma janela em que o autor pode sumir, e a restrição não tem. A segunda
-   * é de segurança: a checagem anterior distinguia "não existe" de "é leitor", e isso é um oráculo de
-   * quais usuários existem — a FK não distingue, e a mensagem traduzida também não.
-   */
   describe('a chave estrangeira é a garantia, e não uma checagem antes', () => {
     it('recusa um authorId que não existe, sem gravar nada', async () => {
       const id = PostId.generate();

@@ -1,5 +1,3 @@
-# As leituras — ↔ `PostQueryResolver`.
-
 type Query {
   """Um Post pelo id; null se não existir"""
   post(id: ID!): Post

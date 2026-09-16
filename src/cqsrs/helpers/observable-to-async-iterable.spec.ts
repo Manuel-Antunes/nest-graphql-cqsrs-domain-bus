@@ -82,11 +82,6 @@ describe('observableToAsyncIterable', () => {
     expect((await iterator.next()).value).toBe(2);
   });
 
-  /**
-   * `throw()` é a outra porta de saída do protocolo de iterador: um consumidor que aborta com um
-   * erro. Como o `return()`, ela precisa cancelar a inscrição **na hora** — senão o assinante fica
-   * pendurado no `EventBus` depois de já ter desistido.
-   */
   it('throw() cancels the subscription and rejects with the error it was given', async () => {
     const source = new Subject<number>();
     const iterator = observableToAsyncIterable(source);
@@ -108,7 +103,6 @@ describe('observableToAsyncIterable', () => {
     expect(await pending).toEqual({ value: undefined, done: true });
   });
 
-  /** Fechar duas vezes é o caso normal: o graphql-js chama `return()` de um stream já completado. */
   it('closing an already finished iterator is a no-op', async () => {
     const source = new Subject<number>();
     const iterator = observableToAsyncIterable(source);
@@ -121,7 +115,6 @@ describe('observableToAsyncIterable', () => {
     expect(await iterator.next()).toEqual({ value: undefined, done: true });
   });
 
-  /** Um valor bufferizado antes do erro ainda é entregue: só depois dele a rejeição aparece. */
   it('delivers what was buffered before the error, then rejects', async () => {
     const source = new Subject<number>();
     const iterator = observableToAsyncIterable(source);

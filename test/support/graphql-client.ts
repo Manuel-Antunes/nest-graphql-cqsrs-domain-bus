@@ -2,10 +2,8 @@ import type { INestApplication } from '@nestjs/common';
 import { type Client, createClient, type ExecutionResult } from 'graphql-ws';
 import WebSocket from 'ws';
 
-/** Um cliente GraphQL mínimo para os e2e: HTTP para query/mutation, graphql-ws para subscription. */
 export class GraphqlClient {
   private readonly ws: Client;
-  /** O cookie de sessão do Better Auth, depois que alguém autenticou. */
   private cookie = '';
 
   constructor(
@@ -20,11 +18,6 @@ export class GraphqlClient {
     return new GraphqlClient(`${origin}/graphql`, origin);
   }
 
-  /**
-   * Registra e autentica alguém pelo Better Auth de verdade — `POST /api/auth/sign-up/email` —, e
-   * guarda o cookie de sessão para as requisições seguintes. É o que o e2e precisa desde que escrever
-   * passou a exigir sessão e papel.
-   */
   async signUp(email: string, name: string, password = 'senha-super-secreta'): Promise<string> {
     const response = await fetch(`${this.origin}/api/auth/sign-up/email`, {
       method: 'POST',
@@ -37,13 +30,10 @@ export class GraphqlClient {
     this.cookie = (response.headers.getSetCookie?.() ?? [])
       .map((c) => c.split(';')[0])
       .join('; ');
-    // O id da credencial — o que a sessão carrega, e o que a porta da identidade recebe para
-    // conceder um papel. Ver `IdentityProvider`.
     const { user } = (await response.json()) as { user: { id: string } };
     return user.id;
   }
 
-  /** Volta a ser anônimo — para provar que rota protegida rejeita quem não autenticou. */
   signOutLocally(): void {
     this.cookie = '';
   }
@@ -57,7 +47,6 @@ export class GraphqlClient {
     return (await response.json()) as ExecutionResult<T>;
   }
 
-  /** Assina e devolve um coletor; `unsubscribe()` fecha a subscription do lado do cliente. */
   subscribe<T = Record<string, any>>(query: string, variables?: Record<string, unknown>): SubscriptionCollector<T> {
     return new SubscriptionCollector<T>(this.ws, query, variables);
   }
@@ -87,7 +76,6 @@ export class SubscriptionCollector<T> {
     );
   }
 
-  /** Espera até ter recebido `count` payloads (ou estoura o timeout). */
   async waitFor(count: number, timeoutMs = 5000): Promise<T[]> {
     const deadline = Date.now() + timeoutMs;
     while (this.received.length < count) {
@@ -103,7 +91,6 @@ export class SubscriptionCollector<T> {
   }
 }
 
-/** Espera uma condição ficar verdadeira — para sincronizar "a subscription já está registrada no servidor". */
 export async function until(condition: () => boolean, timeoutMs = 5000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (!condition()) {

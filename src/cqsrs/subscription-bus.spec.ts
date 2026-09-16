@@ -15,19 +15,16 @@ class CounterEvent {
   ) {}
 }
 
-/** Uma subscription com critério: o filtro por tópico, escrito ao lado da mensagem. */
 class OnCounterSubscription extends Subscription<CounterEvent, { topic?: string | null }> {
   override match(event: CounterEvent): boolean {
     return !this.criteria.topic || event.topic === this.criteria.topic;
   }
 }
 
-/** Nenhum `@SubscriptionHandler` aponta para ela — nem metadata ela tem. */
 class UnhandledSubscription extends Subscription<CounterEvent> {}
 
 @SubscriptionHandler(OnCounterSubscription)
 class OnCounterSubscriptionHandler implements ISubscriptionHandler<OnCounterSubscription> {
-  /** Quantas vezes a fonte foi aberta — uma vez por *stream*, não por assinante. */
   static opened = 0;
 
   constructor(private readonly eventBus: EventBus) {}
@@ -42,11 +39,9 @@ describe('SubscriptionBus', () => {
   let module: TestingModule;
   let bus: SubscriptionBus;
   let eventBus: EventBus;
-  /** Assinantes do `EventBus` — é o número que diz se o bus compartilhou ou duplicou o stream. */
   const upstream = () => eventBus.subject$.observers.length;
   const active: { unsubscribe(): void }[] = [];
 
-  /** Assina um stream e devolve o que ele entregar; a inscrição é cancelada no fim do teste. */
   const collect = <T>(stream: Observable<T>) => {
     const received: T[] = [];
     const subscription = stream.subscribe((value) => received.push(value));
@@ -137,7 +132,6 @@ describe('SubscriptionBus', () => {
     eventBus.publish(new CounterEvent('lifecycle', 9));
 
     expect(values(again)).toEqual([9]);
-    // e o bus voltou a reconhecer esse stream como o do critério — não abriu um segundo em paralelo
     expect(bus.subscribe(new OnCounterSubscription({ topic: 'lifecycle' }))).toBe(stream);
     expect(upstream()).toBe(before + 1);
   });

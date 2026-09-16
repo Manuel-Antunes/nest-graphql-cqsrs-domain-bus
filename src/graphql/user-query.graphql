@@ -1,9 +1,3 @@
-# A leitura de quem está logado — ↔ `UserQueryResolver`.
-#
-# `extend type Query` e não `type Query`: a raiz é declarada em `post-query.graphql`, e o
-# `mergeTypeDefs` do Nest junta os dois. Quem lê este arquivo vê o que a identidade acrescenta à raiz,
-# sem precisar reabrir o bloco dos posts.
-
 extend type Query {
   """
   Quem está logado.

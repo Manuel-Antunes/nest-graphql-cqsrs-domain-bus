@@ -5,20 +5,13 @@ import { PostId } from '../../../../domain/post/vo/post-id';
 import { AUTHOR_ROLE, User } from '../../../../domain/user/user.entity';
 import { Author } from '../../../../domain/user/author.entity';
 import { UserId } from '../../../../domain/user/vo/user-id';
-import { PostSchema } from './post-orm.entity';
+import { PostSchema } from '../entities/post-orm.entity';
 import { ACTIVE_FILTER } from './soft-delete-orm.entity';
-import { SoftDeleteSubscriber } from '../helpers/soft-delete.subscriber';
-import { TagSchema } from './tag-orm.entity';
-import { AuthorSchema, ReaderSchema, UserSchema } from './user-orm.entity';
-import { SoftDeletion } from '../../../../domain/shared/soft-delete';
+import { SoftDeleteSubscriber } from './soft-delete.subscriber';
+import { TagSchema } from '../entities/tag-orm.entity';
+import { AuthorSchema, ReaderSchema, UserSchema } from '../entities/user-orm.entity';
+import { SoftDeletion } from '../../../../domain/shared/soft-delete/soft-delete';
 
-/**
- * O efeito do soft delete **nas consultas** — a metade que é de infraestrutura.
- *
- * O que os comentários do domínio sempre prometeram ("a linha fica, e o filtro de ativos a esconde")
- * só passou a ser verdade quando o filtro existiu. Estes testes são o contrato dessa promessa; as
- * regras do value object e do mixin ficam em `domain/shared/soft-delete.spec`.
- */
 describe('o filtro de ativos', () => {
   const T0 = new Date('2026-09-08T12:00:00.000Z');
 
@@ -67,15 +60,6 @@ describe('o filtro de ativos', () => {
     return post.id;
   };
 
-  /**
-   * A armadilha que a versão Java precisou guardar: o Hibernate deixa o `@Embedded` **nulo** quando
-   * todas as colunas dele vêm nulas — que é o caso de toda entidade viva, já que `deleted_at` é a
-   * única —, e por isso o `Post.softDeletion()` de lá reinstancia o holder na leitura.
-   *
-   * Aqui não é preciso, e este teste é a prova: com `forceConstructor: true` o MikroORM hidrata pelo
-   * `new`, então o inicializador do campo roda e o value object existe antes de qualquer coluna ser
-   * atribuída. É a mesma flag que já existia por causa da `Collection` de tags.
-   */
   it('uma entidade viva volta do banco com o value object montado, e não nulo', async () => {
     const author = await givenAnAuthor();
     const id = await givenAPost(author);
@@ -112,9 +96,7 @@ describe('o filtro de ativos', () => {
     post.softDelete(now);
     await em.flush();
 
-    // filtrado por padrão…
     expect(await orm.em.fork().findOne(Post, { id })).toBeNull();
-    // …e ainda lá, para quem pedir
     const withDeleted = await orm.em.fork().findOne(Post, { id }, { filters: { [ACTIVE_FILTER]: false } });
     expect(withDeleted?.isDeleted()).toBe(true);
     expect(withDeleted?.deletedAt).toEqual(now);
@@ -137,12 +119,6 @@ describe('o filtro de ativos', () => {
     expect(await orm.em.fork().findOne(Post, { id })).not.toBeNull();
   });
 
-  /**
-   * O efeito que o README chama de indireto, e que agora é verdade: apagar o autor tira os posts
-   * dele das consultas **sem tocar em nenhuma linha de post**. Quem faz isso é o
-   * `autoJoinRefsForFilters` do MikroORM (ligado por padrão), que junta a relação m:1 quando ela
-   * tem filtro.
-   */
   it('apagar o autor esconde os posts dele, sem tocar nas linhas de post', async () => {
     const author = await givenAnAuthor();
     const id = await givenAPost(author);
@@ -153,7 +129,6 @@ describe('o filtro de ativos', () => {
     await em.flush();
 
     expect(await orm.em.fork().findOne(Post, { id })).toBeNull();
-    // a linha do post continua ativa: quem sumiu foi o autor
     const [row] = await orm.em
       .fork()
       .getConnection()

@@ -12,7 +12,6 @@ import { TagId } from '../../../domain/tag/vo/tag-id';
 import { PostRequest } from '../../shared/post-request';
 import { AssignTagToPostCommand } from './assign-tag-to-post.command';
 
-/** Request-scoped como todo command handler daqui: o caminho do teste é o `CommandBus`. */
 describe('AssignTagToPostCommand.Handler', () => {
   let module: TestingModule;
   let commands: CommandBus;
@@ -39,7 +38,6 @@ describe('AssignTagToPostCommand.Handler', () => {
     expect(events.events).toEqual([
       new PostUpdatedEvent(post.id.value, 'Nest + GraphQL', 'oi', post.author.id.value, 'manuel', [ref], 2, T0, expect.any(Date)),
     ]);
-    // a relação de verdade: a linha do pivô é o que prova que a tag ficou no post
     const saved = await freshEm(module).findOneOrFail(Post, { id: post.id }, { populate: ['tags'] });
     expect(saved.version).toBe(2);
     expect(saved.tags.getItems().map((t) => ({ tagId: t.id.value, name: t.name.value }))).toEqual([ref]);
@@ -52,7 +50,6 @@ describe('AssignTagToPostCommand.Handler', () => {
 
     await execute(new AssignTagToPostCommand.AssignTagToPost(post.id, second.id));
 
-    // o diff do pivô tem que INSERIR só a nova linha — reinserir a antiga viola a unique do pivô
     const saved = await freshEm(module).findOneOrFail(Post, { id: post.id }, { populate: ['tags'] });
     expect(saved.tags.getItems().map((t) => t.name.value).sort()).toEqual(['Untagged', 'nestjs']);
     expect(saved.version).toBe(3);

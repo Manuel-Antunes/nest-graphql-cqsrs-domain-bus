@@ -6,38 +6,37 @@ import { SubscriptionExplorerService } from './services/subscription-explorer.se
 import { SubscriptionBus } from './subscription-bus';
 
 /**
- * O módulo que resolve as opções e as exporta pelo token `CQSRS_MODULE_OPTIONS` — a peça que faz o
- * `forRootAsync` chamar a factory do usuário **uma vez só**.
+ * The module that resolves the options and exports them under the `CQSRS_MODULE_OPTIONS` token — the
+ * piece that makes `forRootAsync` call the user's factory **exactly once**.
  *
- * Sem ele haveria duas factories a resolver: a do `CqsrsModule` e a do `CqrsModule` embaixo. Com ele
- * há uma: este módulo resolve as opções, o `CqsrsModule` as consome, e o `CqrsModule.forRootAsync`
- * recebe uma factory que só repassa o que já foi resolvido aqui.
+ * Without it there would be two factories to resolve: `CqsrsModule`'s and the underlying
+ * `CqrsModule`'s. With it there is one: this module resolves the options, `CqsrsModule` consumes them,
+ * and `CqrsModule.forRootAsync` gets a factory that merely forwards what was already resolved here.
  */
 @Module({})
 export class CqsrsOptionsModule {}
 
 /**
- * **C**ommand, **Q**uery e **S**ubscription **R**esponsibility **S**egregation: o `CqrsModule` do
- * Nest mais a terceira mensagem.
+ * **C**ommand, **Q**uery and **S**ubscription **R**esponsibility **S**egregation: Nest's `CqrsModule`
+ * plus the third message.
  *
- * Ele não substitui o @nestjs/cqrs — ele o importa e o reexporta. Quem usa `CqsrsModule.forRoot()`
- * continua recebendo `CommandBus`, `QueryBus`, `EventBus`, `EventPublisher` e
- * `UnhandledExceptionBus` exatamente como antes, e ganha o `SubscriptionBus`. As opções passadas
- * aqui vão inteiras para o `CqrsModule.forRoot`, mais a que só o CQSRS entende
- * (`subscriptionPublisher`).
+ * It does not replace @nestjs/cqrs — it imports and re-exports it. Anyone using `CqsrsModule.forRoot()`
+ * still gets `CommandBus`, `QueryBus`, `EventBus`, `EventPublisher` and `UnhandledExceptionBus` exactly
+ * as before, and gains the `SubscriptionBus`. The options passed here go wholesale to
+ * `CqrsModule.forRoot`, plus the one only CQSRS understands (`subscriptionPublisher`).
  *
- * O bootstrap é o mesmo padrão do `CqrsModule`: no `onApplicationBootstrap`, o explorer varre os
- * providers atrás dos `@SubscriptionHandler` e os registra no bus. Fica *depois* do registro de
- * commands, queries, events e sagas, porque o `CqsrsModule` importa o `CqrsModule` — e um módulo é
- * inicializado depois do que ele importa.
+ * Bootstrap follows the same pattern as `CqrsModule`: in `onApplicationBootstrap`, the explorer scans
+ * the providers for `@SubscriptionHandler`s and registers them on the bus. It happens *after* commands,
+ * queries, events and sagas are registered, because `CqsrsModule` imports `CqrsModule` — and a module
+ * is initialized after whatever it imports.
  *
  * ```ts
  * @Module({ imports: [CqsrsModule.forRoot()], providers: [OnPostUpdatedSubscriptionHandler] })
  * export class AppModule {}
  * ```
  *
- * `forRoot` e `forRootAsync` são as portas de entrada: importar a classe `CqsrsModule` crua dá o
- * `SubscriptionBus` sem os buses do CQRS.
+ * `forRoot` and `forRootAsync` are the entry points: importing the bare `CqsrsModule` class gives the
+ * `SubscriptionBus` without the CQRS buses.
  */
 @Module({
   providers: [SubscriptionBus, SubscriptionExplorerService],
@@ -55,8 +54,8 @@ export class CqsrsModule implements OnApplicationBootstrap {
   }
 
   /**
-   * O mesmo, com as opções resolvidas de forma assíncrona — para quando o publisher (de eventos, de
-   * subscriptions) depende de algo que só existe em runtime: um `ConfigService`, uma conexão.
+   * The same, with the options resolved asynchronously — for when the publisher (of events, of
+   * subscriptions) depends on something that only exists at runtime: a `ConfigService`, a connection.
    *
    * ```ts
    * CqsrsModule.forRootAsync({
@@ -66,12 +65,12 @@ export class CqsrsModule implements OnApplicationBootstrap {
    * })
    * ```
    *
-   * A montagem tem uma sutileza que vale o parágrafo: as opções são resolvidas **num módulo só**
-   * ({@link CqsrsOptionsModule}), e tanto o `CqsrsModule` quanto o `CqrsModule` embaixo consomem
-   * dali. O `CqrsModule.forRootAsync` recebe uma factory que apenas repassa o que já foi resolvido —
-   * então a factory de quem chama roda uma vez, e não duas. É o mesmo objeto de módulo dinâmico nas
-   * duas listas de `imports`: o Nest identifica um módulo dinâmico pelo par (classe, metadata), então
-   * as duas referências são o mesmo módulo, com uma instância só.
+   * The wiring has a subtlety worth the paragraph: the options are resolved in **a single module**
+   * ({@link CqsrsOptionsModule}), and both `CqsrsModule` and the underlying `CqrsModule` consume them
+   * from there. `CqrsModule.forRootAsync` receives a factory that merely forwards what was already
+   * resolved — so the caller's factory runs once, not twice. It is the same dynamic module object in
+   * both `imports` lists: Nest identifies a dynamic module by the (class, metadata) pair, so the two
+   * references are the same module, with a single instance.
    */
   static forRootAsync(options: CqsrsModuleAsyncOptions): DynamicModule {
     const optionsModule: DynamicModule = {

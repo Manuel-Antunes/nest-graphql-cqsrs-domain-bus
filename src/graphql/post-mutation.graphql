@@ -1,8 +1,3 @@
-# As escritas — ↔ `PostMutationResolver`.
-#
-# Os `input` moram aqui, e não junto do `type Post`, porque é isto que eles são: os argumentos destas
-# duas mutations. Repare no que nenhum deles tem — o autor. Ele vem da sessão, não do corpo.
-
 type Mutation {
   """Despacha CreatePostCommand e devolve o Post já gravado"""
   createPost(input: CreatePostInput!): Post!

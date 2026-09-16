@@ -30,15 +30,6 @@ import { UpdatePostInput } from '../../dto/graphql/update-post.input';
 import { PostProfile } from './post.profile';
 import { validatedDtoClasses } from './validated-dto.strategy';
 
-/**
- * O perfil do agregado Post, testado sem Nest, sem banco e sem GraphQL.
- *
- * O que estes testes prendem não são os campos que o mapeamento **escreve**: são os que ele escreve
- * sem que ninguém tenha mandado. Um `forMember` esquecido aparece em qualquer teste; um campo que
- * atravessava sozinho e parou (porque perdeu o `@AutoMap()`, ou porque o nome mudou de um lado só)
- * não aparece em lugar nenhum — ele fica `undefined` e o mapeamento segue. Daí cada caso conferir a
- * view **inteira**, e não o campo da vez.
- */
 describe('PostProfile', () => {
   let orm: MikroORM;
   let mapper: Mapper;
@@ -49,10 +40,6 @@ describe('PostProfile', () => {
   const createdAt = new Date('2024-01-01T10:00:00.000Z');
   const updatedAt = new Date('2024-01-02T10:00:00.000Z');
 
-  /**
-   * O `MikroORM.init` existe só para descobrir as entidades — a `Collection` de tags e a `Ref` do
-   * autor precisam da metadata. Sem `ensureDatabase`, nenhuma tabela é criada e nada é lido.
-   */
   beforeAll(async () => {
     orm = await MikroORM.init(
       defineConfig({
@@ -65,11 +52,8 @@ describe('PostProfile', () => {
   afterAll(() => orm.close());
 
   beforeEach(async () => {
-    // Um mapper novo por teste: a estratégia guarda os modelos que já leu, e um reaproveitado entre
-    // suítes esconderia uma metadata que só funciona porque outro teste a registrou antes.
     mapper = createMapper({ strategyInitializer: validatedDtoClasses() });
     new PostProfile(mapper);
-    // O `AutomapperProfile` registra o perfil numa microtask — ver o construtor dele.
     await Promise.resolve();
   });
 
@@ -87,7 +71,6 @@ describe('PostProfile', () => {
 
   const aTag = (): Tag => Tag.create(tagId, 'nestjs', createdAt);
 
-  /** Um post nascido e com uma tag atribuída — o que sai do repositório na v2. */
   const aPost = (): Post => {
     const post = Post.create(
       postId,
@@ -181,7 +164,6 @@ describe('PostProfile', () => {
       expect(view.title.value).toBe('editado');
       expect(view.content.value).toBe('corpo editado');
       expect(view.authorId.equals(authorId)).toBe(true);
-      // O `createdAt` vem do evento (ele viaja no payload), o `updatedAt` do instante do fato.
       expect(view.createdAt).toEqual(createdAt);
       expect(view.updatedAt).toEqual(updatedAt);
       expect(view.version).toBe(3);
@@ -192,11 +174,6 @@ describe('PostProfile', () => {
   });
 
   describe('CreatePostInput → CreatePost', () => {
-    /**
-     * O input chega **cru**: o @nestjs/graphql entrega os `@Args` como objeto, sem instanciar classe
-     * nenhuma. Este teste prende o contrato que o `preMap` sustenta — passar o objeto cru tem de dar o
-     * mesmo resultado que passar o DTO.
-     */
     it('monta o command a partir do objeto cru, com o autor vindo de extraArgs', () => {
       const author = anAuthor();
 
@@ -209,7 +186,6 @@ describe('PostProfile', () => {
 
       expect(command).toBeInstanceOf(CreatePostCommand.CreatePost);
       expect(command.postId).toBeInstanceOf(PostId);
-      // O value object normaliza na travessia: o `trim` é do schema do `PostTitle`.
       expect(command.title).toBe('Nest + GraphQL');
       expect(command.content).toBe('corpo do post');
       expect(command.authorId.equals(authorId)).toBe(true);
@@ -241,7 +217,6 @@ describe('PostProfile', () => {
       expect(command.content).toBe('corpo editado');
     });
 
-    /** `null`/ausente não é um valor a converter: é a instrução de manter o que está lá. */
     it('deixa passar os campos ausentes sem tentar desembrulhá-los', () => {
       const command = mapper.map(
         { id: postId.value, title: 'só o título' } as unknown as UpdatePostInput,
@@ -253,7 +228,6 @@ describe('PostProfile', () => {
       expect(command.content ?? null).toBeNull();
     });
 
-    /** A única validação da borda: um id que não é UUID não chega ao command. */
     it('recusa um id que não é UUID', () => {
       expect(() =>
         mapper.map(

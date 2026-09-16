@@ -1,18 +1,18 @@
 import { z } from 'zod';
 
 /**
- * O que um schema *embutido* aponta: a classe de value object que o produz.
+ * What an *embedded* schema points at: the value object class it produces.
  *
- * `kind` diz como o mixin de objeto precisa tratar o campo na hora de serializar:
+ * `kind` tells the object mixin how to treat the field when serializing:
  *
- * - `scalar` — o value object colapsa para um valor cru (`@Transform`): `PostId` vira `"uuid"` no
- *   JSON, e não `{ value: "uuid" }`. É o `@Embedded` de um `@Embeddable record` de uma coluna só.
- * - `object` — o value object é um objeto de verdade e o class-transformer sabe entrá-lo (`@Type`),
- *   como qualquer DTO aninhado.
+ * - `scalar` — the value object collapses to a raw value (`@Transform`): `PostId` becomes `"uuid"` in
+ *   JSON, not `{ value: "uuid" }`. It is the `@Embedded` of a single-column `@Embeddable record`.
+ * - `object` — the value object is a real object and class-transformer knows how to descend into it
+ *   (`@Type`), like any nested DTO.
  */
 export interface EmbeddedBinding {
   kind: 'scalar' | 'object';
-  /** A classe concreta — a que o `field()` foi chamado, e não a base gerada pelo mixin. */
+  /** The concrete class — the one `field()` was called on, not the base the mixin generated. */
   target: abstract new (...args: any[]) => any;
 }
 
@@ -26,20 +26,20 @@ export function createEmbeddedRegistry(): EMBEDDED_REGISTRY_TYPE {
 }
 
 /**
- * O registro que liga **o schema de um campo** à classe de value object que ele materializa.
+ * The registry binding **a field's schema** to the value object class it materializes.
  *
- * Ele é populado por `VO.field()` (e por `ValidatedDto.embed(VO)`, que é o mesmo), nunca à mão: o
- * `field()` é um método estático, então o `this` dele já é a classe **concreta** — se você escreveu
- * `class PostId extends ValidatedDto.Scalar(PostIdSchema) {}`, é `PostId` que fica registrada, e não
- * a base anônima que o mixin gerou. É por isso que não existe um decorator de "registre-me": a
- * chamada que embute o campo é a mesma que diz qual classe ele produz.
+ * It is populated by `VO.field()` (and by `ValidatedDto.embed(VO)`, which is the same thing), never by
+ * hand: `field()` is a static method, so its `this` is already the **concrete** class — if you wrote
+ * `class PostId extends ValidatedDto.Scalar(PostIdSchema) {}`, it is `PostId` that gets registered, not
+ * the anonymous base the mixin generated. That is why there is no "register me" decorator: the call
+ * that embeds the field is the same one that says which class it produces.
  *
- * Mora num registry do Zod (e não num `WeakMap` avulso) pelo mesmo motivo do `DECORATOR_REGISTRY`:
- * é o mecanismo que o Zod 4 oferece para pendurar metadado num schema.
+ * It lives in a Zod registry (rather than a loose `WeakMap`) for the same reason as
+ * `DECORATOR_REGISTRY`: it is the mechanism Zod 4 offers for hanging metadata off a schema.
  */
 export const EMBEDDED_REGISTRY: EMBEDDED_REGISTRY_TYPE = createEmbeddedRegistry();
 
-/** Lê o vínculo de um schema, tolerando `undefined` e schemas de outra origem. */
+/** Reads a schema's binding, tolerating `undefined` and schemas from another origin. */
 export function getEmbedded(
   schema: z.ZodType | undefined,
   registry: EMBEDDED_REGISTRY_TYPE = EMBEDDED_REGISTRY,
@@ -47,13 +47,10 @@ export function getEmbedded(
   if (!schema) {
     return undefined;
   }
-  // O `get` de um registry do Zod devolve o metadado remapeado pelo `$replace` dele, que achata
-  // tipos-função; o cast devolve o vínculo à forma em que ele foi guardado.
   const binding = registry.get(schema) as EmbeddedBinding | undefined;
   if (binding) {
     return binding;
   }
-  // Registries isolados não substituem o global: um DTO pode misturar campos dos dois.
   return registry === EMBEDDED_REGISTRY
     ? undefined
     : (EMBEDDED_REGISTRY.get(schema) as EmbeddedBinding | undefined);
