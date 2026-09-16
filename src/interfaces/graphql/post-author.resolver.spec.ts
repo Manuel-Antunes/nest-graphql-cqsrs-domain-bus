@@ -1,30 +1,28 @@
 import type { QueryBus } from '@nestjs/cqrs';
 import { FindAuthorQuery } from '../../application/user/query/find-author.query';
-import type { Author } from '../../domain/user/author.entity';
+import { AUTHOR_ROLE, User } from '../../domain/user/user.entity';
+import { Author } from '../../domain/user/author.entity';
 import { NotAnAuthorException } from '../../domain/user/exception/not-an-author.exception';
-import { AUTHOR_ROLE } from '../../domain/user/user.entity';
-import { Users } from '../../domain/user/user.factory';
 import { PostId } from '../../domain/post/vo/post-id';
 import { UserId } from '../../domain/user/vo/user-id';
 import { AuthorView } from '../../dto/graphql/user.view';
 import { PostView } from '../../dto/graphql/post.view';
-import { UserViewMapper } from '../mapper/user-view.mapper';
 import { PostAuthorResolver } from './post-author.resolver';
 
 /**
  * `Post.author`, isolado: a troca do `authorId` da view pelo `Author` do protocolo.
  *
- * O que se afirma é a tradução em dois sentidos — o id da view vira a mensagem com o **value object**,
- * e o agregado vira `AuthorView` — e o que acontece quando o autor não está mais lá. Quantas consultas
- * custa é assunto do handler, e está no `find-author.query.spec`.
+ * O que se afirma é a tradução que sobrou — o `authorId` da view vira a mensagem com o **value
+ * object** — e o que acontece quando o autor não está mais lá. O agregado → `AuthorView` é do
+ * `MapInterceptor` declarado no método, e o que ele produz é assunto do `UserProfile`. Quantas
+ * consultas custa é assunto do handler, e está no `find-author.query.spec`.
  */
 describe('PostAuthorResolver', () => {
-  const mapper = new UserViewMapper();
   const authorId = UserId.parse('3a7b1c2d-4e5f-4a6b-8c9d-0e1f2a3b4c5d');
   const now = new Date('2026-09-08T12:00:00.000Z');
 
   const anAuthor = (): Author => {
-    const user = Users.register(authorId, { email: 'manuel@example.com', name: 'manuel' }, AUTHOR_ROLE, now);
+    const user = Author.register(authorId, { email: 'manuel@example.com', name: 'manuel' }, AUTHOR_ROLE, now);
     if (!user.canWritePosts()) {
       throw new Error('AUTHOR_ROLE precisa nascer Author');
     }
@@ -51,7 +49,7 @@ describe('PostAuthorResolver', () => {
         return Promise.resolve(result);
       },
     } as unknown as QueryBus;
-    return { resolver: new PostAuthorResolver(bus, mapper), dispatched };
+    return { resolver: new PostAuthorResolver(bus), dispatched };
   };
 
   it('despacha FindAuthor com o authorId da view, como value object', async () => {
@@ -64,15 +62,18 @@ describe('PostAuthorResolver', () => {
     expect((dispatched[0] as FindAuthorQuery.FindAuthor).authorId.equals(authorId)).toBe(true);
   });
 
-  it('devolve um AuthorView — o tipo que o `Author!` do schema promete', async () => {
-    const { resolver } = resolverOn(anAuthor());
+  /**
+   * O resolver devolve o **agregado**; quem o traduz em `AuthorView` é o `MapInterceptor` declarado no
+   * método, e o que ele produz é assunto do `UserProfile`. O que importa aqui é que o autor achado
+   * atravesse intacto — trocá-lo por outro seria o único erro que este método poderia cometer.
+   */
+  it('devolve o autor que o handler achou, sem tocá-lo', async () => {
+    const author = anAuthor();
+    const { resolver } = resolverOn(author);
 
-    const view = await resolver.author(aPostView());
+    const found = await resolver.author(aPostView());
 
-    expect(view).toBeInstanceOf(AuthorView);
-    expect(view.id.equals(authorId)).toBe(true);
-    expect(view.name.value).toBe('manuel');
-    expect(view.email.value).toBe('manuel@example.com');
+    expect(found).toBe(author);
   });
 
   /**

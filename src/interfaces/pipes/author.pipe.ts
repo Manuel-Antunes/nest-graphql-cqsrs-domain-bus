@@ -1,14 +1,13 @@
 import { Injectable, type PipeTransform } from '@nestjs/common';
 import { NotAnAuthorException } from '../../domain/user/exception/not-an-author.exception';
-import type { Author } from '../../domain/user/author.entity';
-import type { User } from '../../domain/user/user.entity';
-
+import { type User } from '../../domain/user/user.entity';
+import { type Author } from '../../domain/user/author.entity';
 /**
  * `User` → `Author`: o **upcast** da borda, como um pipe.
  *
  * `canWritePosts()` é `this is Author`, então o que sai daqui não é "um user que talvez escreva": é
- * um `Author`. Daí para baixo o `PostInputMapper` e o `Post.create` não conseguem receber outra coisa
- * — um Reader não é barrado por um `if` espalhado pelos resolvers, ele simplesmente não cabe na
+ * um `Author`. Daí para baixo o `createPost` e o `Post.create` não conseguem receber outra
+ * coisa — um Reader não é barrado por um `if` espalhado pelos resolvers, ele simplesmente não cabe na
  * assinatura.
  *
  * Na prática o `@Roles([AUTHOR_ROLE])` barra antes, pelo papel que veio no token. Este pipe cobre o

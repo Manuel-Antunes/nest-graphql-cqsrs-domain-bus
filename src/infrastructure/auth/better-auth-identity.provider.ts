@@ -33,7 +33,7 @@ interface AuthUserRow {
  * ## O que ele traduz
  * Linha do Better Auth → value objects do domínio, e nada mais. Um `role` que venha como lista (o
  * plugin `admin` permite vários papéis) é achatado para o primeiro — o domínio pergunta *um* papel,
- * e é a fronteira que resolve a diferença de forma, não o `Users.register`.
+ * e é a fronteira que resolve a diferença de forma, não o `User.register`.
  *
  * ## O que ele não traduz: conta
  * Ligar a credencial do Google à mesma identidade de quem já tinha senha é trabalho do

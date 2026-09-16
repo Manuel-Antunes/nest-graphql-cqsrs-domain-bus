@@ -15,7 +15,7 @@ import { FindPostQuery } from './find-post.query';
  *
  * O handler é curto — delega ao repositório e devolve a entidade —, mas o que ele devolve é o que a
  * borda depende para montar a view, e isso não é óbvio: `tags` e `author` são **relações**, e o
- * `PostViewMapper` lê o nome do autor pelo `getEntity()`. Uma leitura sem `populate` compila, passa
+ * mapeamento `Post → PostView` lê as tags pelo `getItems()`. Uma leitura sem `populate` compila, passa
  * num teste que só olhe o id, e estoura no primeiro `fromPost` — daí o teste afirmar as duas
  * relações e não só o achado.
  *

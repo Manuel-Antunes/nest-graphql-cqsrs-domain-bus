@@ -1,16 +1,17 @@
+import { UseInterceptors } from '@nestjs/common';
 import { Query, ResolveField, Resolver } from '@nestjs/graphql';
 import type { User } from '../../domain/user/user.entity';
 import { AuthorView, type UserView } from '../../dto/graphql/user.view';
 import { CurrentUser } from '../decorators/current-user.decorator';
-import { UserViewMapper } from '../mapper/user-view.mapper';
+import { UserViewInterceptor } from '../interceptors/user-view.interceptor';
 
 /**
  * A query `me` — quem está logado — e a peça que faz dela uma pergunta **polimórfica**.
  *
  * ## O ponto polimórfico do schema
  * O retorno declarado é `User`, a interface. Quem decide se o cliente recebe um `Reader` ou um
- * `Author` é o tipo que saiu do banco: o {@link UserViewMapper} despacha por `canWritePosts()`, e o
- * `__resolveType` logo abaixo traduz a classe do DTO no nome do schema.
+ * `Author` é o tipo que saiu do banco: o {@link UserViewInterceptor} despacha por `canWritePosts()`, e
+ * o `__resolveType` logo abaixo traduz a classe do DTO no nome do schema.
  *
  * Ou seja: `me { ... on Author { posts { … } } }` só traz posts para quem tem linha em `authors`. Não
  * há campo a forjar no token — o `@Roles` barra cedo, pelo papel que veio no cookie, mas o que
@@ -29,11 +30,10 @@ import { UserViewMapper } from '../mapper/user-view.mapper';
  */
 @Resolver('User')
 export class UserQueryResolver {
-  constructor(private readonly viewMapper: UserViewMapper) {}
-
   @Query('me')
-  me(@CurrentUser() user: User): UserView {
-    return this.viewMapper.fromUser(user);
+  @UseInterceptors(UserViewInterceptor)
+  me(@CurrentUser() user: User): User {
+    return user;
   }
 
   /**
@@ -48,7 +48,7 @@ export class UserQueryResolver {
    *
    * Um `instanceof` e não um `'campo' in value`: as duas views têm exatamente os mesmos campos, então
    * não há campo que as distinga — o que as distingue é a classe, que é justamente o que o
-   * {@link UserViewMapper} decidiu. Guards e filters não correm neste método (o @nestjs/graphql os
+   * {@link UserViewInterceptor} decidiu. Guards e filters não correm neste método (o @nestjs/graphql os
    * desliga para o `__resolveType`), e nem deveriam: ele não busca nada, só lê o tipo do que já está
    * em mãos.
    */

@@ -1,4 +1,4 @@
-import { type Cursor, EntityManager } from '@mikro-orm/core';
+import { type Cursor } from '@mikro-orm/core';
 import { type IQueryHandler, Query, QueryHandler } from '@nestjs/cqrs';
 import type { Post } from '../../../domain/post/post.entity';
 import { PostRepository } from '../../../domain/post/post.repository';

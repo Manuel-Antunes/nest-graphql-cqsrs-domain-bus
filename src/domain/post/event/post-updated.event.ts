@@ -1,3 +1,4 @@
+import { AutoMap } from '@automapper/classes';
 import type { DomainEvent } from '../../shared/domain-event';
 
 /**
@@ -11,19 +12,55 @@ import type { DomainEvent } from '../../shared/domain-event';
  * Diferente da versão Java, o autor e o `createdAt` também viajam no evento, mesmo sem mudar: é o que
  * permite a subscription `onPostUpdated` montar a `PostView` inteira a partir do payload, sem ler o
  * banco — e portanto sem precisar de um contexto de EntityManager dentro de uma conexão WebSocket.
+ *
+ * Os campos são declarados em vez de parâmetros do construtor pelo mesmo motivo do
+ * {@link PostCreatedEvent} — ver lá.
  */
 export class PostUpdatedEvent implements DomainEvent {
+  @AutoMap()
+  readonly postId: string;
+  @AutoMap()
+  readonly title: string;
+  @AutoMap()
+  readonly content: string;
+  @AutoMap()
+  readonly authorId: string;
+  /** O retrato do momento. Nenhuma view o lê hoje — ver `Post.create`. */
+  readonly authorName: string;
+  /**
+   * Sem `@AutoMap()`: o tipo do item é uma `interface`, e não existe em runtime para o mapeador citar.
+   * Quem traduz esta lista é um `forMember` no `PostProfile` — é o preço de um payload que
+   * deliberadamente não depende de nenhuma classe.
+   */
+  readonly tags: readonly PostUpdatedEventTag[];
+  @AutoMap()
+  readonly version: number;
+  @AutoMap()
+  readonly createdAt: Date;
+  @AutoMap()
+  readonly occurredAt: Date;
+
   constructor(
-    readonly postId: string,
-    readonly title: string,
-    readonly content: string,
-    readonly authorId: string,
-    readonly authorName: string,
-    readonly tags: readonly PostUpdatedEventTag[],
-    readonly version: number,
-    readonly createdAt: Date,
-    readonly occurredAt: Date,
-  ) {}
+    postId: string,
+    title: string,
+    content: string,
+    authorId: string,
+    authorName: string,
+    tags: readonly PostUpdatedEventTag[],
+    version: number,
+    createdAt: Date,
+    occurredAt: Date,
+  ) {
+    this.postId = postId;
+    this.title = title;
+    this.content = content;
+    this.authorId = authorId;
+    this.authorName = authorName;
+    this.tags = tags;
+    this.version = version;
+    this.createdAt = createdAt;
+    this.occurredAt = occurredAt;
+  }
 }
 
 /**

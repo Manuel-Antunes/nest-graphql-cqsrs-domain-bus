@@ -11,8 +11,8 @@ import { PostId } from '../../../../domain/post/vo/post-id';
 import { TagRepository } from '../../../../domain/tag/tag.repository';
 import { TagId } from '../../../../domain/tag/vo/tag-id';
 import { TagName } from '../../../../domain/tag/vo/tag-name';
+import { Author } from '../../../../domain/user/author.entity';
 import { AUTHOR_ROLE, User } from '../../../../domain/user/user.entity';
-import { Users } from '../../../../domain/user/user.factory';
 import { Email } from '../../../../domain/user/vo/email';
 import { UserRepository } from '../../../../domain/user/user.repository';
 import { UserId } from '../../../../domain/user/vo/user-id';
@@ -201,7 +201,7 @@ describe('adapters do MikroORM', () => {
         const encerrado = await users.findById(reader.id);
         encerrado!.supersede(sucessorId, new Date());
         encerrado!.uncommit();
-        const sucessor = Users.register(sucessorId, { email, name: 'manuel' }, AUTHOR_ROLE, new Date(), reader.id);
+        const sucessor = Author.register(sucessorId, { email, name: 'manuel' }, AUTHOR_ROLE, new Date(), reader.id);
         sucessor.uncommit();
         // o sucessor primeiro: a chave estrangeira não aceita a referência antes de a linha existir
         await users.saveAll([sucessor, encerrado!]);
@@ -248,7 +248,7 @@ describe('adapters do MikroORM', () => {
         const encerrado = await users.findById(antigo.id);
         encerrado!.supersede(sucessorId, new Date());
         encerrado!.uncommit();
-        const sucessor = Users.register(sucessorId, { email, name: 'manuel' }, AUTHOR_ROLE, new Date(), antigo.id);
+        const sucessor = Author.register(sucessorId, { email, name: 'manuel' }, AUTHOR_ROLE, new Date(), antigo.id);
         sucessor.uncommit();
         await users.saveAll([sucessor, encerrado!]);
       });

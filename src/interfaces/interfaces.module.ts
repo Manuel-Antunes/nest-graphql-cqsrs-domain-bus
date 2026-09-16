@@ -10,9 +10,9 @@ import { PostAuthorResolver } from './graphql/post-author.resolver';
 import { UserQueryResolver } from './graphql/user-query.resolver';
 import { AuthorPostsResolver } from './graphql/author-posts.resolver';
 import { UserProvisioningHooks } from './auth/user-provisioning.hooks';
-import { PostInputMapper } from './mapper/post-input.mapper';
-import { PostViewMapper } from './mapper/post-view.mapper';
-import { UserViewMapper } from './mapper/user-view.mapper';
+import { UserViewInterceptor } from './interceptors/user-view.interceptor';
+import { PostProfile } from './mapper/post.profile';
+import { UserProfile } from './mapper/user.profile';
 import { AuthorPipe } from './pipes/author.pipe';
 import { SessionUserPipe } from './pipes/session-user.pipe';
 
@@ -50,9 +50,9 @@ import { SessionUserPipe } from './pipes/session-user.pipe';
     // a hierarquia de usuário: `me`, o `__resolveType` da interface e o campo `Author.posts`
     UserQueryResolver,
     AuthorPostsResolver,
-    PostInputMapper,
-    PostViewMapper,
-    UserViewMapper,
+    PostProfile,
+    UserProfile,
+    UserViewInterceptor,
     // Os pipes que o `@CurrentAuthor()` encadeia. São providers como quaisquer outros — é justamente
     // por participarem da injeção de dependência que a tradução da sessão pôde sair do resolver.
     SessionUserPipe,

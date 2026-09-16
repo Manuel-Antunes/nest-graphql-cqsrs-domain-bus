@@ -13,8 +13,8 @@ export namespace FindPostQuery {
   }
 
   /**
-   * Handler de `FindPost`. Devolve a própria entidade: quem achata os value objects para o protocolo
-   * é o `PostViewMapper`, na borda.
+   * Handler de `FindPost`. Devolve a própria entidade: quem a traduz em `PostView` é o mapeamento
+   * declarado no `PostProfile`, aplicado por interceptor na borda.
    *
    * Não é request-scoped, e é de propósito: uma leitura não abre cadeia causal nenhuma, então não há
    * identidade a propagar. O contexto de que ela precisa é o do ORM, e esse já vem aberto da borda —

@@ -31,7 +31,7 @@ import type { PostId } from '../../domain/post/vo/post-id';
  * ## O caminho inteiro
  * ```text
  * PostMutationResolver   commandBus.execute(command, new PostRequest(command.postId))
- *        │                                            └── a chave: o id gerado pelo PostInputMapper
+ *        │                                            └── a chave: o id que o PostProfile gerou
  *        ▼
  * CreatePostCommandHandler  @CommandHandler(Cmd, { scope: Scope.REQUEST }) + @Inject(REQUEST)
  *        │                  publisher.mergeObjectContext(post, this.request)

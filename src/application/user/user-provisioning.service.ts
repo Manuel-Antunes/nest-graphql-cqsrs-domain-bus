@@ -2,8 +2,9 @@ import { Injectable, Logger } from '@nestjs/common';
 import { EventPublisher } from '@nestjs/cqrs';
 import { UnknownIdentityException } from '../../domain/user/exception/unknown-identity.exception';
 import { type Identity, IdentityProvider } from '../../domain/user/identity.provider';
+import { Author } from '../../domain/user/author.entity';
+import { Reader } from '../../domain/user/reader.entity';
 import { AUTHOR_ROLE, User } from '../../domain/user/user.entity';
-import { Users } from '../../domain/user/user.factory';
 import { UserRepository } from '../../domain/user/user.repository';
 import type { CredentialId } from '../../domain/user/vo/credential-id';
 import { UserId } from '../../domain/user/vo/user-id';
@@ -97,10 +98,24 @@ export class UserProvisioning {
     return orphan.supersededBy.id;
   }
 
+  /**
+   * O papel do provedor de identidade → o tipo de domínio.
+   *
+   * É **aqui** que essa tradução mora, e não no `User`: a raiz não sabe o que significa a string que o
+   * Better Auth guarda em `user.role`, e os tipos concretos não deveriam precisar saber também. Quem
+   * sabe é a camada que fala com os dois lados.
+   *
+   * O `Reader` é o fallback, e isso é a regra: qualquer papel que nenhum outro tipo reivindique nasce
+   * leitor — inclusive papel nenhum.
+   */
+  private profileFor(role: string | null): typeof Author | typeof Reader {
+    return role === AUTHOR_ROLE ? Author : Reader;
+  }
+
   private async register(identity: Identity, now: Date, resume: UserId | null): Promise<User> {
     const superseded = resume ? await this.users.findSupersededBy(resume) : null;
     const user = this.publisher.mergeObjectContext(
-      Users.register(
+      this.profileFor(identity.role).register(
         resume ?? UserId.generate(),
         { email: identity.email, name: identity.name },
         identity.role,
@@ -113,14 +128,19 @@ export class UserProvisioning {
     return user;
   }
 
-  /** Os dois passos da promoção, na mesma unidade de trabalho: encerra o antigo, abre o novo. */
-  private async promote(reader: User, identity: Identity, now: Date): Promise<User> {
+  /**
+   * Os dois passos da promoção, na mesma unidade de trabalho: encerra o antigo, abre o novo.
+   *
+   * Aqui não há papel a traduzir: promover **é** criar um autor, então quem se constrói é o `Author` em
+   * pessoa — e o tipo de retorno diz isso, em vez de um `User` que o chamador teria de estreitar.
+   */
+  private async promote(reader: User, identity: Identity, now: Date): Promise<Author> {
     const promotedId = UserId.generate();
     this.logger.log(`promovendo ${reader.email} de Reader para Author: ${reader.id} → ${promotedId}`);
 
     this.publisher.mergeObjectContext(reader).supersede(promotedId, now);
     const author = this.publisher.mergeObjectContext(
-      Users.register(
+      Author.register(
         promotedId,
         { email: reader.email, name: identity.name },
         AUTHOR_ROLE,

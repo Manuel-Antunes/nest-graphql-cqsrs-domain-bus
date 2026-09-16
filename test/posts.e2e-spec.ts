@@ -392,7 +392,7 @@ describe('posts (e2e)', () => {
     beforeAll(async () => {
       anonymous = await GraphqlClient.for(app);
       readerClient = await GraphqlClient.for(app);
-      // sem `grantRole`: o sign-up cria a credencial sem papel, e `Users.emptyFor(null)` faz disso um
+      // sem `grantRole`: o sign-up cria a credencial sem papel, e `User.emptyFor(null)` faz disso um
       // Reader. É a diferença inteira entre os dois perfis deste teste.
       await readerClient.signUp('leitor@example.com', 'leitor');
     });

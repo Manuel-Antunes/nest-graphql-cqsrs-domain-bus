@@ -1,26 +1,28 @@
+import { MapInterceptor } from '@automapper/nestjs';
+import type { Cursor } from '@mikro-orm/core';
+import { UseInterceptors } from '@nestjs/common';
 import { QueryBus } from '@nestjs/cqrs';
 import { AllowAnonymous } from '@thallesp/nestjs-better-auth';
 import { Args, Query, Resolver } from '@nestjs/graphql';
 import { FindAllPostsQuery } from '../../application/post/query/find-all-posts.query';
 import { FindPostQuery } from '../../application/post/query/find-post.query';
+import { Post } from '../../domain/post/post.entity';
 import { PostId } from '../../domain/post/vo/post-id';
-import { connectionOf } from '../../dto/graphql/connection';
-import type { PostConnection } from '../../dto/graphql/post.connection';
 import { PostView } from '../../dto/graphql/post.view';
-import { PostViewMapper } from '../mapper/post-view.mapper';
+import { ConnectionInterceptor } from '../interceptors/connection.interceptor';
 
 /**
- * Camada de interface das **queries** GraphQL: traduz argumentos em queries do `QueryBus` e o
- * resultado em views. A cursor connection de `posts` é montada a partir do `Cursor` do MikroORM pelo
- * `connectionOf`: os cursores de cada edge vêm de `page.from(post)`, o `pageInfo` dos flags que o ORM
- * já calculou — e o mesmo helper serve `Author.posts`, para que as duas connections por cursor não
- * possam divergir.
+ * Camada de interface das **queries** GraphQL: traduz argumentos em queries do `QueryBus`, e mais
+ * nada — o que volta do bus é o agregado, e quem o transforma em view é o interceptor.
+ *
+ * `posts` usa o `ConnectionInterceptor` do projeto, e não o da lib: é o mesmo de `Author.posts`,
+ * para que as duas connections por cursor não possam divergir.
  *
  * ## O que o decorator diz, agora
  * `@Query('posts')` nomeia **o campo do schema** — não um tipo de retorno. O que `posts` devolve está
- * escrito no `type Query` de `src/graphql/post-query.graphql`, e é de lá que o Nest o lê; o `PostConnection` no
- * TypeScript é só o tipo que o compilador confere. Se o nome aqui não existir no schema, o Apollo
- * recusa na subida.
+ * escrito no `type Query` de `src/graphql/post-query.graphql`, e é de lá que o Nest o lê; o tipo no
+ * TypeScript é só o que o compilador confere, e ele diz o que o método tem na mão (`Cursor<Post>`), não
+ * o que o cliente recebe. Se o nome aqui não existir no schema, o Apollo recusa na subida.
  */
 /**
  * **Lacuna conhecida:** na versão Axon toda operação exige autenticação — o `leitor@example.com`
@@ -31,23 +33,24 @@ import { PostViewMapper } from '../mapper/post-view.mapper';
 @AllowAnonymous()
 @Resolver('Post')
 export class PostQueryResolver {
-  constructor(
-    private readonly queryBus: QueryBus,
-    private readonly viewMapper: PostViewMapper,
-  ) {}
+  constructor(private readonly queryBus: QueryBus) {}
 
+  /**
+   * `async` e não um `return` direto: o `PostId.parse` recusa um id malformado **antes** de virar
+   * mensagem, e essa recusa precisa chegar como promessa rejeitada, e não como throw síncrono.
+   */
   @Query('post')
-  async post(@Args('id') id: string): Promise<PostView | null> {
-    const post = await this.queryBus.execute(new FindPostQuery.FindPost(PostId.parse(id)));
-    return post && this.viewMapper.fromPost(post);
+  @UseInterceptors(MapInterceptor(Post, PostView))
+  async post(@Args('id') id: string): Promise<Post | null> {
+    return this.queryBus.execute(new FindPostQuery.FindPost(PostId.parse(id)));
   }
 
   @Query('posts')
+  @UseInterceptors(ConnectionInterceptor(Post, PostView))
   async posts(
     @Args('first') first?: number | null,
     @Args('after') after?: string | null,
-  ): Promise<PostConnection> {
-    const page = await this.queryBus.execute(new FindAllPostsQuery.FindAllPosts(first, after));
-    return connectionOf(page, (post) => this.viewMapper.fromPost(post));
+  ): Promise<Cursor<Post>> {
+    return this.queryBus.execute(new FindAllPostsQuery.FindAllPosts(first, after));
   }
 }

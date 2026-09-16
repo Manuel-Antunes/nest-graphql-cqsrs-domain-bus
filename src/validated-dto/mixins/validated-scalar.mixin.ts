@@ -1,18 +1,11 @@
 import 'reflect-metadata';
 
-import type {
-  ValidationArguments,
-  ValidatorConstraintInterface,
-} from 'class-validator';
+import { type ValidationArguments, type ValidatorConstraintInterface, Validate, ValidatorConstraint } from 'class-validator';
 import { Expose, Transform } from 'class-transformer';
-import { Validate, ValidatorConstraint } from 'class-validator';
 import { z } from 'zod';
 
-import type { DECORATOR_REGISTRY_TYPE } from '../schemas/registries/decorators.registry';
-import { DECORATOR_REGISTRY as GLOBAL_DECORATOR_REGISTRY } from '../schemas/registries/decorators.registry';
-import type { EMBEDDED_REGISTRY_TYPE } from '../schemas/registries/embedded.registry';
-import { EMBEDDED_REGISTRY } from '../schemas/registries/embedded.registry';
-
+import { type DECORATOR_REGISTRY_TYPE, DECORATOR_REGISTRY as GLOBAL_DECORATOR_REGISTRY } from '../schemas/registries/decorators.registry';
+import { type EMBEDDED_REGISTRY_TYPE, EMBEDDED_REGISTRY } from '../schemas/registries/embedded.registry';
 // --- 1. Marcador e desembrulho ------------------------------------------------------------------
 
 /**

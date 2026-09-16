@@ -1,7 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
-import type { Observable } from 'rxjs';
-import { EMPTY } from 'rxjs';
+import { type Observable, EMPTY } from 'rxjs';
 import { Subscription } from '../classes/subscription';
 import { SubscriptionHandler } from '../decorators/subscription-handler.decorator';
 import type { ISubscriptionHandler } from '../interfaces/subscription-handler.interface';

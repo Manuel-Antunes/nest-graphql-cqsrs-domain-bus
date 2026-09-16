@@ -3,8 +3,7 @@ import { defineConfig } from '@mikro-orm/sqlite';
 import { Tag } from '../tag/tag.entity';
 import { TagId } from '../tag/vo/tag-id';
 import { AUTHOR_ROLE, User } from '../user/user.entity';
-import { Users } from '../user/user.factory';
-import { type Author } from '../user/author.entity';
+import { Author } from '../user/author.entity';
 import { UserId } from '../user/vo/user-id';
 import { UserName } from '../user/vo/user-name';
 import { PostCreatedEvent } from './event/post-created.event';
@@ -14,6 +13,7 @@ import { PostUpdatedEvent } from './event/post-updated.event';
 import { AlreadyDeletedException } from '../shared/already-deleted.exception';
 import { NotDeletedException } from '../shared/not-deleted.exception';
 import { InvalidPostException } from './exception/invalid-post.exception';
+import { issuesOf } from '../../../test/support/invalid-input';
 import { PostNotWrittenByException } from './exception/post-not-written-by.exception';
 import { PostSchema } from '../../infrastructure/persistence/sqlite/entities/post-orm.entity';
 import { TagSchema } from '../../infrastructure/persistence/sqlite/entities/tag-orm.entity';
@@ -65,7 +65,7 @@ describe('Post', () => {
    * qualquer. `canWritePosts()` é `this is Author` — é o tipo que faz a triagem, não um `if` solto.
    */
   const anAuthor = (): Ref<Author> => {
-    const user = Users.register(authorId, { email: 'manuel@example.com', name: 'manuel' }, AUTHOR_ROLE, now);
+    const user = Author.register(authorId, { email: 'manuel@example.com', name: 'manuel' }, AUTHOR_ROLE, now);
     if (!user.canWritePosts()) {
       throw new Error('AUTHOR_ROLE precisa nascer Author');
     }
@@ -102,12 +102,14 @@ describe('Post', () => {
 
   it('create with an invalid value raises nothing', () => {
     expect(() => Post.create(id, { title: '   ', content: 'oi' }, anAuthor(), authorName, now)).toThrow(InvalidPostException);
-    expect(() => Post.create(id, { title: 'ok', content: '' }, anAuthor(), authorName, now)).toThrow(/content não pode ser vazio/);
+    expect(issuesOf(() => Post.create(id, { title: 'ok', content: '' }, anAuthor(), authorName, now))).toContain(
+      'content não pode ser vazio',
+    );
   });
 
   it('create rejects a title longer than the maximum', () => {
-    expect(() => Post.create(id, { title: 'x'.repeat(201), content: 'oi' }, anAuthor(), authorName, now)).toThrow(
-      /title excede 200 caracteres/,
+    expect(issuesOf(() => Post.create(id, { title: 'x'.repeat(201), content: 'oi' }, anAuthor(), authorName, now))).toContain(
+      'title excede 200 caracteres',
     );
   });
 
@@ -154,7 +156,7 @@ describe('Post', () => {
     const post = aPost();
     post.uncommit();
 
-    expect(() => post.update({ title: '   ' }, later)).toThrow(/title não pode ser vazio/);
+    expect(issuesOf(() => post.update({ title: '   ' }, later))).toContain('title não pode ser vazio');
     expect(post.getUncommittedEvents()).toEqual([]);
   });
 
@@ -268,7 +270,7 @@ describe('Post', () => {
   describe('assertWrittenBy', () => {
     /** Outro autor, com id próprio: é a identidade que decide, não o nome nem o papel. */
     const outroAutor = () =>
-      Users.register(
+      Author.register(
         UserId.parse('3c2b1a09-8f7e-4d6c-9b5a-1e2d3c4b5a60'),
         { email: 'outro@example.com', name: 'outro' },
         AUTHOR_ROLE,
@@ -301,7 +303,7 @@ describe('Post', () => {
     it('compara por id, então o autor relido de outra origem também passa', () => {
       // Arrange
       const post = aPost();
-      const mesmoAutorOutraInstancia = Users.register(
+      const mesmoAutorOutraInstancia = Author.register(
         authorId,
         { email: 'manuel@example.com', name: 'manuel' },
         AUTHOR_ROLE,

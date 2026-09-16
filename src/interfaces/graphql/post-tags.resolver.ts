@@ -1,21 +1,29 @@
-import { Cursor } from '@mikro-orm/core';
+import { UseInterceptors } from '@nestjs/common';
 import { AllowAnonymous } from '@thallesp/nestjs-better-auth';
 import { Args, Parent, ResolveField, Resolver } from '@nestjs/graphql';
 import { FindAllPostsQuery } from '../../application/post/query/find-all-posts.query';
-import type { TagConnection } from '../../dto/graphql/post.connection';
+import { pageOf, type Page } from '../../dto/graphql/connection';
 import { PostView } from '../../dto/graphql/post.view';
+import { TagView } from '../../dto/graphql/tag.view';
+import { ConnectionInterceptor } from '../interceptors/connection.interceptor';
 
 /**
  * O campo `Post.tags(first, after)`: uma cursor connection sobre a lista de tags que **já veio** com o
- * post (é uma coluna JSON da própria linha), recortada em memória.
+ * post, recortada em memória.
  *
- * Não há DataLoader aqui porque não há N+1 a evitar: N posts numa resposta são N linhas, e as tags
- * estão dentro delas. Se um dia `tags` virar uma relação de verdade, a resposta nativa é o
- * `dataloader: DataloaderType.ALL` do MikroORM, que junta os `load()` de uma mesma rodada numa
- * consulta só — a fronteira deste resolver não mudaria.
+ * Não há DataLoader aqui porque não há N+1 a evitar: as tags de cada post são populadas junto com ele,
+ * e recortar uma lista já carregada não consulta nada.
  *
- * Os cursores usam o mesmo codec do `Cursor` do MikroORM que a connection de `posts` usa
- * (`Cursor.encode`/`Cursor.decode`): base64 do valor de ordenação — aqui, a posição absoluta da tag.
+ * ## O que este resolver faz, e o que ele parou de fazer
+ * Ele decide **o recorte** — o tamanho da página, clampado pelos mesmos limites de `Query.posts`, e
+ * onde ela começa. Montar o envelope (edges, cursores, `pageInfo`) já não é dele: ele devolve a
+ * {@link Page}, e o {@link ConnectionInterceptor} faz o resto, com o mesmo `connectionOf` que serve
+ * `Query.posts` e `Author.posts`. Eram três lugares montando connection; passou a ser um.
+ *
+ * ## Sem tradução de nó, e por quê
+ * O `ConnectionInterceptor()` vai **sem o par de modelos**: `post.tags` já é `TagView[]` — quem
+ * traduziu foi o mapeamento `Post → PostView`, lá atrás. Mapear de novo aqui seria traduzir o que já
+ * está traduzido.
  */
 /**
  * **Lacuna conhecida:** na versão Axon toda operação exige autenticação — o `leitor@example.com`
@@ -27,25 +35,16 @@ import { PostView } from '../../dto/graphql/post.view';
 @Resolver('Post')
 export class PostTagsResolver {
   @ResolveField('tags')
+  @UseInterceptors(ConnectionInterceptor())
   tags(
     @Parent() post: PostView,
     @Args('first') first?: number | null,
     @Args('after') after?: string | null,
-  ): TagConnection {
-    const limit = Math.min(Math.max(first ?? FindAllPostsQuery.DEFAULT_PAGE_SIZE, 1), FindAllPostsQuery.MAX_PAGE_SIZE);
-    const start = after ? Number(Cursor.decode(after)[0]) + 1 : 0;
-    const edges = post.tags
-      .slice(start, start + limit)
-      .map((tag, offset) => ({ cursor: Cursor.encode([start + offset]), node: tag }));
-    return {
-      edges,
-      pageInfo: {
-        hasNextPage: start + limit < post.tags.length,
-        hasPreviousPage: start > 0,
-        startCursor: edges[0]?.cursor ?? null,
-        endCursor: edges[edges.length - 1]?.cursor ?? null,
-      },
-      totalCount: post.tags.length,
-    };
+  ): Page<TagView> {
+    const limit = Math.min(
+      Math.max(first ?? FindAllPostsQuery.DEFAULT_PAGE_SIZE, 1),
+      FindAllPostsQuery.MAX_PAGE_SIZE,
+    );
+    return pageOf(post.tags, limit, after);
   }
 }

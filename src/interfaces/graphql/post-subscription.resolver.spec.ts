@@ -6,15 +6,16 @@ import { PostCreatedEvent } from '../../domain/post/event/post-created.event';
 import { PostUpdatedEvent } from '../../domain/post/event/post-updated.event';
 import { PostId } from '../../domain/post/vo/post-id';
 import { UserId } from '../../domain/user/vo/user-id';
-import { PostView } from '../../dto/graphql/post.view';
-import { PostViewMapper } from '../mapper/post-view.mapper';
 import { PostSubscriptionResolver } from './post-subscription.resolver';
 
 /**
  * A borda das subscriptions, com um `SubscriptionBus` de mentira.
  *
- * O resolver faz duas coisas, e as duas são tradução: **argumento → critério** e **evento → view**. O
- * que ele deliberadamente **não** faz é filtrar — o filtro é o método da mensagem, na camada de
+ * O resolver faz **uma** coisa, e é tradução: argumento → critério da subscription. A outra travessia
+ * — evento → view — virou o `MapSubscriptionInterceptor`, e é lá que ela é testada; aqui o que sai do
+ * iterador é o evento de domínio como o bus o entregou.
+ *
+ * O que ele deliberadamente **não** faz é filtrar — o filtro é o método da mensagem, na camada de
  * aplicação, e roda dentro do stream. Um `filter` que voltasse para cá seria avaliado por assinante e
  * obrigaria o transporte a peneirar o stream inteiro; por isso o teste do critério afirma o que foi
  * **pedido ao bus**, e não o que saiu do iterador.
@@ -37,7 +38,7 @@ describe('PostSubscriptionResolver', () => {
         return source.asObservable();
       },
     } as unknown as SubscriptionBus;
-    return { resolver: new PostSubscriptionResolver(bus, new PostViewMapper()), asked, source };
+    return { resolver: new PostSubscriptionResolver(bus), asked, source };
   };
 
   const created = () => new PostCreatedEvent(postId.value, 'nasceu', 'oi', authorId.value, 'manuel', now);
@@ -57,21 +58,20 @@ describe('PostSubscriptionResolver', () => {
       expect(asked[0]).toBeInstanceOf(OnPostCreatedSubscription.OnPostCreated);
     });
 
-    it('traduz cada PostCreated na view da criação', async () => {
+    /** O que sai é o evento; quem o traduz em `PostView` é o interceptor declarado no método. */
+    it('entrega o PostCreated que passou pelo bus', async () => {
       // Arrange
       const { resolver, source } = fixture();
       const stream = resolver.onPostCreated();
       const first = stream[Symbol.asyncIterator]().next();
+      const event = created();
 
       // Act
-      source.next(created());
+      source.next(event);
       const { value } = await first;
 
       // Assert
-      expect(value).toBeInstanceOf(PostView);
-      expect((value as PostView).id.equals(postId)).toBe(true);
-      expect((value as PostView).version).toBe(1);
-      expect((value as PostView).tags).toEqual([]);
+      expect(value).toBe(event);
     });
   });
 
@@ -102,20 +102,19 @@ describe('PostSubscriptionResolver', () => {
       expect((asked[1] as OnPostUpdatedSubscription.OnPostUpdated).criteria).toEqual({ postId: null });
     });
 
-    it('traduz cada PostUpdated na view com a versão do evento', async () => {
+    it('entrega o PostUpdated que passou pelo bus', async () => {
       // Arrange
       const { resolver, source } = fixture();
       const stream = resolver.onPostUpdated(postId.value);
       const first = stream[Symbol.asyncIterator]().next();
+      const event = updated(4);
 
       // Act
-      source.next(updated(4));
+      source.next(event);
       const { value } = await first;
 
       // Assert
-      expect(value).toBeInstanceOf(PostView);
-      expect((value as PostView).title.value).toBe('editado');
-      expect((value as PostView).version).toBe(4);
+      expect(value).toBe(event);
     });
 
     /**
@@ -137,7 +136,7 @@ describe('PostSubscriptionResolver', () => {
       const { value } = await first;
 
       // Assert
-      expect((value as PostView).id.equals(outroPost)).toBe(true);
+      expect((value as PostUpdatedEvent).postId).toBe(outroPost.value);
     });
 
     it('quando o cliente vai embora, o iterador fecha e larga o stream', async () => {

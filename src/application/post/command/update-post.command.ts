@@ -1,9 +1,10 @@
+import { AutoMap } from '@automapper/classes';
 import { Inject, Scope } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
 import { type AsyncContext, Command, CommandHandler, EventPublisher, type ICommandHandler } from '@nestjs/cqrs';
 import { PostNotFoundException } from '../../../domain/post/exception/post-not-found.exception';
 import { PostRepository } from '../../../domain/post/post.repository';
-import type { PostId } from '../../../domain/post/vo/post-id';
+import { PostId } from '../../../domain/post/vo/post-id';
 
 /** A fatia de `UpdatePost`: a mensagem e o handler dela — ver `CreatePostCommand` para o padrão. */
 export namespace UpdatePostCommand {
@@ -12,12 +13,20 @@ export namespace UpdatePostCommand {
    * valor atual" — quem sabe qual é o valor atual é a entidade, então o command só carrega a intenção.
    */
   export class UpdatePost extends Command<void> {
-    constructor(
-      readonly postId: PostId,
-      readonly title?: string | null,
-      readonly content?: string | null,
-    ) {
+    @AutoMap(() => PostId)
+    readonly postId: PostId;
+    // Tipo explícito: o TypeScript emite `design:type` `Object` para uma união, e o `@AutoMap()`
+    // descarta `Object` — o campo sairia do mapeamento em silêncio.
+    @AutoMap(() => String)
+    readonly title?: string | null;
+    @AutoMap(() => String)
+    readonly content?: string | null;
+
+    constructor(postId: PostId, title?: string | null, content?: string | null) {
       super();
+      this.postId = postId;
+      this.title = title;
+      this.content = content;
     }
   }
 

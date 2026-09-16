@@ -11,7 +11,7 @@ import { FindPostsByAuthorQuery } from './find-posts-by-author.query';
  *
  * Esse último ponto é o que justifica este método existir na porta em vez de o campo usar o
  * `Author.posted` do agregado: sem `populate`, `post.tags` volta não inicializada e o
- * `PostViewMapper.fromPost` estoura na borda — longe daqui, e num lugar onde a causa não aparece.
+ * mapeamento `Post → PostView` estoura na borda — longe daqui, e num lugar onde a causa não aparece.
  */
 describe('FindPostsByAuthorQuery.Handler', () => {
   let module: TestingModule;
@@ -79,7 +79,7 @@ describe('FindPostsByAuthorQuery.Handler', () => {
   });
 
   /**
-   * As duas relações que o `PostViewMapper` lê: `tags` como coleção inicializada e `author` como
+   * As duas relações que o `Post → PostView` lê: `tags` como coleção inicializada e `author` como
    * referência carregada. É o contrato que a borda depende, e por isso ele é afirmado aqui.
    */
   it('os posts voltam com tags e author populados, prontos para a view', async () => {

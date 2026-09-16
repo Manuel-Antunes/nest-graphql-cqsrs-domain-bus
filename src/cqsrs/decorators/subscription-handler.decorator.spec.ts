@@ -1,6 +1,5 @@
 import { Scope } from '@nestjs/common';
-import type { Observable } from 'rxjs';
-import { EMPTY } from 'rxjs';
+import { type Observable, EMPTY } from 'rxjs';
 import { Subscription } from '../classes/subscription';
 import type { ISubscriptionHandler } from '../interfaces/subscription-handler.interface';
 import { SUBSCRIPTION_HANDLER_METADATA, SUBSCRIPTION_METADATA } from './constants';

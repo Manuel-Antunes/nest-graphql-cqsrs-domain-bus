@@ -19,7 +19,9 @@ E a request é uma só, do começo ao fim da cadeia. Os command handlers são `{
 Estado em **SQLite** via MikroORM; event store em memória (o próprio `EventBus`).
 
 ```
-mutation createPost(input) ──► PostInputMapper.toCreateCommand(input)     [protocolo → command; gera o PostId]
+mutation createPost(input, @CurrentAuthor() author)                      [protocolo → command: o AutoMapper
+                              │  mapper.mapAsync(input, CreatePostInput,     monta o CreatePost, gera o PostId,
+                              │    CreatePost, { extraArgs: () => ({ author }) })  e recebe o autor por extraArgs]
                               │
                               └─► commandBus.execute(command, new PostRequest(command.postId))
                                        │                          [a request nasce na borda; sua chave é o PostId]
@@ -48,8 +50,9 @@ mutation createPost(input) ──► PostInputMapper.toCreateCommand(input)     
                                    um stream por critério; desliga quando o último assinante sai
                                                                     │
                                                                     ▼
-                  PostSubscriptionResolver: subscribeAsAsyncIterable(bus, new OnPostUpdatedSubscription.OnPostUpdated({ postId }),
-                                                                     evento => PostView)  ──► @Subscription({ resolve })
+                  PostSubscriptionResolver: subscribeAsAsyncIterable(bus, new OnPostUpdatedSubscription.OnPostUpdated({ postId }))
+                                   MapSubscriptionInterceptor(PostUpdatedEvent, PostView): traduz cada evento
+                                   que passa pelo stream  ──► @Subscription({ resolve })
                                                                     │
                                                                     ▼
                   Apollo ──► graphql-ws (WebSocket em /graphql) ──► { "data": { "onPostUpdated": { ... } } }
@@ -66,6 +69,7 @@ mutation createPost(input) ──► PostInputMapper.toCreateCommand(input)     
 | `@nestjs/graphql` + `@nestjs/apollo` + `@apollo/server` | 14.x / 5.x — schema-first (`typePaths`), subscriptions por `graphql-ws` |
 | MikroORM (`core`, `sqlite`, `nestjs`, `decorators`) | 7.x — `defineEntity`, `findByCursor`, `@CreateRequestContext` |
 | Zod | 4.x — os value objects |
+| AutoMapper (`@automapper/core`, `classes`, `nestjs`) | 9.x — `@AutoMap()` nas classes (e no shape Zod, pelo `DECORATOR_REGISTRY`, nos DTOs gerados), perfis, `typeConverter` para os value objects, e `MapPipe`/`MapInterceptor` para que nenhum resolver chame o mapper (ESM-only, como o MikroORM: roda pelo `require(esm)` do Node) |
 | Vitest + `unplugin-swc` | testes (a receita do Nest para SWC; o Jest não faz `require()` de ESM no Node 22) |
 
 ## Camadas
@@ -95,15 +99,27 @@ src
 │   ├── post.view, tag.view                      #   saída: campos são value objects; a serialização os colapsa
 │   │                                            #   post.view leva authorId (não o nome): Post.author é resolvido
 │   ├── user.view                                #   ReaderView/AuthorView + UserView (a união: o sealed interface)
-│   └── connection, post.connection              #   PageInfo + ConnectionType<T> + connectionOf(Cursor) → Post/TagConnection
+│   └── connection, post.connection              #   PageInfo + ConnectionType<T> + Page<E> + pageOf(lista)
+│                                                #     + connectionOf(page) → Post/TagConnection
 ├── validated-dto                                # o mixin que gera as classes de DTO a partir de um schema Zod
 │   ├── mixins/validated-dto.mixin               #   ValidatedDto(objeto|união) + .Embeddable (VO de vários campos)
 │   ├── mixins/validated-scalar.mixin            #   ValidatedDto.Scalar: VO de um valor só (toString/equals/parse/field)
 │   └── schemas/registries                       #   decorators (os que o campo pendura no schema) + embedded (schema → VO)
-├── mapper                                       # TODO mapeamento do projeto
-│   ├── post-input.mapper                        #   input GraphQL → command   (protocolo → aplicação)
-│   ├── post-view.mapper                         #   Post | evento → PostView  (domínio → protocolo)
-│   └── user-view.mapper                         #   User → Reader/AuthorView  (despacho pelo TIPO, à mão)
+├── mapper                                       # TODO mapeamento do projeto — AutoMapper 9, declarado
+│   ├── post.profile                             #   Post|evento ↔ PostView, input ↔ command: só as DIFERENÇAS
+│   ├── user.profile                             #   Reader→ReaderView, Author→AuthorView (zero linhas de campo)
+│   ├── value-object.converter                   #   valueObjectConverter(PostTitle, String): VO ↔ cru, nos dois
+│   │                                            #     sentidos; cada perfil declara os seus
+│   ├── validated-dto.strategy                   #   classes() + preMap: @Args crus viram o DTO antes de mapear
+│   └── mapper-error.handler                     #   o que o mapeador reclama vai para o Logger do Nest
+│
+├── interfaces/interceptors                      # a saída, sem NENHUM resolver chamando o mapper
+│   ├── connection.interceptor                   #   Page<E> → ConnectionType<T>, as TRÊS connections
+│   │                                            #     do schema. ConnectionInterceptor(Post, PostView)
+│   │                                            #     traduz o nó; ConnectionInterceptor() só envelopa
+│   ├── map-subscription.interceptor             #   embrulha o AsyncIterable e traduz evento a evento
+│   └── user-view.interceptor                    #   o despacho pelo TIPO: a única escolha que o runtime faz
+│
 │
 ├── domain                                       # regras e invariantes; NENHUM mapeamento (ver infrastructure)
 │   ├── shared/domain-event, aggregate-entity    #   marcador dos fatos + AggregateEntity = WithAggregateRoot(BaseEntity)
@@ -119,10 +135,10 @@ src
 │   │   ├── event/post-created.event, post-updated.event   # payload primitivo; estado resultante completo
 │   │   └── exception/invalid-post, post-not-found, post-already-exists
 │   ├── user                                     #   agregado polimórfico, herança multi-tabela
-│   │   ├── user.entity                          #     a raiz ABSTRATA; não conhece as subclasses
+│   │   ├── user.entity                          #     a raiz ABSTRATA; NÃO conhece as subclasses
+│   │   │                                        #       register(): construtor nomeado com `new this()`
 │   │   ├── reader.entity, author.entity         #     os tipos concretos, um por arquivo
 │   │   │                                        #       Author.posts: coleção inversa, paginada, nunca carregada
-│   │   ├── user.factory                         #     Users.register/fromHistory: o papel decide a classe
 │   │   ├── identity.provider                    #     PORTA do provedor de identidade: findById + grantRole
 │   │   │                                        #       (Identity = credentialId, email, name, role)
 │   │   └── user.repository, vo/user-id, email, user-name, credential-id
@@ -218,7 +234,7 @@ Schema em `src/graphql/` — **schema-first**: o SDL é a definição, e não a 
 | `ClassNameTypeResolver` num `@Bean` (`ReaderView` → `Reader`, `AuthorView` → `Author`) | um `__resolveType` no `@Resolver('User')`: o @nestjs/graphql o reconhece pelo nome e o pendura na interface |
 | `@PreAuthorize("isAuthenticated()")` no `me` | o guard global do `@thallesp/nestjs-better-auth`: exigir sessão é o **padrão**, e as leituras de post são a exceção que opta por fora com `@AllowAnonymous()` |
 | `Author.posts` por `@SchemaMapping` + DataLoader, recortado em memória | `@ResolveField('posts')` → `QueryBus` → `em.findByCursor` com `where: { author }`: a página é uma consulta com `limit`, não um recorte de tudo. Sem DataLoader porque `Post.author` é `String!`, então há **um** Author por resposta |
-| MapStruct | `PostInputMapper` / `PostViewMapper` injetáveis, à mão; `UserViewMapper` também à mão, mas por outro motivo: o destino depende do **tipo em runtime** |
+| MapStruct | **AutoMapper 9** (`@automapper/core` + `classes` + `nestjs`): `@AutoMap()` nas próprias classes — e, nos DTOs gerados, no shape Zod pelo `DECORATOR_REGISTRY`, que é o mesmo gancho por onde qualquer outro decorator de campo entra —, dois perfis (`PostProfile`, `UserProfile`), cada um declarando os value objects que atravessa com um `valueObjectConverter(PostTitle, String)` que vale para todos os mapeamentos daquele perfil, nos dois sentidos. A saída nunca passa por um resolver: ela vem por **interceptor** (`MapInterceptor` e os três do projeto — connection, subscription e o despacho polimórfico do `me`, que é o único que um mapeador não decide sozinho). A entrada vem por `MapPipe` onde o input basta; no `createPost` ela é uma chamada explícita, porque o command precisa do autor da sessão e um pipe não enxerga o `ExecutionContext` |
 | Bean Validation na borda + VO no domínio | uma altura só: o domínio (Zod); o `DomainExceptionFilter` traduz para `BAD_USER_INPUT` |
 | `AppGraphQlExceptionHandler` | `APP_FILTER` com um `ExceptionFilter` que **devolve** um `GraphQLError` |
 
@@ -331,12 +347,16 @@ pnpm test:all
 - `find-all-posts.query.spec` — a mecânica da cursor connection de `posts`: a linha a mais que decide o `hasNextPage` nunca vaza, o `endCursor` de uma página é o `after` da seguinte.
 - `assign-default-tag-on-post-created.saga.spec` — a saga é uma função `Observable → Observable`: alimenta-se um `of(evento)` e colhem-se os commands. Cria a tag quando não existe, reusa quando existe, serializa dois posts criados ao mesmo tempo, **sobrevive a uma falha** (sem o `catchError` por evento, o `EventBus` completaria o stream e nenhum post futuro ganharia tag), tira o `PostId` da request que veio carimbada no evento em vez do primitivo do payload, carimba o command que devolve com a mesma request — e cai no `PostId.parse` quando o evento chega sem request nenhuma.
 - `post-request.spec` — a propagação de ponta a ponta, com os quatro command handlers e a saga no mesmo módulo: um `createPost` abre uma cadeia de três eventos por três handlers request-scoped diferentes, dois deles despachados pela saga, e os três saem carimbados com **o mesmo objeto**. Confere também que a chave viaja como *metadado*: o `PostId` chega à saga como value object, o payload do evento continua primitivo, e o carimbo (não-enumerável, sob um símbolo) não aparece no `toEqual` de um evento.
-- `post-tags.resolver.spec` — o recorte em memória de `Post.tags`, que é a parte da connection que é lógica nossa.
+- `post-tags.resolver.spec` — o **recorte** de `Post.tags`, que é a parte da connection que é lógica nossa; o envelope saiu daqui e está no `connection.interceptor.spec`.
+- `post-mutation.resolver.spec` — a borda de escrita, com o mapper **de verdade** e não um duplo: o que se afirma é a costura entre o `extraArgs` que o `createPost` passa e o `mapWithArguments` que o perfil declara. Inclui o teste que explica o desenho: um autor forjado no corpo da requisição não muda o command, porque o autor vem da sessão. E a `PostRequest`, que é o que só este resolver faz — um `execute` sem esse contexto compila, passa no e2e feliz, e quebra a saga.
+- `post.profile.spec` — os mapeamentos do agregado Post, sem Nest, sem banco e sem GraphQL. O que ele prende não são os campos que o mapeamento **escreve**: são os que ele escreve *sem que ninguém tenha mandado*. Um `forMember` esquecido aparece em qualquer teste; um campo que atravessava sozinho e parou (porque perdeu o `@AutoMap()`, ou porque o nome mudou de um lado só) não aparece em lugar nenhum — o AutoMapper o deixa `undefined` e segue. Daí cada caso conferir a view **inteira**. Cobre também a travessia dos value objects nos dois sentidos e o contrato que o `preMap` sustenta: mapear a partir do objeto **cru** (que é o que o @nestjs/graphql entrega) tem de dar o mesmo resultado que mapear a partir do DTO.
+- `connection.interceptor.spec` — a montagem da cursor connection, num lugar só para as três do schema: os cursores vêm de `page.from(item)`, os flags do que a página calculou (`hasPreviousPage` ← `hasPrevPage`, que é o mapeamento que pode quebrar), e a página inteira é traduzida numa passada em vez de uma por edge. Cobre os dois usos da sobrecarga — com o par de modelos e sem ele —, e que o envelope que os dois montam é o mesmo.
+- `map-subscription.interceptor.spec` — o embrulho do stream, e sobretudo o caso que um `async function*` **não** cobre: um cliente que abre a subscription e fecha a aba antes de qualquer evento. Nessa posição um gerador está suspenso num `await`, e o `return()` que vem de fora entra na fila dele em vez de interrompê-lo — a fonte nunca é fechada e a assinatura fica pendurada no `EventBus`. Um vazamento por cliente que desconecta, invisível para qualquer teste que consuma um item primeiro.
 - `find-author.query.spec` — o autor de um post, e **dois testes que não são sobre o resultado**: que resolver o autor de uma página de posts custa **zero consultas** (contadas no driver, com um controle que prova que o contador conta) e que o handler funciona **fora** de qualquer contexto de requisição, que é o caminho da subscription. Tirar o `'author'` do `populate` do repositório quebra o primeiro; tirar o `inRequestContext` do adapter quebra o segundo.
 - `post-author.resolver.spec` — a troca do `authorId` pelo `Author`: o id vai na mensagem como value object, o agregado volta como `AuthorView`, e um autor que já não está lá é **erro** e não `null` — `Author!` não admite um campo não-nulo vazio.
-- `user-view.mapper.spec` — o despacho polimórfico da borda, sem ORM nenhum no meio: quem decide a classe da view é `canWritePosts()`, que é `this is Author`. Um papel qualquer (ou papel nenhum) vira `ReaderView`; `author` vira `AuthorView`. E os três campos saem já normalizados pelo domínio, porque são os mesmos value objects.
-- `user-query.resolver.spec` — `me` e o `__resolveType` juntos, que é onde a regressão moraria: o que o mapper escolheu é o que o `__resolveType` anuncia. Se os dois discordassem, um autor receberia `Reader` no `__typename` e o fragmento `... on Author` deixaria de casar — uma resposta válida e errada. Também que o nome devolvido é o do **schema** (`Author`), não o da classe (`AuthorView`): errar isso quebra em runtime, no graphql-js, e não na compilação.
-- `author-posts.resolver.spec` — `Author.posts` isolado: o id do parent vira `FindPostsByAuthor` como value object, e **nenhum flag de `pageInfo` é conta do resolver** — eles vêm do `Cursor`, pelo `connectionOf`. Um autor sem posts é uma página vazia, e o mapper não é chamado.
+- `user-view.interceptor.spec` — o despacho polimórfico da borda, sem ORM nenhum no meio: quem decide a classe da view é `canWritePosts()`, que é `this is Author`. Um papel qualquer (ou papel nenhum) vira `ReaderView`; `author` vira `AuthorView`. O teste espia o **par de identificadores** passado ao mapper, e não os campos que saíram: um despacho errado produziria uma view com todos os campos certos e o tipo errado, e nenhuma asserção sobre campos o veria.
+- `user-query.resolver.spec` — `me` e o `__resolveType` juntos, que é onde a regressão moraria: o que o interceptor escolheu é o que o `__resolveType` anuncia. Se os dois discordassem, um autor receberia `Reader` no `__typename` e o fragmento `... on Author` deixaria de casar — uma resposta válida e errada. Também que o nome devolvido é o do **schema** (`Author`), não o da classe (`AuthorView`): errar isso quebra em runtime, no graphql-js, e não na compilação.
+- `author-posts.resolver.spec` — `Author.posts` isolado: o id do parent vira `FindPostsByAuthor` como value object, e o resolver devolve o `Cursor` como o ORM o produziu. Os flags de `pageInfo` são afirmados **uma vez só**, no `connection.interceptor.spec` — antes eram três testes paralelos (aqui, em `Query.posts` e em `Post.tags`) que podiam divergir sem ninguém reclamar, porque cada connection era montada no seu próprio resolver.
 - `find-posts-by-author.query.spec` — a connection de `Author.posts` contra o banco: a ordem decrescente (o contrário de `posts`), o recorte por autor (os posts de outro não entram nem no `totalCount`), um id desconhecido como página vazia em vez de erro — e que os posts voltam com `tags` e `author` **populados**, que é o contrato de que a borda depende e a razão de o método morar na porta e não no agregado.
 - `validated-scalar.mixin.spec` — o value object escalar sozinho: normalização pelo schema, `toString`/`toJSON`/`valueOf`/hint numérico (inclusive `Date` → ISO, que o `JSON.stringify` não faria sozinho), igualdade por família, `parse` que não aplica um `transform` duas vezes, e as duas formas de especializar (`narrow` e sobrescrever `static schema`).
 - `validated-dto-embedded.spec` — o value object **dentro** de um DTO: o construtor monta a classe, a serialização a colapsa, o `class-validator` continua reportando a mensagem do schema, e o `design:type` do campo passa a ser a classe (é o que um `@Field` sem thunk leria). Cobre opcional/nulo/default, listas, e o `Embeddable` de vários campos.
@@ -415,7 +435,7 @@ O par mensagem/handler é o que menos se separa nesta arquitetura — mudar o qu
 
 Duas notas de quem implementou. A primeira: o namespace **não** pode declarar um membro chamado `Command` ou `Query` — o nome sombrearia o import do @nestjs/cqrs dentro dele e a classe herdaria de si mesma (`TS2506`); daí `CreatePostCommand.CreatePost` e não `CreatePost.Command`. A segunda é o preço: em runtime todos os handlers se chamam `Handler`, então um erro de injeção do Nest sai como *"can't resolve dependencies of the Handler (?)"* sem dizer qual — a dependência que faltou e o arquivo do stack trace continuam lá, mas o nome da classe deixou de ajudar. (Declarar a classe com nome descritivo e reexportá-la como `Handler` resolveria; o SWC não aceita `export { X as Y }` dentro de um namespace.)
 
-**Uma request, uma cadeia — e a chave é o `PostId`.** O fork do EntityManager resolve a metade *transacional* do `ProcessingContext` do Axon; a outra metade é a **identidade** do pedido, e essa é o [request scoping/propagation](https://docs.nestjs.com/recipes/cqrs#request-scoping) do @nestjs/cqrs. Na versão Java, `@TargetEntityId PostId postId` no command roteava para o stream e `@EventTag` marcava os eventos com o mesmo id: uma chave gerada na borda (`PostId.newId()`) atravessava o pedido inteiro e amarrava os fatos uns aos outros. Aqui a chave é a mesma — o `PostId` que o `PostInputMapper` gera —, e quem a carrega é uma `PostRequest extends AsyncContext`:
+**Uma request, uma cadeia — e a chave é o `PostId`.** O fork do EntityManager resolve a metade *transacional* do `ProcessingContext` do Axon; a outra metade é a **identidade** do pedido, e essa é o [request scoping/propagation](https://docs.nestjs.com/recipes/cqrs#request-scoping) do @nestjs/cqrs. Na versão Java, `@TargetEntityId PostId postId` no command roteava para o stream e `@EventTag` marcava os eventos com o mesmo id: uma chave gerada na borda (`PostId.newId()`) atravessava o pedido inteiro e amarrava os fatos uns aos outros. Aqui a chave é a mesma — o `PostId` que o mapeamento `CreatePostInput → CreatePost` gera —, e quem a carrega é uma `PostRequest extends AsyncContext`:
 
 ```ts
 // a borda cria a request; a chave é o id do command
@@ -503,7 +523,23 @@ Isso cobrou duas coisas, e as duas apareceram como teste vermelho antes de apare
 
 A segunda foi um **bug latente que a chave estrangeira revelou**: a promoção gravava o stream encerrado (`superseded_by` → o novo autor) *antes* de o autor existir. Com um `UserId` solto ninguém reclamava; com a FK, recusa na hora. A correção não é inverter a ordem — isso trocaria um estado inconsistente por outro, com o autor criado e o leitor ainda ativo. É **uma transação só**: `UserRepository.saveAll([author, reader])`, e o unit of work ordena o insert antes do update. Não existe mais instante em que o banco esteja inconsistente — o que, de quebra, torna impossível o "stream órfão" que o `pendingPromotionId` existe para recuperar.
 
-**`Reader` e `Author` em arquivos próprios — e a fábrica num terceiro.** Na versão Java `User.register(...)` mora na raiz e a lista de tipos é uma anotação nela (`concreteTypes = {Reader.class, Author.class}`): a raiz cita os filhos, os filhos estendem a raiz, e o compilador resolve o mútuo. Em TypeScript isso é um **ciclo de módulo com efeito real** — `class Author extends User` precisa do `User` já avaliado, então quem carregasse `user.entity` primeiro veria `extends undefined`. Tentei auto-registro (cada subclasse se anunciando ao carregar) e o teste mostrou o defeito imediatamente: um spec que importava só `user.entity` e `author.entity` construía users sem o tipo de fallback — e a falha é silenciosa, um author nasceria leitor. A saída é `user.factory`: **um módulo que conhece os três**. O grafo fica de mão única, e importar `Users` traz a hierarquia inteira; não há como pedir metade dela.
+**O construtor nomeado é da raiz, mas quem escolhe a classe é quem chama.** Na versão Java `User.register(...)` mora na raiz e a lista de tipos é uma anotação nela (`concreteTypes = {Reader.class, Author.class}`): a raiz cita os filhos, e o framework instancia o certo lendo o primeiro evento do stream. Copiar isso em TypeScript custa caro de duas formas. A raiz citando os filhos é um **ciclo de módulo com efeito real** — `class Author extends User` precisa do `User` já avaliado, então quem carregar `user.entity` primeiro vê `extends undefined` e o processo morre no load (dá para reproduzir com quatro arquivos; o erro é `Class extends value undefined`). E um `if` de papel na raiz é a raiz sabendo o que uma string do provedor de identidade significa, que não é assunto dela.
+
+O que ficou não tem nem uma coisa nem outra:
+
+```ts
+static register<T extends User>(this: new () => T, …): T {
+  const user = new this();          // a classe é a de quem chamou
+  user.apply(new UserRegisteredEvent(…));
+  return user;
+}
+```
+
+`Author.register(...)` devolve um `Author`, `Reader.register(...)` um `Reader`, e a raiz não nomeia nenhum dos dois — então não há ciclo, e os tipos concretos voltam a morar cada um no seu arquivo. `User.register(...)` **não compila**: o `this: new () => T` recusa um construtor abstrato, e é essa a guarda que substituiu o antigo `emptyFor` — em vez de a raiz escolher por um papel, o compilador exige que quem chama já tenha escolhido.
+
+A tradução papel → tipo ficou onde ela pertence: no `UserProvisioning`, que é quem conhece os dois lados. `promote()` nem traduz nada — promover **é** criar um autor, então ele chama `Author.register(...)` e devolve `Author`.
+
+Não há `fromHistory`: `register` já devolve o agregado pronto, e reconstituir um stream é `new Reader()` + `loadFromHistory(...)`, igual ao `Post`. O par decidir/reconstituir existia porque o Axon precisava adivinhar a classe pelo primeiro evento; sem essa adivinhação, ele não tem o que fazer. O `role` continua no `UserRegisteredEvent`, mas como **retrato** — o fato de que aquela pessoa tinha aquele papel quando nasceu —, e não como despacho.
 
 **`Author.posts`, e o convite que ela não aceita.** O `Author` da versão Java deliberadamente **não** tem esta coleção, e o javadoc diz por quê: "um autor produtivo tem milhares de posts, e uma coleção mapeada é um convite a carregar todos para responder qualquer coisa". O convite é real. A resposta aqui não foi abrir mão da coleção — foi não expor o que o aceita: não há `loadItems()` na classe, e os dois métodos que ela oferece vão ao banco com `limit`/`count`. `posted({ limit, offset })` usa o `matching()` da própria coleção, e `postCount()` é um `count(*)`. O `author.entity.spec` afirma isso diretamente: depois de paginar e de contar, `posts.isInitialized()` continua `false`.
 
@@ -517,13 +553,13 @@ A saída que *parece* óbvia não funciona, e vale saber por quê: confiar no id
 
 **Terceiro: o domínio deixou de rodar sem o ORM.** Uma `Collection` descobre a que propriedade pertence lendo a metadata do dono (`Collection.property` → `wrap(owner).__meta`), então qualquer `add`/`set` numa entidade não descoberta estoura `MetadataError`. O `post.entity.spec` passou a inicializar um MikroORM só para a descoberta — sem `ensureDatabase`, sem tabela, sem leitura. Não há como evitar: `propagationOnPrototype: false` não serve, porque a flag é lida do config de um ORM **já inicializado** (`EntityHelper`) e não passa perto desse getter.
 
-O `Post.tags(first, after)` do schema não mudou: o `PostViewMapper` achata a coleção populada para a `PostView`, e o `PostTagsResolver` continua recortando em memória. O schema é byte a byte o mesmo.
+O `Post.tags(first, after)` do schema não mudou: o mapeamento `Post → PostView` achata a coleção populada para a `PostView` (por um `mapWith`, que delega ao `Tag → TagView`), e o `PostTagsResolver` continua recortando em memória. O schema é byte a byte o mesmo.
 
 **Cursor connection montada pelo ORM.** `posts(first, after)` é `em.findByCursor(Post, { first, after, orderBy: { createdAt: 'asc', id: 'asc' } })`. O `Cursor` devolvido já traz `items`, `hasNextPage`, `startCursor`/`endCursor` e `from(entidade)` para o cursor de cada edge; o resolver só monta o shape. A ordenação é `createdAt, id` porque `createdAt` sozinho não é único. Os tipos `PostConnection`/`PostEdge`/`PageInfo` estão escritos no schema; do lado do TypeScript sobra `ConnectionType<T>`, um tipo genérico sem comportamento. As tags usam `Cursor.encode`/`Cursor.decode` do próprio MikroORM para os cursores, então as duas connections falam o mesmo dialeto.
 
-**`me` devolve uma interface, e o casting é do tipo — não de uma claim.** `me: User!` é a única query polimórfica do schema, e a cadeia que a sustenta não tem um `if` de autorização em lugar nenhum: o `UserProvisioning` devolve o perfil que o ORM hidratou (`Reader` ou `Author`, decidido por existir linha em `authors`), o `UserViewMapper` despacha por `canWritePosts()` — que é `this is Author` —, e o `__resolveType` traduz a classe do DTO no nome do schema. O efeito é que `... on Author { posts }` **não casa** para um leitor, e a resposta sai sem o campo em vez de sair com uma lista vazia. O papel no cookie continua existindo e continua barrando cedo (`@Roles([AUTHOR_ROLE])` nas mutations), mas o que *aparece* numa resposta vem da hierarquia real: não há flag a forjar.
+**`me` devolve uma interface, e o casting é do tipo — não de uma claim.** `me: User!` é a única query polimórfica do schema, e a cadeia que a sustenta não tem um `if` de autorização em lugar nenhum: o `UserProvisioning` devolve o perfil que o ORM hidratou (`Reader` ou `Author`, decidido por existir linha em `authors`), o `UserViewInterceptor` despacha por `canWritePosts()` — que é `this is Author` — entre os dois mapeamentos do `UserProfile`, e o `__resolveType` traduz a classe do DTO no nome do schema. O efeito é que `... on Author { posts }` **não casa** para um leitor, e a resposta sai sem o campo em vez de sair com uma lista vazia. O papel no cookie continua existindo e continua barrando cedo (`@Roles([AUTHOR_ROLE])` nas mutations), mas o que *aparece* numa resposta vem da hierarquia real: não há flag a forjar.
 
-**`Post.author` é um `Author`, e isso tornou o schema um grafo.** Era `author: String!` — o nome copiado para a `PostView` —, e um nome não é navegável: o protocolo parava ali. Agora a view carrega `authorId` e o campo é resolvido à parte, então `post → author → posts → author` fecha o ciclo. O `!` não é otimismo: a coluna `posts.author_id` aponta para `authors`, então a chave estrangeira já garante que o autor de um post nunca é um `Reader` — e é por isso que o `UserViewMapper` ganhou um `fromAuthor` tipado em vez de o resolver fazer um cast.
+**`Post.author` é um `Author`, e isso tornou o schema um grafo.** Era `author: String!` — o nome copiado para a `PostView` —, e um nome não é navegável: o protocolo parava ali. Agora a view carrega `authorId` e o campo é resolvido à parte, então `post → author → posts → author` fecha o ciclo. O `!` não é otimismo: a coluna `posts.author_id` aponta para `authors`, então a chave estrangeira já garante que o autor de um post nunca é um `Reader` — e é por isso que este campo usa um `MapInterceptor(Author, AuthorView)` direto, sem o despacho polimórfico do `me`: aqui não há tipo a decidir em runtime.
 
 A troca tem um custo, e ele não é o mesmo nos dois caminhos. Nas **leituras** é zero: o repositório já populava o autor junto do post, então ele está no identity map da requisição e a resolução não emite consulta — medido no driver, com um controle, no `find-author.query.spec`. Nas **subscriptions** é uma consulta por payload entregue, e isso é a parte interessante: a view de `onPostCreated` nasce do payload do evento justamente para não tocar o banco, e o evento carrega `authorId` **e** `authorName`, mas não e-mail — porque o e-mail de alguém não é um fato sobre um post. Quem pede `author` numa subscription está pedindo algo que não está no evento, e paga por isso; quem pede só `id title version` continua sem tocar o banco.
 
@@ -537,15 +573,17 @@ Uma consequência que ficou por decidir: o `authorName` dos eventos já **não �
 
 **Portas como classes abstratas.** `PostRepository` e `TagRepository` são `abstract class`, não `interface`: no Nest a classe é ao mesmo tempo o contrato e o token de injeção (`{ provide: PostRepository, useClass: MikroOrmPostRepository }`), sem `@Inject('TOKEN')`.
 
-**Uma altura de validação — mesmo com value objects na borda.** A versão Java validava na borda (Bean Validation) e no domínio. Aqui só o domínio valida, e isso não mudou quando `CreatePostInput` passou a declarar `title: PostTitle`: o construtor de um value object gerado **não lança** — ele normaliza pelo schema e, se o valor for inválido, guarda o valor cru para quem quiser perguntar (`isValid()`, ou o `class-validator`). Um título em branco continua atravessando a borda e sendo rejeitado pelo domínio, e o `DomainExceptionFilter` o entrega ao cliente como `BAD_USER_INPUT` com a mensagem do value object. A única exceção continua sendo a mesma de antes, agora escrita como `id.assertValid()` no `PostInputMapper` — um id que não é UUID nem vira command.
+**Uma altura de validação — mesmo com value objects na borda.** A versão Java validava na borda (Bean Validation) e no domínio. Aqui só o domínio valida, e isso não mudou quando `CreatePostInput` passou a declarar `title: PostTitle`: o construtor de um value object gerado **não lança** — ele normaliza pelo schema e, se o valor for inválido, guarda o valor cru para quem quiser perguntar (`isValid()`, ou o `class-validator`). Um título em branco continua atravessando a borda e sendo rejeitado pelo domínio, e o `DomainExceptionFilter` o entrega ao cliente como `BAD_USER_INPUT` com a mensagem do value object. A única exceção continua sendo a mesma de antes, agora escrita como `id.assertValid()` num `forMember` do `PostProfile` — um id que não é UUID nem vira command. Quando ela dispara, o AutoMapper embrulha a falha num `MapMemberError`, e o `DomainExceptionFilter` a descasca de volta para o erro de domínio: o cliente continua recebendo `BAD_USER_INPUT` com a mensagem do value object, e não um 500 falando do mapeador.
 
 **Exception filter que devolve, não escreve.** Num resolver GraphQL, um `ExceptionFilter` não escreve resposta: **devolve** o erro, e o @nestjs/graphql o lança de volta para o graphql-js, que o coloca em `errors[]`. `includeStacktraceInErrorResponses: false` no Apollo mantém `extensions` só com o `code`.
 
 ## Pegadinhas de versão (setembro de 2026)
 
-- **MikroORM 7 é ESM-only.** A app roda em CommonJS porque o Node 22 faz `require(esm)`; o Jest não — daí Vitest + `unplugin-swc`, que é a receita do próprio Nest para SWC. Os decorators do ORM (`@CreateRequestContext`, `@Transactional`) moram em `@mikro-orm/decorators/legacy` (TypeScript `experimentalDecorators`) — o pacote `es` é para os decorators do TC39.
+- **MikroORM 7 e AutoMapper 9 são ESM-only.** A app roda em CommonJS porque o Node 22 faz `require(esm)`; o Jest não — daí Vitest + `unplugin-swc`, que é a receita do próprio Nest para SWC. Os decorators do ORM (`@CreateRequestContext`, `@Transactional`) moram em `@mikro-orm/decorators/legacy` (TypeScript `experimentalDecorators`) — o pacote `es` é para os decorators do TC39.
 - **TypeScript 7 não tem API programática.** O Nest CLI recusa; o `package.json` pina `typescript@^6`. O `tsconfig.build.json` precisa de `rootDir` explícito (TS 6).
 - **graphql 16.** O `@nestjs/graphql` 14 aceita 16 e 17; ficou o 16 por compatibilidade com o ecossistema de subscriptions.
+- **O `@automapper/nestjs` 9 declara peer de `@nestjs/*` 10 ou 11**, e este projeto está no 12. O pnpm avisa; o pacote usa só `Module`, `mixin`, `Inject` e `Optional`, que não mudaram — e o e2e exercita o `MapPipe` e o `MapInterceptor` no caminho real.
+- **`fieldResolverEnhancers: ['interceptors']` não é opcional aqui.** Por padrão o @nestjs/graphql liga guards/filters/interceptors só nos resolvers de raiz e os **desliga** nos `@ResolveField`. Sem essa linha, `Post.author` e `Author.posts` devolveriam o agregado cru — e o sintoma é um `Cannot return null for non-nullable field PostConnection.edges`, que não aponta para lugar nenhum.
 
 ## Próximos passos possíveis
 

@@ -1,0 +1,267 @@
+import { createMapper, type Mapper } from '@automapper/core';
+import { MikroORM, ref, type Ref } from '@mikro-orm/core';
+import { defineConfig } from '@mikro-orm/sqlite';
+import { CreatePostCommand } from '../../application/post/command/create-post.command';
+import { UpdatePostCommand } from '../../application/post/command/update-post.command';
+import { PostCreatedEvent } from '../../domain/post/event/post-created.event';
+import { PostUpdatedEvent } from '../../domain/post/event/post-updated.event';
+import { Post } from '../../domain/post/post.entity';
+import { PostContent } from '../../domain/post/vo/post-content';
+import { PostId } from '../../domain/post/vo/post-id';
+import { PostTitle } from '../../domain/post/vo/post-title';
+import { Tag } from '../../domain/tag/tag.entity';
+import { TagId } from '../../domain/tag/vo/tag-id';
+import { TagName } from '../../domain/tag/vo/tag-name';
+import { AUTHOR_ROLE, User } from '../../domain/user/user.entity';
+import { Author } from '../../domain/user/author.entity';
+import { UserId } from '../../domain/user/vo/user-id';
+import { UserName } from '../../domain/user/vo/user-name';
+import { PostSchema } from '../../infrastructure/persistence/sqlite/entities/post-orm.entity';
+import { TagSchema } from '../../infrastructure/persistence/sqlite/entities/tag-orm.entity';
+import {
+  AuthorSchema,
+  ReaderSchema,
+  UserSchema,
+} from '../../infrastructure/persistence/sqlite/entities/user-orm.entity';
+import { CreatePostInput } from '../../dto/graphql/create-post.input';
+import { PostView } from '../../dto/graphql/post.view';
+import { TagView } from '../../dto/graphql/tag.view';
+import { UpdatePostInput } from '../../dto/graphql/update-post.input';
+import { PostProfile } from './post.profile';
+import { validatedDtoClasses } from './validated-dto.strategy';
+
+/**
+ * O perfil do agregado Post, testado sem Nest, sem banco e sem GraphQL.
+ *
+ * O que estes testes prendem não são os campos que o mapeamento **escreve**: são os que ele escreve
+ * sem que ninguém tenha mandado. Um `forMember` esquecido aparece em qualquer teste; um campo que
+ * atravessava sozinho e parou (porque perdeu o `@AutoMap()`, ou porque o nome mudou de um lado só)
+ * não aparece em lugar nenhum — ele fica `undefined` e o mapeamento segue. Daí cada caso conferir a
+ * view **inteira**, e não o campo da vez.
+ */
+describe('PostProfile', () => {
+  let orm: MikroORM;
+  let mapper: Mapper;
+
+  const postId = PostId.parse('0c1ee4d8-9b0d-4a8a-9d5f-2b1a5e7c3f10');
+  const authorId = UserId.parse('9f1d1f36-7c2e-4a0a-9b7d-2f5c1a3e4b60');
+  const tagId = TagId.parse('3a5c9e20-1d4b-4f88-8c1e-7b2d6a0f9e33');
+  const createdAt = new Date('2024-01-01T10:00:00.000Z');
+  const updatedAt = new Date('2024-01-02T10:00:00.000Z');
+
+  /**
+   * O `MikroORM.init` existe só para descobrir as entidades — a `Collection` de tags e a `Ref` do
+   * autor precisam da metadata. Sem `ensureDatabase`, nenhuma tabela é criada e nada é lido.
+   */
+  beforeAll(async () => {
+    orm = await MikroORM.init(
+      defineConfig({
+        dbName: ':memory:',
+        entities: [PostSchema, TagSchema, UserSchema, ReaderSchema, AuthorSchema],
+      }),
+    );
+  });
+
+  afterAll(() => orm.close());
+
+  beforeEach(async () => {
+    // Um mapper novo por teste: a estratégia guarda os modelos que já leu, e um reaproveitado entre
+    // suítes esconderia uma metadata que só funciona porque outro teste a registrou antes.
+    mapper = createMapper({ strategyInitializer: validatedDtoClasses() });
+    new PostProfile(mapper);
+    // O `AutomapperProfile` registra o perfil numa microtask — ver o construtor dele.
+    await Promise.resolve();
+  });
+
+  afterEach(() => mapper.dispose());
+
+  const anAuthor = (): Author => {
+    const user = Author.register(authorId, { email: 'manuel@example.com', name: 'Manuel' }, AUTHOR_ROLE, createdAt);
+    if (!user.canWritePosts()) {
+      throw new Error('AUTHOR_ROLE precisa nascer Author');
+    }
+    return user;
+  };
+
+  const authorRef = (): Ref<Author> => ref(anAuthor());
+
+  const aTag = (): Tag => Tag.create(tagId, 'nestjs', createdAt);
+
+  /** Um post nascido e com uma tag atribuída — o que sai do repositório na v2. */
+  const aPost = (): Post => {
+    const post = Post.create(
+      postId,
+      { title: 'Nest + GraphQL', content: 'corpo do post' },
+      authorRef(),
+      UserName.parse('Manuel'),
+      createdAt,
+    );
+    post.assignTag(aTag(), updatedAt);
+    return post;
+  };
+
+  describe('Post → PostView', () => {
+    it('traduz a entidade inteira, com o autor reduzido a id e as tags como views', () => {
+      const view = mapper.map(aPost(), Post, PostView);
+
+      expect(view).toBeInstanceOf(PostView);
+      expect(view.id.equals(postId)).toBe(true);
+      expect(view.title.value).toBe('Nest + GraphQL');
+      expect(view.content.value).toBe('corpo do post');
+      expect(view.authorId.equals(authorId)).toBe(true);
+      expect(view.createdAt).toEqual(createdAt);
+      expect(view.updatedAt).toEqual(updatedAt);
+      expect(view.version).toBe(2);
+      expect(view.tags).toHaveLength(1);
+      expect(view.tags[0]).toBeInstanceOf(TagView);
+      expect(view.tags[0].name.value).toBe('nestjs');
+    });
+
+    it('preserva os value objects como value objects — a view não achata para texto', () => {
+      const view = mapper.map(aPost(), Post, PostView);
+
+      expect(view.title).toBeInstanceOf(PostTitle);
+      expect(view.id).toBeInstanceOf(PostId);
+      expect(view.authorId).toBeInstanceOf(UserId);
+    });
+  });
+
+  describe('PostCreatedEvent → PostView', () => {
+    it('monta a view do payload: v1, sem tags, com createdAt = updatedAt', () => {
+      const event = new PostCreatedEvent(
+        postId.value,
+        'Nest + GraphQL',
+        'corpo do post',
+        authorId.value,
+        'Manuel',
+        createdAt,
+      );
+
+      const view = mapper.map(event, PostCreatedEvent, PostView);
+
+      expect(view.id.equals(postId)).toBe(true);
+      expect(view.title).toBeInstanceOf(PostTitle);
+      expect(view.title.value).toBe('Nest + GraphQL');
+      expect(view.content.value).toBe('corpo do post');
+      expect(view.authorId).toBeInstanceOf(UserId);
+      expect(view.authorId.equals(authorId)).toBe(true);
+      expect(view.createdAt).toEqual(createdAt);
+      expect(view.updatedAt).toEqual(createdAt);
+      expect(view.version).toBe(1);
+      expect(view.tags).toEqual([]);
+    });
+
+    it('dá um array de tags novo a cada view — duas subscriptions não dividem a mesma lista', () => {
+      const event = new PostCreatedEvent(postId.value, 't', 'c', authorId.value, 'Manuel', createdAt);
+
+      const first = mapper.map(event, PostCreatedEvent, PostView);
+      const second = mapper.map(event, PostCreatedEvent, PostView);
+
+      expect(first.tags).not.toBe(second.tags);
+    });
+  });
+
+  describe('PostUpdatedEvent → PostView', () => {
+    it('monta a view do payload, com as tags que vieram no evento', () => {
+      const event = new PostUpdatedEvent(
+        postId.value,
+        'editado',
+        'corpo editado',
+        authorId.value,
+        'Manuel',
+        [{ tagId: tagId.value, name: 'nestjs' }],
+        3,
+        createdAt,
+        updatedAt,
+      );
+
+      const view = mapper.map(event, PostUpdatedEvent, PostView);
+
+      expect(view.id.equals(postId)).toBe(true);
+      expect(view.title.value).toBe('editado');
+      expect(view.content.value).toBe('corpo editado');
+      expect(view.authorId.equals(authorId)).toBe(true);
+      // O `createdAt` vem do evento (ele viaja no payload), o `updatedAt` do instante do fato.
+      expect(view.createdAt).toEqual(createdAt);
+      expect(view.updatedAt).toEqual(updatedAt);
+      expect(view.version).toBe(3);
+      expect(view.tags).toHaveLength(1);
+      expect(view.tags[0].id).toBeInstanceOf(TagId);
+      expect(view.tags[0].name.value).toBe('nestjs');
+    });
+  });
+
+  describe('CreatePostInput → CreatePost', () => {
+    /**
+     * O input chega **cru**: o @nestjs/graphql entrega os `@Args` como objeto, sem instanciar classe
+     * nenhuma. Este teste prende o contrato que o `preMap` sustenta — passar o objeto cru tem de dar o
+     * mesmo resultado que passar o DTO.
+     */
+    it('monta o command a partir do objeto cru, com o autor vindo de extraArgs', () => {
+      const author = anAuthor();
+
+      const command = mapper.map(
+        { title: '  Nest + GraphQL  ', content: 'corpo do post' } as unknown as CreatePostInput,
+        CreatePostInput,
+        CreatePostCommand.CreatePost,
+        { extraArgs: () => ({ author }) },
+      );
+
+      expect(command).toBeInstanceOf(CreatePostCommand.CreatePost);
+      expect(command.postId).toBeInstanceOf(PostId);
+      // O value object normaliza na travessia: o `trim` é do schema do `PostTitle`.
+      expect(command.title).toBe('Nest + GraphQL');
+      expect(command.content).toBe('corpo do post');
+      expect(command.authorId.equals(authorId)).toBe(true);
+      expect(command.authorName.value).toBe('Manuel');
+    });
+
+    it('gera um postId novo por command', () => {
+      const author = anAuthor();
+      const input = { title: 't', content: 'c' } as unknown as CreatePostInput;
+      const options = { extraArgs: () => ({ author }) };
+
+      const first = mapper.map(input, CreatePostInput, CreatePostCommand.CreatePost, options);
+      const second = mapper.map(input, CreatePostInput, CreatePostCommand.CreatePost, options);
+
+      expect(first.postId.equals(second.postId)).toBe(false);
+    });
+  });
+
+  describe('UpdatePostInput → UpdatePost', () => {
+    it('traduz o id e desembrulha os value objects para texto', () => {
+      const command = mapper.map(
+        { id: postId.value, title: 'editado', content: 'corpo editado' } as unknown as UpdatePostInput,
+        UpdatePostInput,
+        UpdatePostCommand.UpdatePost,
+      );
+
+      expect(command.postId.equals(postId)).toBe(true);
+      expect(command.title).toBe('editado');
+      expect(command.content).toBe('corpo editado');
+    });
+
+    /** `null`/ausente não é um valor a converter: é a instrução de manter o que está lá. */
+    it('deixa passar os campos ausentes sem tentar desembrulhá-los', () => {
+      const command = mapper.map(
+        { id: postId.value, title: 'só o título' } as unknown as UpdatePostInput,
+        UpdatePostInput,
+        UpdatePostCommand.UpdatePost,
+      );
+
+      expect(command.title).toBe('só o título');
+      expect(command.content ?? null).toBeNull();
+    });
+
+    /** A única validação da borda: um id que não é UUID não chega ao command. */
+    it('recusa um id que não é UUID', () => {
+      expect(() =>
+        mapper.map(
+          { id: 'não-é-uuid', title: 'x' } as unknown as UpdatePostInput,
+          UpdatePostInput,
+          UpdatePostCommand.UpdatePost,
+        ),
+      ).toThrow();
+    });
+  });
+});

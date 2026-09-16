@@ -9,9 +9,8 @@ import {
 } from '../../infrastructure/persistence/sqlite/entities/user-orm.entity';
 import { Post } from '../post/post.entity';
 import { PostId } from '../post/vo/post-id';
+import { AUTHOR_ROLE, User } from './user.entity';
 import { Author } from './author.entity';
-import { AUTHOR_ROLE } from './user.entity';
-import { Users } from './user.factory';
 import { UserId } from './vo/user-id';
 
 /**
@@ -41,7 +40,7 @@ describe('Author e os posts dele', () => {
   /** Um autor com N posts, escritos em instantes crescentes para a ordem ser observável. */
   const givenAnAuthorWith = async (titles: string[]): Promise<UserId> => {
     const em = orm.em.fork();
-    const user = Users.register(
+    const user = Author.register(
       UserId.generate(),
       { email: `autor+${UserId.generate()}@example.com`, name: 'manuel' },
       AUTHOR_ROLE,

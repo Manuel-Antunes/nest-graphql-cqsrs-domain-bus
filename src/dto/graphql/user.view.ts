@@ -1,5 +1,7 @@
+import { AutoMap } from '@automapper/classes';
 import { z } from 'zod';
 import { InheritValidatedMetadata, ValidatedDto } from '../../validated-dto/mixins';
+import { AUTOMAP_REGISTRY } from './automap.registry';
 import { Email } from '../../domain/user/vo/email';
 import { UserId } from '../../domain/user/vo/user-id';
 import { UserName } from '../../domain/user/vo/user-name';
@@ -12,9 +14,9 @@ import { UserName } from '../../domain/user/vo/user-name';
  * um dia o `Author` ganhar a `bio` que o da versão Axon tem, é aqui que o schema dele se separa.
  */
 const UserViewSchema = z.object({
-  id: UserId.field(),
-  name: UserName.field(),
-  email: Email.field(),
+  id: UserId.field({ DECORATOR_REGISTRY: AUTOMAP_REGISTRY, decorators: [AutoMap()] }),
+  name: UserName.field({ DECORATOR_REGISTRY: AUTOMAP_REGISTRY, decorators: [AutoMap()] }),
+  email: Email.field({ DECORATOR_REGISTRY: AUTOMAP_REGISTRY, decorators: [AutoMap()] }),
 });
 
 /**
@@ -25,7 +27,7 @@ const UserViewSchema = z.object({
  * hierarquias paralelas para o mesmo shape. Uma base, duas subclasses — e o `instanceof` de cada uma
  * continua distinguindo, que é justamente o que o `__resolveType` precisa.
  */
-const UserViewBase = ValidatedDto(UserViewSchema);
+const UserViewBase = ValidatedDto(UserViewSchema, { DECORATOR_REGISTRY: AUTOMAP_REGISTRY });
 
 /** O `type Reader` do schema. O nome bate com a classe de domínio: os dois nasceram juntos. */
 @InheritValidatedMetadata()
@@ -45,8 +47,8 @@ export class AuthorView extends UserViewBase {}
  * O `interface User` do schema, deste lado: a **união** dos dois tipos concretos.
  *
  * É o `sealed interface UserView permits ReaderView, AuthorView` da versão Java, com a mesma
- * propriedade útil: um terceiro tipo no schema não compila sem par aqui, porque `UserViewMapper`
- * precisa devolver um destes dois. A união é só de tipo — em runtime o que existe são as classes, e é
- * por elas que o `__resolveType` decide.
+ * propriedade útil: um terceiro tipo no schema não compila sem par aqui, porque o
+ * `UserViewInterceptor` precisa devolver um destes dois. A união é só de tipo — em runtime o que
+ * existe são as classes, e é por elas que o `__resolveType` decide.
  */
 export type UserView = ReaderView | AuthorView;

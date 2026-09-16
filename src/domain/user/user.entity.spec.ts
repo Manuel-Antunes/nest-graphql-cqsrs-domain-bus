@@ -12,8 +12,8 @@ import { UserRegisteredEvent } from './event/user-registered.event';
 import { UserRestoredEvent } from './event/user-restored.event';
 import { UserSupersededEvent } from './event/user-superseded.event';
 import { InvalidUserException } from './exception/invalid-user.exception';
+import { issuesOf } from '../../../test/support/invalid-input';
 import { AUTHOR_ROLE, User } from './user.entity';
-import { Users } from './user.factory';
 import { Author } from './author.entity';
 import { Reader } from './reader.entity';
 import { Email } from './vo/email';
@@ -58,21 +58,21 @@ describe('User', () => {
 
   describe('o papel decide a classe', () => {
     it('sem papel de autor, nasce Reader', () => {
-      const user = Users.register(id, input, null, now);
+      const user = Reader.register(id, input, null, now);
 
       expect(user).toBeInstanceOf(Reader);
       expect(user.canWritePosts()).toBe(false);
     });
 
     it('com papel de autor, nasce Author', () => {
-      const user = Users.register(id, input, AUTHOR_ROLE, now);
+      const user = Author.register(id, input, AUTHOR_ROLE, now);
 
       expect(user).toBeInstanceOf(Author);
       expect(user.canWritePosts()).toBe(true);
     });
 
     it('normaliza o email e o nome, e dispara UserRegistered', () => {
-      const user = Users.register(id, input, null, now);
+      const user = Reader.register(id, input, null, now);
 
       expect(user).toMatchObject({
         id,
@@ -87,33 +87,44 @@ describe('User', () => {
     });
 
     it('rejeita email inválido e nome vazio sem disparar nada', () => {
-      expect(() => Users.register(id, { email: 'não-é-email', name: 'x' }, null, now)).toThrow(InvalidUserException);
-      expect(() => Users.register(id, { email: 'a@b.com', name: '   ' }, null, now)).toThrow(/name não pode ser vazio/);
+      expect(() => Reader.register(id, { email: 'não-é-email', name: 'x' }, null, now)).toThrow(InvalidUserException);
+      expect(issuesOf(() => Reader.register(id, { email: 'a@b.com', name: '   ' }, null, now))).toContain('name não pode ser vazio');
     });
   });
 
-  describe('reconstituir escolhe a mesma classe que decidir', () => {
-    it.each([
-      [null, Reader],
-      [AUTHOR_ROLE, Author],
-    ])('papel %s volta como %s', (role, expected) => {
-      const decided = Users.register(id, input, role, now);
+  /**
+   * Decidir e evoluir chegam ao mesmo estado — a mesma afirmação que o `post.entity.spec` faz, e pelo
+   * mesmo motivo: `register` termina chamando os `on<Evento>`, então "o que o command gravou" e "o que
+   * sai de um replay" não podem divergir.
+   *
+   * Repare em como o replay é feito: `new Reader()` e `loadFromHistory`. Não há construtor nomeado
+   * para isso, porque a classe é escolhida por quem chama — nos dois caminhos.
+   */
+  describe('reconstituir devolve o que decidir montou', () => {
+    it('um Reader replica o estado que a decisão montou', () => {
+      const decided = Reader.register(id, input, null, now);
 
-      const sourced = Users.fromHistory(decided.getUncommittedEvents());
+      const sourced = new Reader();
+      sourced.loadFromHistory(decided.getUncommittedEvents());
 
-      expect(sourced).toBeInstanceOf(expected);
       expect(sourced.getUncommittedEvents()).toEqual([]);
       expect(stateOf(sourced)).toEqual(stateOf(decided));
     });
 
-    it('um stream que não começa com UserRegistered não reconstitui', () => {
-      expect(() => Users.fromHistory([new UserDeletedEvent(id.value, now)])).toThrow(/primeiro evento/);
+    it('um Author replica o estado, e continua sabendo escrever', () => {
+      const decided = Author.register(id, input, AUTHOR_ROLE, now);
+
+      const sourced = new Author();
+      sourced.loadFromHistory(decided.getUncommittedEvents());
+
+      expect(sourced.canWritePosts()).toBe(true);
+      expect(stateOf(sourced)).toEqual(stateOf(decided));
     });
   });
 
   describe('promover é encerrar um stream e abrir outro', () => {
     it('supersede encerra o stream apontando para o sucessor', () => {
-      const reader = Users.register(id, input, null, now);
+      const reader = Reader.register(id, input, null, now);
       reader.uncommit();
 
       reader.supersede(other, later);
@@ -124,7 +135,7 @@ describe('User', () => {
     });
 
     it('o novo stream nasce Author e aponta de volta para o encerrado', () => {
-      const author = Users.register(other, input, AUTHOR_ROLE, later, id);
+      const author = Author.register(other, input, AUTHOR_ROLE, later, id);
 
       expect(author).toBeInstanceOf(Author);
       expect(author.supersedes?.id.equals(id)).toBe(true);
@@ -132,14 +143,14 @@ describe('User', () => {
     });
 
     it('um stream já encerrado não encerra de novo, e ninguém sucede a si mesmo', () => {
-      const reader = Users.register(id, input, null, now).supersede(other, later);
+      const reader = Reader.register(id, input, null, now).supersede(other, later);
 
       expect(() => reader.supersede(other, later)).toThrow(/já foi encerrado/);
-      expect(() => Users.register(id, input, null, now).supersede(id, later)).toThrow(/a si mesmo/);
+      expect(() => Reader.register(id, input, null, now).supersede(id, later)).toThrow(/a si mesmo/);
     });
 
     it('o Reader promovido continua Reader — a classe é do stream, não do papel de hoje', () => {
-      const reader = Users.register(id, input, null, now).supersede(other, later);
+      const reader = Reader.register(id, input, null, now).supersede(other, later);
 
       expect(reader).toBeInstanceOf(Reader);
       expect(reader.canWritePosts()).toBe(false);
@@ -148,7 +159,7 @@ describe('User', () => {
 
   describe('apagar é reversível', () => {
     it('softDelete marca a data e tira o user de circulação', () => {
-      const user = Users.register(id, input, null, now);
+      const user = Reader.register(id, input, null, now);
       user.uncommit();
 
       user.softDelete(later);
@@ -159,7 +170,7 @@ describe('User', () => {
     });
 
     it('restore limpa a data', () => {
-      const user = Users.register(id, input, null, now).softDelete(later);
+      const user = Reader.register(id, input, null, now).softDelete(later);
       user.uncommit();
 
       user.restore(later);
@@ -170,7 +181,7 @@ describe('User', () => {
     });
 
     it('não apaga duas vezes nem restaura o que não está apagado', () => {
-      const user = Users.register(id, input, null, now);
+      const user = Reader.register(id, input, null, now);
 
       expect(() => user.restore(later)).toThrow(/não está apagado/);
       user.softDelete(later);
@@ -179,13 +190,15 @@ describe('User', () => {
   });
 
   it('a versão conta os eventos aplicados', () => {
-    const user = Users.register(id, input, null, now);
+    const user = Reader.register(id, input, null, now);
     expect(user.version).toBe(1);
 
     user.softDelete(later);
     user.restore(later);
 
     expect(user.version).toBe(3);
-    expect(Users.fromHistory(user.getUncommittedEvents()).version).toBe(3);
+    const sourced = new Reader();
+    sourced.loadFromHistory(user.getUncommittedEvents());
+    expect(sourced.version).toBe(3);
   });
 });

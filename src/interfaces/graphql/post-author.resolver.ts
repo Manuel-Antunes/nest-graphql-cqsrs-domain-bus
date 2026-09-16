@@ -1,10 +1,12 @@
+import { MapInterceptor } from '@automapper/nestjs';
+import { UseInterceptors } from '@nestjs/common';
 import { QueryBus } from '@nestjs/cqrs';
 import { Parent, ResolveField, Resolver } from '@nestjs/graphql';
 import { FindAuthorQuery } from '../../application/user/query/find-author.query';
+import { Author } from '../../domain/user/author.entity';
 import { NotAnAuthorException } from '../../domain/user/exception/not-an-author.exception';
-import type { AuthorView } from '../../dto/graphql/user.view';
+import { AuthorView } from '../../dto/graphql/user.view';
 import type { PostView } from '../../dto/graphql/post.view';
-import { UserViewMapper } from '../mapper/user-view.mapper';
 
 /**
  * O campo `Post.author`: o `authorId` da view trocado pelo `Author` do protocolo.
@@ -30,13 +32,13 @@ import { UserViewMapper } from '../mapper/user-view.mapper';
  * — antes deste campo não havia caminho do protocolo que chegasse a N autores. A saída nativa é o
  * `dataloader: DataloaderType.ALL` (já ligado no config) aplicado a um acesso por relação em vez de uma
  * consulta por autor; fica anotado, e a fronteira destas classes não muda.
+ *
+ * O `type Author!` do schema e a chave estrangeira `posts.author_id → authors.id` já decidiram os dois
+ * lados, então aqui não há despacho polimórfico a fazer — o `me` é o caso oposto.
  */
 @Resolver('Post')
 export class PostAuthorResolver {
-  constructor(
-    private readonly queryBus: QueryBus,
-    private readonly viewMapper: UserViewMapper,
-  ) {}
+  constructor(private readonly queryBus: QueryBus) {}
 
   /**
    * @throws NotAnAuthorException se o autor não for mais um autor ativo — o que só acontece se ele
@@ -45,11 +47,12 @@ export class PostAuthorResolver {
    * da consulta para começo de conversa.
    */
   @ResolveField('author')
-  async author(@Parent() post: PostView): Promise<AuthorView> {
+  @UseInterceptors(MapInterceptor(Author, AuthorView))
+  async author(@Parent() post: PostView): Promise<Author> {
     const author = await this.queryBus.execute(new FindAuthorQuery.FindAuthor(post.authorId));
     if (!author) {
       throw new NotAnAuthorException(post.authorId);
     }
-    return this.viewMapper.fromAuthor(author);
+    return author;
   }
 }

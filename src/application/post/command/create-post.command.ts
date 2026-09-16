@@ -1,14 +1,15 @@
-import { EntityManager, ref, rel } from '@mikro-orm/core';
+import { AutoMap } from '@automapper/classes';
+import { ref, rel } from '@mikro-orm/core';
 import { Inject, Scope } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
 import { type AsyncContext, Command, CommandHandler, EventPublisher, type ICommandHandler } from '@nestjs/cqrs';
 import { PostAlreadyExistsException } from '../../../domain/post/exception/post-already-exists.exception';
 import { Post } from '../../../domain/post/post.entity';
 import { PostRepository } from '../../../domain/post/post.repository';
-import type { PostId } from '../../../domain/post/vo/post-id';
+import { PostId } from '../../../domain/post/vo/post-id';
 import { Author } from '../../../domain/user/author.entity';
-import type { UserId } from '../../../domain/user/vo/user-id';
-import type { UserName } from '../../../domain/user/vo/user-name';
+import { UserId } from '../../../domain/user/vo/user-id';
+import { UserName } from '../../../domain/user/vo/user-name';
 
 /**
  * A fatia de `CreatePost`: a **mensagem** e o **handler** dela, num arquivo só, sob um namespace.
@@ -36,14 +37,30 @@ export namespace CreatePostCommand {
    * preciso, e a chave estrangeira garante melhor do que a consulta garantia — ver `Post.create`.
    */
   export class CreatePost extends Command<PostId> {
+    @AutoMap(() => PostId)
+    readonly postId: PostId;
+    @AutoMap()
+    readonly title: string;
+    @AutoMap()
+    readonly content: string;
+    @AutoMap(() => UserId)
+    readonly authorId: UserId;
+    @AutoMap(() => UserName)
+    readonly authorName: UserName;
+
     constructor(
-      readonly postId: PostId,
-      readonly title: string,
-      readonly content: string,
-      readonly authorId: UserId,
-      readonly authorName: UserName,
+      postId: PostId,
+      title: string,
+      content: string,
+      authorId: UserId,
+      authorName: UserName,
     ) {
       super();
+      this.postId = postId;
+      this.title = title;
+      this.content = content;
+      this.authorId = authorId;
+      this.authorName = authorName;
     }
   }
 

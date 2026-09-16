@@ -5,6 +5,7 @@ import { User } from './user.entity';
  * isso, o que é o ponto: a ausência é a regra.
  *
  * É o tipo de fallback da hierarquia. Qualquer papel que nenhum outro tipo reivindique nasce leitor,
- * inclusive papel nenhum (`null`) — ver `User.claimEveryOtherRole` logo abaixo.
+ * inclusive papel nenhum (`null`). Quem faz essa triagem é quem traduz o papel do provedor de
+ * identidade em tipo de domínio — ver `UserProvisioning`.
  */
 export class Reader extends User {}

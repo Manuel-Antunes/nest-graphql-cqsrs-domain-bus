@@ -20,7 +20,8 @@ import { UserId } from './user/vo/user-id';
  * Elas são lidas em três lugares diferentes, e cada um depende de uma metade distinta:
  *
  * - o `DomainExceptionFilter` roteia pelo **`name`** — se ele mudar, uma recusa de negócio vira 500;
- * - o cliente do GraphQL lê a **mensagem**, então ela precisa nomear o que foi recusado;
+ * - o cliente do GraphQL lê a **mensagem** — ou, quando a recusa veio de um `safeParse`, a **`cause`**
+ *   que a exceção carrega: é lá que moram as issues campo a campo, e quem as imprime é o filtro;
  * - quem trata a exceção lê o **campo tipado** (`postId`, `userId`) sem reparsear a mensagem.
  *
  * O caso do {@link NotAnAuthorException} é o que mais pede teste: ele tem duas formas de propósito, e
@@ -64,17 +65,22 @@ describe('exceções do domínio', () => {
       expect(error.userId).toBe(userId);
     });
 
-    it('InvalidPost.fromZod junta as issues numa mensagem por campo', () => {
+    /**
+     * A exceção **não traduz** o `safeParse`: ela o pendura como `cause`. A mensagem nomeia a
+     * invariante, e as issues continuam sendo dados até a borda decidir como imprimi-las.
+     */
+    it('InvalidPost nomeia a invariante e guarda o ZodError como causa', () => {
       // Arrange
       const result = z.object({ title: z.string().min(1, 'title não pode ser vazio') }).safeParse({ title: '' });
 
       // Act
-      const error = InvalidPostException.fromZod(result.error!);
+      const error = new InvalidPostException('post inválido', { cause: result.error });
 
       // Assert
       expect(error).toBeInstanceOf(InvalidPostException);
       expect(error.name).toBe('InvalidPostException');
-      expect(error.message).toContain('title não pode ser vazio');
+      expect(error.message).toBe('post inválido');
+      expect(error.cause).toBe(result.error);
     });
   });
 
@@ -87,12 +93,16 @@ describe('exceções do domínio', () => {
       expect(new TagAlreadyExistsException(tagId).name).toBe('TagAlreadyExistsException');
     });
 
-    it('InvalidTag.fromZod traduz as issues', () => {
+    it('InvalidTag guarda as issues na causa', () => {
       // Arrange
       const result = z.string().min(1, 'nome da tag não pode ser vazio').safeParse('');
 
-      // Act / Assert
-      expect(InvalidTagException.fromZod(result.error!).message).toContain('nome da tag não pode ser vazio');
+      // Act
+      const error = new InvalidTagException('nome de tag inválido', { cause: result.error });
+
+      // Assert
+      expect(error.message).toBe('nome de tag inválido');
+      expect(error.cause).toBe(result.error);
     });
   });
 
@@ -126,14 +136,20 @@ describe('exceções do domínio', () => {
       expect(error.userId).toBeUndefined();
     });
 
-    it('InvalidUser aceita mensagem direta e também a de um ZodError', () => {
+    it('InvalidUser aceita mensagem direta e, quando há, a causa que a originou', () => {
       // Arrange
       const result = z.object({ email: z.email('email inválido') }).safeParse({ email: 'x' });
 
+      // Act
+      const doDominio = new InvalidUserException('promoção impossível');
+      const doParse = new InvalidUserException('user inválido', { cause: result.error });
+
       // Assert
-      expect(new InvalidUserException('promoção impossível').message).toBe('promoção impossível');
-      expect(new InvalidUserException('x').name).toBe('InvalidUserException');
-      expect(InvalidUserException.fromZod(result.error!).message).toContain('email inválido');
+      expect(doDominio.message).toBe('promoção impossível');
+      expect(doDominio.name).toBe('InvalidUserException');
+      // Uma recusa que não veio de parse não inventa causa nenhuma — a causa é opcional.
+      expect(doDominio.cause).toBeUndefined();
+      expect(doParse.cause).toBe(result.error);
     });
   });
 

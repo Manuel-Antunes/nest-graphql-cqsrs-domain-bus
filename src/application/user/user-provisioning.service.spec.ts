@@ -5,11 +5,11 @@ import {
   inRequestContext,
 } from '../../../test/support/cqrs-testing-module';
 import { FakeIdentityProvider } from '../../../test/support/fake-identity-provider';
-import { Author } from '../../domain/user/author.entity';
-import { IdentityProvider } from '../../domain/user/identity.provider';
-import { Reader } from '../../domain/user/reader.entity';
-import { UnknownIdentityException } from '../../domain/user/exception/unknown-identity.exception';
 import { AUTHOR_ROLE, User } from '../../domain/user/user.entity';
+import { Author } from '../../domain/user/author.entity';
+import { Reader } from '../../domain/user/reader.entity';
+import { IdentityProvider } from '../../domain/user/identity.provider';
+import { UnknownIdentityException } from '../../domain/user/exception/unknown-identity.exception';
 import type { CredentialId } from '../../domain/user/vo/credential-id';
 import { UserProvisioning } from './user-provisioning.service';
 

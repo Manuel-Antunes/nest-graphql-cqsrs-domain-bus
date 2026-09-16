@@ -1,9 +1,6 @@
 import 'reflect-metadata';
 
-import type {
-  ValidationArguments,
-  ValidatorConstraintInterface,
-} from 'class-validator';
+import { type ValidationArguments, type ValidatorConstraintInterface, Validate, ValidatorConstraint } from 'class-validator';
 import {
   Expose,
   instanceToPlain,
@@ -11,23 +8,11 @@ import {
   TransformationType,
   Type,
 } from 'class-transformer';
-import { Validate, ValidatorConstraint } from 'class-validator';
 import { z } from 'zod';
 
-import type { DECORATOR_REGISTRY_TYPE } from '../schemas/registries/decorators.registry';
-import { DECORATOR_REGISTRY as GLOBAL_DECORATOR_REGISTRY } from '../schemas/registries/decorators.registry';
-import type {
-  EmbeddedBinding,
-  EMBEDDED_REGISTRY_TYPE,
-} from '../schemas/registries/embedded.registry';
-import { EMBEDDED_REGISTRY, getEmbedded } from '../schemas/registries/embedded.registry';
-import type {
-  ScalarFieldOptions,
-  ScalarValueObjectStatic,
-  ValidatedScalarOptions,
-} from './validated-scalar.mixin';
-import { rawScalarValue, ValidatedScalar } from './validated-scalar.mixin';
-
+import { type DECORATOR_REGISTRY_TYPE, DECORATOR_REGISTRY as GLOBAL_DECORATOR_REGISTRY } from '../schemas/registries/decorators.registry';
+import { type EmbeddedBinding, type EMBEDDED_REGISTRY_TYPE, EMBEDDED_REGISTRY, getEmbedded } from '../schemas/registries/embedded.registry';
+import { type ScalarFieldOptions, type ScalarValueObjectStatic, type ValidatedScalarOptions, rawScalarValue, ValidatedScalar } from './validated-scalar.mixin';
 /**
  * Class decorator that copies metadata from the ValidatedDto parent class to the extending class.
  * This is required when using ValidatedDto with frameworks like GraphQL that inspect the final class

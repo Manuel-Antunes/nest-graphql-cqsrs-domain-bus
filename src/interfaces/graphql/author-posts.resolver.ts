@@ -1,10 +1,12 @@
+import type { Cursor } from '@mikro-orm/core';
+import { UseInterceptors } from '@nestjs/common';
 import { QueryBus } from '@nestjs/cqrs';
 import { Args, Parent, ResolveField, Resolver } from '@nestjs/graphql';
 import { FindPostsByAuthorQuery } from '../../application/post/query/find-posts-by-author.query';
-import { connectionOf } from '../../dto/graphql/connection';
-import type { PostConnection } from '../../dto/graphql/post.connection';
+import { Post } from '../../domain/post/post.entity';
+import { PostView } from '../../dto/graphql/post.view';
 import type { AuthorView } from '../../dto/graphql/user.view';
-import { PostViewMapper } from '../mapper/post-view.mapper';
+import { ConnectionInterceptor } from '../interceptors/connection.interceptor';
 
 /**
  * O campo `Author.posts(first, after)`: uma cursor connection sobre os posts de quem o `me` devolveu.
@@ -31,26 +33,23 @@ import { PostViewMapper } from '../mapper/post-view.mapper';
  * Esse é de graça, porque o repositório já populou o autor de cada post — ver `PostAuthorResolver`.
  *
  * ## O que ele faz com os cursores: nada
- * Nenhum flag de `pageInfo` é calculado aqui. O `connectionOf` os tira do `Cursor` que o
- * `em.findByCursor` devolveu — e é por isso que `Author.posts` tem a mesma paginação por keyset de
- * `Query.posts`, em vez de cursores de offset como `Post.tags`.
+ * O método devolve o `Cursor` que o `em.findByCursor` produziu, e o {@link ConnectionInterceptor} —
+ * o mesmo de `Query.posts` — monta a connection a partir dele. É por isso que as duas connections por
+ * cursor não podem divergir.
  */
 @Resolver('Author')
 export class AuthorPostsResolver {
-  constructor(
-    private readonly queryBus: QueryBus,
-    private readonly viewMapper: PostViewMapper,
-  ) {}
+  constructor(private readonly queryBus: QueryBus) {}
 
   @ResolveField('posts')
+  @UseInterceptors(ConnectionInterceptor(Post, PostView))
   async posts(
     @Parent() author: AuthorView,
     @Args('first') first?: number | null,
     @Args('after') after?: string | null,
-  ): Promise<PostConnection> {
-    const page = await this.queryBus.execute(
+  ): Promise<Cursor<Post>> {
+    return this.queryBus.execute(
       new FindPostsByAuthorQuery.FindPostsByAuthor(author.id, first, after),
     );
-    return connectionOf(page, (post) => this.viewMapper.fromPost(post));
   }
 }

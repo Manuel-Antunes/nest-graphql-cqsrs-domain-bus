@@ -1,4 +1,4 @@
-import type { Cursor } from "@mikro-orm/core";
+import { Cursor } from "@mikro-orm/core";
 import { z } from "zod";
 import { InheritValidatedMetadata, ValidatedDto } from "../../validated-dto/mixins";
 
@@ -40,7 +40,7 @@ export interface ConnectionType<T> {
 }
 
 /**
- * O `Cursor` do MikroORM → a connection do protocolo.
+ * Uma {@link Page} → a connection do protocolo.
  *
  * É a peça que o `Connections` da versão Java também tem, e pelo mesmo motivo: **nenhum flag de
  * `pageInfo` é calculado por quem chama**. `hasNextPage` sai da linha a mais que o `findByCursor`
@@ -50,9 +50,57 @@ export interface ConnectionType<T> {
  * diferentes.
  *
  * O que fica do lado de quem chama é só o que é dele: como um item vira nó do protocolo.
+ *
+ * O parâmetro é uma {@link Page}, e não o `Cursor` do MikroORM, porque nem toda página vem do banco:
+ * o `Cursor` satisfaz a interface, e o {@link pageOf} produz uma a partir de uma lista em memória. É o
+ * que permite as **três** connections do schema — `posts`, `Author.posts` e `Post.tags` — dividirem o
+ * mesmo envelope, em vez de duas o dividirem e a terceira o reescrever à mão.
  */
+export interface Page<E> {
+  readonly items: E[];
+  /** O cursor daquele item — a posição dele na ordenação que produziu a página. */
+  from(item: E): string;
+  readonly hasNextPage: boolean;
+  readonly hasPrevPage: boolean;
+  readonly startCursor: string | null;
+  readonly endCursor: string | null;
+  readonly totalCount?: number;
+}
+
+/**
+ * Uma página de uma lista **já em memória**, com cursores de posição absoluta.
+ *
+ * É o que `Post.tags` precisa: as tags vieram junto com o post, e paginar ali é recortar, não
+ * consultar. O `Cursor.encode`/`decode` é o mesmo codec do MikroORM que as connections por keyset
+ * usam — o que muda é o valor codificado (aqui, o índice), e não o formato, então um cursor continua
+ * sendo opaco da mesma forma para quem o recebe.
+ *
+ * O que ela **não** é: uma paginação que escala. Recortar em memória só é honesto quando a lista
+ * inteira já está carregada e é pequena por natureza — se as tags virarem uma relação aberta, o lugar
+ * disto passa a ser uma consulta com `limit`, como em `Author.posts`.
+ */
+export function pageOf<E extends object>(
+  items: readonly E[],
+  limit: number,
+  after?: string | null,
+): Page<E> {
+  const start = after ? Number(Cursor.decode(after)[0]) + 1 : 0;
+  const slice = items.slice(start, start + limit);
+  const cursors = new Map(slice.map((item, offset) => [item, Cursor.encode([start + offset])]));
+
+  return {
+    items: slice,
+    from: (item) => cursors.get(item)!,
+    hasNextPage: start + limit < items.length,
+    hasPrevPage: start > 0,
+    startCursor: cursors.get(slice[0]) ?? null,
+    endCursor: cursors.get(slice[slice.length - 1]) ?? null,
+    totalCount: items.length,
+  };
+}
+
 export function connectionOf<E extends object, T>(
-  page: Cursor<E>,
+  page: Page<E>,
   node: (item: E) => T,
 ): ConnectionType<T> {
   const edges = page.items.map((item) => ({ cursor: page.from(item), node: node(item) }));

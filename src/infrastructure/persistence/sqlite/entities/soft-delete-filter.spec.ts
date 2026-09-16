@@ -3,8 +3,7 @@ import { defineConfig } from '@mikro-orm/sqlite';
 import { Post } from '../../../../domain/post/post.entity';
 import { PostId } from '../../../../domain/post/vo/post-id';
 import { AUTHOR_ROLE, User } from '../../../../domain/user/user.entity';
-import { Users } from '../../../../domain/user/user.factory';
-import { type Author } from '../../../../domain/user/author.entity';
+import { Author } from '../../../../domain/user/author.entity';
 import { UserId } from '../../../../domain/user/vo/user-id';
 import { PostSchema } from './post-orm.entity';
 import { ACTIVE_FILTER } from './soft-delete-orm.entity';
@@ -42,7 +41,7 @@ describe('o filtro de ativos', () => {
 
   const givenAnAuthor = async (): Promise<Author> => {
     const em = orm.em.fork();
-    const user = Users.register(
+    const user = Author.register(
       UserId.generate(),
       { email: `autor+${UserId.generate()}@example.com`, name: 'manuel' },
       AUTHOR_ROLE,

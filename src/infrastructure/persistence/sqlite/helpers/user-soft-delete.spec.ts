@@ -1,7 +1,6 @@
 import { MikroORM } from '@mikro-orm/core';
 import { defineConfig } from '@mikro-orm/sqlite';
 import { AUTHOR_ROLE, User } from '../../../../domain/user/user.entity';
-import { Users } from '../../../../domain/user/user.factory';
 import { Author } from '../../../../domain/user/author.entity';
 import { PostSchema } from '../entities/post-orm.entity';
 import { ACTIVE_FILTER } from '../entities/soft-delete-orm.entity';
@@ -42,7 +41,7 @@ describe('soft delete do User, contra o banco', () => {
     );
 
     const em = orm.em.fork();
-    const author = Users.register(UserId.generate(), { email: EMAIL, name: 'Autor' }, AUTHOR_ROLE, NOW);
+    const author = Author.register(UserId.generate(), { email: EMAIL, name: 'Autor' }, AUTHOR_ROLE, NOW);
     author.uncommit();
     await em.persist(author).flush();
     authorId = author.id;

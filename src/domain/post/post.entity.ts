@@ -1,11 +1,12 @@
+import { AutoMap } from "@automapper/classes";
 import { BaseEntity, Collection, ref, rel, type Ref } from "@mikro-orm/core";
 import { WithAggregateRoot } from "@nestjs/cqrs";
 import { z } from "zod";
 import { WithSoftDelete } from "../shared/soft-delete";
 import { Tag } from "../tag/tag.entity";
 import { TagId } from "../tag/vo/tag-id";
-import { Author } from "../user/author.entity";
-import { type User } from "../user/user.entity";
+import { type User } from '../user/user.entity';
+import { Author } from '../user/author.entity';
 import { UserId } from "../user/vo/user-id";
 import type { UserName } from "../user/vo/user-name";
 import { PostCreatedEvent } from "./event/post-created.event";
@@ -74,8 +75,11 @@ export type PostChanges = z.input<typeof PostChanges>;
 export class Post extends WithAggregateRoot(
   WithSoftDelete(BaseEntity),
 )<PostEvent> {
+  @AutoMap(() => PostId)
   id!: PostId;
+  @AutoMap(() => PostTitle)
   title!: PostTitle;
+  @AutoMap(() => PostContent)
   content!: PostContent;
   /**
    * Quem escreveu — o agregado {@link User}, por **referência**, e não por cópia do nome.
@@ -89,9 +93,12 @@ export class Post extends WithAggregateRoot(
    * dele junto, sem que nenhuma linha de post seja tocada.
    */
   author!: Ref<Author>;
+  @AutoMap()
   createdAt!: Date;
+  @AutoMap()
   updatedAt!: Date;
   /** Quantos eventos já foram aplicados (1 = só criado). Não é lock otimista do ORM: é o contador do stream. */
+  @AutoMap()
   version!: number;
   /**
    * As tags do post, como **relação** many-to-many de verdade (tabela pivô `post_tags`) — o agregado
@@ -144,7 +151,7 @@ export class Post extends WithAggregateRoot(
   ): Post {
     const parsed = NewPost.safeParse(input);
     if (!parsed.success) {
-      throw InvalidPostException.fromZod(parsed.error);
+      throw new InvalidPostException('post inválido', { cause: parsed.error });
     }
     const post = new Post();
     post.author = author;
@@ -171,7 +178,7 @@ export class Post extends WithAggregateRoot(
   update(changes: PostChanges, now: Date): this {
     const parsed = PostChanges.safeParse(changes);
     if (!parsed.success) {
-      throw InvalidPostException.fromZod(parsed.error);
+      throw new InvalidPostException('update inválido', { cause: parsed.error });
     }
     const title = parsed.data.title ?? this.title;
     const content = parsed.data.content ?? this.content;

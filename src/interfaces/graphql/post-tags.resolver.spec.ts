@@ -6,13 +6,18 @@ import { TagView } from '../../dto/graphql/tag.view';
 import { PostTagsResolver } from './post-tags.resolver';
 
 /**
- * O recorte em memória de `Post.tags`, que é a parte da cursor connection que é lógica nossa e não do
+ * O **recorte** de `Post.tags`, que é a parte da cursor connection que é lógica nossa e não do
  * MikroORM (a de `posts` é do `em.findByCursor`, coberta no `FindAllPostsQueryHandler`).
+ *
+ * Só o recorte: o envelope — edges, `pageInfo`, `totalCount` — saiu daqui junto com o comportamento, e
+ * está no `connection.interceptor.spec`. É o mesmo movimento que `Query.posts` e `Author.posts` já
+ * tinham feito, e o efeito é o de sempre: os flags de paginação são afirmados **uma vez**, e valem
+ * para as três connections do schema.
  */
 describe('PostTagsResolver', () => {
   const resolver = new PostTagsResolver();
 
-  /** Uma view como o `PostViewMapper` a entrega: campos como value objects, tags como `TagView`. */
+  /** Uma view como o `PostProfile` a entrega: campos como value objects, tags como `TagView`. */
   const viewWith = (names: string[]) =>
     new PostView({
       id: PostId.generate(),
@@ -26,50 +31,56 @@ describe('PostTagsResolver', () => {
     });
 
   const post = viewWith(['a', 'b', 'c', 'd', 'e']);
+  const names = (page: { items: TagView[] }) => page.items.map((tag) => tag.name.value);
 
-  it('slice cuts the page and flags that there is more', () => {
+  it('corta a página e sinaliza que há mais', () => {
     const page = resolver.tags(post, 2);
 
-    expect(page.edges.map((e) => e.node.name.value)).toEqual(['a', 'b']);
-    expect(page.pageInfo).toMatchObject({ hasNextPage: true, hasPreviousPage: false });
+    expect(names(page)).toEqual(['a', 'b']);
+    expect(page.hasNextPage).toBe(true);
+    expect(page.hasPrevPage).toBe(false);
     expect(page.totalCount).toBe(5);
   });
 
-  it('a cursor points at the last seen tag so the next page starts after it', () => {
+  it('o cursor aponta para a última tag vista, e a página seguinte começa depois dela', () => {
     const first = resolver.tags(post, 2);
 
-    const second = resolver.tags(post, 2, first.pageInfo.endCursor);
+    const second = resolver.tags(post, 2, first.endCursor);
 
-    expect(second.edges.map((e) => e.node.name.value)).toEqual(['c', 'd']);
-    expect(second.pageInfo).toMatchObject({ hasNextPage: true, hasPreviousPage: true });
+    expect(names(second)).toEqual(['c', 'd']);
+    expect(second.hasNextPage).toBe(true);
+    expect(second.hasPrevPage).toBe(true);
   });
 
-  it('the last page has no next', () => {
-    const page = resolver.tags(post, 2, resolver.tags(post, 4).pageInfo.endCursor);
+  it('a última página não tem próxima', () => {
+    const page = resolver.tags(post, 2, resolver.tags(post, 4).endCursor);
 
-    expect(page.edges.map((e) => e.node.name.value)).toEqual(['e']);
-    expect(page.pageInfo.hasNextPage).toBe(false);
+    expect(names(page)).toEqual(['e']);
+    expect(page.hasNextPage).toBe(false);
   });
 
-  it('a limit larger than the collection is not an error', () => {
+  it('um limite maior que a coleção não é erro', () => {
     const page = resolver.tags(post, 50);
 
-    expect(page.edges).toHaveLength(5);
-    expect(page.pageInfo).toMatchObject({ hasNextPage: false, startCursor: expect.any(String), endCursor: expect.any(String) });
+    expect(page.items).toHaveLength(5);
+    expect(page.hasNextPage).toBe(false);
+    expect(page.startCursor).toEqual(expect.any(String));
+    expect(page.endCursor).toEqual(expect.any(String));
   });
 
-  it('an empty list is an empty page', () => {
+  it('uma lista vazia é uma página vazia', () => {
     const page = resolver.tags(viewWith([]));
 
-    expect(page.edges).toEqual([]);
-    expect(page.pageInfo).toEqual({ hasNextPage: false, hasPreviousPage: false, startCursor: null, endCursor: null });
+    expect(page.items).toEqual([]);
+    expect(page).toMatchObject({ hasNextPage: false, hasPrevPage: false, startCursor: null, endCursor: null });
   });
 
-  it('each edge gets the cursor of its absolute position', () => {
+  /** O cursor é a **posição absoluta**, e não a posição dentro da página. */
+  it('cada item leva o cursor da sua posição absoluta', () => {
     const first = resolver.tags(post, 3);
-    const second = resolver.tags(post, 3, first.pageInfo.endCursor);
+    const second = resolver.tags(post, 3, first.endCursor);
 
-    expect(second.edges[0].cursor).not.toEqual(first.edges[0].cursor);
-    expect(resolver.tags(post, 1, second.edges[0].cursor).edges[0].node.name.value).toBe('e');
+    expect(second.from(second.items[0])).not.toEqual(first.from(first.items[0]));
+    expect(names(resolver.tags(post, 1, second.from(second.items[0])))).toEqual(['e']);
   });
 });

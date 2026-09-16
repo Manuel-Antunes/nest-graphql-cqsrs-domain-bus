@@ -1,14 +1,12 @@
-import { z, type ZodError } from 'zod';
-
-/** Uma invariante do Post foi violada: título vazio, update sem mudanças, tag repetida... */
+/**
+ * Uma invariante do Post foi violada: título vazio, update sem mudanças, tag repetida...
+ *
+ * Quando a violação vem de um `safeParse`, o `ZodError` vai como `cause` — a mensagem nomeia a
+ * invariante, a causa carrega as issues. Quem imprime uma coisa ou outra é a borda.
+ */
 export class InvalidPostException extends Error {
-  constructor(message: string) {
-    super(message);
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
     this.name = 'InvalidPostException';
-  }
-
-  /** Traduz as issues de um `safeParse` em uma mensagem só, campo a campo. */
-  static fromZod(error: ZodError): InvalidPostException {
-    return new InvalidPostException(z.prettifyError(error));
   }
 }

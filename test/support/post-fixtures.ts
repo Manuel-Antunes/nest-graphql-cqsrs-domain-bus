@@ -4,8 +4,8 @@ import { Post } from '../../src/domain/post/post.entity';
 import { PostId } from '../../src/domain/post/vo/post-id';
 import { Tag } from '../../src/domain/tag/tag.entity';
 import { TagId } from '../../src/domain/tag/vo/tag-id';
+import { Reader } from '../../src/domain/user/reader.entity';
 import { AUTHOR_ROLE, User } from '../../src/domain/user/user.entity';
-import { Users } from '../../src/domain/user/user.factory';
 import { Author } from '../../src/domain/user/author.entity';
 import { UserId } from '../../src/domain/user/vo/user-id';
 import { freshEm } from './cqrs-testing-module';
@@ -53,14 +53,14 @@ export async function givenAnAuthor(module: TestingModule, email = `autor+${User
 /** Grava um Reader — quem lê mas não escreve. */
 export async function givenAReader(module: TestingModule, email = `leitor+${UserId.generate()}@example.com`, name = 'leitor'): Promise<User> {
   const em = freshEm(module);
-  const reader = Users.register(UserId.generate(), { email, name }, null, T0);
+  const reader = Reader.register(UserId.generate(), { email, name }, null, T0);
   reader.uncommit();
   await em.persist(reader).flush();
   return reader;
 }
 
 async function givenAnAuthorIn(em: ReturnType<typeof freshEm>, email: string, name: string): Promise<Author> {
-  const author = Users.register(UserId.generate(), { email, name }, AUTHOR_ROLE, T0);
+  const author = Author.register(UserId.generate(), { email, name }, AUTHOR_ROLE, T0);
   if (!author.canWritePosts()) {
     throw new Error('User.register com AUTHOR_ROLE precisa nascer Author');
   }

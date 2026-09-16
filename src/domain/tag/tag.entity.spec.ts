@@ -1,5 +1,6 @@
 import { TagCreatedEvent } from './event/tag-created.event';
 import { InvalidTagException } from './exception/invalid-tag.exception';
+import { issuesOf } from '../../../test/support/invalid-input';
 import { Tag } from './tag.entity';
 import { TagId } from './vo/tag-id';
 import { TagName } from './vo/tag-name';
@@ -17,7 +18,7 @@ describe('Tag', () => {
 
   it('create with a blank name raises nothing', () => {
     expect(() => Tag.create(id, '   ', now)).toThrow(InvalidTagException);
-    expect(() => Tag.create(id, 'x'.repeat(51), now)).toThrow(/excede 50 caracteres/);
+    expect(issuesOf(() => Tag.create(id, 'x'.repeat(51), now))).toContain('excede 50 caracteres');
   });
 
   it('the name value object trims and rejects the empty string', () => {

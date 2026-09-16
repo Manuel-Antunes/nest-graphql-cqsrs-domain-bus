@@ -1,5 +1,4 @@
-import type { EventSubscriber, FlushEventArgs } from '@mikro-orm/core';
-import { ChangeSetType } from '@mikro-orm/core';
+import { type EventSubscriber, type FlushEventArgs, ChangeSetType } from '@mikro-orm/core';
 import { isSoftDeletable } from '../../../../domain/shared/soft-delete';
 
 /**

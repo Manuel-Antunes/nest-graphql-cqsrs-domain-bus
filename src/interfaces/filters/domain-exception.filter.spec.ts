@@ -30,6 +30,15 @@ describe('DomainExceptionFilter', () => {
     expect(error.extensions).toEqual({ code });
   });
 
+  it('prints the ZodError a domain exception carries as its cause', () => {
+    const { error } = z.object({ title: z.string().min(1, 'title não pode ser vazio') }).safeParse({ title: '' });
+
+    const translated = filter.catch(new InvalidPostException('post inválido', { cause: error }), host);
+
+    expect(translated.extensions.code).toBe('BAD_USER_INPUT');
+    expect(translated.message).toContain('title não pode ser vazio');
+  });
+
   it('turns a ZodError from the edge into BAD_USER_INPUT with the pretty message', () => {
     const { error } = z.uuid().safeParse('nao-existe');
 

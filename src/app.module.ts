@@ -1,3 +1,4 @@
+import { AutomapperModule } from "@automapper/nestjs";
 import { MikroORM, RequestContext } from "@mikro-orm/core";
 import { MikroOrmModule } from "@mikro-orm/nestjs";
 import { Module } from "@nestjs/common";
@@ -9,6 +10,8 @@ import { CqsrsModule } from "./cqsrs";
 import { createAuth } from "./infrastructure/auth/auth";
 import { mikroOrmConfig } from "./infrastructure/persistence/sqlite/mikro-orm.config";
 import { InterfacesModule } from "./interfaces/interfaces.module";
+import { MapperErrorHandler } from "./interfaces/mapper/mapper-error.handler";
+import { validatedDtoClasses } from "./interfaces/mapper/validated-dto.strategy";
 
 /**
  * O composition root: as quatro peças de framework que o projeto integra, e a borda da aplicação.
@@ -47,9 +50,11 @@ import { InterfacesModule } from "./interfaces/interfaces.module";
  * - `AuthModule`: o Better Auth ligado ao ORM;
  * - `GraphQLModule` com o driver Apollo: schema **schema-first**, carregado de `src/graphql/`, e
  *   subscriptions sobre WebSocket em `/graphql`, pelo protocolo graphql-ws.
+ * - `AutomapperModule`: o mapeador que traduz a borda — ver abaixo.
  *
- * Os dois primeiros são `global`, e é por isso que os módulos de camada não precisam importá-los:
- * `CqsrsModule.forRoot()` traz `global: true`, e o `MikroOrmCoreModule` é `@Global()`.
+ * O `CqsrsModule.forRoot()` traz `global: true`, o `MikroOrmCoreModule` é `@Global()` e o
+ * `AutomapperModule.forRoot` também se registra global; é por isso que os módulos de camada não
+ * precisam importá-los.
  */
 @Module({
   imports: [
@@ -83,9 +88,36 @@ import { InterfacesModule } from "./interfaces/interfaces.module";
        */
       typePaths: [join(__dirname, "graphql", "**/*.graphql")],
       resolvers: { DateTime: GraphQLISODateTime },
+      /**
+       * Por padrão o @nestjs/graphql **desliga** guards, filters e interceptors nos `@ResolveField`,
+       * para não pagar o pipeline inteiro em cada nó de cada lista. `Post.author` e `Author.posts`
+       * traduzem o que devolvem por interceptor, como os de raiz — sem esta linha eles devolveriam o
+       * agregado cru, e o sintoma seria um `Cannot return null for non-nullable field` que não aponta
+       * para lugar nenhum.
+       *
+       * Só `interceptors`: guards e filters continuam desligados nos campos, onde o custo por nó
+       * importaria e onde ninguém os declarou.
+       */
+      fieldResolverEnhancers: ["interceptors"],
       graphiql: true,
       subscriptions: { "graphql-ws": true },
       includeStacktraceInErrorResponses: false,
+    }),
+    /**
+     * O mapeador, registrado uma vez para a aplicação inteira.
+     *
+     * Ele aparece aqui, e não dentro do `InterfacesModule`, pelo mesmo motivo dos outros quatro: é
+     * uma peça de framework, e o composition root é onde elas se ligam. **O que ele traduz**, porém, é
+     * assunto exclusivo da borda — os perfis são providers do `InterfacesModule`, e nenhuma outra
+     * camada injeta o `Mapper`.
+     *
+     * Não há `namingConventions` de propósito: os dois lados de cada mapeamento já são camelCase, e
+     * uma convenção ligada aqui passaria a achatar nomes compostos (`authorId` viraria o caminho
+     * `author.id`) em todos os mapeamentos de uma vez.
+     */
+    AutomapperModule.forRoot({
+      strategyInitializer: validatedDtoClasses(),
+      errorHandler: new MapperErrorHandler(),
     }),
     InterfacesModule,
   ],

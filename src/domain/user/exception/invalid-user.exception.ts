@@ -1,14 +1,15 @@
-import type { ZodError } from 'zod';
-import { z } from 'zod';
-
-/** Uma invariante de User foi violada — email inválido, nome vazio, promoção impossível. */
+/**
+ * Uma invariante de User foi violada — email inválido, nome vazio, promoção impossível.
+ *
+ * Quando a violação vem de um `safeParse`, o `ZodError` viaja junto como `cause`: o domínio diz
+ * **qual** invariante caiu, e quem precisa do detalhe campo a campo — o `DomainExceptionFilter` na
+ * borda, o log — lê a causa. Traduzir o `ZodError` para texto aqui dentro faria o contrário: jogaria
+ * fora as issues (que são dados) logo no ponto em que elas ainda estão inteiras, e amarraria o domínio
+ * ao jeito que o Zod imprime.
+ */
 export class InvalidUserException extends Error {
-  constructor(message: string) {
-    super(message);
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
     this.name = 'InvalidUserException';
-  }
-
-  static fromZod(error: ZodError): InvalidUserException {
-    return new InvalidUserException(z.prettifyError(error));
   }
 }

@@ -1,8 +1,8 @@
 import { defineEntity, p } from '@mikro-orm/core';
 import { User } from '../../../../domain/user/user.entity';
 import { Author } from '../../../../domain/user/author.entity';
-import { PostSchema } from './post-orm.entity';
 import { Reader } from '../../../../domain/user/reader.entity';
+import { PostSchema } from './post-orm.entity';
 import { Email } from '../../../../domain/user/vo/email';
 import { UserId } from '../../../../domain/user/vo/user-id';
 import { UserName } from '../../../../domain/user/vo/user-name';
