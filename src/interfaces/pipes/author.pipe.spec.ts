@@ -1,38 +1,86 @@
+import { MikroORM } from '@mikro-orm/core';
+import { defineConfig } from '@mikro-orm/sqlite';
+import type { QueryBus } from '@nestjs/cqrs';
+import { FindAuthorQuery } from '../../application/user/query/find-author.query';
+import { AUTHOR_ROLE, Author, Authorship } from '../../domain/user/author.entity';
 import { NotAnAuthorException } from '../../domain/user/exception/not-an-author.exception';
-import { Reader } from '../../domain/user/reader.entity';
-import { AUTHOR_ROLE, User } from '../../domain/user/user.entity';
-import { Author } from '../../domain/user/author.entity';
+import { User } from '../../domain/user/user.entity';
 import { UserId } from '../../domain/user/vo/user-id';
+import { PostEntitySchema } from '../../infrastructure/persistence/sqlite/entities/post-orm.entity';
+import { TagSchema } from '../../infrastructure/persistence/sqlite/entities/tag-orm.entity';
+import {
+  AuthorshipEntitySchema,
+  UserEntitySchema,
+} from '../../infrastructure/persistence/sqlite/entities/user-orm.entity';
 import { AuthorPipe } from './author.pipe';
 
 describe('AuthorPipe', () => {
-  const pipe = new AuthorPipe();
+  let orm: MikroORM;
   const now = new Date('2026-09-08T12:00:00.000Z');
 
-  const anEmail = () => `x+${UserId.generate()}@example.com`;
-  const anAuthor = (): User =>
-    Author.register(UserId.generate(), { email: anEmail(), name: 'manuel' }, AUTHOR_ROLE, now);
-  const aReader = (): User =>
-    Reader.register(UserId.generate(), { email: anEmail(), name: 'manuel' }, null, now);
-
-  it('deixa passar um Author, e o tipo que sai é Author', () => {
-    const user = anAuthor();
-
-    const author = pipe.transform(user);
-
-    expect(author).toBeInstanceOf(Author);
-    expect(author).toBe(user);
+  beforeAll(async () => {
+    orm = await MikroORM.init(
+      defineConfig({
+        dbName: ':memory:',
+        entities: [PostEntitySchema, TagSchema, UserEntitySchema, AuthorshipEntitySchema],
+      }),
+    );
   });
 
-  it('recusa um Reader', () => {
-    const reader = aReader();
+  afterAll(() => orm.close());
 
-    expect(() => pipe.transform(reader)).toThrow(NotAnAuthorException);
+  const pipeFinding = (author: Author | null) => {
+    const dispatched: unknown[] = [];
+    const bus = {
+      execute: (query: unknown) => {
+        dispatched.push(query);
+        return Promise.resolve(author);
+      },
+    } as unknown as QueryBus;
+    return { pipe: new AuthorPipe(bus), dispatched };
+  };
+
+  const aUser = (roles: readonly string[]): User =>
+    User.register(UserId.generate(), { email: `x+${UserId.generate()}@example.com`, name: 'manuel' }, roles, now);
+
+  const anAuthor = (user: User): Author => Author.cast(user, Authorship.of(user));
+
+  it('asks for the author by the id of the session user, as a value object', async () => {
+    const user = aUser([AUTHOR_ROLE]);
+    const { pipe, dispatched } = pipeFinding(anAuthor(user));
+
+    await pipe.transform(user);
+
+    expect(dispatched[0]).toBeInstanceOf(FindAuthorQuery.FindAuthor);
+    expect((dispatched[0] as FindAuthorQuery.FindAuthor).authorId.equals(user.id)).toBe(true);
   });
 
-  it('a recusa nomeia o usuário — quem recebe a mensagem é o dono da sessão', () => {
-    const reader = aReader();
+  it('hands back what came out of the query, already an Author', async () => {
+    const user = aUser([AUTHOR_ROLE]);
+    const author = anAuthor(user);
 
-    expect(() => pipe.transform(reader)).toThrow(new RegExp(String(reader.id)));
+    expect(await pipeFinding(author).pipe.transform(user)).toBe(author);
+  });
+
+  it('refuses a user without the author role, and does not even ask', async () => {
+    const user = aUser([]);
+    const { pipe, dispatched } = pipeFinding(null);
+
+    await expect(pipe.transform(user)).rejects.toThrow(NotAnAuthorException);
+    expect(dispatched).toEqual([]);
+  });
+
+  it('the role alone is not enough: without the delegate row there is nothing to cast over', async () => {
+    const user = aUser([AUTHOR_ROLE]);
+    const { pipe, dispatched } = pipeFinding(null);
+
+    await expect(pipe.transform(user)).rejects.toThrow(NotAnAuthorException);
+    expect(dispatched).toHaveLength(1);
+  });
+
+  it('the refusal names the user — whoever reads the message owns the session', async () => {
+    const user = aUser([]);
+
+    await expect(pipeFinding(null).pipe.transform(user)).rejects.toThrow(new RegExp(String(user.id)));
   });
 });

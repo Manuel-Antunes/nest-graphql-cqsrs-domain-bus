@@ -2,8 +2,8 @@ import { MikroORM, ref, type Ref } from '@mikro-orm/core';
 import { defineConfig } from '@mikro-orm/sqlite';
 import { Tag } from '../tag/tag.entity';
 import { TagId } from '../tag/vo/tag-id';
-import { AUTHOR_ROLE, User } from '../user/user.entity';
-import { Author } from '../user/author.entity';
+import { User } from '../user/user.entity';
+import { AUTHOR_ROLE, Author, Authorship } from '../user/author.entity';
 import { UserId } from '../user/vo/user-id';
 import { UserName } from '../user/vo/user-name';
 import { PostCreatedEvent } from './event/post-created.event';
@@ -15,8 +15,9 @@ import { NotDeletedException } from '../shared/soft-delete/not-deleted.exception
 import { InvalidPostException } from './exception/invalid-post.exception';
 import { issuesOf } from '../../../test/support/invalid-input';
 import { PostNotWrittenByException } from './exception/post-not-written-by.exception';
-import { PostSchema } from '../../infrastructure/persistence/sqlite/entities/post-orm.entity';
+import { PostEntitySchema } from '../../infrastructure/persistence/sqlite/entities/post-orm.entity';
 import { TagSchema } from '../../infrastructure/persistence/sqlite/entities/tag-orm.entity';
+import { type DelegatedRef, delegateRef } from '../shared/delegation/delegate';
 import { Post } from './post.entity';
 import { PostContent } from './vo/post-content';
 import { PostId } from './vo/post-id';
@@ -26,7 +27,7 @@ describe('Post', () => {
   let orm: MikroORM;
 
   beforeAll(async () => {
-    orm = await MikroORM.init(defineConfig({ dbName: ':memory:', entities: [PostSchema, TagSchema] }));
+    orm = await MikroORM.init(defineConfig({ dbName: ':memory:', entities: [PostEntitySchema, TagSchema] }));
   });
 
   afterAll(() => orm.close());
@@ -38,13 +39,11 @@ describe('Post', () => {
   const tagInEvent = { tagId: '5f7a1c7e-4d0b-4b7a-9e3c-1a2b3c4d5e6f', name: 'Untagged' };
 
   const authorId = UserId.parse('9f1d1f36-7c2e-4a0a-9b7d-2f5c1a3e4b60');
-  const anAuthor = (): Ref<Author> => {
-    const user = Author.register(authorId, { email: 'manuel@example.com', name: 'manuel' }, AUTHOR_ROLE, now);
-    if (!user.canWritePosts()) {
-      throw new Error('AUTHOR_ROLE precisa nascer Author');
-    }
-    return ref(user);
-  };
+  const anAuthor = (at = now): DelegatedRef<Authorship, Author> =>
+    delegateRef(
+      Author,
+      Authorship.of(User.register(authorId, { email: 'manuel@example.com', name: 'manuel' }, [AUTHOR_ROLE], at)),
+    );
   const authorName = UserName.parse('manuel');
   const aPost = () => Post.create(id, { title: 'Nest + GraphQL', content: 'oi' }, anAuthor(), authorName, now);
   const stateOf = ({ id, title, content, author, createdAt, updatedAt, version, tags }: Post) => ({
@@ -223,16 +222,16 @@ describe('Post', () => {
   });
   describe('assertWrittenBy', () => {
     const outroAutor = () =>
-      Author.register(
+      User.register(
         UserId.parse('3c2b1a09-8f7e-4d6c-9b5a-1e2d3c4b5a60'),
         { email: 'outro@example.com', name: 'outro' },
-        AUTHOR_ROLE,
+        [AUTHOR_ROLE],
         now,
       );
 
     it('quem escreveu o post passa, e o próprio post volta para encadear', () => {
       const post = aPost();
-      const autor = post.author.getEntity();
+      const autor = post.author.delegated();
 
       expect(post.assertWrittenBy(autor)).toBe(post);
     });
@@ -247,14 +246,14 @@ describe('Post', () => {
 
     it('compara por id, então o autor relido de outra origem também passa', () => {
       const post = aPost();
-      const mesmoAutorOutraInstancia = Author.register(
+      const mesmoAutorOutraInstancia = User.register(
         authorId,
         { email: 'manuel@example.com', name: 'manuel' },
-        AUTHOR_ROLE,
+        [AUTHOR_ROLE],
         later,
       );
 
-      expect(mesmoAutorOutraInstancia).not.toBe(post.author.getEntity());
+      expect(mesmoAutorOutraInstancia).not.toBe(post.author.delegated());
       expect(() => post.assertWrittenBy(mesmoAutorOutraInstancia)).not.toThrow();
     });
 
@@ -262,7 +261,7 @@ describe('Post', () => {
       const post = aPost();
       const outro = outroAutor();
 
-      expect(outro.canWritePosts()).toBe(true);
+      expect(outro.hasRole(AUTHOR_ROLE)).toBe(true);
       expect(() => post.assertWrittenBy(outro)).toThrow(PostNotWrittenByException);
     });
 
@@ -273,6 +272,78 @@ describe('Post', () => {
       expect(() => post.assertWrittenBy(outroAutor())).toThrow();
 
       expect(post.getUncommittedEvents()).toEqual([]);
+    });
+  });
+  describe('props-based construction and state invariants', () => {
+    it('builds the scalar state straight from props, without the ORM', () => {
+      const post = Post.from({
+        id,
+        title: PostTitle.parse('Nest + GraphQL'),
+        content: PostContent.parse('oi'),
+        createdAt: now,
+        updatedAt: now,
+        version: 1,
+      });
+
+      expect(post).toMatchObject({ id, createdAt: now, updatedAt: now, version: 1 });
+      expect(post.title).toEqual(PostTitle.parse('Nest + GraphQL'));
+      expect(post.getUncommittedEvents()).toEqual([]);
+    });
+
+    it('takes a relation from props, as a reference', () => {
+      const post = Post.from({ id, author: anAuthor() });
+
+      expect(post.author.id).toEqual(authorId);
+    });
+
+    it('turns a bare primary key into a reference, like the docs prescribe', () => {
+      const post = Post.from({ id, author: authorId as never });
+
+      expect(post.author.id).toEqual(authorId);
+      expect(post.author.isInitialized()).toBe(false);
+    });
+
+    it('leaves the collections to the ORM', () => {
+      const post = Post.from({ id, tags: [tag()] as never });
+
+      expect(post.tags.isInitialized()).toBe(true);
+      expect(post.tags.count()).toBe(0);
+    });
+
+    it('validate accepts the state a created post lands in', () => {
+      expect(() => aPost().validate()).not.toThrow();
+    });
+
+    it('validate rejects an updatedAt older than createdAt', () => {
+      const post = aPost();
+      post.updatedAt = new Date('2026-09-08T11:00:00.000Z');
+
+      expect(() => post.validate()).toThrow(InvalidPostException);
+      expect(issuesOf(() => post.validate())).toContain('updatedAt cannot precede createdAt');
+    });
+
+    it('validate rejects a version below one', () => {
+      const post = aPost();
+      post.version = 0;
+
+      expect(() => post.validate()).toThrow(InvalidPostException);
+    });
+
+    it('every applied event is validated, so a broken transition throws', () => {
+      const post = aPost();
+
+      expect(() =>
+        post.apply(new PostUpdatedEvent(id.value, 'outro title', 'outro content', authorId.value, 'manuel', [], 0, now, later)),
+      ).toThrow(InvalidPostException);
+    });
+
+    it('equals compares by identity, not by reference', () => {
+      const post = aPost();
+      const same = Post.from({ id, title: post.title, content: post.content, createdAt: now, updatedAt: now, version: 1 });
+
+      expect(post.equals(same)).toBe(true);
+      expect(post.equals(Post.from({ id: PostId.generate() }))).toBe(false);
+      expect(post.equals(null)).toBe(false);
     });
   });
 });

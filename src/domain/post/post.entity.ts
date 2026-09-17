@@ -1,11 +1,13 @@
 import { AutoMap } from "@automapper/classes";
-import { BaseEntity, Collection, ref, rel, type Ref } from "@mikro-orm/core";
-import { WithAggregateRoot } from "@nestjs/cqrs";
+import { Collection, rel } from "@mikro-orm/core";
+import { AggregateRoot } from "../shared/aggregate-root";
+import { type DelegatedRef, delegateRef } from "../shared/delegation/delegate";
+import { BaseEntity } from "../shared/base-entity";
 import { WithSoftDelete } from "../shared/soft-delete/soft-delete";
 import { Tag } from "../tag/tag.entity";
 import { TagId } from "../tag/vo/tag-id";
-import { type User } from '../user/user.entity';
-import { Author } from '../user/author.entity';
+import { Author, Authorship } from "../user/author.entity";
+import { type User } from "../user/user.entity";
 import { UserId } from "../user/vo/user-id";
 import type { UserName } from "../user/vo/user-name";
 import { PostCreatedEvent } from "./event/post-created.event";
@@ -13,11 +15,17 @@ import { PostDeletedEvent } from "./event/post-deleted.event";
 import { PostRestoredEvent } from "./event/post-restored.event";
 import { PostUpdatedEvent } from "./event/post-updated.event";
 import { InvalidPostException } from "./exception/invalid-post.exception";
-import { type NewPost, NewPostSchema, type PostChanges, PostChangesSchema } from "./schemas/new-post.schema";
 import { PostNotWrittenByException } from "./exception/post-not-written-by.exception";
+import {
+  type NewPost,
+  NewPostSchema,
+  type PostChanges,
+  PostChangesSchema,
+} from "./schemas/new-post.schema";
 import { PostContent } from "./vo/post-content";
 import { PostId } from "./vo/post-id";
 import { PostTitle } from "./vo/post-title";
+import { IPost } from "./schemas/post.schema";
 
 export type PostEvent =
   | PostCreatedEvent
@@ -27,34 +35,48 @@ export type PostEvent =
 
 export type { NewPost, PostChanges };
 
-export class Post extends WithAggregateRoot(
-  WithSoftDelete(BaseEntity),
-)<PostEvent> {
+export class Post
+  extends AggregateRoot(WithSoftDelete(BaseEntity))<PostEvent>
+  implements IPost
+{
   @AutoMap(() => PostId)
   id!: PostId;
+
   @AutoMap(() => PostTitle)
   title!: PostTitle;
+
+  _content: string;
+
   @AutoMap(() => PostContent)
-  content!: PostContent;
-  author!: Ref<Author>;
-  @AutoMap()
-  createdAt!: Date;
-  @AutoMap()
-  updatedAt!: Date;
+  get content(): PostContent {
+    return this._content as unknown as PostContent;
+  }
+
+  set content(value: PostContent) {
+    this._content = value.value;
+  }
+
+  author!: DelegatedRef<Authorship, Author>;
+
   @AutoMap()
   version!: number;
+
   readonly tags = new Collection<Tag, Post>(this);
+
+  static from(state: Partial<Post>): Post {
+    return new Post(state);
+  }
 
   static create(
     id: PostId,
     input: NewPost,
-    author: Ref<Author>,
+    author: DelegatedRef<Authorship, Author>,
     authorName: UserName,
     now: Date,
   ): Post {
     const parsed = NewPostSchema.safeParse(input);
     if (!parsed.success) {
-      throw new InvalidPostException('post inválido', { cause: parsed.error });
+      throw new InvalidPostException("post inválido", { cause: parsed.error });
     }
     const post = new Post();
     post.author = author;
@@ -74,7 +96,9 @@ export class Post extends WithAggregateRoot(
   update(changes: PostChanges, now: Date): this {
     const parsed = PostChangesSchema.safeParse(changes);
     if (!parsed.success) {
-      throw new InvalidPostException('update inválido', { cause: parsed.error });
+      throw new InvalidPostException("update inválido", {
+        cause: parsed.error,
+      });
     }
     const title = parsed.data.title ?? this.title;
     const content = parsed.data.content ?? this.content;
@@ -114,7 +138,7 @@ export class Post extends WithAggregateRoot(
   }
 
   private authorName(): string {
-    return this.author.getEntity().name.value;
+    return this.author.delegated().name.value;
   }
 
   private raiseUpdate(
@@ -156,8 +180,7 @@ export class Post extends WithAggregateRoot(
     this.title = PostTitle.parse(event.title);
     this.content = PostContent.parse(event.content);
     this.author = this.sameAuthorOr(event.authorId);
-    this.createdAt = event.occurredAt;
-    this.updatedAt = event.occurredAt;
+    this.stampCreation(event.occurredAt);
     this.version = 1;
     this.applyRestoration();
     this.tags.removeAll();
@@ -166,7 +189,7 @@ export class Post extends WithAggregateRoot(
   onPostUpdatedEvent(event: PostUpdatedEvent): void {
     this.title = PostTitle.parse(event.title);
     this.content = PostContent.parse(event.content);
-    this.updatedAt = event.occurredAt;
+    this.touch(event.occurredAt);
     this.version = event.version;
     this.author = this.sameAuthorOr(event.authorId);
     const atHand = new Map(
@@ -181,19 +204,19 @@ export class Post extends WithAggregateRoot(
 
   onPostDeletedEvent(event: PostDeletedEvent): void {
     this.applyDeletion(event.occurredAt);
-    this.updatedAt = event.occurredAt;
+    this.touch(event.occurredAt);
     this.version = event.version;
   }
 
   onPostRestoredEvent(event: PostRestoredEvent): void {
     this.applyRestoration();
-    this.updatedAt = event.occurredAt;
+    this.touch(event.occurredAt);
     this.version = event.version;
   }
 
-  private sameAuthorOr(authorId: string): Ref<Author> {
+  private sameAuthorOr(authorId: string): DelegatedRef<Authorship, Author> {
     return this.author?.id.equals(authorId)
       ? this.author
-      : ref(rel(Author, UserId.parse(authorId)));
+      : delegateRef(Author, UserId.parse(authorId));
   }
 }

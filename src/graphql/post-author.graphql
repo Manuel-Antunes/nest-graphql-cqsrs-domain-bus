@@ -2,8 +2,8 @@ extend type Post {
   """
   Quem escreveu. Resolvido a partir do `authorId` que a `PostView` carrega.
 
-  É sempre um `Author` (nunca um `Reader`): a coluna `posts.author_id` aponta para `authors`, então a
-  chave estrangeira já garante o que o `!` promete.
+  É sempre um `Author`: a coluna `posts.author_id` aponta para `authors`, então a chave estrangeira já
+  garante o que o `!` promete — quem não tem a linha delegada não é autor de post nenhum.
 
   Dá para navegar de volta para os outros posts dele — ver `Author.posts`.
   """

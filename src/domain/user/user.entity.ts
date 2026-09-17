@@ -1,83 +1,80 @@
 import { AutoMap } from "@automapper/classes";
-import { BaseEntity, ref, rel, type Ref } from "@mikro-orm/core";
-import { WithAggregateRoot } from "@nestjs/cqrs";
+import { AggregateRoot } from "../shared/aggregate-root";
+import { BaseEntity } from "../shared/base-entity";
 import { WithSoftDelete } from "../shared/soft-delete/soft-delete";
-import type { Author } from "./author.entity";
 import { UserDeletedEvent } from "./event/user-deleted.event";
 import { UserRegisteredEvent } from "./event/user-registered.event";
 import { UserRestoredEvent } from "./event/user-restored.event";
-import { UserSupersededEvent } from "./event/user-superseded.event";
+import { UserRoleGrantedEvent } from "./event/user-role-granted.event";
 import { InvalidUserException } from "./exception/invalid-user.exception";
 import { type NewUser, NewUserSchema } from "./schemas/new-user.schema";
+import type { IUser } from "./schemas/user.schema";
 import { Email } from "./vo/email";
 import { UserId } from "./vo/user-id";
 import { UserName } from "./vo/user-name";
 
 export type UserEvent =
   | UserRegisteredEvent
-  | UserSupersededEvent
+  | UserRoleGrantedEvent
   | UserDeletedEvent
   | UserRestoredEvent;
 
-export const AUTHOR_ROLE = "author";
-
 export type { NewUser };
 
-export abstract class User extends WithAggregateRoot(
-  WithSoftDelete(BaseEntity),
-)<UserEvent> {
+export class User
+  extends AggregateRoot(WithSoftDelete(BaseEntity))<UserEvent>
+  implements IUser
+{
   @AutoMap(() => UserId)
   id!: UserId;
+
   @AutoMap(() => Email)
   email!: Email;
+
   @AutoMap(() => UserName)
   name!: UserName;
-  createdAt!: Date;
+
+  roles: string[] = [];
+
   version!: number;
-  supersededBy?: Ref<User> | null;
-  supersedes?: Ref<User> | null;
 
-  static referenceTo(userId: UserId): Ref<User> {
-    return ref(rel(User as unknown as new () => User, userId)) as Ref<User>;
-  }
-
-  static register<T extends User>(
-    this: new () => T,
+  static register(
     id: UserId,
     input: NewUser,
-    role: string | null,
+    roles: readonly string[],
     now: Date,
-    supersedes: UserId | null = null,
-  ): T {
+  ): User {
     const parsed = NewUserSchema.safeParse(input);
     if (!parsed.success) {
-      throw new InvalidUserException('user inválido', { cause: parsed.error });
+      throw new InvalidUserException("user inválido", { cause: parsed.error });
     }
-    const user = new this();
+    const user = new User();
     user.apply(
       new UserRegisteredEvent(
         id.value,
         parsed.data.email.value,
         parsed.data.name.value,
-        role,
-        supersedes?.value ?? null,
+        [...roles],
         now,
       ),
     );
     return user;
   }
 
-  supersede(by: UserId, now: Date): this {
-    if (this.supersededBy) {
-      throw new InvalidUserException(
-        `user ${this.id} já foi encerrado em favor de ${this.supersededBy.id}`,
-      );
+  hasRole(role: string): boolean {
+    return this.roles.includes(role);
+  }
+
+  grantRole(role: string, now: Date): this {
+    if (this.hasRole(role)) {
+      throw new InvalidUserException(`user ${this.id} já tem o papel ${role}`);
     }
-    if (by.equals(this.id)) {
-      throw new InvalidUserException("um user não pode suceder a si mesmo");
-    }
-    this.apply(new UserSupersededEvent(this.id.value, by.value, now));
+    this.apply(new UserRoleGrantedEvent(this.id.value, role, now));
     return this;
+  }
+
+  isActive(): boolean {
+    return !this.isDeleted();
   }
 
   override softDelete(now: Date): this {
@@ -92,39 +89,33 @@ export abstract class User extends WithAggregateRoot(
     return this;
   }
 
-  canWritePosts(): this is Author {
-    return false;
-  }
-
-  isActive(): boolean {
-    return !this.supersededBy && !this.isDeleted();
-  }
-
   onUserRegisteredEvent(event: UserRegisteredEvent): void {
     this.id = UserId.parse(event.userId);
     this.email = Email.parse(event.email);
     this.name = UserName.parse(event.name);
-    this.createdAt = event.occurredAt;
-    this.supersedes = event.supersedes
-      ? User.referenceTo(UserId.parse(event.supersedes))
-      : null;
-    this.supersededBy = null;
+    this.roles = [...event.roles];
+    this.stampCreation(event.occurredAt);
     this.applyRestoration();
     this.version = 1;
   }
 
-  onUserSupersededEvent(event: UserSupersededEvent): void {
-    this.supersededBy = User.referenceTo(UserId.parse(event.supersededBy));
+  onUserRoleGrantedEvent(event: UserRoleGrantedEvent): void {
+    this.roles = this.hasRole(event.role)
+      ? this.roles
+      : [...this.roles, event.role];
+    this.touch(event.occurredAt);
     this.version += 1;
   }
 
   onUserDeletedEvent(event: UserDeletedEvent): void {
     this.applyDeletion(event.occurredAt);
+    this.touch(event.occurredAt);
     this.version += 1;
   }
 
-  onUserRestoredEvent(_event: UserRestoredEvent): void {
+  onUserRestoredEvent(event: UserRestoredEvent): void {
     this.applyRestoration();
+    this.touch(event.occurredAt);
     this.version += 1;
   }
 }

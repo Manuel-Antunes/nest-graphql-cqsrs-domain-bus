@@ -4,15 +4,16 @@ import {
   freshEm,
   inRequestContext,
 } from '../../../../../test/support/cqrs-testing-module';
-import { givenAnAuthor, givenAPost, givenATag, T0 } from '../../../../../test/support/post-fixtures';
+import { givenAnAuthor, givenAPost, givenATag, givenAUser, T0 } from '../../../../../test/support/post-fixtures';
 import { Post } from '../../../../domain/post/post.entity';
 import { PostRepository } from '../../../../domain/post/post.repository';
 import { PostId } from '../../../../domain/post/vo/post-id';
 import { TagRepository } from '../../../../domain/tag/tag.repository';
 import { TagId } from '../../../../domain/tag/vo/tag-id';
 import { TagName } from '../../../../domain/tag/vo/tag-name';
-import { Author } from '../../../../domain/user/author.entity';
-import { AUTHOR_ROLE, User } from '../../../../domain/user/user.entity';
+import { AUTHOR_ROLE, Author, Authorship } from '../../../../domain/user/author.entity';
+import { AuthorRepository } from '../../../../domain/user/author.repository';
+import { User } from '../../../../domain/user/user.entity';
 import { Email } from '../../../../domain/user/vo/email';
 import { UserRepository } from '../../../../domain/user/user.repository';
 import { UserId } from '../../../../domain/user/vo/user-id';
@@ -22,12 +23,14 @@ describe('adapters do MikroORM', () => {
   let posts: PostRepository;
   let tags: TagRepository;
   let users: UserRepository;
+  let authors: AuthorRepository;
 
   beforeEach(async () => {
     module = await createCqrsTestingModule([]);
     posts = module.get(PostRepository);
     tags = module.get(TagRepository);
     users = module.get(UserRepository);
+    authors = module.get(AuthorRepository);
   });
 
   afterEach(() => module.close());
@@ -43,7 +46,7 @@ describe('adapters do MikroORM', () => {
 
       expect(found?.id.equals(post.id)).toBe(true);
       expect(found?.tags.getItems().map((each) => each.name.value)).toEqual(['dev']);
-      expect(found?.author.getEntity().name.value).toBe('manuel');
+      expect(found!.author.delegated().name.value).toBe('manuel');
     });
 
     it('findById devolve null para um id que não existe', async () => {
@@ -130,40 +133,31 @@ describe('adapters do MikroORM', () => {
   });
 
   describe('MikroOrmUserRepository', () => {
-    it('findById devolve o tipo concreto certo', async () => {
+    it('findById devolve o user com os papéis que ele carrega', async () => {
       const author = await givenAnAuthor(module);
 
       const found = await inContext(() => users.findById(author.id));
 
-      expect(found?.canWritePosts()).toBe(true);
+      expect(found?.hasRole(AUTHOR_ROLE)).toBe(true);
       expect(await inContext(() => users.findById(UserId.generate()))).toBeNull();
     });
 
-    it('findActiveByEmail ignora quem foi encerrado por promoção', async () => {
-      const email = 'promovido@example.com';
-      const reader = await givenAnAuthor(module, email);
-      const sucessorId = UserId.generate();
-      await inContext(async () => {
-        const encerrado = await users.findById(reader.id);
-        encerrado!.supersede(sucessorId, new Date());
-        encerrado!.uncommit();
-        const sucessor = Author.register(sucessorId, { email, name: 'manuel' }, AUTHOR_ROLE, new Date(), reader.id);
-        sucessor.uncommit();
-        await users.saveAll([sucessor, encerrado!]);
-      });
-
-      const ativo = await inContext(() => users.findActiveByEmail(Email.parse(email)));
-
-      expect(ativo?.id.equals(sucessorId)).toBe(true);
-      expect(ativo?.id.equals(reader.id)).toBe(false);
-      expect(await freshEm(module).count(User, {}, { filters: false })).toBe(2);
-    });
-
-    it('findActiveByEmail devolve null para um email desconhecido', async () => {
+    it('findByEmail acha quem está ativo, e devolve null para um email desconhecido', async () => {
       const author = await givenAnAuthor(module, 'conhecido@example.com');
 
-      expect((await inContext(() => users.findActiveByEmail(author.email)))?.id.equals(author.id)).toBe(true);
-      expect(await inContext(() => users.findActiveByEmail(Email.parse('outro@example.com')))).toBeNull();
+      expect((await inContext(() => users.findByEmail(author.email)))?.id.equals(author.id)).toBe(true);
+      expect(await inContext(() => users.findByEmail(Email.parse('outro@example.com')))).toBeNull();
+    });
+
+    it('findByEmail não enxerga quem foi apagado', async () => {
+      const author = await givenAnAuthor(module, 'apagado@example.com');
+      await inContext(async () => {
+        const found = await users.findById(author.id);
+        found!.softDelete(new Date());
+        await users.save(found!);
+      });
+
+      expect(await inContext(() => users.findByEmail(author.email))).toBeNull();
     });
 
     it('saveAll grava vários numa transação só', async () => {
@@ -175,25 +169,6 @@ describe('adapters do MikroORM', () => {
       });
 
       expect(await freshEm(module).count(User)).toBe(2);
-    });
-
-    it('findSupersededBy acha o stream encerrado a partir do sucessor', async () => {
-      const email = 'voltando@example.com';
-      const antigo = await givenAnAuthor(module, email);
-      const sucessorId = UserId.generate();
-      await inContext(async () => {
-        const encerrado = await users.findById(antigo.id);
-        encerrado!.supersede(sucessorId, new Date());
-        encerrado!.uncommit();
-        const sucessor = Author.register(sucessorId, { email, name: 'manuel' }, AUTHOR_ROLE, new Date(), antigo.id);
-        sucessor.uncommit();
-        await users.saveAll([sucessor, encerrado!]);
-      });
-
-      const encontrado = await inContext(() => users.findSupersededBy(sucessorId));
-
-      expect(encontrado?.id.equals(antigo.id)).toBe(true);
-      expect(await inContext(() => users.findSupersededBy(UserId.generate()))).toBeNull();
     });
 
     it('restore traz de volta um user apagado', async () => {
@@ -210,6 +185,48 @@ describe('adapters do MikroORM', () => {
       const back = await inContext(() => users.findById(author.id));
       expect(back?.id.equals(author.id)).toBe(true);
       expect(back?.isDeleted()).toBe(false);
+    });
+  });
+
+  describe('MikroOrmAuthorRepository', () => {
+    it('findById devolve o Author já castado, e null para quem não tem a linha delegada', async () => {
+      const author = await givenAnAuthor(module);
+      const semPapel = await givenAUser(module);
+
+      const found = await inContext(() => authors.findById(author.id));
+
+      expect(found).toBeInstanceOf(Author);
+      expect(found!.id.equals(author.id)).toBe(true);
+      expect(found!.name.value).toBe('manuel');
+      expect(await inContext(() => authors.findById(semPapel.id))).toBeNull();
+    });
+
+    it('o Author que sai é o MESMO user do identity map, e não uma cópia', async () => {
+      const author = await givenAnAuthor(module);
+
+      const [user, cast] = await inContext(async () => [
+        await users.findById(author.id),
+        await authors.findById(author.id),
+      ]);
+
+      expect(cast).toBe(user);
+      expect(cast).toBeInstanceOf(Author);
+    });
+
+    it('create anexa a delegação a um user que já existe, sem tocar no user', async () => {
+      const user = await givenAUser(module);
+      const created = await inContext(async () => {
+        const found = await users.findById(user.id);
+        found!.grantRole(AUTHOR_ROLE, new Date());
+        found!.uncommit();
+        await users.save(found!);
+        return authors.create(found!);
+      });
+
+      expect(created).toBeInstanceOf(Author);
+      expect(created.authorship).toBeInstanceOf(Authorship);
+      expect(await freshEm(module).count(User)).toBe(1);
+      expect(await freshEm(module).count(Authorship)).toBe(1);
     });
   });
 });

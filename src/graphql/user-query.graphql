@@ -1,16 +1,17 @@
 extend type Query {
   """
-  Quem está logado.
+  Who is logged in.
 
-  Exige sessão — sem o cookie do Better Auth o guard global recusa antes de o resolver rodar, que é o
-  `@PreAuthorize("isAuthenticated()")` da versão Axon. Repare que não há argumento: o alvo é sempre
-  quem está pedindo.
+  Requires a session — without the Better Auth cookie the global guard refuses before the resolver
+  runs, which is the `@PreAuthorize("isAuthenticated()")` of the Axon version. Note there is no
+  argument: the target is always whoever is asking.
 
-  Na primeira vez que uma credencial nova aparece, o perfil de domínio é criado — ou religado ao que
-  já existe, pelo email — sem que o cliente peça nada: é o provisionamento *just-in-time* do
-  `UserProvisioning`. No caminho normal isso já aconteceu no sign-up, pelo hook, e aqui é só leitura.
+  The first time a new credential shows up, the domain profile is created — or reattached to the one
+  that already exists, by email — without the client asking for anything: that is the *just-in-time*
+  provisioning of `UserProvisioning`. On the normal path this already happened at sign-up, through
+  the hook, and here it is only a read.
 
-  Devolve a **interface**: use um fragmento para alcançar o que só existe no `Author`.
+  Returns the **interface**: use a fragment to reach what only exists on `Author`.
 
       me {
         id
@@ -21,8 +22,8 @@ extend type Query {
         }
       }
 
-  Para um `Reader`, o mesmo fragmento simplesmente não casa — e a resposta vem sem `posts`, em vez de
-  vir com uma lista vazia.
+  For a user without the author role the same fragment simply does not match — and the answer comes
+  back without `posts`, instead of with an empty list.
   """
-  me: User!
+  me: IUser!
 }

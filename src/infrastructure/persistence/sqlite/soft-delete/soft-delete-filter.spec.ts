@@ -2,14 +2,15 @@ import { MikroORM, ref } from '@mikro-orm/core';
 import { defineConfig } from '@mikro-orm/sqlite';
 import { Post } from '../../../../domain/post/post.entity';
 import { PostId } from '../../../../domain/post/vo/post-id';
-import { AUTHOR_ROLE, User } from '../../../../domain/user/user.entity';
-import { Author } from '../../../../domain/user/author.entity';
+import { User } from '../../../../domain/user/user.entity';
+import { delegateRef } from '../../../../domain/shared/delegation/delegate';
+import { AUTHOR_ROLE, Author, Authorship } from '../../../../domain/user/author.entity';
 import { UserId } from '../../../../domain/user/vo/user-id';
-import { PostSchema } from '../entities/post-orm.entity';
+import { PostEntitySchema } from '../entities/post-orm.entity';
 import { ACTIVE_FILTER } from './soft-delete-orm.entity';
 import { SoftDeleteSubscriber } from './soft-delete.subscriber';
 import { TagSchema } from '../entities/tag-orm.entity';
-import { AuthorSchema, ReaderSchema, UserSchema } from '../entities/user-orm.entity';
+import { AuthorshipEntitySchema, UserEntitySchema } from '../entities/user-orm.entity';
 import { SoftDeletion } from '../../../../domain/shared/soft-delete/soft-delete';
 
 describe('o filtro de ativos', () => {
@@ -21,7 +22,7 @@ describe('o filtro de ativos', () => {
     orm = await MikroORM.init(
       defineConfig({
         dbName: ':memory:',
-        entities: [PostSchema, TagSchema, UserSchema, ReaderSchema, AuthorSchema],
+        entities: [PostEntitySchema, TagSchema, UserEntitySchema, AuthorshipEntitySchema],
         subscribers: [new SoftDeleteSubscriber()],
         ensureDatabase: { create: true },
       }),
@@ -32,29 +33,29 @@ describe('o filtro de ativos', () => {
 
   const now = T0;
 
-  const givenAnAuthor = async (): Promise<Author> => {
+  const givenAnAuthor = async (): Promise<User> => {
     const em = orm.em.fork();
-    const user = Author.register(
+    const user = User.register(
       UserId.generate(),
       { email: `autor+${UserId.generate()}@example.com`, name: 'manuel' },
-      AUTHOR_ROLE,
+      [AUTHOR_ROLE],
       now,
     );
-    if (!user.canWritePosts()) {
-      throw new Error('AUTHOR_ROLE precisa nascer Author');
-    }
     user.uncommit();
-    await em.persist(user).flush();
+    await em.persist(user).persist(Authorship.of(user)).flush();
     return user;
   };
 
-  const givenAPost = async (author: Author) => {
+  const givenAPost = async (author: User) => {
     const em = orm.em.fork();
-    const owner = await em.findOneOrFail(User, { id: author.id });
-    if (!owner.canWritePosts()) {
-      throw new Error('o autor precisa ser Author');
-    }
-    const post = Post.create(PostId.generate(), { title: 'um post', content: 'oi' }, ref(owner), owner.name, now);
+    const authorship = await em.findOneOrFail(Authorship, { user: author.id });
+    const post = Post.create(
+      PostId.generate(),
+      { title: 'um post', content: 'oi' },
+      delegateRef(Author, authorship),
+      delegateRef(Author, authorship).delegated().name,
+      now,
+    );
     post.uncommit();
     await em.persist(post).flush();
     return post.id;

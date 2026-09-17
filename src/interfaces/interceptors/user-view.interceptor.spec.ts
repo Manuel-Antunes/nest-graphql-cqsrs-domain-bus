@@ -1,11 +1,10 @@
 import type { Mapper, ModelIdentifier } from '@automapper/core';
 import type { CallHandler, ExecutionContext } from '@nestjs/common';
 import { lastValueFrom, of } from 'rxjs';
-import { AUTHOR_ROLE, User } from '../../domain/user/user.entity';
-import { Author } from '../../domain/user/author.entity';
-import { Reader } from '../../domain/user/reader.entity';
+import { AUTHOR_ROLE } from '../../domain/user/author.entity';
+import { User } from '../../domain/user/user.entity';
 import { UserId } from '../../domain/user/vo/user-id';
-import { AuthorView, ReaderView } from '../../dto/graphql/user.view';
+import { AuthorView, UserView } from '../../dto/graphql/user.view';
 import { UserViewInterceptor } from './user-view.interceptor';
 
 describe('UserViewInterceptor', () => {
@@ -31,35 +30,27 @@ describe('UserViewInterceptor', () => {
     return dispatched;
   };
 
-  const anAuthor = (): User =>
-    Author.register(UserId.generate(), { email: 'quem@example.com', name: 'quem' }, AUTHOR_ROLE, now);
-  const aReader = (): User =>
-    Reader.register(UserId.generate(), { email: 'quem@example.com', name: 'quem' }, null, now);
+  const aUser = (roles: readonly string[]): User =>
+    User.register(UserId.generate(), { email: 'quem@example.com', name: 'quem' }, roles, now);
 
-  it('um autor é mapeado como Author → AuthorView', async () => {
-    const author = anAuthor();
-    expect(author).toBeInstanceOf(Author);
+  it('a user carrying the author role is mapped as User → AuthorView', async () => {
+    const dispatched = await intercept(aUser([AUTHOR_ROLE]));
 
-    const dispatched = await intercept(author);
-
-    expect(dispatched).toEqual([[Author, AuthorView]]);
+    expect(dispatched).toEqual([[User, AuthorView]]);
   });
 
-  it('quem não escreve é mapeado como Reader → ReaderView', async () => {
-    const reader = aReader();
-    expect(reader).toBeInstanceOf(Reader);
+  it('a user without it is mapped as User → UserView', async () => {
+    const dispatched = await intercept(aUser([]));
 
-    const dispatched = await intercept(reader);
-
-    expect(dispatched).toEqual([[Reader, ReaderView]]);
+    expect(dispatched).toEqual([[User, UserView]]);
   });
 
-  it('a triagem é a que o agregado publica, e não uma reimplementada aqui', async () => {
-    const user = aReader();
-    vi.spyOn(user, 'canWritePosts').mockReturnValue(true as never);
+  it('the triage is the role the aggregate carries, not one reimplemented here', async () => {
+    const user = aUser([]);
+    expect(await intercept(user)).toEqual([[User, UserView]]);
 
-    const dispatched = await intercept(user);
+    user.grantRole(AUTHOR_ROLE, now);
 
-    expect(dispatched).toEqual([[Author, AuthorView]]);
+    expect(await intercept(user)).toEqual([[User, AuthorView]]);
   });
 });

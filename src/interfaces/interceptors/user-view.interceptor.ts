@@ -7,21 +7,20 @@ import {
   type NestInterceptor,
 } from '@nestjs/common';
 import { concatMap, type Observable } from 'rxjs';
-import { type User } from '../../domain/user/user.entity';
-import { Author } from '../../domain/user/author.entity';
-import { Reader } from '../../domain/user/reader.entity';
-import { AuthorView, ReaderView, type UserView } from '../../dto/graphql/user.view';
+import { AUTHOR_ROLE } from '../../domain/user/author.entity';
+import { User } from '../../domain/user/user.entity';
+import { AuthorView, UserView, type IUserView } from '../../dto/graphql/user.view';
 
 @Injectable()
-export class UserViewInterceptor implements NestInterceptor<User, UserView> {
+export class UserViewInterceptor implements NestInterceptor<User, IUserView> {
   constructor(@InjectMapper() private readonly mapper: Mapper) {}
 
-  intercept(_context: ExecutionContext, next: CallHandler<User>): Observable<UserView> {
+  intercept(_context: ExecutionContext, next: CallHandler<User>): Observable<IUserView> {
     return next.handle().pipe(
       concatMap((user) =>
-        user.canWritePosts()
-          ? this.mapper.mapAsync(user, Author, AuthorView)
-          : this.mapper.mapAsync(user as Reader, Reader, ReaderView),
+        user.hasRole(AUTHOR_ROLE)
+          ? this.mapper.mapAsync(user, User, AuthorView)
+          : this.mapper.mapAsync(user, User, UserView),
       ),
     );
   }

@@ -2,7 +2,7 @@ import { ForeignKeyConstraintViolationException } from '@mikro-orm/core';
 import { CommandBus } from '@nestjs/cqrs';
 import type { TestingModule } from '@nestjs/testing';
 import { createCqrsTestingModule, freshEm, RecordingEvents, inRequestContext } from '../../../../test/support/cqrs-testing-module';
-import { givenAnAuthor, givenAPost, givenAReader } from '../../../../test/support/post-fixtures';
+import { givenAnAuthor, givenAPost, givenAUser } from '../../../../test/support/post-fixtures';
 import { PostCreatedEvent } from '../../../domain/post/event/post-created.event';
 import { InvalidPostException } from '../../../domain/post/exception/invalid-post.exception';
 import { PostAlreadyExistsException } from '../../../domain/post/exception/post-already-exists.exception';
@@ -95,8 +95,8 @@ describe('CreatePostCommand.Handler', () => {
       expect(await freshEm(module).findOne(Post, { id })).toBeNull();
     });
 
-    it('recusa o id de um Reader — a FK aponta para `authors`, não para `users`', async () => {
-      const reader = await givenAReader(module);
+    it('refuses the id of a user with no authorship — the FK points at `authors`, not at `users`', async () => {
+      const reader = await givenAUser(module);
       const id = PostId.generate();
       const command = new CreatePostCommand.CreatePost(id, 'Nest + GraphQL', 'oi', reader.id, reader.name);
 

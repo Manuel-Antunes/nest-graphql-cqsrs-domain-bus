@@ -42,7 +42,7 @@ describe('FindPostQuery.Handler', () => {
 
     expect(found!.tags.isInitialized()).toBe(true);
     expect(found!.tags.getItems().map((each) => each.name.value)).toEqual(['dev']);
-    expect(found!.author.getEntity().name.value).toBe('manuel');
+    expect(found!.author.delegated().name.value).toBe('manuel');
   });
 
   it('um id que não existe é null, e não exceção', async () => {

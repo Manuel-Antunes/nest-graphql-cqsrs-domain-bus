@@ -6,9 +6,11 @@ import { Test, type TestingModule } from '@nestjs/testing';
 import { CqsrsModule } from '../../src/cqsrs';
 import { PostRepository } from '../../src/domain/post/post.repository';
 import { TagRepository } from '../../src/domain/tag/tag.repository';
+import { AuthorRepository } from '../../src/domain/user/author.repository';
 import { UserRepository } from '../../src/domain/user/user.repository';
 import { MikroOrmPostRepository } from '../../src/infrastructure/persistence/sqlite/repositories/mikro-orm-post.repository';
 import { MikroOrmTagRepository } from '../../src/infrastructure/persistence/sqlite/repositories/mikro-orm-tag.repository';
+import { MikroOrmAuthorRepository } from '../../src/infrastructure/persistence/sqlite/repositories/mikro-orm-author.repository';
 import { MikroOrmUserRepository } from '../../src/infrastructure/persistence/sqlite/repositories/mikro-orm-user.repository';
 import { mikroOrmConfig } from '../../src/infrastructure/persistence/sqlite/mikro-orm.config';
 
@@ -20,6 +22,7 @@ export async function createCqrsTestingModule(providers: Provider[]): Promise<Te
       { provide: PostRepository, useClass: MikroOrmPostRepository },
       { provide: TagRepository, useClass: MikroOrmTagRepository },
       { provide: UserRepository, useClass: MikroOrmUserRepository },
+      { provide: AuthorRepository, useClass: MikroOrmAuthorRepository },
     ],
   }).compile();
   await module.init();

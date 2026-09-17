@@ -6,22 +6,25 @@ import { UpdatePostCommand } from '../../application/post/command/update-post.co
 import { PostCreatedEvent } from '../../domain/post/event/post-created.event';
 import { PostUpdatedEvent } from '../../domain/post/event/post-updated.event';
 import { Post } from '../../domain/post/post.entity';
+import {
+  type DelegatedRef,
+  delegateRef,
+} from '../../domain/shared/delegation/delegate';
 import { PostContent } from '../../domain/post/vo/post-content';
 import { PostId } from '../../domain/post/vo/post-id';
 import { PostTitle } from '../../domain/post/vo/post-title';
 import { Tag } from '../../domain/tag/tag.entity';
 import { TagId } from '../../domain/tag/vo/tag-id';
 import { TagName } from '../../domain/tag/vo/tag-name';
-import { AUTHOR_ROLE, User } from '../../domain/user/user.entity';
-import { Author } from '../../domain/user/author.entity';
+import { User } from '../../domain/user/user.entity';
+import { AUTHOR_ROLE, Author, Authorship } from '../../domain/user/author.entity';
 import { UserId } from '../../domain/user/vo/user-id';
 import { UserName } from '../../domain/user/vo/user-name';
-import { PostSchema } from '../../infrastructure/persistence/sqlite/entities/post-orm.entity';
+import { PostEntitySchema } from '../../infrastructure/persistence/sqlite/entities/post-orm.entity';
 import { TagSchema } from '../../infrastructure/persistence/sqlite/entities/tag-orm.entity';
 import {
-  AuthorSchema,
-  ReaderSchema,
-  UserSchema,
+  AuthorshipEntitySchema,
+  UserEntitySchema,
 } from '../../infrastructure/persistence/sqlite/entities/user-orm.entity';
 import { CreatePostInput } from '../../dto/graphql/create-post.input';
 import { PostView } from '../../dto/graphql/post.view';
@@ -44,7 +47,7 @@ describe('PostProfile', () => {
     orm = await MikroORM.init(
       defineConfig({
         dbName: ':memory:',
-        entities: [PostSchema, TagSchema, UserSchema, ReaderSchema, AuthorSchema],
+        entities: [PostEntitySchema, TagSchema, UserEntitySchema, AuthorshipEntitySchema],
       }),
     );
   });
@@ -60,14 +63,11 @@ describe('PostProfile', () => {
   afterEach(() => mapper.dispose());
 
   const anAuthor = (): Author => {
-    const user = Author.register(authorId, { email: 'manuel@example.com', name: 'Manuel' }, AUTHOR_ROLE, createdAt);
-    if (!user.canWritePosts()) {
-      throw new Error('AUTHOR_ROLE precisa nascer Author');
-    }
-    return user;
+    const user = User.register(authorId, { email: 'manuel@example.com', name: 'Manuel' }, [AUTHOR_ROLE], createdAt);
+    return Author.cast(user, Authorship.of(user));
   };
 
-  const authorRef = (): Ref<Author> => ref(anAuthor());
+  const authorRef = (): DelegatedRef<Authorship, Author> => delegateRef(Author, anAuthor().authorship);
 
   const aTag = (): Tag => Tag.create(tagId, 'nestjs', createdAt);
 

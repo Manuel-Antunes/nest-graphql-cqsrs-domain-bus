@@ -1,12 +1,11 @@
-import { ref } from '@mikro-orm/core';
 import type { TestingModule } from '@nestjs/testing';
 import { Post } from '../../src/domain/post/post.entity';
 import { PostId } from '../../src/domain/post/vo/post-id';
 import { Tag } from '../../src/domain/tag/tag.entity';
 import { TagId } from '../../src/domain/tag/vo/tag-id';
-import { Reader } from '../../src/domain/user/reader.entity';
-import { AUTHOR_ROLE, User } from '../../src/domain/user/user.entity';
-import { Author } from '../../src/domain/user/author.entity';
+import { delegateRef } from '../../src/domain/shared/delegation/delegate';
+import { AUTHOR_ROLE, Author, Authorship } from '../../src/domain/user/author.entity';
+import { User } from '../../src/domain/user/user.entity';
 import { UserId } from '../../src/domain/user/vo/user-id';
 import { freshEm } from './cqrs-testing-module';
 
@@ -18,13 +17,12 @@ export async function givenAPost(
 ): Promise<Post> {
   const em = freshEm(module);
   const at = overrides.createdAt ?? T0;
-  const author = overrides.author
-    ? await em.findOneOrFail(Author, { id: overrides.author.id })
-    : await givenAnAuthorIn(em, `manuel+${UserId.generate()}@example.com`, 'manuel');
+  const author = overrides.author ?? (await givenAnAuthor(module));
+  const authorship = await em.findOneOrFail(Authorship, { user: author.id });
   const post = Post.create(
     overrides.id ?? PostId.generate(),
     { title: overrides.title ?? 'Nest + GraphQL', content: overrides.content ?? 'oi' },
-    ref(author),
+    delegateRef(Author, authorship),
     author.name,
     at,
   );
@@ -36,26 +34,32 @@ export async function givenAPost(
   return post;
 }
 
-export async function givenAnAuthor(module: TestingModule, email = `autor+${UserId.generate()}@example.com`, name = 'manuel'): Promise<Author> {
-  return givenAnAuthorIn(freshEm(module), email, name);
-}
-
-export async function givenAReader(module: TestingModule, email = `leitor+${UserId.generate()}@example.com`, name = 'leitor'): Promise<User> {
+export async function givenAnAuthor(
+  module: TestingModule,
+  email = `autor+${UserId.generate()}@example.com`,
+  name = 'manuel',
+): Promise<Author> {
   const em = freshEm(module);
-  const reader = Reader.register(UserId.generate(), { email, name }, null, T0);
-  reader.uncommit();
-  await em.persist(reader).flush();
-  return reader;
+  const user = givenAUserWith(email, name, [AUTHOR_ROLE]);
+  const authorship = Authorship.of(user);
+  await em.persist(user).persist(authorship).flush();
+  return Author.cast(user, authorship);
 }
 
-async function givenAnAuthorIn(em: ReturnType<typeof freshEm>, email: string, name: string): Promise<Author> {
-  const author = Author.register(UserId.generate(), { email, name }, AUTHOR_ROLE, T0);
-  if (!author.canWritePosts()) {
-    throw new Error('User.register com AUTHOR_ROLE precisa nascer Author');
-  }
-  author.uncommit();
-  await em.persist(author).flush();
-  return author;
+export async function givenAUser(
+  module: TestingModule,
+  email = `leitor+${UserId.generate()}@example.com`,
+  name = 'leitor',
+): Promise<User> {
+  const user = givenAUserWith(email, name, []);
+  await freshEm(module).persist(user).flush();
+  return user;
+}
+
+function givenAUserWith(email: string, name: string, roles: readonly string[]): User {
+  const user = User.register(UserId.generate(), { email, name }, roles, T0);
+  user.uncommit();
+  return user;
 }
 
 export async function givenATag(module: TestingModule, name = 'Untagged', id: TagId = TagId.generate()): Promise<Tag> {

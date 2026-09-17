@@ -5,8 +5,7 @@ export class UserRegisteredEvent implements DomainEvent {
     readonly userId: string,
     readonly email: string,
     readonly name: string,
-    readonly role: string | null,
-    readonly supersedes: string | null,
+    readonly roles: readonly string[],
     readonly occurredAt: Date,
   ) {}
 }

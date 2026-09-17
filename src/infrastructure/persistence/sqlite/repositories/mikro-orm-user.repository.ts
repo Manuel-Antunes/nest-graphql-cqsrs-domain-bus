@@ -25,8 +25,8 @@ export class MikroOrmUserRepository extends UserRepository {
     return inRequestContext(this.em, () => this.em.findOne(User, { id: userId }));
   }
 
-  findActiveByEmail(email: Email): Promise<User | null> {
-    return this.em.findOne(User, { email, supersededBy: null });
+  findByEmail(email: Email): Promise<User | null> {
+    return inRequestContext(this.em, () => this.em.findOne(User, { email }));
   }
 
   async restore(userId: UserId): Promise<void> {
@@ -35,18 +35,6 @@ export class MikroOrmUserRepository extends UserRepository {
       { id: userId },
       { deleted: { deletedAt: null } },
       { filters: { [ACTIVE_FILTER]: false } },
-    );
-  }
-
-  findSupersededBy(userId: UserId): Promise<User | null> {
-    return this.em.findOne(User, { supersededBy: userId });
-  }
-
-  findSupersededByEmail(email: Email): Promise<User | null> {
-    return this.em.findOne(
-      User,
-      { email, supersededBy: { $ne: null } },
-      { orderBy: { createdAt: 'desc' } },
     );
   }
 }

@@ -1,5 +1,4 @@
 import { AutoMap } from '@automapper/classes';
-import { ref, rel } from '@mikro-orm/core';
 import { Inject, Scope } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
 import { type AsyncContext, Command, CommandHandler, EventPublisher, type ICommandHandler } from '@nestjs/cqrs';
@@ -8,6 +7,7 @@ import { Post } from '../../../domain/post/post.entity';
 import { PostRepository } from '../../../domain/post/post.repository';
 import { PostId } from '../../../domain/post/vo/post-id';
 import { Author } from '../../../domain/user/author.entity';
+import { delegateRef } from '../../../domain/shared/delegation/delegate';
 import { UserId } from '../../../domain/user/vo/user-id';
 import { UserName } from '../../../domain/user/vo/user-name';
 
@@ -51,7 +51,7 @@ export namespace CreatePostCommand {
       if (await this.posts.findById(command.postId)) {
         throw new PostAlreadyExistsException(command.postId);
       }
-      const author = ref(rel(Author, command.authorId));
+      const author = delegateRef(Author, command.authorId);
       const post = this.publisher.mergeObjectContext(
         Post.create(
           command.postId,

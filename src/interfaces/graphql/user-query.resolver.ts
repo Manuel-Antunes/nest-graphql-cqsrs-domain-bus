@@ -1,11 +1,11 @@
 import { UseInterceptors } from '@nestjs/common';
 import { Query, ResolveField, Resolver } from '@nestjs/graphql';
 import type { User } from '../../domain/user/user.entity';
-import { AuthorView, type UserView } from '../../dto/graphql/user.view';
+import { AuthorView, type IUserView } from '../../dto/graphql/user.view';
 import { CurrentUser } from '../decorators/current-user.decorator';
 import { UserViewInterceptor } from '../interceptors/user-view.interceptor';
 
-@Resolver('User')
+@Resolver('IUser')
 export class UserQueryResolver {
   @Query('me')
   @UseInterceptors(UserViewInterceptor)
@@ -14,7 +14,7 @@ export class UserQueryResolver {
   }
 
   @ResolveField()
-  __resolveType(value: UserView): string {
-    return value instanceof AuthorView ? 'Author' : 'Reader';
+  __resolveType(value: IUserView): string {
+    return value instanceof AuthorView ? 'Author' : 'User';
   }
 }

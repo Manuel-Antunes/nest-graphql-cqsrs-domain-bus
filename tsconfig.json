@@ -3,6 +3,7 @@
     "module": "commonjs",
     "moduleResolution": "bundler",
     "target": "es2023",
+    "useDefineForClassFields": false,
     "lib": ["es2023"],
     "declaration": false,
     "removeComments": false,

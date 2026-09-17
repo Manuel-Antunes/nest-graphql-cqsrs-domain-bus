@@ -22,3 +22,11 @@ export const activeFilter = {
     default: true,
   },
 };
+
+export const activeThrough = (relation: string) => ({
+  [ACTIVE_FILTER]: {
+    name: ACTIVE_FILTER,
+    cond: { [relation]: { deleted: { deletedAt: null } } },
+    default: true,
+  },
+});

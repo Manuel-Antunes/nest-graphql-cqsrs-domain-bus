@@ -15,9 +15,9 @@ const UserViewSchema = z.object({
 const UserViewBase = ValidatedDto(UserViewSchema, { DECORATOR_REGISTRY: AUTOMAP_REGISTRY });
 
 @InheritValidatedMetadata()
-export class ReaderView extends UserViewBase {}
+export class UserView extends UserViewBase {}
 
 @InheritValidatedMetadata()
 export class AuthorView extends UserViewBase {}
 
-export type UserView = ReaderView | AuthorView;
+export type IUserView = UserView | AuthorView;

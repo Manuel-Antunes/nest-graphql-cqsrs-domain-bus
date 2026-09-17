@@ -1,51 +1,45 @@
-import { Author } from '../../domain/user/author.entity';
-import { Reader } from '../../domain/user/reader.entity';
-import { AUTHOR_ROLE, User } from '../../domain/user/user.entity';
+import { AUTHOR_ROLE } from '../../domain/user/author.entity';
+import { User } from '../../domain/user/user.entity';
 import { UserId } from '../../domain/user/vo/user-id';
-import { AuthorView, ReaderView } from '../../dto/graphql/user.view';
+import { AuthorView, UserView } from '../../dto/graphql/user.view';
 import { UserQueryResolver } from './user-query.resolver';
 
 describe('UserQueryResolver', () => {
   const resolver = new UserQueryResolver();
   const now = new Date('2026-09-08T12:00:00.000Z');
 
-  const anEmail = () => `u+${UserId.generate()}@example.com`;
-  const anAuthor = (): User =>
-    Author.register(UserId.generate(), { email: anEmail(), name: 'manuel' }, AUTHOR_ROLE, now);
-  const aReader = (): User =>
-    Reader.register(UserId.generate(), { email: anEmail(), name: 'manuel' }, null, now);
+  const aUser = (roles: readonly string[]): User =>
+    User.register(UserId.generate(), { email: `u+${UserId.generate()}@example.com`, name: 'manuel' }, roles, now);
 
-  const viewOf = (user: User) =>
-    user.canWritePosts()
-      ? new AuthorView({ id: user.id, name: user.name, email: user.email })
-      : new ReaderView({ id: user.id, name: user.name, email: user.email });
+  const viewOf = (user: User) => {
+    const state = { id: user.id, name: user.name, email: user.email };
+    return user.hasRole(AUTHOR_ROLE) ? new AuthorView(state) : new UserView(state);
+  };
 
   describe('me', () => {
-    it('devolve o usuário da sessão como veio', () => {
-      const user = anAuthor();
+    it('hands back the session user as it came', () => {
+      const user = aUser([AUTHOR_ROLE]);
 
       expect(resolver.me(user)).toBe(user);
     });
 
-    it('um Reader também tem um me, e ele não é um erro', () => {
-      const reader = aReader();
+    it('a user with no role also has a me, and it is not an error', () => {
+      const user = aUser([]);
 
-      expect(resolver.me(reader)).toBe(reader);
+      expect(resolver.me(user)).toBe(user);
     });
   });
 
   describe('__resolveType', () => {
-    it('traduz a classe da view no nome do tipo do schema', () => {
-      expect(resolver.__resolveType(viewOf(anAuthor()))).toBe('Author');
-      expect(resolver.__resolveType(viewOf(aReader()))).toBe('Reader');
+    it('translates the view class into the schema type name', () => {
+      expect(resolver.__resolveType(viewOf(aUser([AUTHOR_ROLE])))).toBe('Author');
+      expect(resolver.__resolveType(viewOf(aUser([])))).toBe('User');
     });
 
-    it('devolve o nome do schema, não o da classe', () => {
-      const names = [anAuthor(), aReader()].map((user) =>
-        resolver.__resolveType(viewOf(user)),
-      );
+    it('answers with the schema name, not the class name', () => {
+      const names = [aUser([AUTHOR_ROLE]), aUser([])].map((user) => resolver.__resolveType(viewOf(user)));
 
-      expect(names).toEqual(['Author', 'Reader']);
+      expect(names).toEqual(['Author', 'User']);
       expect(names.some((name) => name.endsWith('View'))).toBe(false);
     });
   });

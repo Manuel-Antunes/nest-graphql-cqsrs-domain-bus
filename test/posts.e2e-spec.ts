@@ -6,7 +6,8 @@ import { AppModule } from '../src/app.module';
 import { PostRequest } from '../src/application/shared/post-request';
 import { SubscriptionBus } from '../src/cqsrs';
 import { IdentityProvider } from '../src/domain/user/identity.provider';
-import { AUTHOR_ROLE, User } from '../src/domain/user/user.entity';
+import { AUTHOR_ROLE, Authorship } from '../src/domain/user/author.entity';
+import { User } from '../src/domain/user/user.entity';
 import { CredentialId } from '../src/domain/user/vo/credential-id';
 import { Email } from '../src/domain/user/vo/email';
 import { GraphqlClient, until } from './support/graphql-client';
@@ -74,16 +75,14 @@ describe('posts (e2e)', () => {
       expect(profilesAfterSignUp).toBe(1);
     });
 
-    it('conceder o papel pela porta promove o perfil a Author', async () => {
+    it('conceder o papel pela porta promove o mesmo perfil, sem abrir outro', async () => {
       const em = app.get(MikroORM).em.fork();
 
-      const author = await em.findOneOrFail(User, {
-        email: Email.parse('manuel@example.com'),
-        supersededBy: null,
-      });
+      const author = await em.findOneOrFail(User, { email: Email.parse('manuel@example.com') });
 
-      expect(author.canWritePosts()).toBe(true);
-      expect(author.supersedes ?? null).not.toBeNull();
+      expect(author.hasRole(AUTHOR_ROLE)).toBe(true);
+      expect(await em.findOne(Authorship, { user: author.id })).not.toBeNull();
+      expect(await em.count(User)).toBe(profilesAfterSignUp);
     });
 
     it('a identidade que a porta devolve é a mesma que a sessão carrega', async () => {
@@ -334,14 +333,11 @@ describe('posts (e2e)', () => {
       const { data } = await client.execute(`{ me { id } }`);
 
       const em = app.get(MikroORM).em.fork();
-      const active = await em.findOneOrFail(User, {
-        email: Email.parse('manuel@example.com'),
-        supersededBy: null,
-      });
+      const active = await em.findOneOrFail(User, { email: Email.parse('manuel@example.com') });
       expect(data!.me.id).toBe(active.id.value);
     });
 
-    it('um leitor é um Reader, e o fragmento de Author simplesmente não casa', async () => {
+    it('quem não é autor é um User, e o fragmento de Author simplesmente não casa', async () => {
       const { data, errors } = await readerClient.execute(
         `{ me { ${ME} ... on Author { posts(first: 1) { totalCount } } } }`,
       );
@@ -351,7 +347,7 @@ describe('posts (e2e)', () => {
         id: expect.any(String),
         name: 'leitor',
         email: 'leitor@example.com',
-        __typename: 'Reader',
+        __typename: 'User',
       });
     });
 
@@ -413,8 +409,8 @@ describe('posts (e2e)', () => {
       });
     });
 
-    it('pedir Author.posts num Reader é um erro de schema, não uma lista vazia', async () => {
-      const { errors } = await readerClient.execute(`{ me { ... on Reader { posts(first: 1) { totalCount } } } }`);
+    it('pedir Author.posts em quem não é autor é um erro de schema, não uma lista vazia', async () => {
+      const { errors } = await readerClient.execute(`{ me { ... on User { posts(first: 1) { totalCount } } } }`);
 
       expect(errors?.[0].message).toMatch(/posts/);
     });

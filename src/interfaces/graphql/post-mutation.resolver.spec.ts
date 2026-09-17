@@ -1,4 +1,6 @@
 import { createMapper, type Mapper } from '@automapper/core';
+import { MikroORM } from '@mikro-orm/core';
+import { defineConfig } from '@mikro-orm/sqlite';
 import type { CommandBus, QueryBus } from '@nestjs/cqrs';
 import { CreatePostCommand } from '../../application/post/command/create-post.command';
 import { UpdatePostCommand } from '../../application/post/command/update-post.command';
@@ -7,12 +9,18 @@ import { PostRequest } from '../../application/shared/post-request';
 import { PostNotFoundException } from '../../domain/post/exception/post-not-found.exception';
 import type { Post } from '../../domain/post/post.entity';
 import { PostId } from '../../domain/post/vo/post-id';
-import { Author } from '../../domain/user/author.entity';
-import { AUTHOR_ROLE } from '../../domain/user/user.entity';
+import { AUTHOR_ROLE, Author, Authorship } from '../../domain/user/author.entity';
+import { User } from '../../domain/user/user.entity';
 import { UserId } from '../../domain/user/vo/user-id';
 import type { CreatePostInput } from '../../dto/graphql/create-post.input';
 import { PostProfile } from '../mapper/post.profile';
 import { validatedDtoClasses } from '../mapper/validated-dto.strategy';
+import { PostEntitySchema } from '../../infrastructure/persistence/sqlite/entities/post-orm.entity';
+import { TagSchema } from '../../infrastructure/persistence/sqlite/entities/tag-orm.entity';
+import {
+  AuthorshipEntitySchema,
+  UserEntitySchema,
+} from '../../infrastructure/persistence/sqlite/entities/user-orm.entity';
 import { PostMutationResolver } from './post-mutation.resolver';
 
 describe('PostMutationResolver', () => {
@@ -22,6 +30,19 @@ describe('PostMutationResolver', () => {
 
   let mapper: Mapper;
 
+  let orm: MikroORM;
+
+  beforeAll(async () => {
+    orm = await MikroORM.init(
+      defineConfig({
+        dbName: ':memory:',
+        entities: [PostEntitySchema, TagSchema, UserEntitySchema, AuthorshipEntitySchema],
+      }),
+    );
+  });
+
+  afterAll(() => orm.close());
+
   beforeEach(async () => {
     mapper = createMapper({ strategyInitializer: validatedDtoClasses() });
     new PostProfile(mapper);
@@ -30,8 +51,10 @@ describe('PostMutationResolver', () => {
 
   afterEach(() => mapper.dispose());
 
-  const anAuthor = (): Author =>
-    Author.register(authorId, { email: 'manuel@example.com', name: 'manuel' }, AUTHOR_ROLE, now);
+  const anAuthor = (): Author => {
+    const user = User.register(authorId, { email: 'manuel@example.com', name: 'manuel' }, [AUTHOR_ROLE], now);
+    return Author.cast(user, Authorship.of(user));
+  };
 
   const anInput = (overrides: Record<string, unknown> = {}) =>
     ({ title: '  Nest + GraphQL  ', content: 'oi', ...overrides }) as unknown as CreatePostInput;

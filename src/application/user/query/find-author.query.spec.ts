@@ -1,7 +1,7 @@
 import { MikroORM } from '@mikro-orm/core';
 import type { TestingModule } from '@nestjs/testing';
 import { createCqrsTestingModule, inRequestContext } from '../../../../test/support/cqrs-testing-module';
-import { givenAnAuthor, givenAPost, givenAReader, T0 } from '../../../../test/support/post-fixtures';
+import { givenAnAuthor, givenAPost, givenAUser, T0 } from '../../../../test/support/post-fixtures';
 import { FindAllPostsQuery } from '../../post/query/find-all-posts.query';
 import { Author } from '../../../domain/user/author.entity';
 import { UserId } from '../../../domain/user/vo/user-id';
@@ -33,7 +33,7 @@ describe('FindAuthorQuery.Handler', () => {
 
   afterEach(() => module.close());
 
-  it('devolve o Author, já com o tipo concreto', async () => {
+  it('devolve o Author: o mesmo user, já castado sobre a authorship', async () => {
     const author = await givenAnAuthor(module, 'autora@example.com', 'manuel');
 
     const found = await inRequestContext(module, () =>
@@ -45,8 +45,8 @@ describe('FindAuthorQuery.Handler', () => {
     expect(found!.email.value).toBe('autora@example.com');
   });
 
-  it('um Reader e um id desconhecido são o mesmo null', async () => {
-    const reader = await givenAReader(module);
+  it('um user sem o papel de autor e um id desconhecido são o mesmo null', async () => {
+    const reader = await givenAUser(module);
 
     const asReader = await inRequestContext(module, () =>
       handler.execute(new FindAuthorQuery.FindAuthor(reader.id)),

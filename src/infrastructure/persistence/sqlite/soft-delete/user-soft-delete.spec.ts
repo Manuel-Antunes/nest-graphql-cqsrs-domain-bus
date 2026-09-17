@@ -1,12 +1,12 @@
 import { MikroORM } from '@mikro-orm/core';
 import { defineConfig } from '@mikro-orm/sqlite';
-import { AUTHOR_ROLE, User } from '../../../../domain/user/user.entity';
-import { Author } from '../../../../domain/user/author.entity';
-import { PostSchema } from '../entities/post-orm.entity';
+import { User } from '../../../../domain/user/user.entity';
+import { AUTHOR_ROLE, Authorship } from '../../../../domain/user/author.entity';
+import { PostEntitySchema } from '../entities/post-orm.entity';
 import { ACTIVE_FILTER } from './soft-delete-orm.entity';
 import { SoftDeleteSubscriber } from './soft-delete.subscriber';
 import { TagSchema } from '../entities/tag-orm.entity';
-import { AuthorSchema, ReaderSchema, UserSchema } from '../entities/user-orm.entity';
+import { AuthorshipEntitySchema, UserEntitySchema } from '../entities/user-orm.entity';
 import { UserId } from '../../../../domain/user/vo/user-id';
 import { MikroOrmUserRepository } from '../repositories/mikro-orm-user.repository';
 
@@ -22,16 +22,16 @@ describe('soft delete do User, contra o banco', () => {
     orm = await MikroORM.init(
       defineConfig({
         dbName: ':memory:',
-        entities: [PostSchema, TagSchema, UserSchema, ReaderSchema, AuthorSchema],
+        entities: [PostEntitySchema, TagSchema, UserEntitySchema, AuthorshipEntitySchema],
         subscribers: [new SoftDeleteSubscriber()],
         ensureDatabase: { create: true },
       }),
     );
 
     const em = orm.em.fork();
-    const author = Author.register(UserId.generate(), { email: EMAIL, name: 'Autor' }, AUTHOR_ROLE, NOW);
+    const author = User.register(UserId.generate(), { email: EMAIL, name: 'Autor' }, [AUTHOR_ROLE], NOW);
     author.uncommit();
-    await em.persist(author).flush();
+    await em.persist(author).persist(Authorship.of(author)).flush();
     authorId = author.id;
     users = new MikroOrmUserRepository(orm.em.fork());
   });
@@ -58,26 +58,26 @@ describe('soft delete do User, contra o banco', () => {
       await removeThroughOrm();
 
       expect(await users.findById(authorId)).toBeNull();
-      expect(await users.findActiveByEmail(EMAIL as never)).toBeNull();
+      expect(await users.findByEmail(EMAIL as never)).toBeNull();
       expect(await rawCount('users', `id = '${authorId.value}' and deleted_at is not null`)).toBe(1);
     });
 
-    it('a linha da tabela filha sobrevive ao delete', async () => {
+    it('a linha da authorship sobrevive ao delete', async () => {
       await removeThroughOrm();
 
       expect(await rawCount('authors', `id = '${authorId.value}'`)).toBe(1);
     });
 
-    it('restaurar traz o Author de volta inteiro, com a subclasse intacta', async () => {
+    it('restaurar traz o user de volta inteiro, com os papéis e a delegação intactos', async () => {
       await removeThroughOrm();
 
       await users.restore(authorId);
 
       const restored = await new MikroOrmUserRepository(orm.em.fork()).findById(authorId);
-      expect(restored).toBeInstanceOf(Author);
-      expect(restored?.canWritePosts()).toBe(true);
+      expect(restored?.hasRole(AUTHOR_ROLE)).toBe(true);
       expect(restored?.isDeleted()).toBe(false);
       expect(restored?.name.value).toBe('Autor');
+      expect(await orm.em.fork().findOne(Authorship, { user: authorId })).not.toBeNull();
     });
   });
 

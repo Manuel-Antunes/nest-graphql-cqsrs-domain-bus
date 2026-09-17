@@ -2,10 +2,10 @@ import { DataloaderType } from '@mikro-orm/core';
 import { defineConfig } from '@mikro-orm/sqlite';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { PostSchema } from './entities/post-orm.entity';
+import { PostEntitySchema } from './entities/post-orm.entity';
 import { SoftDeleteSubscriber } from './soft-delete/soft-delete.subscriber';
 import { TagSchema } from './entities/tag-orm.entity';
-import { AuthorSchema, ReaderSchema, UserSchema } from './entities/user-orm.entity';
+import { AuthorshipEntitySchema, UserEntitySchema } from './entities/user-orm.entity';
 import { betterAuthEntities } from '../../auth/auth';
 
 export const mikroOrmConfig = (dbName = process.env.POSTS_DB ?? 'data/posts.db') => {
@@ -14,7 +14,7 @@ export const mikroOrmConfig = (dbName = process.env.POSTS_DB ?? 'data/posts.db')
   }
   return defineConfig({
     dbName,
-    entities: [PostSchema, TagSchema, UserSchema, ReaderSchema, AuthorSchema, ...betterAuthEntities],
+    entities: [PostEntitySchema, TagSchema, UserEntitySchema, AuthorshipEntitySchema, ...betterAuthEntities],
     subscribers: [new SoftDeleteSubscriber()],
     dataloader: DataloaderType.ALL,
     ensureDatabase: { create: true },

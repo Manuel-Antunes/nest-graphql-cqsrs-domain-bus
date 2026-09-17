@@ -1,6 +1,6 @@
 import { type IQueryHandler, Query, QueryHandler } from '@nestjs/cqrs';
 import type { Author } from '../../../domain/user/author.entity';
-import { UserRepository } from '../../../domain/user/user.repository';
+import { AuthorRepository } from '../../../domain/user/author.repository';
 import type { UserId } from '../../../domain/user/vo/user-id';
 
 export namespace FindAuthorQuery {
@@ -12,11 +12,10 @@ export namespace FindAuthorQuery {
 
   @QueryHandler(FindAuthor)
   export class Handler implements IQueryHandler<FindAuthor> {
-    constructor(private readonly users: UserRepository) {}
+    constructor(private readonly authors: AuthorRepository) {}
 
-    async execute(query: FindAuthor): Promise<Author | null> {
-      const user = await this.users.findById(query.authorId);
-      return user?.canWritePosts() ? user : null;
+    execute(query: FindAuthor): Promise<Author | null> {
+      return this.authors.findById(query.authorId);
     }
   }
 }

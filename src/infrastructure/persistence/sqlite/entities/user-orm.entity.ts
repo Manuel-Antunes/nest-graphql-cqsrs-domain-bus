@@ -1,52 +1,59 @@
-import { defineEntity, p } from '@mikro-orm/core';
-import { User } from '../../../../domain/user/user.entity';
-import { Author } from '../../../../domain/user/author.entity';
-import { Reader } from '../../../../domain/user/reader.entity';
-import { PostSchema } from './post-orm.entity';
-import { Email } from '../../../../domain/user/vo/email';
-import { UserId } from '../../../../domain/user/vo/user-id';
-import { UserName } from '../../../../domain/user/vo/user-name';
-import { activeFilter, softDeleteIndex, softDeleteProperty } from '../soft-delete/soft-delete-orm.entity';
-import { valueObjectType } from '../helpers/value-object-type';
+import { defineEntity, p } from "@mikro-orm/core";
+import { Authorship } from "../../../../domain/user/author.entity";
+import { InvalidUserException } from "../../../../domain/user/exception/invalid-user.exception";
+import { UserSchema } from "../../../../domain/user/schemas/user.schema";
+import { User } from "../../../../domain/user/user.entity";
+import { Email } from "../../../../domain/user/vo/email";
+import { UserId } from "../../../../domain/user/vo/user-id";
+import { UserName } from "../../../../domain/user/vo/user-name";
+import { ZodEntity } from "../../../../domain/shared/zod-entity";
+import {
+  activeFilter,
+  activeThrough,
+  softDeleteIndex,
+  softDeleteProperty,
+} from "../soft-delete/soft-delete-orm.entity";
+import { referencesServeDelegations } from "../delegation/delegated-reference";
+import { valueObjectType } from "../helpers/value-object-type";
+import { PostEntitySchema } from "./post-orm.entity";
 
-const UserIdType = valueObjectType(UserId, { columnType: 'varchar(36)' });
-const EmailType = valueObjectType(Email, { columnType: 'varchar(320)' });
-const UserNameType = valueObjectType(UserName, { columnType: 'varchar(100)' });
+const UserIdType = valueObjectType(UserId, { columnType: "varchar(36)" });
+const EmailType = valueObjectType(Email, { columnType: "varchar(320)" });
+const UserNameType = valueObjectType(UserName, { columnType: "varchar(100)" });
 
-export const UserSchema = defineEntity({
+export const UserEntitySchema = defineEntity({
   class: User,
-  tableName: 'users',
-  abstract: true,
-  inheritance: 'tpt',
+  tableName: "users",
   forceConstructor: true,
   properties: {
     id: p.type(UserIdType).primary(),
     email: p.type(EmailType),
     name: p.type(UserNameType),
+    roles: p.array(),
     createdAt: p.datetime(),
+    updatedAt: p.datetime(),
     version: p.integer(),
-    supersededBy: () => p.manyToOne(UserSchema).ref().nullable().fieldName('superseded_by'),
-    supersedes: () => p.manyToOne(UserSchema).ref().nullable().fieldName('supersedes'),
     deleted: () => softDeleteProperty(),
   },
   filters: activeFilter,
-  indexes: [{ properties: ['email'] }, softDeleteIndex],
+  indexes: [{ properties: ["email"] }, softDeleteIndex],
 });
 
-export const ReaderSchema = defineEntity({
-  class: Reader,
-  tableName: 'readers',
-  extends: UserSchema,
-  forceConstructor: true,
-  properties: {},
-});
-
-export const AuthorSchema = defineEntity({
-  class: Author,
-  tableName: 'authors',
-  extends: UserSchema,
+export const AuthorshipEntitySchema = defineEntity({
+  class: Authorship,
+  tableName: "authors",
   forceConstructor: true,
   properties: {
-    posts: () => p.oneToMany(PostSchema).mappedBy('author'),
+    user: () => p.oneToOne(UserEntitySchema).ref().primary().eager().fieldName("id"),
+    posts: () => p.oneToMany(PostEntitySchema).mappedBy("author"),
   },
+  filters: activeThrough("user"),
 });
+
+referencesServeDelegations();
+
+ZodEntity(
+  User,
+  UserSchema,
+  error => new InvalidUserException("user inválido", { cause: error }),
+);

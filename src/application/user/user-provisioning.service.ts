@@ -1,10 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { EventPublisher } from '@nestjs/cqrs';
+import { AUTHOR_ROLE } from '../../domain/user/author.entity';
+import { AuthorRepository } from '../../domain/user/author.repository';
 import { UnknownIdentityException } from '../../domain/user/exception/unknown-identity.exception';
 import { type Identity, IdentityProvider } from '../../domain/user/identity.provider';
-import { Author } from '../../domain/user/author.entity';
-import { Reader } from '../../domain/user/reader.entity';
-import { AUTHOR_ROLE, User } from '../../domain/user/user.entity';
+import { User } from '../../domain/user/user.entity';
 import { UserRepository } from '../../domain/user/user.repository';
 import type { CredentialId } from '../../domain/user/vo/credential-id';
 import { UserId } from '../../domain/user/vo/user-id';
@@ -16,6 +16,7 @@ export class UserProvisioning {
   constructor(
     private readonly identities: IdentityProvider,
     private readonly users: UserRepository,
+    private readonly authors: AuthorRepository,
     private readonly publisher: EventPublisher,
   ) {}
 
@@ -24,68 +25,37 @@ export class UserProvisioning {
     if (!identity) {
       throw new UnknownIdentityException(credentialId);
     }
-
-    const existing = await this.users.findActiveByEmail(identity.email);
-    if (!existing) {
-      return this.register(identity, now, await this.pendingPromotionId(identity));
-    }
-    if (identity.role === AUTHOR_ROLE && !existing.canWritePosts()) {
-      return this.promote(existing, identity, now);
-    }
-    return existing;
+    const roles = rolesOf(identity);
+    const existing = await this.users.findByEmail(identity.email);
+    const user = existing ?? (await this.register(identity, roles, now));
+    return this.granting(user, roles, now);
   }
 
-  private async pendingPromotionId(identity: Identity): Promise<UserId | null> {
-    const orphan = await this.users.findSupersededByEmail(identity.email);
-    if (!orphan?.supersededBy) {
-      return null;
-    }
-    if (await this.users.findById(orphan.supersededBy.id)) {
-      return null;
-    }
-    this.logger.warn(
-      `promoção interrompida detectada para ${identity.email}: retomando o id ${orphan.supersededBy.id}`,
-    );
-    return orphan.supersededBy.id;
-  }
-
-  private profileFor(role: string | null): typeof Author | typeof Reader {
-    return role === AUTHOR_ROLE ? Author : Reader;
-  }
-
-  private async register(identity: Identity, now: Date, resume: UserId | null): Promise<User> {
-    const superseded = resume ? await this.users.findSupersededBy(resume) : null;
+  private async register(identity: Identity, roles: readonly string[], now: Date): Promise<User> {
     const user = this.publisher.mergeObjectContext(
-      this.profileFor(identity.role).register(
-        resume ?? UserId.generate(),
-        { email: identity.email, name: identity.name },
-        identity.role,
-        now,
-        superseded?.id ?? null,
-      ),
+      User.register(UserId.generate(), { email: identity.email, name: identity.name }, roles, now),
     );
     await this.users.save(user);
     user.commit();
     return user;
   }
 
-  private async promote(reader: User, identity: Identity, now: Date): Promise<Author> {
-    const promotedId = UserId.generate();
-    this.logger.log(`promovendo ${reader.email} de Reader para Author: ${reader.id} → ${promotedId}`);
-
-    this.publisher.mergeObjectContext(reader).supersede(promotedId, now);
-    const author = this.publisher.mergeObjectContext(
-      Author.register(
-        promotedId,
-        { email: reader.email, name: identity.name },
-        AUTHOR_ROLE,
-        now,
-        reader.id,
-      ),
-    );
-    await this.users.saveAll([author, reader]);
-    reader.commit();
-    author.commit();
-    return author;
+  private async granting(user: User, roles: readonly string[], now: Date): Promise<User> {
+    for (const role of roles) {
+      if (!user.hasRole(role)) {
+        this.logger.log(`concedendo o papel ${role} a ${user.email}: ${user.id}`);
+        this.publisher.mergeObjectContext(user).grantRole(role, now);
+        await this.users.save(user);
+        user.commit();
+      }
+    }
+    if (user.hasRole(AUTHOR_ROLE) && !(await this.authors.findById(user.id))) {
+      await this.authors.create(user);
+    }
+    return user;
   }
+}
+
+function rolesOf(identity: Identity): readonly string[] {
+  return identity.role ? [identity.role] : [];
 }

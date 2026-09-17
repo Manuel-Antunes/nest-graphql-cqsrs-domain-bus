@@ -6,7 +6,7 @@ import { Roles } from '@thallesp/nestjs-better-auth';
 import { UseFilters, UseInterceptors } from '@nestjs/common';
 import { CurrentAuthor } from '../decorators/current-user.decorator';
 import { MikroOrmExceptionFilter } from '../filters/mikro-orm-exception.filter';
-import { AUTHOR_ROLE } from '../../domain/user/user.entity';
+import { AUTHOR_ROLE } from '../../domain/user/author.entity';
 import { type Author } from '../../domain/user/author.entity';
 import { CreatePostCommand } from '../../application/post/command/create-post.command';
 import { UpdatePostCommand } from '../../application/post/command/update-post.command';

@@ -1,31 +1,33 @@
 """
-Quem tem conta. Interface, e não tipo, porque a hierarquia do domínio é polimórfica.
+Anyone with an account.
+
+An interface rather than a type because what a user *can do* is not a class they were born in: it is
+composed, at read time, from the roles they carry. Each capability shows up as its own concrete type.
 """
-interface User {
+interface IUser {
   id: ID!
   name: String!
   email: String!
 }
 
 """
-Usuário que só lê: autentica, vê posts, assina atualizações. É o `Reader` do domínio — linha em
-`users`, linha em `readers`, e nenhum campo a mais.
+A user with no capability attached: authenticates, reads posts, subscribes to updates.
 
-Não escrever não é uma permissão que falta: é um campo que não existe.
+Not writing is not a permission that is missing: it is a field that does not exist.
 """
-type Reader implements User {
+type User implements IUser {
   id: ID!
   name: String!
   email: String!
 }
 
 """
-Usuário que escreve. É o `Author` do domínio: na herança multi-tabela (`inheritance: 'tpt'`), linha em
-`users` **e** linha em `authors`.
+A user who writes. One row in `users`, plus one row in `authors` — the authorship delegate that owns
+the posts. `Author` is that same user, cast over the delegate; there is no second identity.
 
-O campo `posts` não está declarado aqui — ele tem resolver próprio, e mora em `author-posts.graphql`.
+The `posts` field is not declared here: it has a resolver of its own, in `author-posts.graphql`.
 """
-type Author implements User {
+type Author implements IUser {
   id: ID!
   name: String!
   email: String!

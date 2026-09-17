@@ -5,17 +5,18 @@ import {
   inRequestContext,
 } from '../../../test/support/cqrs-testing-module';
 import { FakeIdentityProvider } from '../../../test/support/fake-identity-provider';
-import { AUTHOR_ROLE, User } from '../../domain/user/user.entity';
-import { Author } from '../../domain/user/author.entity';
-import { Reader } from '../../domain/user/reader.entity';
+import { AUTHOR_ROLE, Author, Authorship } from '../../domain/user/author.entity';
+import { AuthorRepository } from '../../domain/user/author.repository';
 import { IdentityProvider } from '../../domain/user/identity.provider';
 import { UnknownIdentityException } from '../../domain/user/exception/unknown-identity.exception';
+import { User } from '../../domain/user/user.entity';
 import type { CredentialId } from '../../domain/user/vo/credential-id';
 import { UserProvisioning } from './user-provisioning.service';
 
 describe('UserProvisioning', () => {
   let module: TestingModule;
   let provisioning: UserProvisioning;
+  let authors: AuthorRepository;
   let identities: FakeIdentityProvider;
   let credentialId: CredentialId;
 
@@ -29,6 +30,8 @@ describe('UserProvisioning', () => {
   const provision = (id: CredentialId = credentialId) =>
     inRequestContext(module, () => provisioning.provision(id));
 
+  const countAuthorships = () => freshEm(module).count(Authorship);
+
   beforeEach(async () => {
     identities = new FakeIdentityProvider();
     module = await createCqrsTestingModule([
@@ -36,20 +39,23 @@ describe('UserProvisioning', () => {
       { provide: IdentityProvider, useValue: identities },
     ]);
     provisioning = module.get(UserProvisioning);
+    authors = module.get(AuthorRepository);
     signUp();
   });
 
   afterEach(() => module.close());
 
-  it('o primeiro acesso cria o perfil de domínio', async () => {
+  it('the first access creates the domain profile', async () => {
     const user = await provision();
 
-    expect(user).toBeInstanceOf(Reader);
+    expect(user).toBeInstanceOf(User);
     expect(user.email.value).toBe(EMAIL);
+    expect(user.roles).toEqual([]);
     expect(await freshEm(module).count(User)).toBe(1);
+    expect(await countAuthorships()).toBe(0);
   });
 
-  it('o segundo acesso reaproveita o perfil, não cria outro', async () => {
+  it('the second access reuses the profile instead of creating another', async () => {
     const first = await provision();
 
     const second = await provision();
@@ -58,23 +64,24 @@ describe('UserProvisioning', () => {
     expect(await freshEm(module).count(User)).toBe(1);
   });
 
-  it('quem chega já como author nasce Author', async () => {
+  it('whoever arrives already as an author gets the role and the authorship row', async () => {
     signUp(AUTHOR_ROLE);
 
     const user = await provision();
 
-    expect(user).toBeInstanceOf(Author);
-    expect(user.canWritePosts()).toBe(true);
+    expect(user.hasRole(AUTHOR_ROLE)).toBe(true);
+    expect(await countAuthorships()).toBe(1);
+    expect(await freshEm(module).count(User)).toBe(1);
   });
 
-  it('uma credencial que o provedor não conhece não vira perfil', async () => {
+  it('a credential the provider does not know does not become a profile', async () => {
     identities.forget(credentialId);
 
     await expect(provision()).rejects.toBeInstanceOf(UnknownIdentityException);
     expect(await freshEm(module).count(User)).toBe(0);
   });
 
-  it('outra credencial com o mesmo email reaproveita o perfil que já existe', async () => {
+  it('another credential with the same email reuses the profile that already exists', async () => {
     const first = await provision();
 
     const other = identities.signUp(EMAIL, 'Manuel');
@@ -84,90 +91,53 @@ describe('UserProvisioning', () => {
     expect(await freshEm(module).count(User)).toBe(1);
   });
 
-  describe('promoção: encerrar um stream e abrir outro', () => {
+  describe('promotion is a row, not a second identity', () => {
     const promote = async () => {
       await identities.grantRole(credentialId, AUTHOR_ROLE);
       return provision();
     };
 
-    it('promove um Reader a Author, gravando as duas linhas', async () => {
-      const reader = await provision();
+    it('promoting keeps the very same user id and adds one authorship', async () => {
+      const before = await provision();
 
-      const author = await promote();
+      const after = await promote();
+
+      expect(after.id.equals(before.id)).toBe(true);
+      expect(after.hasRole(AUTHOR_ROLE)).toBe(true);
+      expect(await freshEm(module).count(User)).toBe(1);
+      expect(await countAuthorships()).toBe(1);
+    });
+
+    it('the promoted user reads back as an Author, cast over the row that was just created', async () => {
+      await provision();
+      const promoted = await promote();
+
+      const author = await inRequestContext(module, () => authors.findById(promoted.id));
 
       expect(author).toBeInstanceOf(Author);
-      expect(author.id.equals(reader.id)).toBe(false);
-      expect(await freshEm(module).count(User)).toBe(2);
+      expect(author!.authorship.id.equals(promoted.id)).toBe(true);
+      expect(author!.hasRole(AUTHOR_ROLE)).toBe(true);
     });
 
-    it('as duas linhas apontam uma para a outra, e as referências resolvem', async () => {
-      const reader = await provision();
-      const author = await promote();
-
-      const em = freshEm(module);
-      const closed = await em.findOneOrFail(User, { id: reader.id }, { filters: false });
-      const opened = await em.findOneOrFail(User, { id: author.id });
-
-      expect(closed.supersededBy?.id.equals(author.id)).toBe(true);
-      expect(opened.supersedes?.id.equals(reader.id)).toBe(true);
-      expect(await closed.supersededBy!.load()).toBeInstanceOf(Author);
-      expect(await opened.supersedes!.load()).toBeInstanceOf(Reader);
-    });
-
-    it('o stream encerrado deixa de contar como ativo', async () => {
-      const reader = await provision();
-      await promote();
-
-      const closed = await freshEm(module).findOneOrFail(User, { id: reader.id }, { filters: false });
-
-      expect(closed.isActive()).toBe(false);
-      expect(closed).toBeInstanceOf(Reader);
-    });
-
-    it('depois de promovido, o acesso seguinte reaproveita o Author', async () => {
+    it('provisioning again after the promotion changes nothing', async () => {
       await provision();
-      const author = await promote();
+      const promoted = await promote();
 
       const again = await provision();
 
-      expect(again.id.equals(author.id)).toBe(true);
-      expect(await freshEm(module).count(User)).toBe(2);
-    });
-
-    it('a mesma credencial passa a responder pelo perfil promovido', async () => {
-      await provision();
-
-      const author = await promote();
-
-      const again = await provision();
-      expect(again.id.equals(author.id)).toBe(true);
-      expect(again).toBeInstanceOf(Author);
-    });
-  });
-
-  describe('quando não há promoção a retomar', () => {
-    it('uma promoção que terminou não é retomada, e o Author é reaproveitado', async () => {
-      await provision();
-      await identities.grantRole(credentialId, AUTHOR_ROLE);
-      const author = await provision();
-      const warn = vi.spyOn((provisioning as any).logger, 'warn').mockImplementation(() => undefined);
-
-      const again = await provision();
-
-      expect(again.id.equals(author.id)).toBe(true);
-      expect(warn).not.toHaveBeenCalled();
-      expect(await freshEm(module).count(User)).toBe(2);
-      warn.mockRestore();
-    });
-
-    it('sem nenhuma promoção no histórico, o registro nasce com id novo e sem supersedes', async () => {
-      signUp(AUTHOR_ROLE);
-
-      const user = await provision();
-
-      expect(user).toBeInstanceOf(Author);
-      expect(user.supersedes ?? null).toBeNull();
+      expect(again.id.equals(promoted.id)).toBe(true);
+      expect(again.roles).toEqual([AUTHOR_ROLE]);
       expect(await freshEm(module).count(User)).toBe(1);
+      expect(await countAuthorships()).toBe(1);
+    });
+
+    it('the version tells the promotion happened on the same stream', async () => {
+      const before = await provision();
+      expect(before.version).toBe(1);
+
+      const after = await promote();
+
+      expect(after.version).toBe(2);
     });
   });
 });

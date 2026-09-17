@@ -70,7 +70,7 @@ describe('FindPostsByAuthorQuery.Handler', () => {
 
     expect(items[0].tags.isInitialized()).toBe(true);
     expect(items[0].author.isInitialized()).toBe(true);
-    expect(items[0].author.getEntity().name.value).toBe(author.name.value);
+    expect(items[0].author.delegated().name.value).toBe(author.name.value);
   });
 
   it('sem first a página é a default, e o teto é o mesmo de posts', () => {
