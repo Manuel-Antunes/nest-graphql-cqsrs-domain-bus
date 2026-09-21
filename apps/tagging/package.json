@@ -1,0 +1,48 @@
+{
+  "name": "@nestposts/tagging",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "@nestposts/cqsrs": "workspace:*",
+    "@nestposts/platform": "workspace:*",
+    "@nestposts/posts": "workspace:*",
+    "@nestposts/transport-eventbus": "workspace:*",
+    "@nestposts/users": "workspace:*"
+  },
+  "nx": {
+    "targets": {
+      "build": {
+        "executor": "nx:run-commands",
+        "cache": true,
+        "dependsOn": [
+          "^build"
+        ],
+        "inputs": [
+          "production",
+          "^production"
+        ],
+        "outputs": [
+          "{projectRoot}/dist"
+        ],
+        "options": {
+          "cwd": "{projectRoot}",
+          "command": "nest build"
+        }
+      },
+      "serve": {
+        "executor": "nx:run-commands",
+        "continuous": true,
+        "dependsOn": [
+          "^build"
+        ],
+        "options": {
+          "cwd": "{projectRoot}",
+          "command": "nest start --watch"
+        }
+      }
+    }
+  },
+  "devDependencies": {
+    "@camcima/nestjs-memory-microservices": "^0.3.0"
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "out-tsc/app",
+    "tsBuildInfoFile": "out-tsc/app/tsconfig.app.tsbuildinfo"
+  },
+  "include": [
+    "src/**/*.ts"
+  ],
+  "exclude": [
+    "src/**/*.spec.ts"
+  ],
+  "references": [
+    {
+      "path": "../../libs/validated-dto/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/users/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/transport-eventbus/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/posts/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/platform/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/cqsrs/tsconfig.lib.json"
+    }
+  ]
+}

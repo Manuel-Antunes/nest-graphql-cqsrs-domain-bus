@@ -1,0 +1,25 @@
+# O broker, e só ele: os dois serviços guardam o que é deles em SQLite, cada um no seu arquivo.
+#
+# POR QUE UMA FILA POR SERVIÇO, E NÃO UMA COMPARTILHADA
+# ====================================================
+# No RabbitMQ a cópia é por fila vinculada, não por consumidor: dois serviços na mesma fila COMPETEM
+# pelas mensagens em vez de receberem cópias, e quem descarta dá ack e mata a mensagem do outro. As
+# filas e os bindings são declarados pelas próprias aplicações na partida — `exchangeType: 'topic'` com
+# `wildcards: true`, que é o que faz o pattern do `@EventPattern` ser a routing key.
+services:
+  rabbitmq:
+    image: rabbitmq:4-management
+    container_name: nestposts-rabbitmq
+    ports:
+      - '5672:5672'
+      # A API de management, que o teste da saga usa para republicar uma mensagem na mão — é assim que
+      # ele prova a idempotência do inbox, e de passagem valida o formato de fio.
+      - '15672:15672'
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-guest}
+    healthcheck:
+      test: ['CMD', 'rabbitmq-diagnostics', '-q', 'check_running']
+      interval: 5s
+      timeout: 5s
+      retries: 20

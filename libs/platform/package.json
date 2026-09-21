@@ -1,0 +1,17 @@
+{
+  "name": "@nestposts/platform",
+  "version": "0.1.0",
+  "private": true,
+  "exports": {
+    "./package.json": "./package.json",
+    "./*": {
+      "@nestposts/source": "./src/*.ts",
+      "types": "./dist/*.d.ts",
+      "require": "./dist/*.js",
+      "default": "./dist/*.js"
+    }
+  },
+  "dependencies": {
+    "@nestposts/validated-dto": "workspace:*"
+  }
+}

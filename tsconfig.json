@@ -1,26 +1,31 @@
 {
-  "compilerOptions": {
-    "module": "commonjs",
-    "moduleResolution": "bundler",
-    "target": "es2023",
-    "useDefineForClassFields": false,
-    "lib": ["es2023"],
-    "declaration": false,
-    "removeComments": false,
-    "emitDecoratorMetadata": true,
-    "experimentalDecorators": true,
-    "allowSyntheticDefaultImports": true,
-    "esModuleInterop": true,
-    "sourceMap": true,
-    "outDir": "./dist",
-    "incremental": true,
-    "skipLibCheck": true,
-    "strict": true,
-    "strictPropertyInitialization": false,
-    "noImplicitOverride": true,
-    "forceConsistentCasingInFileNames": true,
-    "types": ["node", "vitest/globals"]
-  },
-  "include": ["src/**/*", "test/**/*"],
-  "exclude": ["node_modules", "dist"]
+  "extends": "./tsconfig.base.json",
+  "compileOnSave": false,
+  "files": [],
+  "references": [
+    {
+      "path": "./libs/validated-dto"
+    },
+    {
+      "path": "./libs/cqsrs"
+    },
+    {
+      "path": "./libs/platform"
+    },
+    {
+      "path": "./libs/users"
+    },
+    {
+      "path": "./libs/posts"
+    },
+    {
+      "path": "./apps/posts-api"
+    },
+    {
+      "path": "./libs/transport-eventbus"
+    },
+    {
+      "path": "./apps/tagging"
+    }
+  ]
 }

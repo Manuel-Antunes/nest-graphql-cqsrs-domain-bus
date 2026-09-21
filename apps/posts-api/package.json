@@ -1,0 +1,73 @@
+{
+  "name": "@nestposts/posts-api",
+  "version": "0.1.0",
+  "private": true,
+  "exports": {
+    "./package.json": "./package.json",
+    "./*": {
+      "@nestposts/source": "./src/*.ts",
+      "types": "./dist/*.d.ts",
+      "require": "./dist/*.js",
+      "default": "./dist/*.js"
+    }
+  },
+  "dependencies": {
+    "@nestposts/cqsrs": "workspace:*",
+    "@nestposts/platform": "workspace:*",
+    "@nestposts/posts": "workspace:*",
+    "@nestposts/transport-eventbus": "workspace:*",
+    "@nestposts/users": "workspace:*",
+    "@nestposts/validated-dto": "workspace:*"
+  },
+  "nx": {
+    "targets": {
+      "build": {
+        "executor": "nx:run-commands",
+        "cache": true,
+        "dependsOn": [
+          "^build"
+        ],
+        "inputs": [
+          "production",
+          "^production"
+        ],
+        "outputs": [
+          "{projectRoot}/dist"
+        ],
+        "options": {
+          "cwd": "{projectRoot}",
+          "command": "nest build"
+        }
+      },
+      "serve": {
+        "executor": "nx:run-commands",
+        "continuous": true,
+        "dependsOn": [
+          "^build"
+        ],
+        "options": {
+          "cwd": "{projectRoot}",
+          "command": "nest start --watch"
+        }
+      },
+      "test-e2e": {
+        "executor": "nx:run-commands",
+        "cache": true,
+        "dependsOn": [
+          "^build"
+        ],
+        "inputs": [
+          "default",
+          "^production"
+        ],
+        "options": {
+          "cwd": "{projectRoot}",
+          "command": "vitest run --config vitest.e2e.config.mts"
+        }
+      }
+    }
+  },
+  "devDependencies": {
+    "@camcima/nestjs-memory-microservices": "^0.3.0"
+  }
+}
