@@ -1,0 +1,106 @@
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import swc from 'unplugin-swc';
+import { defineConfig, type ViteUserConfig } from 'vitest/config';
+
+/**
+ * The one Vitest configuration every project extends.
+ *
+ * SWC, and not Vite's esbuild: esbuild does not emit `emitDecoratorMetadata`, which Nest's dependency
+ * injection reads. Vitest, and not Jest: MikroORM v7 and AutoMapper 9 are ESM-only and Jest cannot
+ * `require()` ESM on Node 22.
+ *
+ * Under test, a workspace package resolves to its SOURCE — see {@link workspaceAliases}. It is not a
+ * convenience: resolving to `dist` makes the same module exist twice in one run, once as the
+ * CommonJS `tsc` emitted (reached by `require` from another package's `dist`) and once as the ESM SWC
+ * produces (reached by `import` from the spec). Two copies of `delegate.ts` are two delegation
+ * registries, two copies of a class are two prototypes, and the symptoms are a `.id` that comes back
+ * `undefined` and MikroORM's "entity with this name was discovered, but not the prototype you are
+ * passing". Aliased to source, the whole run is one module graph, transformed once, by SWC.
+ */
+export type ProjectTestOptions = {
+  /** The project name, as it shows up in Vitest's output and in Nx. */
+  name: string;
+  include?: string[];
+  env?: Record<string, string>;
+  testTimeout?: number;
+  coverageExclude?: string[];
+};
+
+/**
+ * Every workspace package, aliased to its own sources.
+ *
+ * An alias and not the `@nestposts/source` export condition, which is what TypeScript uses: adding a
+ * condition means declaring the whole list, and the list Vite resolves third-party packages with is
+ * not ours to guess — dropping `require` from it is enough to make a dependency that ships broken ESM
+ * (`@opentelemetry/semantic-conventions`, through MikroORM) fail to load. An alias touches nothing but
+ * the packages in this repository.
+ */
+const workspaceAliases = (): { find: RegExp; replacement: string }[] => {
+  const root = import.meta.dirname;
+  const aliases: { find: RegExp; replacement: string }[] = [];
+  for (const group of ['libs', 'apps']) {
+    for (const project of readdirSync(join(root, group))) {
+      const manifest = join(root, group, project, 'package.json');
+      if (!existsSync(manifest)) continue;
+      const { name } = JSON.parse(readFileSync(manifest, 'utf8')) as { name: string };
+      const source = join(root, group, project, 'src');
+      aliases.push({ find: new RegExp(`^${name}/(.*)$`), replacement: `${source}/$1` });
+      aliases.push({ find: new RegExp(`^${name}$`), replacement: `${source}/index.ts` });
+    }
+  }
+  return aliases;
+};
+
+const swcPlugin = () =>
+  swc.vite({
+    module: { type: 'es6' },
+    jsc: {
+      parser: { syntax: 'typescript', decorators: true },
+      transform: { legacyDecorator: true, decoratorMetadata: true, useDefineForClassFields: false },
+    },
+  });
+
+/**
+ * What stays out of the coverage denominator is not "untested code", it is code that is not logic of
+ * ours: re-export barrels, type-only files, the bootstrap and the configuration. Everything else —
+ * resolvers, mappers and DTOs included — counts.
+ */
+const coverageExclude = [
+  'src/**/*.spec.ts',
+  'src/**/index.ts',
+  'src/**/interfaces/**',
+  'src/**/*.interface.ts',
+  'src/main.ts',
+];
+
+export const testProject = ({
+  name,
+  include = ['src/**/*.spec.ts'],
+  env,
+  testTimeout = 15000,
+  coverageExclude: extraExcludes = [],
+}: ProjectTestOptions): ViteUserConfig =>
+  defineConfig({
+    test: {
+      name,
+      watch: false,
+      globals: true,
+      environment: 'node',
+      include,
+      env,
+      testTimeout,
+      hookTimeout: 30000,
+      setupFiles: ['reflect-metadata'],
+      reporters: ['default'],
+      coverage: {
+        provider: 'v8',
+        include: ['src/**/*.ts'],
+        exclude: [...coverageExclude, ...extraExcludes],
+        reporter: ['text', 'html', 'json', 'json-summary'],
+        reportsDirectory: './coverage',
+      },
+    },
+    resolve: { alias: workspaceAliases() },
+    plugins: [swcPlugin()],
+  });

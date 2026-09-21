@@ -1,0 +1,14 @@
+packages:
+  - 'libs/*'
+  - 'apps/*'
+
+# pnpm 10 asks for approval before running a dependency's build scripts, and in a non-interactive
+# install (CI, or a fresh clone) that approval never comes — the native builds silently do not happen.
+onlyBuiltDependencies:
+  - better-sqlite3
+  - '@swc/core'
+  - esbuild
+  - nx
+
+overrides:
+  '@better-auth/utils': 0.4.2

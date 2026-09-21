@@ -7,3 +7,11 @@ data/
 # artefatos de cobertura
 coverage/
 .vitest/
+
+# Nx e os artefatos por projeto
+.nx/
+**/dist/
+**/out-tsc/
+**/coverage/
+**/test-output/
+.e2e/
