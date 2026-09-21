@@ -1,4 +1,3 @@
-import { Injectable } from '@nestjs/common';
 import {
   type ClientProxy,
   ClientProxyFactory,
@@ -16,6 +15,12 @@ import {
 
 export const POST_EVENTS_CLIENT = 'POST_EVENTS_CLIENT';
 
+/** Who this service is on the wire — the mark every message it publishes carries. */
+export const postsApiIdentity = (): TransportIdentity =>
+  TransportIdentity.named(process.env.POSTS_APPLICATION_NAME ?? 'posts-api', {
+    publishes: process.env.POSTS_PUBLISH_EVENTS !== 'false',
+  });
+
 export const EXCHANGE = process.env.POSTS_EXCHANGE ?? 'nestposts.events';
 
 export const POST_COMPLETED_QUEUE = process.env.POSTS_COMPLETED_QUEUE ?? 'nestposts.posts-api.post-completed';
@@ -29,12 +34,6 @@ export const taggingInProcess = (): boolean => process.env.POSTS_TAGGING_IN_PROC
 
 const urls = (): string[] => [process.env.RABBITMQ_URL ?? 'amqp://localhost:5672'];
 
-@Injectable()
-export class PostsApiIdentity extends TransportIdentity {
-  readonly applicationName = process.env.POSTS_APPLICATION_NAME ?? 'posts-api';
-
-  override readonly publishes = process.env.POSTS_PUBLISH_EVENTS !== 'false';
-}
 
 export const postEventsClient = (): ClientProxy =>
   transportMode() === 'rabbitmq'

@@ -1,4 +1,3 @@
-import { Injectable } from '@nestjs/common';
 import { MemoryServer } from '@camcima/nestjs-memory-microservices';
 import {
   type ClientProxy,
@@ -16,6 +15,12 @@ import {
 
 export const POST_EVENTS_CLIENT = 'POST_EVENTS_CLIENT';
 
+/** Who this service is on the wire — the mark every message it publishes carries. */
+export const taggingIdentity = (): TransportIdentity =>
+  TransportIdentity.named(process.env.TAGGING_APPLICATION_NAME ?? 'tagging', {
+    publishes: process.env.TAGGING_PUBLISH_EVENTS !== 'false',
+  });
+
 export const EXCHANGE = process.env.TAGGING_EXCHANGE ?? 'nestposts.events';
 
 export const INBOUND_QUEUE = process.env.TAGGING_QUEUE ?? 'nestposts.tagging.post-events';
@@ -27,12 +32,6 @@ export const transportMode = (): TransportMode =>
 
 const urls = (): string[] => [process.env.RABBITMQ_URL ?? 'amqp://localhost:5672'];
 
-@Injectable()
-export class TaggingIdentity extends TransportIdentity {
-  readonly applicationName = process.env.TAGGING_APPLICATION_NAME ?? 'tagging';
-
-  override readonly publishes = process.env.TAGGING_PUBLISH_EVENTS !== 'false';
-}
 
 export const postEventsClient = (): ClientProxy =>
   transportMode() === 'rabbitmq'

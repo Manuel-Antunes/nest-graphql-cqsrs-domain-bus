@@ -186,9 +186,11 @@ apps/posts-api/src
 │   ├── tag/command/create-tag, user/query/find-author
 │   └── user/user-provisioning                       # the domain profile, born at sign-up
 ├── infrastructure
-│   ├── persistence/mikro-orm.config, persistence.module, default-tag.seeder
+│   ├── persistence/mikro-orm.config, default-tag.seeder   # só a CONEXÃO: cada tabela chega pelo
+│   │                                                #   módulo que a possui (DatabaseModule.forFeature)
 │   ├── outbox/post-events.publisher                 # @Publisher('posts'): the client of the destination
-│   └── transport/transport.module, transport.config # the providers, and where the destination points
+│   └── transport/transport.config                   # a identidade e para onde o destino aponta; o
+│                                                    #   transporte inteiro sobe no AppModule, numa chamada
 └── interfaces
     ├── graphql/*.resolver                           # one resolver per schema file
     ├── messaging/post-completion.controller         # the port of entry BY MESSAGE: @EventPattern → EventIngestion
@@ -203,8 +205,8 @@ apps/tagging/src
 ├── infrastructure
 │   ├── outbox/post-events.publisher                 # it publishes the `posts` namespace: the fact is
 │   │                                                #   the Post's, and this service decided it
-│   └── transport/transport.module, transport.config # where the framework's event store is BOUND:
-│                                                    #   no store, no sink, no repository written here
+│   └── transport/transport.config                   # idem; o event store do framework entra por
+│                                                    #   `eventStore: [Post]` no forRoot do AppModule
 └── interfaces/messaging
     └── post-events.controller                       # UMA entrada: `posts.#`, tudo o que o namespace
                                                      #   afirma — o que ele decide e o que ele replica
@@ -330,11 +332,11 @@ ingestion, and `IncomingRequest.of(executionContext)` is that same request for a
 before any pipe. Whatever the publishing service put in its context — a tenant, a session, a locale —
 is on the envelope's metadata, so authorising a message is the same code as authorising a request.
 
-That is also why a consumer can bind a **namespace** and be done: `everyEventOf(POSTS_NAMESPACE)` is
+That is also why a consumer can bind a **namespace** and be done: `EventAddress.everyEventOf(POSTS_NAMESPACE)` is
 `posts.#`, one entry whose parameter is whichever event arrived, as the class it is. `apps/tagging`
 does that, because a service that keeps another's stream wants all of it — a binding per event type is
 a list that silently misses whatever the other service adds next, since an event nobody bound to is
-dropped by the exchange without a word. `apps/posts-api` binds `everyEventOf(PostCreatedEvent)`
+dropped by the exchange without a word. `apps/posts-api` binds `EventAddress.everyEventOf(PostCreatedEvent)`
 instead: it owns the read model and waits for one decision, not for the namespace it publishes itself. One detail the port has to add that Quarkus does not: a `Date` goes out as
 `{"@date":"…"}`, because JSON has no date type and JavaScript has no field types at runtime to guess
 one back.
@@ -390,9 +392,8 @@ is appended and published. That is also why it ingests `posts.PostUpdated`, `pos
 `posts.PostRestored`, which nothing there reacts to: a service that writes to a stream has to see the
 same history, or the next decision is taken against half of it.
 
-**None of that is written in the service.** Two lines in its `TransportModule` —
-`...eventStoreProviders` and `EventSourcedRepository.of(Post)` — plus `eventStoreEntities` in its
-MikroORM list, and the framework does the rest: the stream, the sequence numbers, the payload format,
+**None of that is written in the service.** One option in its `TransportEventBusModule.forRoot` —
+`eventStore: [Post]`, which brings the streams' table with it — and the framework does the rest: the stream, the sequence numbers, the payload format,
 the sink that appends every ingested event to the stream of the aggregate its `@EventType({ tags })`
 names, the replay, and the refusal to append a second creation to a stream that already has one. The
 Axon side has no such code either, for the same reason: an event store is a framework's job, and a

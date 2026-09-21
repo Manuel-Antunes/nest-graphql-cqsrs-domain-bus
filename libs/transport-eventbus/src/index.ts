@@ -16,6 +16,8 @@
  * | what keeps it once | the origin mark | the origin mark, {@link MessageInbox}, and the aggregate |
  */
 export * from './constants';
+export * from './transport-event-bus.module';
+export * from './transport-event-bus.options';
 export * from './transport-event-bus.providers';
 export * from './transport-event-bus.service';
 export * from './transport-event-bus.publisher';

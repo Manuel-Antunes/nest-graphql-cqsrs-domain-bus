@@ -48,12 +48,6 @@ class PostCreatedHandler implements IEventHandler<PostCreatedEvent> {
   }
 }
 
-@Injectable()
-class PostsApiIdentity extends TransportIdentity {
-  readonly applicationName = 'posts-api';
-
-  override readonly publishes = false;
-}
 
 const serializer = new MemoryEventEnvelopeSerializer();
 const deserializer = new MemoryEventEnvelopeDeserializer();
@@ -100,7 +94,7 @@ const moduleWith = async (overrides: Provider[] = []): Promise<TestingModule> =>
     providers: [
       ...transportEventBusProviders,
       ...eventIngestionProviders,
-      { provide: TransportIdentity, useClass: PostsApiIdentity },
+      { provide: TransportIdentity, useValue: TransportIdentity.silent('posts-api') },
       { provide: RequestContextCodec, useClass: CorrelatedRequestContext },
       { provide: IngestionSink, useClass: NoDurableState },
       { provide: MessageInbox, useClass: MikroOrmMessageInbox },

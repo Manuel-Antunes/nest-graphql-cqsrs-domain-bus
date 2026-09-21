@@ -14,7 +14,7 @@ import { TransportEvent } from '../decorators/transport-event.decorator';
 import { TransportRequest } from '../decorators/transport-request.decorator';
 import { MemoryClient } from '../in-memory/memory-client';
 import { EventEnvelopeFactory } from '../outbound/event-envelope.factory';
-import { EventAddress, everyEventOf } from '../outbound/event-address';
+import { EventAddress } from '../outbound/event-address';
 import { MemoryEventEnvelopeSerializer } from '../outbound/serializers/memory-event-envelope.serializer';
 import {
   CorrelatedRequestContext,
@@ -91,17 +91,13 @@ class ShopEventsController {
     private readonly commandBus: CommandBus,
   ) {}
 
-  @EventPattern<string>(everyEventOf(SHOP))
+  @EventPattern<string>(EventAddress.everyEventOf(SHOP))
   shop(@TransportEvent() event: object, @TransportRequest() request?: AsyncContext): Promise<void> {
     this.arrivals.arrivals.push(new Arrival(event, request));
     return this.commandBus.execute(new NoteTheOrder('o-1'), request);
   }
 }
 
-@Injectable()
-class ShopIdentity extends TransportIdentity {
-  readonly applicationName = 'shop';
-}
 
 describe('one entry per namespace, through @TransportEvent() and @TransportRequest()', () => {
   let consuming: Awaited<ReturnType<typeof startInProcessService>>;
@@ -136,7 +132,7 @@ describe('one entry per namespace, through @TransportEvent() and @TransportReque
         NoteTheOrderHandler,
       ],
     });
-    envelopes = new EventEnvelopeFactory(new ShopIdentity(), new CorrelatedRequestContext());
+    envelopes = new EventEnvelopeFactory(TransportIdentity.named('shop'), new CorrelatedRequestContext());
     publishing = new MemoryClient({
       servers: [consuming.server],
       serializer: new MemoryEventEnvelopeSerializer(),

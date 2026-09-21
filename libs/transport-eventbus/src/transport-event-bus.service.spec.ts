@@ -222,10 +222,6 @@ class RabbitPublisher {
   }
 }
 
-@Injectable()
-class TheSuiteIdentity extends TransportIdentity {
-  readonly applicationName = 'the-suite';
-}
 
 const metadataOf = (message: { data: unknown }) =>
   (message.data as { metadata: Record<string, string> }).metadata;
@@ -242,7 +238,7 @@ describe('the transport event bus (the vendored base)', () => {
       imports: [CqrsModule.forRoot(), DiscoveryModule],
       providers: [
         ...transportEventBusProviders,
-        { provide: TransportIdentity, useClass: TheSuiteIdentity },
+        { provide: TransportIdentity, useValue: TransportIdentity.named('the-suite') },
         { provide: RequestContextCodec, useClass: CorrelatedRequestContext },
         RabbitPublisher,
         Storage,
@@ -388,7 +384,7 @@ describe("upstream's own mode: one destination, every namespace", () => {
       imports: [CqrsModule.forRoot(), DiscoveryModule],
       providers: [
         ...transportEventBusProviders,
-        { provide: TransportIdentity, useClass: TheSuiteIdentity },
+        { provide: TransportIdentity, useValue: TransportIdentity.named('the-suite') },
         { provide: RequestContextCodec, useClass: CorrelatedRequestContext },
         EverythingPublisher,
         Storage,

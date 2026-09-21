@@ -7,7 +7,7 @@ import { TransportRequestPipe } from '../inbound/transport-request.pipe';
  * metadata by the application's {@link RequestContextCodec}.
  *
  * ```ts
- * @EventPattern(everyEventOf(POSTS_NAMESPACE))
+ * @EventPattern(EventAddress.everyEventOf(POSTS_NAMESPACE))
  * posts(@TransportEvent() event: DomainEvent, @TransportRequest() request?: AsyncContext): Promise<void> {
  *   return this.commandBus.execute(new CompletePost(event), request);   // the same request, across services
  * }

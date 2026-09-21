@@ -1,35 +1,21 @@
-import { Global, Module } from '@nestjs/common';
-import { DiscoveryModule } from '@nestjs/core';
+import { type DynamicModule } from '@nestjs/common';
+import { DatabaseModule } from '@nestposts/platform/infrastructure/persistence/database.module';
 import {
-  IngestionSink,
-  MessageInbox,
   MikroOrmMessageInbox,
-  NoDurableState,
-  OutboxRouting,
-  RequestContextCodec,
-  TRANSPORT_EVENT_BUS_PUBLISHER,
-  TRANSPORT_EVENT_BUS_SERVICE,
+  TransportEventBusModule,
   TransportIdentity,
-  transportEventBusProviders,
 } from '@nestposts/transport-eventbus';
 import { PostRequestContextCodec } from '../../src/application/shared/post-request-context.codec';
-import { SilentIdentity } from './silent-identity';
+import { mikroOrmConfig } from '../../src/infrastructure/persistence/mikro-orm.config';
 
-@Global()
-@Module({
-  imports: [DiscoveryModule],
-  providers: [
-    ...transportEventBusProviders,
-    { provide: TransportIdentity, useClass: SilentIdentity },
-    { provide: RequestContextCodec, useClass: PostRequestContextCodec },
-    { provide: IngestionSink, useClass: NoDurableState },
-    { provide: MessageInbox, useClass: MikroOrmMessageInbox },
-  ],
-  exports: [
-    TRANSPORT_EVENT_BUS_SERVICE,
-    TRANSPORT_EVENT_BUS_PUBLISHER,
-    OutboxRouting,
-    MessageInbox,
-  ],
-})
-export class TransportTestingModule {}
+/** This application's connection, in memory. Every table arrives through the module that owns it. */
+export const persistenceTesting = (): DynamicModule =>
+  DatabaseModule.forRoot(mikroOrmConfig(':memory:'));
+
+/** The transport as a spec wants it: everything this application binds, publishing nowhere. */
+export const transportTesting = (): DynamicModule =>
+  TransportEventBusModule.forRoot({
+    identity: TransportIdentity.silent('posts-api-spec'),
+    inbox: MikroOrmMessageInbox,
+    requestContext: PostRequestContextCodec,
+  });

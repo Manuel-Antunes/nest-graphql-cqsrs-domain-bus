@@ -16,7 +16,7 @@ import { EventStoreSink } from './event-store.sink';
  *     ...eventIngestionProviders,
  *     ...eventStoreProviders,
  *     EventSourcedRepository.of(Post),
- *     { provide: TransportIdentity, useClass: TaggingIdentity },
+ *     { provide: TransportIdentity, useValue: TransportIdentity.named('tagging') },
  *     { provide: RequestContextCodec, useClass: CorrelatedRequestContext },
  *     { provide: MessageInbox, useClass: MikroOrmMessageInbox },
  *   ],
@@ -25,8 +25,8 @@ import { EventStoreSink } from './event-store.sink';
  * ```
  *
  * It replaces the `IngestionSink` binding rather than adding to it: a service either makes its streams
- * durable or it does not, and `NoDurableState` is the other answer. The one thing left to declare is
- * `eventStoreEntities` in the MikroORM configuration, because the table is the service's own.
+ * durable or it does not, and `NoDurableState` is the other answer. The table comes with it —
+ * {@link TransportEventBusModule} declares it through `DatabaseModule.forFeature`.
  */
 export const eventStoreProviders: readonly Provider[] = [
   MikroOrmEventStore,

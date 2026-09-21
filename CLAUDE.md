@@ -105,8 +105,10 @@ exists, which query answers what, which event chains into the next step — and 
 ```
 libs/platform            domain/shared (aggregate root, soft delete, delegation, @EventType)
                          infrastructure/persistence (request context, value object types, filters)
-libs/users               domain/user + its ORM mapping, repositories and the Better Auth adapter
-libs/posts               domain/post + domain/tag + their ORM mappings and repositories
+libs/users               domain/user + its ORM mapping, repositories and the Better Auth adapter,
+                         wired by UsersInfrastructureModule and IdentityModule
+libs/posts               domain/post + domain/tag + their ORM mappings and repositories,
+                         wired by PostsInfrastructureModule
 libs/cqsrs               the third CQRS message (see below)
 libs/validated-dto       Zod → DTO/value object mixins
 libs/transport-eventbus  the CQRS event bus over Nest's microservice transports (see below)
@@ -127,15 +129,24 @@ map in its `package.json`. Under Vitest those packages resolve to **source**, th
 `vitest.shared.mts` — resolving to `dist` makes the same module exist twice in one run and produces
 two delegation registries and two prototypes of every class.
 
-### The module chain is still the layer boundary
+### The module chain is still the layer boundary — and below it, one module per DOMAIN module
 
 ```
-InterfacesModule  →  ApplicationModule  →  PersistenceModule + IdentityModule
+InterfacesModule  →  ApplicationModule  →  PostsInfrastructureModule
+                                           UsersInfrastructureModule
+                                           IdentityModule
 ```
 
-Each module imports **only** the one below it, and `AppModule` lists `TransportModule` and
-`InterfacesModule` — the others arrive transitively, on purpose. A resolver cannot inject
-`PostRepository`: the ports are only exported by `PersistenceModule`.
+Each module imports **only** the one below it, and `AppModule` lists `InterfacesModule`, the transport
+and the ORM — the rest arrives transitively, on purpose. A resolver cannot inject `PostRepository`: the
+ports leave only through the infrastructure module of their own domain module, which the application
+layer imports and the interfaces layer does not.
+
+Those two modules live in the **libraries** (`libs/posts/src/infrastructure/posts-infrastructure.module.ts`,
+`libs/users/src/infrastructure/users-infrastructure.module.ts`), next to the adapters they bind, which is
+the shape `IdentityModule` already had. What an importer asks for is a domain module (`posts`), not a
+layer ("the persistence of everything"), and `apps/tagging` shows why it matters: it imports neither,
+because it decides about a Post through its event store and has no repository at all.
 
 ### CQSRS: the third message (`libs/cqsrs`)
 
@@ -191,9 +202,18 @@ before changing the library's shape. The essentials:
   no `@TransportType` on an event: it would be the same fact twice and a deployment detail inside a
   domain event — which is also why `libs/posts` imports **nothing** from this library. The code says
   **what** goes out; the `ClientsModule`-style factory says **where**.
-- **There is no module function.** The mechanism is `transportEventBusProviders` +
-  `eventIngestionProviders`, spread into each application's own `@Global()` `TransportModule`, with
-  four bindings: `TransportIdentity`, `RequestContextCodec`, `IngestionSink`, `MessageInbox`.
+- **`TransportEventBusModule.forRoot(...)` starts it**, in each application's `AppModule`: `identity`,
+  `publishers`, `inbox` (which turns receiving on), `eventStore: [Post]`, `requestContext`, `sink`. It
+  is global, and `forRootAsync` is the same with the identity resolved at runtime. Underneath it are the
+  provider arrays (`transportEventBusProviders`, `eventIngestionProviders`, `eventStoreProviders`),
+  still exported for a service — or a spec — that wants to compose them by hand.
+- **The transport's tables come with its options**: `inbox` brings the inbox's schema and `eventStore`
+  the streams', through `DatabaseModule.forFeature`. A publish-only service needs no database at all.
+- **`TransportIdentity` is the mark of authorship, not an address.** Bound with
+  `TransportIdentity.named('tagging', { publishes })` (or `.silent('…-spec')` in a suite), it is what
+  every published message carries and what the ingestion compares to drop this service's **own echo** —
+  which is what makes binding a namespace one also publishes to safe. Remove it and `apps/tagging`
+  ingests its own `PostCreated` and decides again (`tagging.spec` covers exactly that).
 - **The wire is `EventEnvelope`: `data` (the event as the application wrote it) and `metadata` (a flat
   map of strings).** Each transport has a pair — `RmqEventEnvelopeSerializer`/`Deserializer` put the
   metadata in the **AMQP headers** (through `RmqRecordBuilder`) and the event in the body;
@@ -203,7 +223,7 @@ before changing the library's shape. The essentials:
   `TransportEventPipe`, which rebuilds the real class from the envelope and marks it as ingested. Extra
   pipes compose (`@TransportEvent(new ValidationPipe())`), and `@TransportRequest()` is the other half:
   the `AsyncContext` the message belongs to, for a controller that dispatches a command itself.
-- **A binding is `everyEventOf(...)`**: a namespace (`posts.#`, one entry for every event of it — the
+- **A binding is `EventAddress.everyEventOf(...)`**: a namespace (`posts.#`, one entry for every event of it — the
   message type resolves the concrete class) or one event class (`posts.PostCreated.*`). `apps/tagging`
   binds the namespace because it keeps the Post's whole stream; `apps/posts-api` binds the one type it
   waits for. `EventIngestion` refuses an event that did
@@ -353,9 +373,22 @@ This applies to the libraries' `domain/` only. The GraphQL DTO schemas under
 
 The mapping lives in `libs/*/src/infrastructure/persistence/entities/*-orm.entity.ts`, via
 `defineEntity({ class: Post, ... })`. Value objects become columns through
-`valueObjectType(PostId, { columnType })`. Each application composes its own entity list in its
-`mikro-orm.config.ts` — which is how `apps/tagging` maps the Post's *metadata* (a reference needs it)
-without owning its table.
+`valueObjectType(PostId, { columnType })`.
+
+**The entity list is not a list.** `DatabaseModule.forRoot(mikroOrmConfig())`
+(`libs/platform/src/infrastructure/persistence/database.module.ts`) is the connection, and every table
+reaches it through `DatabaseModule.forFeature(...)` in the module that **owns** it:
+`PostsInfrastructureModule`, `UsersInfrastructureModule`, `IdentityModule` (the Better Auth tables) and
+`TransportEventBusModule` (the inbox, the streams). An application's `mikro-orm.config.ts` therefore
+holds the connection and nothing else — and `apps/tagging`, which needs the Post's *mapping* but not its
+repositories, imports `DatabaseModule.forFeature([...postsEntities, ...usersEntities])` and nothing more.
+
+Two measured failures are why `forRoot` resolves that list **lazily**, in a factory, instead of using
+`autoLoadEntities`: the flag fills `entitiesTs` with only the registered entities and MikroORM prefers
+that list under TypeScript (the application's own entities vanish, and the symptom is
+`Cannot read properties of undefined (reading '__em')`); and Nest's own registry is cleared when an
+application closes, so in a suite that boots a module per test the second one comes up with
+`Metadata for entity User not found`.
 
 **A feature that spans layers gets a folder of its own in each layer it touches.** Soft delete is the
 worked example:
@@ -372,7 +405,8 @@ libs/platform/src/infrastructure/persistence/soft-delete/   ← the mechanism
 ```
 
 The ports are **abstract classes** in `libs/*/src/domain/*/*.repository.ts` (they double as DI tokens)
-and the adapters are bound in each application's `persistence.module.ts`. Paths that do not originate
+and the adapters are bound by the module that owns them — `PostsInfrastructureModule`,
+`UsersInfrastructureModule` — which is what an application imports where it needs them. Paths that do not originate
 in an HTTP request — a field resolver inside a subscription (WebSocket), a message arriving on a queue,
 Better Auth hooks, tests — need `inRequestContext(em, work)`
 (`libs/platform/src/infrastructure/persistence/request-context.ts`), otherwise the first query is
@@ -411,8 +445,8 @@ rejected.
 There is no fake repository: handler specs boot the real `CqsrsModule` and an **in-memory** SQLite
 through `createCqrsTestingModule([...])` (`apps/posts-api/test/support/cqrs-testing-module.ts`),
 registering **only the handler under test** — an accidental dependency between handlers breaks the
-test. That module also spreads `transportEventBusProviders` with a `SilentIdentity` (`publishes =
-false`), because the handlers commit through the transport publisher. The database proves what was saved; `RecordingEvents`
+test. That module also spreads `transportEventBusProviders` with `TransportIdentity.silent(...)`,
+because the handlers commit through the transport publisher and a suite publishes nowhere. The database proves what was saved; `RecordingEvents`
 (attached to the `EventBus`) proves what was published. Because handlers are request-scoped, tests
 dispatch through the `CommandBus` with a `PostRequest`.
 

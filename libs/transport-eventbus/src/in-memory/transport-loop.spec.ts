@@ -59,10 +59,6 @@ const wire: { readonly toConsuming: MemoryServer[]; readonly toPublishing: Memor
   toPublishing: [],
 };
 
-@Injectable()
-class PublishingIdentity extends TransportIdentity {
-  readonly applicationName = 'publishing-service';
-}
 
 @Injectable()
 @Publisher(POSTS)
@@ -92,10 +88,6 @@ class ArrivalsController {
   }
 }
 
-@Injectable()
-class ConsumingIdentity extends TransportIdentity {
-  readonly applicationName = 'consuming-service';
-}
 
 @Injectable()
 @Publisher(POSTS)
@@ -157,7 +149,7 @@ describe('one hop between two services, over the in-process transport', () => {
       controllers: [ArrivalsController],
       providers: [
         ...transportEventBusProviders,
-        { provide: TransportIdentity, useClass: PublishingIdentity },
+        { provide: TransportIdentity, useValue: TransportIdentity.named('publishing-service') },
         { provide: RequestContextCodec, useClass: CorrelatedRequestContext },
         PublishingOutbox,
         Arrivals,
@@ -182,7 +174,7 @@ describe('one hop between two services, over the in-process transport', () => {
       providers: [
         ...transportEventBusProviders,
         ...eventIngestionProviders,
-        { provide: TransportIdentity, useClass: ConsumingIdentity },
+        { provide: TransportIdentity, useValue: TransportIdentity.named('consuming-service') },
         { provide: RequestContextCodec, useClass: CorrelatedRequestContext },
         { provide: IngestionSink, useClass: NoDurableState },
         { provide: MessageInbox, useClass: MikroOrmMessageInbox },

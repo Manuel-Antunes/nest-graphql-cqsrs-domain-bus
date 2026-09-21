@@ -24,7 +24,7 @@ import { TransportEventBusService } from './transport-event-bus.service';
  *   imports: [DiscoveryModule],
  *   providers: [
  *     ...transportEventBusProviders,
- *     { provide: TransportIdentity, useClass: PostsApiIdentity },
+ *     { provide: TransportIdentity, useValue: TransportIdentity.named('posts-api') },
  *     { provide: RequestContextCodec, useClass: PostRequestContextCodec },
  *     { provide: IngestionSink, useClass: NoDurableState },
  *     { provide: MessageInbox, useClass: MikroOrmMessageInbox },

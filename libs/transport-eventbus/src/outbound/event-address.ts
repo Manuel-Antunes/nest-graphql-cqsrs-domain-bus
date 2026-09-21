@@ -30,6 +30,10 @@ export class EventAddress {
    */
   static readonly NO_AGGREGATE = 'none';
 
+  /** AMQP's wildcards, and the ones {@link topicMatches} understands: one segment, and the rest. */
+  private static readonly ONE_SEGMENT = '*';
+  private static readonly EVERY_SEGMENT = '#';
+
   constructor(
     /** `namespace.Name#version`, the way the envelope carries it. */
     readonly messageType: string,
@@ -109,6 +113,43 @@ export class EventAddress {
     );
   }
 
+  /**
+   * **The binding for everything a consumer wants**, in the same shape {@link routingKey} publishes
+   * under — so what a controller declares and what a producer sends are read from one place, and a
+   * namespace renamed in `@EventType` takes its bindings with it.
+   *
+   * ```ts
+   * @EventPattern(EventAddress.everyEventOf(POSTS_NAMESPACE))   // posts.#  — every event of the namespace
+   * @EventPattern(EventAddress.everyEventOf(PostCreatedEvent))  // posts.PostCreated.*  — one type, any aggregate
+   * ```
+   *
+   * ## Why a whole namespace is a shape worth having
+   * Because a service that replicates another's aggregate wants **all** of it: a decision taken against
+   * half a history is a wrong decision, and a binding per event type is a list that has to grow every
+   * time the other service adds one — silently, since nothing fails when an event nobody bound to is
+   * dropped by the exchange. One entry per namespace is also one handler: the message type in the
+   * envelope is what resolves the concrete class, so the controller does not need one method per event.
+   *
+   * The cost, and it is the reason this is a choice rather than the default: the queue then receives
+   * events this service does not act on — including its own, which the origin mark drops before the
+   * inbox. A consumer that wants one type asks for that type.
+   *
+   * ## Why the return type is a template literal
+   * Because `@EventPattern` resolves to a different overload for a plain `string` than for a literal,
+   * and the `string` one infers the handler's payload as `{}` — which makes a typed parameter a compile
+   * error with a message about property descriptors. Keeping the pattern a literal type is what keeps
+   * the controller readable.
+   */
+  static everyEventOf<TNamespace extends string>(
+    namespace: TNamespace,
+  ): `${TNamespace}.${typeof EventAddress.EVERY_SEGMENT}`;
+  static everyEventOf(event: Type<object>): `${string}.${typeof EventAddress.ONE_SEGMENT}`;
+  static everyEventOf(target: string | Type<object>): string {
+    return typeof target === 'string'
+      ? `${target}.${EventAddress.EVERY_SEGMENT}`
+      : `${requireEventTypeOf(target).qualifiedName}.${EventAddress.ONE_SEGMENT}`;
+  }
+
   static fromMessageType(
     messageType: string,
     identifier: string,
@@ -147,44 +188,4 @@ export class EventAddress {
     }
     return tags[0].value;
   }
-}
-
-/** AMQP's wildcards, and the ones {@link topicMatches} understands: one segment, and the rest. */
-const ONE_SEGMENT = '*';
-const EVERY_SEGMENT = '#';
-
-/**
- * **The binding for everything a consumer wants**, in the same shape {@link EventAddress.routingKey}
- * publishes under — so what a controller declares and what a producer sends are read from one place.
- *
- * ```ts
- * @EventPattern(everyEventOf(POSTS_NAMESPACE))      // posts.#        — every event of the namespace
- * @EventPattern(everyEventOf(PostCreatedEvent))     // posts.PostCreated.*  — one type, any aggregate
- * ```
- *
- * ## Why a whole namespace is a shape worth having
- * Because a service that replicates another's aggregate wants **all** of it: a decision taken against
- * half a history is a wrong decision, and a binding per event type is a list that has to grow every
- * time the other service adds one — silently, since nothing fails when an event nobody bound to is
- * dropped by the exchange. One entry per namespace is also one handler: the message type in the
- * envelope is what resolves the concrete class, so the controller does not need one method per event.
- *
- * The cost, and it is the reason this is a choice rather than the default: the queue then receives
- * events this service does not act on — including its own, which the origin mark drops before the
- * inbox. A consumer that wants one type asks for that type.
- *
- * ## Why the return type is a template literal
- * Because `@EventPattern` resolves to a different overload for a plain `string` than for a literal,
- * and the `string` one infers the handler's payload as `{}` — which makes a typed parameter a
- * compile error with a message about property descriptors. Keeping the pattern a literal type is what
- * keeps the controller readable.
- */
-export function everyEventOf<TNamespace extends string>(
-  namespace: TNamespace,
-): `${TNamespace}.${typeof EVERY_SEGMENT}`;
-export function everyEventOf(event: Type<object>): `${string}.${typeof ONE_SEGMENT}`;
-export function everyEventOf(target: string | Type<object>): string {
-  return typeof target === 'string'
-    ? `${target}.${EVERY_SEGMENT}`
-    : `${requireEventTypeOf(target).qualifiedName}.${ONE_SEGMENT}`;
 }

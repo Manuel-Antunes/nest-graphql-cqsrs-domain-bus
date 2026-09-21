@@ -53,13 +53,14 @@ assertion, and it is what proves the base still behaves the same on this stack.
 
 ## What this repository changed in its shape
 
-7. **There is no `TransportEventBusModule.forRoot(...)`.** Upstream's module function is how an
-   application declares its destinations; here the mechanism is two arrays of providers
-   (`transportEventBusProviders`, `eventIngestionProviders`) that an application spreads into a module
-   of its own, and what the library needs back it asks for as an **abstract class** —
-   `TransportIdentity`, `RequestContextCodec`, `IngestionSink`, `MessageInbox`. A module function is a
-   second way of wiring, one that takes an options literal instead of a class and that nothing can
-   substitute in a test; a binding is the way everything else in this repository is wired.
+7. **`forRoot` is there, and so are the providers under it.** Upstream's module function is the only way
+   to wire it; here it is the **opinionated** way — `TransportEventBusModule.forRoot({ identity, inbox,
+   eventStore, publishers })` composes three exported provider arrays
+   (`transportEventBusProviders`, `eventIngestionProviders`, `eventStoreProviders`) and binds the four
+   ports the library asks for (`TransportIdentity`, `RequestContextCodec`, `IngestionSink`,
+   `MessageInbox`). A service that wants another shape spreads the arrays itself, which is what the
+   library's own specs do; `forRootAsync` resolves the identity at runtime. The options are values and
+   classes, never a substitute for a binding: what a test replaces, it replaces by binding.
 8. **The wire format lives in the transporter's own extension points, one pair per transport.**
    Upstream's bus builds the message; here the forwarder emits an `EventEnvelope` — `data`, the event,
    and `metadata`, a flat map of strings — and each transport's `EventEnvelopeSerializer` /
@@ -113,9 +114,12 @@ Everything under `outbound/`, `inbound/` and `persistence/`, none of which upstr
   service that had to write it would be writing the framework once per service;
 - an **origin mark** on every message, which is what keeps "everything published locally is forwarded"
   and "everything received is published locally" from feeding each other forever;
+- **its tables declared where they are needed**: `inbox` and `eventStore` bring the inbox's schema and
+  the streams' through `DatabaseModule.forFeature`, so neither is a list an application keeps in step by
+  hand;
 - **request-context propagation** across the hop (`RequestContextCodec`), and `@TransportRequest()`,
   which hands that request to a controller so a command dispatched there runs in it;
-- **a binding for a whole namespace** (`everyEventOf`): one `@EventPattern`, every event of the
+- **a binding for a whole namespace** (`EventAddress.everyEventOf`): one `@EventPattern`, every event of the
   namespace, each answered as the class it is — which is what a service that keeps another's stream
   needs, and what a list of per-type bindings silently gets wrong as the other side grows;
 - the **doubles** that make all of the above testable with nothing running: `MemoryClient`,

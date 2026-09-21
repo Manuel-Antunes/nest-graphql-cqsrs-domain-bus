@@ -16,7 +16,7 @@ import {
   EventStore,
   TRANSPORT_EVENT_BUS_PUBLISHER,
 } from '@nestposts/transport-eventbus';
-import { TransportTestingModule } from '../../test/support/transport-testing.module';
+import { persistenceTesting, transportTesting } from '../../test/support/transport-testing.module';
 import { mikroOrmConfig } from '../infrastructure/persistence/mikro-orm.config';
 import { CompletePostWithDefaultTagCommand } from './complete-post-with-default-tag.command';
 
@@ -56,8 +56,8 @@ describe('CompletePostWithDefaultTagCommand.Handler', () => {
     module = await Test.createTestingModule({
       imports: [
         CqsrsModule.forRoot({ aggregatePublisher: TRANSPORT_EVENT_BUS_PUBLISHER }),
-        MikroOrmModule.forRoot(mikroOrmConfig(':memory:')),
-        TransportTestingModule,
+        ...persistenceTesting(),
+        transportTesting(),
       ],
       providers: [CompletePostWithDefaultTagCommand.Handler],
     }).compile();

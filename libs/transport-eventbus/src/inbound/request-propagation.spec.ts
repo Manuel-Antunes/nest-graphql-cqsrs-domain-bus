@@ -30,7 +30,7 @@ import { EventType } from '@nestposts/platform/domain/shared/event-type';
 import { type Observable, map } from 'rxjs';
 import { TransportEvent } from '../decorators/transport-event.decorator';
 import { MemoryClient } from '../in-memory/memory-client';
-import { EventAddress, everyEventOf } from '../outbound/event-address';
+import { EventAddress } from '../outbound/event-address';
 import { EventEnvelopeFactory } from '../outbound/event-envelope.factory';
 import { MemoryEventEnvelopeSerializer } from '../outbound/serializers/memory-event-envelope.serializer';
 import { MessageInbox, MikroOrmMessageInbox } from '../persistence/message-inbox';
@@ -168,18 +168,12 @@ class OrderPlacedHandler implements IEventHandler<OrderPlacedEvent> {
 class ShopEventsController {
   constructor(private readonly ingestion: EventIngestion) {}
 
-  @EventPattern(everyEventOf(SHOP))
+  @EventPattern(EventAddress.everyEventOf(SHOP))
   shop(@TransportEvent() event: OrderPlacedEvent): Promise<void> {
     return this.ingestion.ingest(event);
   }
 }
 
-@Injectable()
-class ShopIdentity extends TransportIdentity {
-  readonly applicationName = 'shop';
-
-  override readonly publishes = false;
-}
 
 describe('the request that crosses: what a guard, a saga and a command all see', () => {
   let consuming: Awaited<ReturnType<typeof startInProcessService>>;
@@ -225,7 +219,7 @@ describe('the request that crosses: what a guard, a saga and a command all see',
       providers: [
         ...transportEventBusProviders,
         ...eventIngestionProviders,
-        { provide: TransportIdentity, useClass: ShopIdentity },
+        { provide: TransportIdentity, useValue: TransportIdentity.named('shop') },
         { provide: RequestContextCodec, useClass: ShopRequestCodec },
         { provide: IngestionSink, useClass: NoDurableState },
         { provide: MessageInbox, useClass: MikroOrmMessageInbox },
@@ -237,7 +231,7 @@ describe('the request that crosses: what a guard, a saga and a command all see',
       ],
     });
     envelopes = new EventEnvelopeFactory(
-      { applicationName: 'orders', publishes: true } as TransportIdentity,
+      TransportIdentity.named('orders'),
       new ShopRequestCodec(),
     );
     publishing = new MemoryClient({

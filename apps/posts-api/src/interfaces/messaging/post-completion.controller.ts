@@ -2,7 +2,7 @@ import { Controller } from '@nestjs/common';
 import { EventPattern } from '@nestjs/microservices';
 import { AllowAnonymous } from '@thallesp/nestjs-better-auth';
 import { PostCreatedEvent } from '@nestposts/posts/domain/post/event/post-created.event';
-import { EventIngestion, TransportEvent, everyEventOf } from '@nestposts/transport-eventbus';
+import { EventAddress, EventIngestion, TransportEvent } from '@nestposts/transport-eventbus';
 
 /**
  * The saga coming back: the post returning complete from the service that decided its first tag.
@@ -10,7 +10,7 @@ import { EventIngestion, TransportEvent, everyEventOf } from '@nestposts/transpo
  * One type, any aggregate — this service owns the read model and wants the decision, not the whole
  * namespace it publishes itself.
  */
-export const POST_COMPLETED_PATTERN = everyEventOf(PostCreatedEvent);
+export const POST_COMPLETED_PATTERN = EventAddress.everyEventOf(PostCreatedEvent);
 
 /**
  * `@AllowAnonymous` because a message carries no session, and the global guard — inherited by the

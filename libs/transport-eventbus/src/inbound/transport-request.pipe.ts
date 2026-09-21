@@ -18,7 +18,7 @@ import { IncomingRequest } from './incoming-request';
  * A controller can then dispatch in the request that opened it, on the other side of the wire:
  *
  * ```ts
- * @EventPattern(everyEventOf(POSTS_NAMESPACE))
+ * @EventPattern(EventAddress.everyEventOf(POSTS_NAMESPACE))
  * posts(@TransportEvent() event: DomainEvent, @TransportRequest() request?: AsyncContext) {
  *   return this.commandBus.execute(new DoSomething(event), request);
  * }

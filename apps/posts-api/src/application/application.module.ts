@@ -1,7 +1,8 @@
 import { Module } from '@nestjs/common';
 import { taggingInProcess } from '../infrastructure/transport/transport.config';
+import { PostsInfrastructureModule } from '@nestposts/posts/infrastructure/posts-infrastructure.module';
 import { IdentityModule } from '@nestposts/users/infrastructure/auth/identity.module';
-import { PersistenceModule } from '../infrastructure/persistence/persistence.module';
+import { UsersInfrastructureModule } from '@nestposts/users/infrastructure/users-infrastructure.module';
 import { AssignTagToPostCommand } from './post/command/assign-tag-to-post.command';
 import { CreatePostCommand } from './post/command/create-post.command';
 import { UpdatePostCommand } from './post/command/update-post.command';
@@ -18,7 +19,7 @@ import { FindAuthorQuery } from './user/query/find-author.query';
 import { UserProvisioning } from './user/user-provisioning.service';
 
 @Module({
-  imports: [PersistenceModule, IdentityModule],
+  imports: [PostsInfrastructureModule, UsersInfrastructureModule, IdentityModule],
   providers: [
     CreatePostCommand.Handler,
     UpdatePostCommand.Handler,

@@ -5,15 +5,9 @@ import { EventBus, type IEvent } from "@nestjs/cqrs";
 import { Test, type TestingModule } from "@nestjs/testing";
 import { CqsrsModule } from "@nestposts/cqsrs";
 import { TRANSPORT_EVENT_BUS_PUBLISHER } from "@nestposts/transport-eventbus";
-import { TransportTestingModule } from "./transport-testing.module";
-import { PostRepository } from "@nestposts/posts/domain/post/post.repository";
-import { TagRepository } from "@nestposts/posts/domain/tag/tag.repository";
-import { AuthorRepository } from "@nestposts/users/domain/user/author.repository";
-import { UserRepository } from "@nestposts/users/domain/user/user.repository";
-import { MikroOrmPostRepository } from "@nestposts/posts/infrastructure/persistence/repositories/mikro-orm-post.repository";
-import { MikroOrmTagRepository } from "@nestposts/posts/infrastructure/persistence/repositories/mikro-orm-tag.repository";
-import { MikroOrmAuthorRepository } from "@nestposts/users/infrastructure/persistence/repositories/mikro-orm-author.repository";
-import { MikroOrmUserRepository } from "@nestposts/users/infrastructure/persistence/repositories/mikro-orm-user.repository";
+import { persistenceTesting, transportTesting } from "./transport-testing.module";
+import { PostsInfrastructureModule } from "@nestposts/posts/infrastructure/posts-infrastructure.module";
+import { UsersInfrastructureModule } from "@nestposts/users/infrastructure/users-infrastructure.module";
 import { mikroOrmConfig } from "../../src/infrastructure/persistence/mikro-orm.config";
 
 export async function createCqrsTestingModule(
@@ -21,17 +15,13 @@ export async function createCqrsTestingModule(
 ): Promise<TestingModule> {
   const module = await Test.createTestingModule({
     imports: [
-      CqsrsModule.forRoot({}),
-      MikroOrmModule.forRoot(mikroOrmConfig(":memory:")),
-      TransportTestingModule,
+      CqsrsModule.forRoot({ aggregatePublisher: TRANSPORT_EVENT_BUS_PUBLISHER }),
+      persistenceTesting(),
+      transportTesting(),
+      PostsInfrastructureModule,
+      UsersInfrastructureModule,
     ],
-    providers: [
-      ...providers,
-      { provide: PostRepository, useClass: MikroOrmPostRepository },
-      { provide: TagRepository, useClass: MikroOrmTagRepository },
-      { provide: UserRepository, useClass: MikroOrmUserRepository },
-      { provide: AuthorRepository, useClass: MikroOrmAuthorRepository },
-    ],
+    providers: [...providers],
   }).compile();
   await module.init();
   return module;

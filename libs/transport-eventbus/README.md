@@ -59,75 +59,86 @@ segment of the routing key, so a consumer can bind to one post's stream, and it 
 uses to know what the event belongs to. One tag per event: an event about two aggregates cannot be
 ordered by either.
 
-### 2. Declare the mechanism in your own module
+### 2. Start it
 
 ```ts
-import { Global, Module } from '@nestjs/common';
-import { DiscoveryModule } from '@nestjs/core';
+import { Module } from '@nestjs/common';
+import { CqsrsModule } from '@nestposts/cqsrs';
+import { DatabaseModule } from '@nestposts/platform/infrastructure/persistence/database.module';
 import {
-  EventIngestion,
-  IngestionSink,
-  MessageInbox,
   MikroOrmMessageInbox,
-  NoDurableState,
-  OutboxRouting,
-  RequestContextCodec,
   TRANSPORT_EVENT_BUS_PUBLISHER,
-  TRANSPORT_EVENT_BUS_SERVICE,
-  TransportIdentity,
-  eventIngestionProviders,
-  transportEventBusProviders,
+  TransportEventBusModule,
 } from '@nestposts/transport-eventbus';
 
-@Global()
 @Module({
-  imports: [DiscoveryModule],
-  providers: [
-    ...transportEventBusProviders,
-    ...eventIngestionProviders,
-    { provide: TransportIdentity, useClass: PostsApiIdentity },
-    { provide: RequestContextCodec, useClass: PostRequestContextCodec },
-    { provide: IngestionSink, useClass: NoDurableState },
-    { provide: MessageInbox, useClass: MikroOrmMessageInbox },
-    PostEventsPublisher,
-    { provide: POST_EVENTS_CLIENT, useFactory: postEventsClient },
+  imports: [
+    CqsrsModule.forRoot({ aggregatePublisher: TRANSPORT_EVENT_BUS_PUBLISHER }),
+    DatabaseModule.forRoot(mikroOrmConfig()),
+    TransportEventBusModule.forRoot({
+      identity: taggingIdentity(),                    // 'tagging', or an identity of its own
+      inbox: MikroOrmMessageInbox,                    // receiving on, and what it remembers
+      eventStore: [Post],                             // the aggregates it sources from its streams
+      publishers: [
+        PostEventsPublisher,
+        { provide: POST_EVENTS_CLIENT, useFactory: postEventsClient },
+      ],
+    }),
   ],
-  exports: [TRANSPORT_EVENT_BUS_SERVICE, TRANSPORT_EVENT_BUS_PUBLISHER, EventIngestion, OutboxRouting],
 })
-export class TransportModule {}
+export class AppModule {}
 ```
+
+| option | | |
+|---|---|---|
+| `identity` | required | who this service is on the wire: a name, or a `TransportIdentity` (`.silent('my-suite')` for a spec) |
+| `publishes` | `true` | the master switch of the outbound half, when the identity is a plain name |
+| `requestContext` | `CorrelatedRequestContext` | what a request means here |
+| `publishers` | `[]` | the destinations: the `@Publisher` classes and the clients they hold |
+| `inbox` | — | passing one turns **receiving** on: `MikroOrmMessageInbox`, or `NoMessageInbox` for a service that keeps no memory of what it received |
+| `sink` | `NoDurableState` | what an ingested event leaves durable, inside the ingestion's transaction |
+| `eventStore` | — | the aggregates this service event-sources; given, the store and the sink that fills it are wired, with a repository per aggregate |
+| `imports` / `providers` / `exports` | `[]` | whatever the above depend on |
+
+`forRootAsync` is the same with the identity resolved at runtime — from a `ConfigService`, a secret, a
+discovery agent:
 
 ```ts
-@Injectable()
-export class PostsApiIdentity extends TransportIdentity {
-  readonly applicationName = 'posts-api';
-
-  override readonly publishes = process.env.POSTS_PUBLISH_EVENTS !== 'false';
-}
+TransportEventBusModule.forRootAsync({
+  imports: [ConfigModule],
+  inject: [ConfigService],
+  useFactory: (config: ConfigService) => ({ identity: config.serviceName, publishes: config.publishes }),
+  inbox: MikroOrmMessageInbox,
+  publishers: [PostEventsPublisher, { provide: POST_EVENTS_CLIENT, useFactory: postEventsClient }],
+})
 ```
 
-Four things to know:
+Only the identity is async, and that is not a limitation: everything else is a class or a provider, and
+a provider resolves its own dependencies — a client factory injecting a `ConfigService` is an ordinary
+`useFactory`. What cannot wait is module metadata, which Nest reads before anything is instantiated.
 
-- **`applicationName` is the mark of authorship.** It goes on every message that leaves, and it is how
-  an event this service produced and got back is recognised and dropped. Two services must not share
-  it. `publishes` is the master switch for the outbound half.
-- **Nothing here imports `CqrsModule`**: the `EventBus` comes from wherever your application put CQRS.
+Five things to know:
+
+- **`applicationName` is the mark of authorship, not an address.** Where a message goes is the
+  `@Publisher`'s client; the name is what every message carries *from* this service, and the inbound
+  half's answer to "did I send this?" — a service that binds a namespace it also publishes to receives
+  its own events, and without the mark it ingests them, writing its own state again and deciding twice.
+  Two services must not share it, and there is no default because a wrong name is worse than a missing
+  one.
+- **The tables come with the options.** `inbox` brings the inbox's schema and `eventStore` brings the
+  streams', through `DatabaseModule.forFeature` (`@nestposts/platform`) — so a table this library owns
+  is never something an application copies into its configuration. A service that only publishes needs
+  no database at all.
+- **Nothing imports `CqrsModule`**: the `EventBus` comes from wherever your application put CQRS.
   `CqrsModule.forRoot()` and `CqsrsModule.forRoot()` are global, so that is enough — and importing the
   static `CqrsModule` inside a provider's module would give it a *second* `EventBus`, which fails
   silently (see `NOTICE.md`).
-- **`DiscoveryModule` is Nest's own**, and it is what finds the `@Publisher` classes wherever they are
-  declared.
-- **`eventIngestionProviders` is the inbound half**, and it is separate because publishing needs no
-  database. With it, add `transportEntities` to your MikroORM entity list:
-
-```ts
-import { transportEntities } from '@nestposts/transport-eventbus';
-
-entities: [PostEntitySchema, /* … */, ...transportEntities],
-```
-
-A service that receives but keeps no memory of what it received binds `NoMessageInbox` instead of
-`MikroOrmMessageInbox` — and then has one guard fewer.
+- **The module is global**, because what it provides is injected from everywhere: a command handler asks
+  for `TRANSPORT_EVENT_BUS_PUBLISHER`, a controller for `EventIngestion`, a guard for
+  `IncomingRequest`.
+- **The provider arrays are still there.** `transportEventBusProviders`, `eventIngestionProviders` and
+  `eventStoreProviders` are what `forRoot` composes, and a service that wants to compose them by hand —
+  or a spec that wants half of them — still can. `forRoot` is the opinionated way, not the only one.
 
 ### 3. Declare where the events go out
 
@@ -255,7 +266,7 @@ and a controller, binding either one event type or a whole namespace:
 export class PostEventsController {
   constructor(private readonly ingestion: EventIngestion) {}
 
-  @EventPattern(everyEventOf(POSTS_NAMESPACE))        // posts.#  — every event of the namespace
+  @EventPattern(EventAddress.everyEventOf(POSTS_NAMESPACE))    // posts.#  — every event of the namespace
   posts(@TransportEvent() event: DomainEvent): Promise<void> {
     return this.ingestion.ingest(event);
   }
@@ -265,7 +276,7 @@ export class PostEventsController {
 export class PostCompletionController {
   constructor(private readonly ingestion: EventIngestion) {}
 
-  @EventPattern(everyEventOf(PostCreatedEvent))       // posts.PostCreated.*  — one type, any aggregate
+  @EventPattern(EventAddress.everyEventOf(PostCreatedEvent))   // posts.PostCreated.*  — one type, any aggregate
   postCompleted(@TransportEvent() event: PostCreatedEvent): Promise<void> {
     return this.ingestion.ingest(event);
   }
@@ -294,7 +305,7 @@ instead of ingesting passes it on, and the command runs in the request that open
 side of the wire:
 
 ```ts
-@EventPattern<string>(everyEventOf(POSTS_NAMESPACE))    // <string>: see below
+@EventPattern<string>(EventAddress.everyEventOf(POSTS_NAMESPACE))   // <string>: see below
 posts(@TransportEvent() event: DomainEvent, @TransportRequest() request?: AsyncContext): Promise<void> {
   return this.commandBus.execute(new CompletePost(event), request);
 }
@@ -405,10 +416,10 @@ Each covers what the others do not:
 
 Two answers ship with the library, and a service picks one:
 
-| binding | for |
+| option | for |
 |---|---|
-| `IngestionSink` → `NoDurableState` (the default) | a service whose state is a read model fed by its own projections: there is nothing to make durable, the projections are handlers like any other |
-| `...eventStoreProviders` | a service that **decides about an aggregate it has no table for**: what arrives is appended to that aggregate's stream, and the next decision is taken against the whole history |
+| nothing (the default is `NoDurableState`) | a service whose state is a read model fed by its own projections: there is nothing to make durable, the projections are handlers like any other |
+| `eventStore: [Aggregate]` | a service that **decides about an aggregate it has no table for**: what arrives is appended to that aggregate's stream, and the next decision is taken against the whole history |
 
 Whatever the sink writes lands in the same transaction as the inbox row. The event reaches the local
 bus **after** that transaction commits — a handler triggered from inside it would inherit the
@@ -416,30 +427,24 @@ transaction through the async store and then find it gone (`Transaction is alrea
 
 ### Event sourcing a service that owns no read model
 
-This is the second case above, and **there is nothing to write for it**. `eventStoreProviders` brings
-the store and the sink that appends every ingested event to the stream of the aggregate its
-`@EventType({ tags })` names; `EventSourcedRepository.of(Aggregate)` brings the repository that replays
-it:
+This is the second case above, and **there is nothing to write for it** — one option names the
+aggregates, and the store, the sink that appends every ingested event to the stream of the aggregate its
+`@EventType({ tags })` names, and a repository per aggregate are wired:
 
 ```ts
-@Global()
 @Module({
-  imports: [DiscoveryModule],
-  providers: [
-    ...transportEventBusProviders,
-    ...eventIngestionProviders,
-    ...eventStoreProviders,
-    EventSourcedRepository.of(Post),
-    { provide: TransportIdentity, useClass: TaggingIdentity },
-    { provide: RequestContextCodec, useClass: CorrelatedRequestContext },
-    { provide: MessageInbox, useClass: MikroOrmMessageInbox },
+  imports: [
+    CqsrsModule.forRoot({ aggregatePublisher: TRANSPORT_EVENT_BUS_PUBLISHER }),
+    DatabaseModule.forRoot(mikroOrmConfig()),
+    TransportEventBusModule.forRoot({
+      identity: taggingIdentity(),
+      inbox: MikroOrmMessageInbox,
+      eventStore: [Post],
+      publishers: [PostEventsPublisher, { provide: POST_EVENTS_CLIENT, useFactory: postEventsClient }],
+    }),
   ],
 })
-export class TransportModule {}
-```
-
-```ts
-entities: [/* the domain's mappings */, ...eventStoreEntities, ...transportEntities],
+export class AppModule {}
 ```
 
 From there a command handler is the ordinary one — load, let the domain decide, save, commit:
@@ -720,14 +725,12 @@ an `EventEnvelope` under the event's own key and never learns a protocol.
 
 ## Reference
 
-### What the application binds
+### What the application declares
 
-| binding | | |
-|---|---|---|
-| `TransportIdentity` | required | `applicationName`, the mark of authorship; `publishes`, the master switch for the outbound half |
-| `RequestContextCodec` | required | `CorrelatedRequestContext`, or your own — what a request means here |
-| `IngestionSink` | inbound | `NoDurableState`, `...eventStoreProviders` for an event-sourced service, or one of your own |
-| `MessageInbox` | inbound | `MikroOrmMessageInbox`, or `NoMessageInbox` for a service that keeps no memory |
+The options of `forRoot` are the table in **Start it**, above. Under them are the same four bindings the
+library asks for, which a service composing the provider arrays by hand binds itself:
+`TransportIdentity` (required), `RequestContextCodec` (defaulted), and — for a service that receives —
+`IngestionSink` and `MessageInbox`.
 
 `transportEventBusProviders` brings the outbound half and the bus itself
 (`TRANSPORT_EVENT_BUS_SERVICE`, `TRANSPORT_EVENT_BUS_PUBLISHER`, `OutboxRouting`,
@@ -748,9 +751,11 @@ an `EventEnvelope` under the event's own key and never learns a protocol.
 | `@TransportEvent()` / `TransportEventPipe` | the parameter that is the event, rebuilt from the envelope |
 | `@TransportRequest()` / `TransportRequestPipe` | the parameter that is the request the message belongs to |
 | `IncomingRequest` | the same request, for a guard, an interceptor or a filter |
-| `everyEventOf(namespace)` / `everyEventOf(EventClass)` | the binding: `posts.#`, or `posts.PostCreated.*` |
+| `EventAddress.everyEventOf(namespace)` / `.everyEventOf(EventClass)` | the binding: `posts.#`, or `posts.PostCreated.*` |
 | `EventIngestion.ingest(event)` | what a controller calls |
 | `IngestionSink` / `MessageInbox` | the two ports of the inbound half |
+| `TransportEventBusModule.forRoot` / `.forRootAsync` | the transport, started in one call |
+| `DatabaseModule.forRoot` / `.forFeature` (in `@nestposts/platform`) | the connection, and the tables each module owns |
 | `eventStoreProviders` / `EventSourcedRepository.of(Aggregate)` | the event store, the sink that fills it, and the replay |
 | `EventStore` / `MikroOrmEventStore` / `eventStoreEntities` | the stream's port, its adapter and its table |
 | `isIngested` / `originOf` / `identifierOf` | what an event says about where it came from |
