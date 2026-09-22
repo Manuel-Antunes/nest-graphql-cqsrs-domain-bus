@@ -1,14 +1,23 @@
-import { PublishCommand, SNSClient, type SNSClientConfig } from '@aws-sdk/client-sns';
+import type { SNSClientConfig } from '@aws-sdk/client-sns';
+import { PublishCommand, SNSClient } from '@aws-sdk/client-sns';
 import { Logger } from '@nestjs/common';
-import {
-  ClientProxy,
-  type ProducerSerializer,
-  type ReadPacket,
-  type WritePacket,
+import type {
+  ProducerSerializer,
+  ReadPacket,
+  WritePacket,
 } from '@nestjs/microservices';
+import { ClientProxy } from '@nestjs/microservices';
+
 import { TRANSPORT_IDENTIFIER } from '../outbound/event-envelope';
 import { awsClientConfig } from './aws-client.config';
-import { type AwsEnvelopeMessage, asMessageAttributes, orderingKeyIn } from './aws-message';
+import type { AwsEnvelopeMessage } from './aws-message';
+import {
+  asMessageAttributes,
+  orderingKeyIn,
+  withExtraMetadata,
+} from './aws-message';
+import type { SnsRecordOptions } from './sns-record.builder';
+import { SnsRecordBuilder } from './sns-record.builder';
 
 export interface SnsClientProxyOptions {
   /** The topic this destination publishes to. FIFO is inferred from the `.fifo` suffix. */
@@ -68,7 +77,9 @@ export class SnsClientProxy extends ClientProxy {
     }
     this.fifo = this.topicArn.endsWith('.fifo');
     this.ownsClient = !options.client;
-    this.client = options.client ?? new SNSClient({ ...awsClientConfig(), ...options.clientConfig });
+    this.client =
+      options.client ??
+      new SNSClient({ ...awsClientConfig(), ...options.clientConfig });
     this.initializeSerializer(options);
   }
 
@@ -86,7 +97,10 @@ export class SnsClientProxy extends ClientProxy {
     return this.client as T;
   }
 
-  protected publish(packet: ReadPacket, callback: (packet: WritePacket) => void): () => void {
+  protected publish(
+    packet: ReadPacket,
+    callback: (packet: WritePacket) => void,
+  ): () => void {
     callback({
       err: new Error(
         `a topic carries events, not calls: nobody answers send() on ${String(packet.pattern)}. ` +
@@ -97,17 +111,30 @@ export class SnsClientProxy extends ClientProxy {
   }
 
   protected async dispatchEvent<T = unknown>(packet: ReadPacket): Promise<T> {
-    const message = (await this.serializer.serialize(packet)) as AwsEnvelopeMessage;
+    const record = SnsRecordBuilder.isRecord(packet.data)
+      ? packet.data
+      : undefined;
+    const options: SnsRecordOptions = record?.options ?? {};
+    const message = (await this.serializer.serialize(
+      record ? { ...packet, data: record.data } : packet,
+    )) as AwsEnvelopeMessage;
+    const body = withExtraMetadata(message.body, options.metadata);
 
     await this.client.send(
       new PublishCommand({
         TopicArn: this.topicArn,
-        Message: JSON.stringify(message.body),
-        MessageAttributes: asMessageAttributes(message.attributes),
+        Message: JSON.stringify(body),
+        MessageAttributes: {
+          ...asMessageAttributes(message.attributes),
+          ...(options.messageAttributes ?? {}),
+        },
         ...(this.fifo
           ? {
-              MessageGroupId: orderingKeyIn(message.pattern),
-              MessageDeduplicationId: message.body.metadata[TRANSPORT_IDENTIFIER],
+              MessageGroupId:
+                options.messageGroupId ?? orderingKeyIn(message.pattern),
+              MessageDeduplicationId:
+                options.messageDeduplicationId ??
+                body.metadata[TRANSPORT_IDENTIFIER],
             }
           : {}),
       }),

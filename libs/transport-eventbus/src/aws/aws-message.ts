@@ -91,6 +91,17 @@ export const routingAttributesOf = (
 };
 
 /**
+ * **A body with a record's extra metadata merged in.** Metadata is what survives every hop — the far
+ * side reads it back as the request's attributes — where a message attribute belongs to one message
+ * on one transport, so a record that says something the chain should carry says it here.
+ */
+export const withExtraMetadata = (
+  body: AwsMessageBody,
+  extra: Record<string, string> | undefined,
+): AwsMessageBody =>
+  extra ? { ...body, metadata: { ...body.metadata, ...extra } } : body;
+
+/**
  * Both SDKs reject an attribute whose `StringValue` is empty, with an error naming the parameter and
  * not the value — so a blank one is dropped here rather than at the API boundary.
  */

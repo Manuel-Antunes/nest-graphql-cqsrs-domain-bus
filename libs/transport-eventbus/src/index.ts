@@ -63,6 +63,7 @@ export * from './aws/aws-message';
 export * from './aws/process-sqs-event';
 export * from './aws/sns-client.proxy';
 export * from './aws/sns-filter-policy';
+export * from './aws/sns-record.builder';
 export * from './aws/sqs-client.proxy';
 export * from './aws/sqs-record.builder';
 export * from './aws/sqs.context';
