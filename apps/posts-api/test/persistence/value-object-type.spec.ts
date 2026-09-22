@@ -1,21 +1,19 @@
+import { closeTestDatabase, tableIn, testDatabase } from '@nestposts/database/testing';
 import { MikroORM } from '@mikro-orm/core';
-import { defineConfig } from '@mikro-orm/sqlite';
 import { Tag } from '@nestposts/posts/domain/tag/tag.entity';
 import { TagSchema } from '@nestposts/posts/infrastructure/persistence/entities/tag-orm.entity';
 import { TagId } from '@nestposts/posts/domain/tag/vo/tag-id';
 import { TagName } from '@nestposts/posts/domain/tag/vo/tag-name';
-import { valueObjectType } from '@nestposts/platform/infrastructure/persistence/helpers/value-object-type';
+import { valueObjectType } from '@nestposts/database';
 
 describe('valueObjectType', () => {
   let orm: MikroORM;
 
   beforeAll(async () => {
-    orm = await MikroORM.init(
-      defineConfig({ dbName: ':memory:', entities: [TagSchema], ensureDatabase: { create: true } }),
-    );
+    orm = await testDatabase({ entities: [TagSchema] });
   });
 
-  afterAll(() => orm.close(true));
+  afterAll(() => closeTestDatabase(orm));
 
   let seq = 0;
   const givenATag = async (name = `tag-${++seq}`) => {
@@ -41,7 +39,7 @@ describe('valueObjectType', () => {
     const [row] = await orm.em
       .fork()
       .getConnection()
-      .execute('select id, name from tags where id = ?', [id.value]);
+      .execute(`select id, name from ${tableIn(orm, 'tags')} where id = ?`, [id.value]);
 
     expect(row).toEqual({ id: id.value, name: 'texto puro' });
   });

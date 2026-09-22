@@ -1,5 +1,6 @@
+import { MikroORM } from '@mikro-orm/core';
+import { dropTestSchema, ensureTestSchema, testDatabaseConfig } from '@nestposts/database/testing';
 import { MikroOrmModule } from '@mikro-orm/nestjs';
-import { defineConfig } from '@mikro-orm/sqlite';
 import { Injectable, type Provider } from '@nestjs/common';
 import { DiscoveryModule } from '@nestjs/core';
 import { AsyncContext, CqrsModule, EventsHandler, type IEventHandler } from '@nestjs/cqrs';
@@ -83,10 +84,8 @@ const moduleWith = async (overrides: Provider[] = []): Promise<TestingModule> =>
       CqrsModule.forRoot(),
       DiscoveryModule,
       MikroOrmModule.forRoot(
-        defineConfig({
-          dbName: ':memory:',
+        testDatabaseConfig({
           entities: [...transportEntities],
-          ensureDatabase: { create: true },
           allowGlobalContext: true,
         }),
       ),
@@ -104,6 +103,7 @@ const moduleWith = async (overrides: Provider[] = []): Promise<TestingModule> =>
     ],
   }).compile();
   await module.init();
+  await ensureTestSchema(module.get(MikroORM));
   return module;
 };
 
@@ -120,7 +120,10 @@ describe('EventIngestion', () => {
     received = module.get(Received);
   });
 
-  afterEach(() => module.close());
+  afterEach(async () => {
+    await dropTestSchema(module.get(MikroORM));
+    await module.close();
+  });
 
   it('publishes the event the deserializer rebuilt, dates and all', async () => {
     await ingestion.ingest(arrivingFrom('tagging'));
@@ -211,12 +214,16 @@ describe('EventIngestion', () => {
       const custom = await moduleWith([{ provide: IngestionSink, useClass: RecordingSink }]);
       RecordingSink.seen.length = 0;
 
-      await custom.get(EventIngestion).ingest(arrivingFrom('tagging', 'evt-sink'));
-      await settle();
+      try {
+        await custom.get(EventIngestion).ingest(arrivingFrom('tagging', 'evt-sink'));
+        await settle();
 
-      expect(RecordingSink.seen).toHaveLength(1);
-      expect(RecordingSink.seen[0]).toBeInstanceOf(PostCreatedEvent);
-      await custom.close();
+        expect(RecordingSink.seen).toHaveLength(1);
+        expect(RecordingSink.seen[0]).toBeInstanceOf(PostCreatedEvent);
+      } finally {
+        await dropTestSchema(custom.get(MikroORM));
+        await custom.close();
+      }
     });
   });
 });

@@ -4,7 +4,7 @@ import { Post } from '../../../domain/post/post.entity';
 import { type PostPage, PostRepository } from '../../../domain/post/post.repository';
 import type { PostId } from '../../../domain/post/vo/post-id';
 import type { UserId } from '@nestposts/users/domain/user/vo/user-id';
-import { inRequestContext } from '@nestposts/platform/infrastructure/persistence/request-context';
+import { inRequestContext } from '@nestposts/database';
 import { ACTIVE_FILTER } from '@nestposts/platform/infrastructure/persistence/soft-delete/soft-delete-orm.entity';
 
 @Injectable()

@@ -1,4 +1,6 @@
-# O broker, e só ele: os dois serviços guardam o que é deles em SQLite, cada um no seu arquivo.
+# O broker e o banco. Os dois serviços guardam o que é deles no MESMO Postgres, cada um no seu
+# SCHEMA (`posts` e `tagging`) — e cada schema leva o seu próprio `mikro_orm_migrations`, porque
+# quem cria tabela aqui é o `apps/migrator` e mais ninguém.
 #
 # POR QUE UMA FILA POR SERVIÇO, E NÃO UMA COMPARTILHADA
 # ====================================================
@@ -20,6 +22,23 @@ services:
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-guest}
     healthcheck:
       test: ['CMD', 'rabbitmq-diagnostics', '-q', 'check_running']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  postgres:
+    image: postgres:18-alpine
+    container_name: nestposts-postgres
+    ports:
+      # POSTGRES_PORT existe porque 5432 costuma já estar ocupado por outro projeto na máquina. Quem
+      # o mudar muda também a POSTGRES_URL — o padrão dos dois é 5432.
+      - '${POSTGRES_PORT:-5432}:5432'
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-nestposts}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-nestposts}
+      POSTGRES_DB: ${POSTGRES_DB:-nestposts}
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-nestposts} -d ${POSTGRES_DB:-nestposts}']
       interval: 5s
       timeout: 5s
       retries: 20

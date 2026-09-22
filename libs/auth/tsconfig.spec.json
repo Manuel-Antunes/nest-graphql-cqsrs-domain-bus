@@ -1,0 +1,31 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "out-tsc/vitest",
+    "tsBuildInfoFile": "out-tsc/vitest/tsconfig.spec.tsbuildinfo",
+    "types": [
+      "node",
+      "vitest/globals"
+    ]
+  },
+  "include": [
+    "src/**/*.spec.ts"
+  ],
+  "references": [
+    {
+      "path": "./tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/platform/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/validated-dto/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/users/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/database/tsconfig.lib.json"
+    }
+  ]
+}

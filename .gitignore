@@ -15,3 +15,8 @@ coverage/
 **/coverage/
 **/test-output/
 .e2e/
+tmp
+target/
+playwright-report/
+blob-report/
+.playwright/

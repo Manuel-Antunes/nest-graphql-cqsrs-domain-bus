@@ -7,6 +7,22 @@ export interface WireTag {
 /** What the envelope carries beside the event: a flat map, because that is what a header is. */
 export type EnvelopeMetadata = Record<string, string>;
 
+/**
+ * **The prefix this integration reserves on the envelope's metadata.**
+ *
+ * Every key below, and the codec's correlation and causation, start with it — so "is this key the
+ * framework's or the application's?" is answerable without a list to keep in step. What that question
+ * decides is {@link TransportRequestContext.toAttributes}: a service in the middle of a chain carries
+ * the APPLICATION's attributes onward and must not carry these, because re-emitting
+ * {@link TRANSPORT_ORIGIN} would republish somebody else's authorship — and the origin mark is the
+ * one thing standing between "every service forwards what it receives" and an endless loop.
+ */
+export const TRANSPORT_METADATA_PREFIX = 'cqrs-transport-';
+
+/** Whether a metadata key belongs to this integration rather than to the application. */
+export const isTransportMetadata = (key: string): boolean =>
+  key.startsWith(TRANSPORT_METADATA_PREFIX);
+
 /** `namespace.Name#version` — what the other side resolves the class by. */
 export const TRANSPORT_MESSAGE_TYPE = 'cqrs-transport-message-type';
 

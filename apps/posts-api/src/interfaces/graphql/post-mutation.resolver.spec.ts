@@ -1,6 +1,6 @@
+import { closeTestDatabase, testDatabase } from '@nestposts/database/testing';
 import { createMapper, type Mapper } from '@automapper/core';
 import { MikroORM } from '@mikro-orm/core';
-import { defineConfig } from '@mikro-orm/sqlite';
 import type { CommandBus, QueryBus } from '@nestjs/cqrs';
 import { CreatePostCommand } from '../../application/post/command/create-post.command';
 import { UpdatePostCommand } from '../../application/post/command/update-post.command';
@@ -13,6 +13,7 @@ import { AUTHOR_ROLE, Author, Authorship } from '@nestposts/users/domain/user/au
 import { User } from '@nestposts/users/domain/user/user.entity';
 import { UserId } from '@nestposts/users/domain/user/vo/user-id';
 import type { CreatePostInput } from '../../dto/graphql/create-post.input';
+import { ROOT_TENANT } from '@nestposts/database';
 import { PostProfile } from '../mapper/post.profile';
 import { validatedDtoClasses } from '../mapper/validated-dto.strategy';
 import { PostEntitySchema } from '@nestposts/posts/infrastructure/persistence/entities/post-orm.entity';
@@ -33,15 +34,12 @@ describe('PostMutationResolver', () => {
   let orm: MikroORM;
 
   beforeAll(async () => {
-    orm = await MikroORM.init(
-      defineConfig({
-        dbName: ':memory:',
+    orm = await testDatabase({
         entities: [PostEntitySchema, TagSchema, UserEntitySchema, AuthorshipEntitySchema],
-      }),
-    );
+      });
   });
 
-  afterAll(() => orm.close());
+  afterAll(() => closeTestDatabase(orm));
 
   beforeEach(async () => {
     mapper = createMapper({ strategyInitializer: validatedDtoClasses() });
@@ -88,7 +86,7 @@ describe('PostMutationResolver', () => {
     it('monta o command com o que veio no input e o autor da sessão', async () => {
       const { resolver, commands } = fixture();
 
-      await resolver.createPost(anInput(), anAuthor());
+      await resolver.createPost(anInput(), anAuthor(), ROOT_TENANT);
 
       const command = commands[0].command as CreatePostCommand.CreatePost;
       expect(command).toBeInstanceOf(CreatePostCommand.CreatePost);
@@ -102,18 +100,29 @@ describe('PostMutationResolver', () => {
       const { resolver, commands } = fixture();
       const forjado = anInput({ authorId: UserId.generate().value, authorName: 'outra pessoa' });
 
-      await resolver.createPost(forjado, anAuthor());
+      await resolver.createPost(forjado, anAuthor(), ROOT_TENANT);
 
       const command = commands[0].command as CreatePostCommand.CreatePost;
       expect(command.authorId.equals(authorId)).toBe(true);
       expect(command.authorName.value).toBe('manuel');
     });
 
+    it('leva o tenant da requisição para dentro da PostRequest, que é o que atravessa o broker', async () => {
+      const { resolver, commands } = fixture();
+
+      await resolver.createPost(anInput(), anAuthor(), 'acme');
+
+      const request = commands[0].context as PostRequest;
+      expect(request).toBeInstanceOf(PostRequest);
+      expect(request.tenantId).toBe('acme');
+      expect(request.toAttributes()['x-tenant']).toBe('acme');
+    });
+
     it('gera um postId novo a cada chamada', async () => {
       const { resolver, commands } = fixture();
 
-      await resolver.createPost(anInput(), anAuthor());
-      await resolver.createPost(anInput(), anAuthor());
+      await resolver.createPost(anInput(), anAuthor(), ROOT_TENANT);
+      await resolver.createPost(anInput(), anAuthor(), ROOT_TENANT);
 
       const [first, second] = commands.map((c) => c.command.postId as PostId);
       expect(first.equals(second)).toBe(false);
@@ -122,7 +131,7 @@ describe('PostMutationResolver', () => {
     it('abre a PostRequest com o id do post que está sendo criado', async () => {
       const { resolver, commands } = fixture();
 
-      await resolver.createPost(anInput(), anAuthor());
+      await resolver.createPost(anInput(), anAuthor(), ROOT_TENANT);
 
       const { command, context } = commands[0];
       expect(context).toBeInstanceOf(PostRequest);
@@ -132,7 +141,7 @@ describe('PostMutationResolver', () => {
     it('devolve o post já gravado, lido de volta pelo QueryBus', async () => {
       const { resolver, queries, found } = fixture();
 
-      const post = await resolver.createPost(anInput(), anAuthor());
+      const post = await resolver.createPost(anInput(), anAuthor(), ROOT_TENANT);
 
       expect(queries).toHaveLength(1);
       expect(queries[0]).toBeInstanceOf(FindPostQuery.FindPost);
@@ -142,7 +151,7 @@ describe('PostMutationResolver', () => {
     it('se o post gravado não é encontrado, isso é erro e não null', async () => {
       const { resolver } = fixture(null);
 
-      await expect(resolver.createPost(anInput(), anAuthor())).rejects.toThrow(PostNotFoundException);
+      await expect(resolver.createPost(anInput(), anAuthor(), ROOT_TENANT)).rejects.toThrow(PostNotFoundException);
     });
   });
 
@@ -151,7 +160,7 @@ describe('PostMutationResolver', () => {
       const { resolver, commands } = fixture();
       const command = anUpdateCommand();
 
-      await resolver.updatePost(command, anAuthor());
+      await resolver.updatePost(command, anAuthor(), ROOT_TENANT);
 
       expect(commands[0].command).toBe(command);
     });
@@ -159,7 +168,7 @@ describe('PostMutationResolver', () => {
     it('a PostRequest do update é a do post informado', async () => {
       const { resolver, commands } = fixture();
 
-      await resolver.updatePost(anUpdateCommand(), anAuthor());
+      await resolver.updatePost(anUpdateCommand(), anAuthor(), ROOT_TENANT);
 
       expect((commands[0].context as PostRequest).postId.equals(postId)).toBe(true);
     });
@@ -167,7 +176,7 @@ describe('PostMutationResolver', () => {
     it('devolve o post relido depois da escrita', async () => {
       const { resolver, queries, found } = fixture();
 
-      const post = await resolver.updatePost(anUpdateCommand(), anAuthor());
+      const post = await resolver.updatePost(anUpdateCommand(), anAuthor(), ROOT_TENANT);
 
       expect((queries[0] as FindPostQuery.FindPost).postId.equals(postId)).toBe(true);
       expect(post).toBe(found);
@@ -176,7 +185,7 @@ describe('PostMutationResolver', () => {
     it('se o post não existe mais, isso é erro e não null', async () => {
       const { resolver } = fixture(null);
 
-      await expect(resolver.updatePost(anUpdateCommand(), anAuthor())).rejects.toThrow(
+      await expect(resolver.updatePost(anUpdateCommand(), anAuthor(), ROOT_TENANT)).rejects.toThrow(
         PostNotFoundException,
       );
     });

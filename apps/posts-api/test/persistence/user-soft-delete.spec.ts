@@ -1,5 +1,5 @@
+import { closeTestDatabase, tableIn, testDatabase } from '@nestposts/database/testing';
 import { MikroORM } from '@mikro-orm/core';
-import { defineConfig } from '@mikro-orm/sqlite';
 import { User } from '@nestposts/users/domain/user/user.entity';
 import { AUTHOR_ROLE, Authorship } from '@nestposts/users/domain/user/author.entity';
 import { PostEntitySchema } from '@nestposts/posts/infrastructure/persistence/entities/post-orm.entity';
@@ -19,14 +19,10 @@ describe('soft delete do User, contra o banco', () => {
   const EMAIL = 'autor@example.com';
 
   beforeEach(async () => {
-    orm = await MikroORM.init(
-      defineConfig({
-        dbName: ':memory:',
+    orm = await testDatabase({
         entities: [PostEntitySchema, TagSchema, UserEntitySchema, AuthorshipEntitySchema],
         subscribers: [new SoftDeleteSubscriber()],
-        ensureDatabase: { create: true },
-      }),
-    );
+      });
 
     const em = orm.em.fork();
     const author = User.register(UserId.generate(), { email: EMAIL, name: 'Autor' }, [AUTHOR_ROLE], NOW);
@@ -36,13 +32,13 @@ describe('soft delete do User, contra o banco', () => {
     users = new MikroOrmUserRepository(orm.em.fork());
   });
 
-  afterEach(() => orm.close(true));
+  afterEach(() => closeTestDatabase(orm));
 
   const rawCount = async (table: string, where: string): Promise<number> => {
     const [row] = await orm.em
       .fork()
       .getConnection()
-      .execute(`select count(*) as total from ${table} where ${where}`);
+      .execute(`select count(*) as total from ${tableIn(orm, table)} where ${where}`);
     return Number(row.total);
   };
 

@@ -15,9 +15,6 @@
   ],
   "references": [
     {
-      "path": "../../libs/cqsrs/tsconfig.lib.json"
-    },
-    {
       "path": "../../libs/users/tsconfig.lib.json"
     },
     {
@@ -28,6 +25,12 @@
     },
     {
       "path": "../../libs/platform/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/database/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/cqsrs/tsconfig.lib.json"
     }
   ]
 }

@@ -4,8 +4,9 @@ import { testProject } from '../../vitest.shared.mts';
 export default testProject({
   name: '@nestposts/posts-api:e2e',
   include: ['test/**/*.e2e-spec.ts'],
+  database: true,
   env: {
-    POSTS_DB: ':memory:',
+    POSTS_SCHEMA: `e2e_${Date.now().toString(36)}`,
     POSTS_TRANSPORT: 'memory',
     POSTS_TAGGING_IN_PROCESS: 'true',
   },

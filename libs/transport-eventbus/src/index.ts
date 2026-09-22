@@ -47,6 +47,7 @@ export * from './inbound/deserializers/memory-event-envelope.deserializer';
 export * from './inbound/deserializers/rmq-event-envelope.deserializer';
 export * from './inbound/event-ingestion';
 export * from './inbound/incoming-request';
+export * from './inbound/transport-tenant.resolver';
 export * from './inbound/transport-event.pipe';
 export * from './inbound/transport-request.pipe';
 export * from './inbound/event-reconstruction';

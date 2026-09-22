@@ -5,6 +5,7 @@ import { ModulesContainer } from '@nestjs/core';
 import { registeredEventTypes } from '@nestposts/platform/domain/shared/event-type';
 import { POSTS_NAMESPACE } from '@nestposts/posts/domain/post/event/posts.namespace';
 import { OutboxRouting } from '@nestposts/transport-eventbus';
+import { TestSchemaModule } from '@nestposts/database/testing';
 import { AppModule } from '../src/app.module';
 
 const SOURCE = join(process.cwd(), 'src');
@@ -34,7 +35,7 @@ describe('the wiring that fails silently', () => {
   let module: TestingModule;
 
   beforeAll(async () => {
-    module = await Test.createTestingModule({ imports: [AppModule] }).compile();
+    module = await Test.createTestingModule({ imports: [AppModule, TestSchemaModule.forRoot()] }).compile();
     await module.init();
   });
 

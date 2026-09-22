@@ -4,11 +4,10 @@ import { defineEntity, p } from '@mikro-orm/core';
  * One row per message received from the broker.
  *
  * ## Why it is a mapped entity here, unlike the Quarkus side
- * There, the inbox is native SQL with no `@Entity`, because the schema comes from a migration and a
- * mapping would be one more thing to keep in step with it. Here there are no migrations: the schema
- * is generated from the metadata, so a table nobody maps is a table that does not exist. The insert
- * is still native — see {@link MessageInbox} — because the decision it makes is `on conflict do
- * nothing`, which is not something an ORM expresses.
+ * There, the inbox is native SQL with no `@Entity`. Here it is mapped, because the mapping is what
+ * `apps/migrator` diffs to write the migration that creates the table, and what tells the native
+ * statement which schema it lives in. The insert itself is still native — see {@link MessageInbox} —
+ * because the decision it makes is `on conflict do nothing`, which is not something an ORM expresses.
  */
 export class TransportMessage {
   identifier!: string;

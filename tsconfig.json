@@ -26,6 +26,18 @@
     },
     {
       "path": "./apps/tagging"
+    },
+    {
+      "path": "./apps/migrator"
+    },
+    {
+      "path": "./libs/database"
+    },
+    {
+      "path": "./libs/auth"
+    },
+    {
+      "path": "./libs/organizations"
     }
   ]
 }

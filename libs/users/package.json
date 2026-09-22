@@ -12,6 +12,7 @@
     }
   },
   "dependencies": {
+    "@nestposts/database": "workspace:*",
     "@nestposts/platform": "workspace:*",
     "@nestposts/validated-dto": "workspace:*"
   }

@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { taggingInProcess } from '../infrastructure/transport/transport.config';
 import { PostsInfrastructureModule } from '@nestposts/posts/infrastructure/posts-infrastructure.module';
-import { IdentityModule } from '@nestposts/users/infrastructure/auth/identity.module';
+import { OrganizationsInfrastructureModule } from '@nestposts/organizations/infrastructure/organizations-infrastructure.module';
 import { UsersInfrastructureModule } from '@nestposts/users/infrastructure/users-infrastructure.module';
 import { AssignTagToPostCommand } from './post/command/assign-tag-to-post.command';
 import { CreatePostCommand } from './post/command/create-post.command';
@@ -19,7 +19,7 @@ import { FindAuthorQuery } from './user/query/find-author.query';
 import { UserProvisioning } from './user/user-provisioning.service';
 
 @Module({
-  imports: [PostsInfrastructureModule, UsersInfrastructureModule, IdentityModule],
+  imports: [PostsInfrastructureModule, UsersInfrastructureModule, OrganizationsInfrastructureModule],
   providers: [
     CreatePostCommand.Handler,
     UpdatePostCommand.Handler,
@@ -36,6 +36,6 @@ import { UserProvisioning } from './user/user-provisioning.service';
     UserProvisioning,
     ...(taggingInProcess() ? [InProcessTagAssignment] : []),
   ],
-  exports: [UserProvisioning],
+  exports: [UserProvisioning, OrganizationsInfrastructureModule],
 })
 export class ApplicationModule {}

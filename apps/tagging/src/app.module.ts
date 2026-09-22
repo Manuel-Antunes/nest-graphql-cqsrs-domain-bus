@@ -1,12 +1,13 @@
 import { Module } from "@nestjs/common";
 import { CqsrsModule } from "@nestposts/cqsrs";
-import { DatabaseModule } from "@nestposts/platform/infrastructure/persistence/database.module";
+import { DatabaseModule, TenancyModule } from "@nestposts/database";
 import { Post } from "@nestposts/posts/domain/post/post.entity";
 import { postsEntities } from "@nestposts/posts/infrastructure/posts-infrastructure.module";
 import {
   MikroOrmMessageInbox,
   TRANSPORT_EVENT_BUS_PUBLISHER,
   TransportEventBusModule,
+  TransportTenantResolver,
 } from "@nestposts/transport-eventbus";
 import { usersEntities } from "@nestposts/users/infrastructure/users-infrastructure.module";
 import { CompleteOnPostPreCreated } from "./application/complete-on-post-pre-created.saga";
@@ -25,6 +26,7 @@ import { PostEventsController } from "./interfaces/messaging/post-events.control
     CqsrsModule.forRoot({ aggregatePublisher: TRANSPORT_EVENT_BUS_PUBLISHER }),
     DatabaseModule.forRoot(mikroOrmConfig()),
     DatabaseModule.forFeature([...postsEntities, ...usersEntities]),
+    TenancyModule.forRoot({ http: false, resolver: TransportTenantResolver }),
     TransportEventBusModule.forRoot({
       identity: taggingIdentity(),
       inbox: MikroOrmMessageInbox,

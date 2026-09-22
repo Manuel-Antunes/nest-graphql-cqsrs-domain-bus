@@ -2,6 +2,8 @@ import type { INestApplication } from '@nestjs/common';
 import { MikroORM } from '@mikro-orm/core';
 import { EventBus, type IEvent } from '@nestjs/cqrs';
 import { Test } from '@nestjs/testing';
+import { TestSchemaModule } from '@nestposts/database/testing';
+import { DefaultTagSeeder } from '@nestposts/migrator/seeders/default-tag.seeder';
 import { AppModule } from '../src/app.module';
 import { PostRequest } from '../src/application/shared/post-request';
 import { SubscriptionBus } from '@nestposts/cqsrs';
@@ -73,9 +75,10 @@ describe('posts (e2e)', () => {
   };
 
   beforeAll(async () => {
-    const module = await Test.createTestingModule({ imports: [AppModule] }).compile();
+    const module = await Test.createTestingModule({ imports: [AppModule, TestSchemaModule.forRoot()] }).compile();
     app = module.createNestApplication();
     await app.listen(0, '127.0.0.1');
+    await app.get(MikroORM).seeder.seed(DefaultTagSeeder);
     client = await GraphqlClient.for(app);
     credentialId = await client.signUp('manuel@example.com', 'manuel');
     profilesAfterSignUp = await profileCount();
@@ -133,7 +136,7 @@ describe('posts (e2e)', () => {
       const created = await subscribeCreated();
 
       const post = await createPost('com tag padrão');
-      const [event] = await created.waitFor(1);
+      const event = await created.waitForMatch((received) => received.onPostCreated?.id === post.id);
 
       expect(event.onPostCreated).toMatchObject({
         id: post.id,
@@ -468,7 +471,7 @@ describe('posts (e2e)', () => {
       const created = await subscribeCreated();
 
       const post = await createPost('autor pela subscription');
-      const [event] = await created.waitFor(1);
+      const event = await created.waitForMatch((received) => received.onPostCreated?.id === post.id);
 
       expect(event.onPostCreated).toMatchObject({
         id: post.id,

@@ -1,24 +1,22 @@
+import { closeTestDatabase, testDatabase } from '@nestposts/database/testing';
 import { MikroORM } from '@mikro-orm/core';
-import { defineConfig } from '@mikro-orm/sqlite';
-import { inRequestContext } from '@nestposts/platform/infrastructure/persistence/request-context';
+import { inRequestContext } from '@nestposts/database';
 import { MikroOrmMessageInbox } from './message-inbox';
-import { transportEntities } from './message-inbox.entity';
+import { TransportMessage, transportEntities } from './message-inbox.entity';
 
 describe('MessageInbox', () => {
   let orm: MikroORM;
   let inbox: MikroOrmMessageInbox;
 
   beforeAll(async () => {
-    orm = await MikroORM.init(
-      defineConfig({ dbName: ':memory:', entities: [...transportEntities], ensureDatabase: { create: true } }),
-    );
+    orm = await testDatabase({ entities: [...transportEntities] });
     inbox = new MikroOrmMessageInbox(orm.em);
   });
 
-  afterAll(() => orm.close(true));
+  afterAll(() => closeTestDatabase(orm));
 
   beforeEach(async () => {
-    await orm.em.getConnection().execute('delete from transport_message_inbox');
+    await orm.em.fork().nativeDelete(TransportMessage, {});
   });
 
   const register = (identifier: string, origin = 'tagging') =>

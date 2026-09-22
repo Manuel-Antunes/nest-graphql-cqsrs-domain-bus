@@ -25,6 +25,13 @@ export type ProjectTestOptions = {
   env?: Record<string, string>;
   testTimeout?: number;
   coverageExclude?: string[];
+  /**
+   * Whether this project's specs talk to Postgres. It adds the global setup that reuses a server
+   * already listening — `docker compose up -d postgres` — and starts a throwaway container when there
+   * is none, publishing the result as `POSTGRES_URL`. A project of pure domain rules leaves it off and
+   * needs no infrastructure at all.
+   */
+  database?: boolean;
 };
 
 /**
@@ -74,16 +81,20 @@ const coverageExclude = [
   'src/main.ts',
 ];
 
+const POSTGRES_SETUP = 'libs/database/src/testing/postgres.ts';
+
 export const testProject = ({
   name,
   include = ['src/**/*.spec.ts'],
   env,
   testTimeout = 15000,
   coverageExclude: extraExcludes = [],
+  database = false,
 }: ProjectTestOptions): ViteUserConfig =>
   defineConfig({
     test: {
       name,
+      globalSetup: database ? [join(import.meta.dirname, POSTGRES_SETUP)] : [],
       watch: false,
       globals: true,
       environment: 'node',

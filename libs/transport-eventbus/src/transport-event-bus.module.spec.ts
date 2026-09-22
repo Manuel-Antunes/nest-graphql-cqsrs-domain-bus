@@ -1,5 +1,5 @@
+import { TestSchemaModule, testDatabaseConfig } from '@nestposts/database/testing';
 import { MikroORM } from '@mikro-orm/core';
-import { defineConfig } from '@mikro-orm/sqlite';
 import { Inject, Injectable, type ModuleMetadata } from '@nestjs/common';
 import { AsyncContext, CqrsModule } from '@nestjs/cqrs';
 import type { ClientProxy } from '@nestjs/microservices';
@@ -8,7 +8,7 @@ import { AggregateRoot } from '@nestposts/platform/domain/shared/aggregate-root'
 import { BaseEntity } from '@nestposts/platform/domain/shared/base-entity';
 import type { DomainEvent } from '@nestposts/platform/domain/shared/domain-event';
 import { EventType } from '@nestposts/platform/domain/shared/event-type';
-import { inRequestContext } from '@nestposts/platform/infrastructure/persistence/request-context';
+import { inRequestContext } from '@nestposts/database';
 import { TRANSPORT_EVENT_BUS_PUBLISHER, TRANSPORT_EVENT_BUS_SERVICE } from './constants';
 import { Publisher } from './decorators/publisher.decorator';
 import { EventIngestion } from './inbound/event-ingestion';
@@ -19,7 +19,7 @@ import { EventSourcedRepository } from './persistence/event-store/event-sourced.
 import { EventStore } from './persistence/event-store/event-store';
 import { EventStoreSink } from './persistence/event-store/event-store.sink';
 import { MessageInbox, MikroOrmMessageInbox, NoMessageInbox } from './persistence/message-inbox';
-import { DatabaseModule } from '@nestposts/platform/infrastructure/persistence/database.module';
+import { DatabaseModule } from '@nestposts/database';
 import { CorrelatedRequestContext, RequestContextCodec } from './request-context';
 import type { Ingestion } from './outbound/transport-metadata';
 import { RecordingClient } from './testing/recording-client';
@@ -64,10 +64,10 @@ class MyRequestCodec extends CorrelatedRequestContext {
 }
 
 /** The application's connection. Every table reaches it through the module that owns it. */
-const persistence = () =>
-  DatabaseModule.forRoot(
-    defineConfig({ dbName: ':memory:', ensureDatabase: { create: true }, allowGlobalContext: true }),
-  );
+const persistence = () => [
+  DatabaseModule.forRoot(testDatabaseConfig({ allowGlobalContext: true })),
+  TestSchemaModule.forRoot(),
+];
 
 describe('TransportEventBusModule', () => {
   let module: TestingModule;
@@ -135,7 +135,7 @@ describe('TransportEventBusModule', () => {
 
     it('turns receiving on with an inbox, and exports what a controller and a guard inject', async () => {
       const app = await bootstrap([
-        persistence(),
+        ...persistence(),
         TransportEventBusModule.forRoot({ identity: 'things-api', inbox: NoMessageInbox }),
       ]);
 
@@ -146,7 +146,7 @@ describe('TransportEventBusModule', () => {
 
     it('wires the event store and a repository per aggregate, and fills the sink with it', async () => {
       const app = await bootstrap([
-        persistence(),
+        ...persistence(),
         TransportEventBusModule.forRoot({
           identity: 'tagging',
           inbox: MikroOrmMessageInbox,
@@ -161,7 +161,7 @@ describe('TransportEventBusModule', () => {
 
     it('brings the tables the library needs, which the application never listed', async () => {
       const app = await bootstrap([
-        persistence(),
+        ...persistence(),
         TransportEventBusModule.forRoot({
           identity: 'tagging',
           inbox: MikroOrmMessageInbox,
@@ -237,7 +237,7 @@ describe('TransportEventBusModule', () => {
 
     it('wires the same mechanism as forRoot around it', async () => {
       const app = await bootstrap([
-        persistence(),
+        ...persistence(),
         TransportEventBusModule.forRootAsync({
           useFactory: () => 'tagging',
           inbox: MikroOrmMessageInbox,

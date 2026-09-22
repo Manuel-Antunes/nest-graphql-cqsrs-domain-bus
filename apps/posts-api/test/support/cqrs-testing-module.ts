@@ -16,7 +16,7 @@ export async function createCqrsTestingModule(
   const module = await Test.createTestingModule({
     imports: [
       CqsrsModule.forRoot({ aggregatePublisher: TRANSPORT_EVENT_BUS_PUBLISHER }),
-      persistenceTesting(),
+      ...persistenceTesting(),
       transportTesting(),
       PostsInfrastructureModule,
       UsersInfrastructureModule,

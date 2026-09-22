@@ -1,6 +1,6 @@
 import { EntityManager } from '@mikro-orm/core';
 import { Injectable } from '@nestjs/common';
-import { inRequestContext } from '@nestposts/platform/infrastructure/persistence/request-context';
+import { inRequestContext } from '@nestposts/database';
 import { User } from '../../../domain/user/user.entity';
 import { UserRepository } from '../../../domain/user/user.repository';
 import type { Email } from '../../../domain/user/vo/email';

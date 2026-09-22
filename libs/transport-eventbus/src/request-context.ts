@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { AsyncContext } from '@nestjs/cqrs';
+import { isTransportMetadata } from './outbound/event-envelope';
 import type { Ingestion } from './outbound/transport-metadata';
 
 /**
@@ -50,7 +51,7 @@ const CORRELATION = Symbol.for('nestposts.transport-eventbus.correlation');
  * An application with a richer notion of a request subclasses the codec, not this: see
  * `PostRequestContextCodec`.
  */
-export class TransportRequestContext extends AsyncContext {
+export class TransportRequestContext extends AsyncContext implements ContextAttributes {
   constructor(
     readonly correlationId: string,
     readonly causationId?: string,
@@ -62,6 +63,28 @@ export class TransportRequestContext extends AsyncContext {
   static override of(target: object): TransportRequestContext | undefined {
     const context = AsyncContext.of(target);
     return context instanceof TransportRequestContext ? context : undefined;
+  }
+
+  /**
+   * **What arrived on the envelope goes back out on it — the application's half of it.**
+   *
+   * A service in the middle of a chain republishes under the context it was given, and everything the
+   * FIRST service put there — a tenant, a locale, a feature flag — is only still true three hops later
+   * because this hands it back to `encode`. Without it a generic context re-emits the trace and drops
+   * every attribute, and the far end sees a request that lost its tenant somewhere with nothing in any
+   * log to say where.
+   *
+   * Everything under {@link TRANSPORT_METADATA_PREFIX} is left out, and that exclusion is not tidiness:
+   * `cqrs-transport-origin` is the mark that says who AUTHORED the event, and a service that re-emitted
+   * the one it received would publish its own decisions under the previous service's name. The far side
+   * would then read its own name on them and drop them as its echo — the saga stopping dead, with every
+   * message still flowing. The trace ids are excluded by the same rule, and `encode` writes them itself:
+   * the causation it writes is this message's, while the one that arrived is the previous hop's.
+   */
+  toAttributes(): Record<string, string> {
+    return Object.fromEntries(
+      Object.entries(this.attributes).filter(([key]) => !isTransportMetadata(key)),
+    );
   }
 }
 

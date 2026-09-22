@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { APP_FILTER } from '@nestjs/core';
 import { ApplicationModule } from '../application/application.module';
+import { AuthExceptionFilter } from './filters/auth-exception.filter';
 import { DomainExceptionFilter } from './filters/domain-exception.filter';
 import { PostMutationResolver } from './graphql/post-mutation.resolver';
 import { PostQueryResolver } from './graphql/post-query.resolver';
@@ -14,6 +15,9 @@ import { PostCompletionController } from './messaging/post-completion.controller
 import { UserViewInterceptor } from './interceptors/user-view.interceptor';
 import { PostProfile } from './mapper/post.profile';
 import { UserProfile } from './mapper/user.profile';
+import { ActiveMemberPipe } from './pipes/active-member.pipe';
+import { ActiveOrganizationIdPipe } from './pipes/active-organization-id.pipe';
+import { ActiveOrganizationPipe } from './pipes/active-organization.pipe';
 import { AuthorPipe } from './pipes/author.pipe';
 import { SessionUserPipe } from './pipes/session-user.pipe';
 
@@ -33,7 +37,11 @@ import { SessionUserPipe } from './pipes/session-user.pipe';
     UserViewInterceptor,
     SessionUserPipe,
     AuthorPipe,
+    ActiveOrganizationIdPipe,
+    ActiveOrganizationPipe,
+    ActiveMemberPipe,
     UserProvisioningHooks,
+    { provide: APP_FILTER, useClass: AuthExceptionFilter },
     { provide: APP_FILTER, useClass: DomainExceptionFilter },
   ],
 })

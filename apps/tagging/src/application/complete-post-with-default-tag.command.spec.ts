@@ -3,7 +3,7 @@ import { MikroOrmModule } from '@mikro-orm/nestjs';
 import { CommandBus, EventBus, type IEvent } from '@nestjs/cqrs';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { CqsrsModule } from '@nestposts/cqsrs';
-import { inRequestContext } from '@nestposts/platform/infrastructure/persistence/request-context';
+import { inRequestContext } from '@nestposts/database';
 import { PostCreatedEvent } from '@nestposts/posts/domain/post/event/post-created.event';
 import { PostPreCreatedEvent } from '@nestposts/posts/domain/post/event/post-pre-created.event';
 import { PostNotFoundException } from '@nestposts/posts/domain/post/exception/post-not-found.exception';

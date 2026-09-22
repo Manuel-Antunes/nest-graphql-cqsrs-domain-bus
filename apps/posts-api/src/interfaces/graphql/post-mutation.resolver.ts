@@ -4,6 +4,7 @@ import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import { Args, Mutation, Resolver } from '@nestjs/graphql';
 import { Roles } from '@thallesp/nestjs-better-auth';
 import { UseFilters, UseInterceptors } from '@nestjs/common';
+import { CurrentTenant } from '../decorators/current-tenant.decorator';
 import { CurrentAuthor } from '../decorators/current-user.decorator';
 import { MikroOrmExceptionFilter } from '../filters/mikro-orm-exception.filter';
 import { AUTHOR_ROLE } from '@nestposts/users/domain/user/author.entity';
@@ -34,6 +35,7 @@ export class PostMutationResolver {
   async createPost(
     @Args('input') input: CreatePostInput,
     @CurrentAuthor() author: Author,
+    @CurrentTenant() tenantId: string,
   ): Promise<Post> {
     const command = await this.mapper.mapAsync(
       input,
@@ -41,7 +43,10 @@ export class PostMutationResolver {
       CreatePostCommand.CreatePost,
       { extraArgs: () => ({ author }) },
     );
-    const postId = await this.commandBus.execute(command, new PostRequest(command.postId));
+    const postId = await this.commandBus.execute(
+      command,
+      new PostRequest(command.postId, tenantId),
+    );
     return this.savedPost(postId);
   }
 
@@ -52,8 +57,9 @@ export class PostMutationResolver {
     @Args('input', MapPipe(UpdatePostInput, UpdatePostCommand.UpdatePost))
     command: UpdatePostCommand.UpdatePost,
     @CurrentAuthor() _author: Author,
+    @CurrentTenant() tenantId: string,
   ): Promise<Post> {
-    await this.commandBus.execute(command, new PostRequest(command.postId));
+    await this.commandBus.execute(command, new PostRequest(command.postId, tenantId));
     return this.savedPost(command.postId);
   }
 

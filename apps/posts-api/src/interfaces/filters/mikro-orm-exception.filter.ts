@@ -1,22 +1,18 @@
 import { type ArgumentsHost, Catch, type ExceptionFilter } from '@nestjs/common';
-import {
-  ForeignKeyConstraintViolationException,
-  NotFoundError,
-  UniqueConstraintViolationException,
-} from '@mikro-orm/core';
+import { DATABASE_EXCEPTIONS, databaseErrorCode } from '@nestposts/database';
 import { GraphQLError } from 'graphql';
 import { NotAnAuthorException } from '@nestposts/users/domain/user/exception/not-an-author.exception';
 
-@Catch(ForeignKeyConstraintViolationException, UniqueConstraintViolationException, NotFoundError)
+@Catch(...DATABASE_EXCEPTIONS)
 export class MikroOrmExceptionFilter implements ExceptionFilter {
   catch(exception: Error, _host: ArgumentsHost): GraphQLError {
-    if (exception instanceof ForeignKeyConstraintViolationException) {
-      const translated = new NotAnAuthorException();
-      return new GraphQLError(translated.message, { extensions: { code: 'BAD_USER_INPUT' } });
+    const code = databaseErrorCode(exception);
+    if (code === 'BAD_USER_INPUT') {
+      return new GraphQLError(new NotAnAuthorException().message, { extensions: { code } });
     }
-    if (exception instanceof UniqueConstraintViolationException) {
-      return new GraphQLError('o valor informado já está em uso', { extensions: { code: 'CONFLICT' } });
+    if (code === 'CONFLICT') {
+      return new GraphQLError('o valor informado já está em uso', { extensions: { code } });
     }
-    return new GraphQLError('não existe', { extensions: { code: 'NOT_FOUND' } });
+    return new GraphQLError('não existe', { extensions: { code } });
   }
 }

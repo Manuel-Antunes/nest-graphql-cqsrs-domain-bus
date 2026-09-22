@@ -1,6 +1,6 @@
 import { type DynamicModule, Module, type Provider } from '@nestjs/common';
 import { DiscoveryModule } from '@nestjs/core';
-import { DatabaseModule } from '@nestposts/platform/infrastructure/persistence/database.module';
+import { DatabaseModule } from '@nestposts/database';
 import { TRANSPORT_EVENT_BUS_PUBLISHER, TRANSPORT_EVENT_BUS_SERVICE } from './constants';
 import { EventIngestion } from './inbound/event-ingestion';
 import { IncomingRequest } from './inbound/incoming-request';

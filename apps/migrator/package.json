@@ -1,0 +1,155 @@
+{
+  "name": "@nestposts/migrator",
+  "version": "0.1.0",
+  "private": true,
+  "main": "./dist/main.js",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "@nestposts/source": "./src/main.ts",
+      "require": "./dist/main.js",
+      "default": "./dist/main.js"
+    },
+    "./*": {
+      "@nestposts/source": "./src/*.ts",
+      "require": "./dist/*.js",
+      "default": "./dist/*.js"
+    }
+  },
+  "dependencies": {
+    "@nestposts/auth": "workspace:*",
+    "@nestposts/database": "workspace:*",
+    "@nestposts/organizations": "workspace:*",
+    "@nestposts/platform": "workspace:*",
+    "@nestposts/posts": "workspace:*",
+    "@nestposts/transport-eventbus": "workspace:*",
+    "@nestposts/users": "workspace:*"
+  },
+  "nx": {
+    "targets": {
+      "build": {
+        "executor": "nx:run-commands",
+        "cache": true,
+        "dependsOn": [
+          "^build"
+        ],
+        "inputs": [
+          "production",
+          "^production"
+        ],
+        "outputs": [
+          "{projectRoot}/dist"
+        ],
+        "options": {
+          "cwd": "{projectRoot}",
+          "command": "rm -rf dist && tsc -p tsconfig.build.json"
+        }
+      },
+      "migrate": {
+        "executor": "nx:run-commands",
+        "dependsOn": [
+          "build"
+        ],
+        "defaultConfiguration": "posts",
+        "configurations": {
+          "posts": {
+            "command": "pnpm exec mikro-orm migration:up --config ./apps/migrator/dist/posts-mikro-orm.config.js"
+          },
+          "tagging": {
+            "command": "pnpm exec mikro-orm migration:up --config ./apps/migrator/dist/tagging-mikro-orm.config.js"
+          }
+        }
+      },
+      "revert": {
+        "executor": "nx:run-commands",
+        "dependsOn": [
+          "build"
+        ],
+        "defaultConfiguration": "posts",
+        "configurations": {
+          "posts": {
+            "command": "pnpm exec mikro-orm migration:down --config ./apps/migrator/dist/posts-mikro-orm.config.js"
+          },
+          "tagging": {
+            "command": "pnpm exec mikro-orm migration:down --config ./apps/migrator/dist/tagging-mikro-orm.config.js"
+          }
+        }
+      },
+      "fresh": {
+        "executor": "nx:run-commands",
+        "dependsOn": [
+          "build"
+        ],
+        "defaultConfiguration": "posts",
+        "configurations": {
+          "posts": {
+            "command": "pnpm exec mikro-orm migration:fresh --seed --config ./apps/migrator/dist/posts-mikro-orm.config.js"
+          },
+          "tagging": {
+            "command": "pnpm exec mikro-orm migration:fresh --config ./apps/migrator/dist/tagging-mikro-orm.config.js"
+          }
+        }
+      },
+      "pending": {
+        "executor": "nx:run-commands",
+        "dependsOn": [
+          "build"
+        ],
+        "defaultConfiguration": "posts",
+        "configurations": {
+          "posts": {
+            "command": "pnpm exec mikro-orm migration:list --config ./apps/migrator/dist/posts-mikro-orm.config.js"
+          },
+          "tagging": {
+            "command": "pnpm exec mikro-orm migration:list --config ./apps/migrator/dist/tagging-mikro-orm.config.js"
+          }
+        }
+      },
+      "migration-generate": {
+        "executor": "nx:run-commands",
+        "dependsOn": [
+          "build"
+        ],
+        "defaultConfiguration": "posts",
+        "configurations": {
+          "posts": {
+            "command": "pnpm exec mikro-orm migration:create --config ./apps/migrator/dist/posts-mikro-orm.config.js",
+            "forwardAllArgs": true
+          },
+          "tagging": {
+            "command": "pnpm exec mikro-orm migration:create --config ./apps/migrator/dist/tagging-mikro-orm.config.js",
+            "forwardAllArgs": true
+          }
+        }
+      },
+      "seeder-generate": {
+        "executor": "nx:run-commands",
+        "dependsOn": [
+          "build"
+        ],
+        "options": {
+          "command": "pnpm exec mikro-orm seeder:create --config ./apps/migrator/dist/posts-mikro-orm.config.js",
+          "forwardAllArgs": true
+        }
+      },
+      "seed": {
+        "executor": "nx:run-commands",
+        "dependsOn": [
+          "build"
+        ],
+        "options": {
+          "command": "pnpm exec mikro-orm seeder:run --config ./apps/migrator/dist/posts-mikro-orm.config.js"
+        }
+      },
+      "setup": {
+        "executor": "nx:run-commands",
+        "dependsOn": [
+          "build"
+        ],
+        "options": {
+          "command": "node apps/migrator/dist/main.js setup"
+        }
+      }
+    }
+  }
+}

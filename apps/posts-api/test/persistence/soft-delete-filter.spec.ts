@@ -1,5 +1,5 @@
+import { closeTestDatabase, tableIn, testDatabase } from '@nestposts/database/testing';
 import { MikroORM, ref } from '@mikro-orm/core';
-import { defineConfig } from '@mikro-orm/sqlite';
 import { Post } from '@nestposts/posts/domain/post/post.entity';
 import { PostId } from '@nestposts/posts/domain/post/vo/post-id';
 import { User } from '@nestposts/users/domain/user/user.entity';
@@ -19,17 +19,13 @@ describe('o filtro de ativos', () => {
   let orm: MikroORM;
 
   beforeAll(async () => {
-    orm = await MikroORM.init(
-      defineConfig({
-        dbName: ':memory:',
+    orm = await testDatabase({
         entities: [PostEntitySchema, TagSchema, UserEntitySchema, AuthorshipEntitySchema],
         subscribers: [new SoftDeleteSubscriber()],
-        ensureDatabase: { create: true },
-      }),
-    );
+      });
   });
 
-  afterAll(() => orm.close(true));
+  afterAll(() => closeTestDatabase(orm));
 
   const now = T0;
 
@@ -84,7 +80,7 @@ describe('o filtro de ativos', () => {
     const [row] = await orm.em
       .fork()
       .getConnection()
-      .execute('select deleted_at from posts where id = ?', [id.value]);
+      .execute(`select deleted_at from ${tableIn(orm, 'posts')} where id = ?`, [id.value]);
     expect(row.deleted_at).toBeTruthy();
   });
 
@@ -133,7 +129,7 @@ describe('o filtro de ativos', () => {
     const [row] = await orm.em
       .fork()
       .getConnection()
-      .execute('select deleted_at from posts where id = ?', [id.value]);
+      .execute(`select deleted_at from ${tableIn(orm, 'posts')} where id = ?`, [id.value]);
     expect(row.deleted_at).toBeNull();
   });
 });

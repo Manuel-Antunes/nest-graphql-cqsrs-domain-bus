@@ -18,7 +18,7 @@ E o filtro é da mensagem, não do transporte: toda `Subscription` tem um métod
 
 E a request é uma só, do começo ao fim da cadeia. Os command handlers são `{ scope: Scope.REQUEST }`, a borda cria uma `PostRequest` cuja chave é o próprio `PostId`, e o [request scoping/propagation](https://docs.nestjs.com/recipes/cqrs#request-scoping) do @nestjs/cqrs a leva do command para os eventos, dos eventos para a saga, e da saga para os commands que ela despacha — inclusive os de outro agregado. É o `@TargetEntityId PostId postId` + `@EventTag` da versão Axon, em que um id gerado na borda roteava o command e marcava os eventos, dito com a ferramenta do Nest: um `createPost` produz `PostPreCreated` → `PostCreated` **carimbados com o mesmo objeto** — e a request atravessa também o **broker**, porque o passo do meio é de outro serviço (`libs/transport-eventbus` escreve no envelope o que ela representa, e o outro lado a reconstrói).
 
-Estado em **SQLite** via MikroORM, um arquivo por aplicação; a `posts-api` tem read model e o `tagging` tem um event log próprio e nenhuma projeção.
+Estado em **PostgreSQL** via MikroORM, um schema por aplicação; a `posts-api` tem read model e o `tagging` tem um event log próprio e nenhuma projeção.
 
 ```
 mutation createPost(input, @CurrentAuthor() author)                      [protocolo → command: o AutoMapper
@@ -73,7 +73,7 @@ mutation createPost(input, @CurrentAuthor() author)                      [protoc
 | NestJS (`@nestjs/core`, `platform-express`) | 12.x |
 | `@nestjs/cqrs` | 12.x — `Command<T>`/`Query<T>` tipados, `WithAggregateRoot`, `@Saga`, `ofType` |
 | `@nestjs/graphql` + `@nestjs/apollo` + `@apollo/server` | 14.x / 5.x — schema-first (`typePaths`), subscriptions por `graphql-ws` |
-| MikroORM (`core`, `sqlite`, `nestjs`, `decorators`) | 7.x — `defineEntity`, `findByCursor`, `@CreateRequestContext` |
+| MikroORM (`core`, `postgresql`, `migrations`, `seeder`, `nestjs`, `decorators`) | 7.x — `defineEntity`, `findByCursor`, `@CreateRequestContext` |
 | Zod | 4.x — os value objects |
 | AutoMapper (`@automapper/core`, `classes`, `nestjs`) | 9.x — `@AutoMap()` nas classes (e no shape Zod, pelo `DECORATOR_REGISTRY`, nos DTOs gerados), perfis, `typeConverter` para os value objects, e `MapPipe`/`MapInterceptor` para que nenhum resolver chame o mapper (ESM-only, como o MikroORM: roda pelo `require(esm)` do Node) |
 | Vitest + `unplugin-swc` | testes (a receita do Nest para SWC; o Jest não faz `require()` de ESM no Node 22) |
@@ -102,14 +102,20 @@ wrong: import everything, or redeclare the event on the other side.
 
 | project | what it is |
 |---|---|
-| `libs/platform` | the shared domain (aggregate root, soft delete, delegation, `@EventType`) and the shared persistence mechanisms |
-| `libs/users` | the user aggregate, its ORM mapping, its repositories and the Better Auth adapter |
+| `libs/platform` | the shared domain (aggregate root, soft delete, delegation, `@EventType`) and the ORM half of the rules it owns |
+| `libs/database` | the one door to MikroORM: the connection, `DatabaseModule`, `valueObjectType`, `inRequestContext`, what a driver exception means |
+| `libs/users` | the user aggregate, its ORM mapping and its repositories. It knows nothing about Better Auth |
+| `libs/auth` | authentication: the Better Auth instance and its **core** plugin registry, `auth_user` and the tables Better Auth generates, `AuthService` and the `IdentityProvider` adapter. It names no organization |
+| `libs/organizations` | organizations, members and invitations: the three tables, their domain and repositories, `OrganizationService`, and the `organization` plugin it **contributes** to the instance `libs/auth` builds. Both have READMEs |
 | `libs/posts` | the post and tag aggregates, their ORM mappings and repositories |
 | `libs/cqsrs` | CQSRS: the third CQRS message. Knows nothing about GraphQL |
 | `libs/validated-dto` | the Zod → DTO / value object mixins |
 | `libs/transport-eventbus` | the CQRS event bus across services. Knows nothing about this domain |
 | `apps/posts-api` | the GraphQL API. A **hybrid application**: HTTP and WebSocket, plus a RabbitMQ microservice in the same process |
 | `apps/tagging` | one step of the saga. A **full microservice**: no HTTP port at all |
+| `apps/migrator` | the migrations and the seeders of both schemas. The only thing that writes DDL, and the only thing that seeds |
+| `apps/web-e2e` | the whole system through a **browser**: Playwright over three processes, a real broker and a real Postgres |
+| `apps/web` | a Next.js client, to see the API from outside. Not part of the saga |
 
 Each project is a pnpm workspace package, and a file is imported by its own path —
 `@nestposts/posts/domain/post/post.entity` — through a wildcard `exports` map. The domain has no
@@ -144,12 +150,19 @@ libs/platform/src
 │   ├── delegation                                  # Delegate(): mixin + cast; DelegatedRef/delegateRef
 │   └── zod-entity, validation-error                # the entity's own state, validated by its schema
 ├── infrastructure/persistence
-│   ├── request-context                             # reuses the ORM's context, or opens one — what makes
-│   │                                               #   Post.author resolve inside a WebSocket or a queue
-│   ├── helpers/value-object-type                   # the VO ↔ column bridge: a Type generated from the class
 │   ├── delegation/delegated-reference              # a Reference that serves a delegation
 │   └── soft-delete                                 # the property, the index, the `active` filter, the subscriber
 └── testing/invalid-input                           # issuesOf(...): what a rejected input complained about
+
+libs/database/src                                    # everything ORM that needs no domain to be understood
+├── index                                            # the door: the package's own API + @mikro-orm/core re-exported
+├── config/database.config                           # postgresDatabase(schema, options): the connection, and the
+│                                                    #   one place that decides ensureDatabase
+├── database.module                                  # forRoot (the connection) + forFeature (a module's tables)
+├── entities/value-object.type                       # the VO ↔ column bridge: a Type generated from the class
+├── helpers/request-context                          # reuses the ORM's context, or opens one — what makes
+│                                                    #   Post.author resolve inside a WebSocket or a queue
+└── filters/database-error                           # what a driver exception MEANS; the message is the edge's
 
 libs/posts/src
 ├── domain/post
@@ -166,9 +179,27 @@ libs/posts/src
     ├── entities/post-orm, tag-orm                   # THE MAPPING: defineEntity pointing at the domain class
     └── repositories/mikro-orm-post, mikro-orm-tag   # the adapters (findByCursor and restore live here)
 
-libs/users/src                                       # the same shape: domain/user + its mapping and repositories,
-                                                     #   plus infrastructure/auth, the only place that knows
-                                                     #   Better Auth exists (the IdentityProvider adapter)
+libs/users/src                                       # the same shape: domain/user + its mapping and repositories.
+                                                     #   Nothing here names Better Auth any more
+
+libs/auth/src                                        # the only place that knows Better Auth exists
+├── domain/auth                                      # AuthService (request-scoped port), Session, AuthUser
+├── infrastructure/better-auth                       # config, the SYSTEM access control, the CORE plugin
+│   ├── plugins/registry                             #   registry (one Nest provider per plugin, folded back
+│   ├── factories/                                   #   into an ordered tuple), initAuth, BETTER_AUTH,
+│   └── identity/                                    #   BetterAuthService and the IdentityProvider adapter
+├── infrastructure/persistence                       # auth_user mapped BY HAND, the rest generated from
+│                                                    #   better-auth's own description of its schema
+└── standalone.ts                                    # the same instance outside Nest
+
+libs/organizations/src                               # built ON libs/auth, never the other way round
+├── domain/organization                              # Organization, Member, Invitation + schemas/, vo/,
+│                                                    #   repository ports and OrganizationService
+├── infrastructure/better-auth                       # the ORGANIZATION access control, the plugin provider
+│                                                    #   it contributes, and OrganizationService over it
+├── infrastructure/persistence                       # the three tables, and the ONE composition point for
+│                                                    #   "every table this system's auth owns"
+└── standalone.ts                                    # that composition outside Nest — what apps/web runs
 
 apps/posts-api/src
 ├── app.module, main                                 # main connects the microservice and starts both halves
@@ -186,7 +217,7 @@ apps/posts-api/src
 │   ├── tag/command/create-tag, user/query/find-author
 │   └── user/user-provisioning                       # the domain profile, born at sign-up
 ├── infrastructure
-│   ├── persistence/mikro-orm.config, default-tag.seeder   # só a CONEXÃO: cada tabela chega pelo
+│   ├── persistence/mikro-orm.config                 # só a CONEXÃO: cada tabela chega pelo
 │   │                                                #   módulo que a possui (DatabaseModule.forFeature)
 │   ├── outbox/post-events.publisher                 # @Publisher('posts'): the client of the destination
 │   └── transport/transport.config                   # a identidade e para onde o destino aponta; o
@@ -195,7 +226,8 @@ apps/posts-api/src
     ├── graphql/*.resolver                           # one resolver per schema file
     ├── messaging/post-completion.controller         # the port of entry BY MESSAGE: @EventPattern → EventIngestion
     ├── interceptors, pipes, filters, mapper         # the edge's machinery, unchanged
-    └── auth/user-provisioning.hooks                 # the other edge: Better Auth calling inwards
+    ├── auth/user-provisioning.hooks                 # the other edge: Better Auth calling inwards
+    └── decorators/current-tenant                    # @CurrentTenant(): the x-tenant that enters the PostRequest
 
 apps/tagging/src
 ├── app.module, main                                 # NestFactory.createMicroservice: no HTTP anywhere
@@ -210,6 +242,13 @@ apps/tagging/src
 └── interfaces/messaging
     └── post-events.controller                       # UMA entrada: `posts.#`, tudo o que o namespace
                                                      #   afirma — o que ele decide e o que ele replica
+
+apps/migrator/src                                    # sem Nest: só o ORM, as migrations e os seeders
+├── main                                             # migrate()/seed()/setup(), módulo E script (lambda)
+├── connection                                       # o que as duas configs têm em comum
+├── posts-mikro-orm.config, tagging-mikro-orm.config # uma por banco: entidades, migrations, seeders
+├── migrations/posts, migrations/tagging             # um histórico por banco, TypeScript compilado no build
+└── seeders/database.seeder, default-tag.seeder      # a cadeia, e a tag padrão que a saga exige
 ```
 
 ## Events across services
@@ -411,10 +450,10 @@ The real path has its own test, out of the suite, where there is nobody to share
 | unit / slice | every project, beside the code | the rule, the handler, the mapping |
 | integration | `libs/transport-eventbus/src/**`, `apps/posts-api/test/persistence` | the envelope (a `Date` that survives the wire), the routing table's three refusals, the inbox's atomicity, the ORM mapping |
 | one hop, in process | `libs/transport-eventbus/src/in-memory/transport-loop.spec.ts` | two services over `MemoryServer` and `MemoryClient`, each able to reach the other: the real class arrives, the request is restored, one correlation id per request, a redelivery reaches nobody, the loop is cut |
-| the whole saga | `pnpm test:saga` (`docker/e2e/`) | **two processes over real RabbitMQ**: version 1 without tags, the complete post on `onPostCreated`, each service's durable state, both inboxes, idempotency through the broker's management API, the replica channel, and **one correlation id for the whole saga** — read off the AMQP headers of both messages, each published by a different process |
+| the whole system, in a browser | `pnpm test:web` (`apps/web-e2e`, **Playwright**) | **three processes over real RabbitMQ**, driven through Chromium: signing in and being refused, the three states of `/posts/new`, the polymorphic `me`, a post read by somebody who never signed in — and, in the same tests, what a browser cannot see: each service's durable state, both inboxes, idempotency through the broker's management API, the replica channel, **one correlation id for the whole saga**, and the `x-tenant` **of the browser** on the headers of both messages, each published by a different process |
 
 ```
-$ pnpm test:saga
+$ pnpm test:web
 ### 5. a topologia que as duas aplicações declararam
     nestposts.events  posts.PostCreated.*      ->  nestposts.posts-api.post-completed
     nestposts.events  posts.#                  ->  nestposts.tagging.post-events
@@ -460,11 +499,43 @@ channel per purpose buys and what a single "catch everything" queue would have c
 | Bean Validation na borda + VO no domínio | uma altura só: o domínio (Zod); o `DomainExceptionFilter` traduz para `BAD_USER_INPUT` |
 | `AppGraphQlExceptionHandler` | `APP_FILTER` com um `ExceptionFilter` que **devolve** um `GraphQLError` |
 
+## The schema, the migrations and the seeders
+
+> This chapter is in English, per the rule in `CLAUDE.md` that new documentation is written in English.
+
+**No application creates a schema.** `apps/migrator` owns the DDL of both databases and the seed data
+of the one that has any, through MikroORM's own `Migrator` and `SeedManager`.
+`apps/migrator/README.md` is the guide; the shape is:
+
+```bash
+pnpm db:setup                                   # migrate both databases, then seed — `pnpm dev` runs it first
+pnpm db:migrate                                 # migration:up, posts (:tagging for the other)
+pnpm db:migration:create -- --name add-a-thing  # writes apps/migrator/src/migrations/posts/*.ts
+pnpm db:seed                                    # seeder:run, posts
+pnpm db:fresh                                   # drop, remigrate, seed
+```
+
+Two databases, two configs, two migration histories — the services do not share a database, so they do
+not share a ledger either. The configs name no table: each one composes the arrays the owning modules
+already export (`postsEntities`, `usersEntities`, `authEntities`, `transportEntities`,
+`eventStoreEntities`), which is the same edit that makes a new table reach the applications.
+
+What the applications still do is one line in `postgresDatabase`: `ensureDatabase: { create: false }`
+— the database is made sure of, the schema is not. A service whose migrations have not run fails with
+`relation … does not exist`, which is the honest answer.
+
+The suites are the exception, and deliberately so: Postgres has no in-memory mode, so what replaces
+the fresh `:memory:` database each spec used to get is a **schema of its own**, built from the
+entities and dropped afterwards (`@nestposts/database/testing`). A migration is qualified with the
+schema it was generated in, so a throwaway schema is never built from migrations — which is also why
+`apps/web-e2e` drops and rebuilds `posts` and `tagging` instead of inventing names.
+
 ## Rodando
 
 ```bash
 pnpm install
 docker compose up -d rabbitmq   # o transporte das duas aplicações (ou um RabbitMQ que já esteja no ar)
+pnpm db:setup                   # as migrations dos dois bancos e os seeders (o `pnpm dev` já faz isto)
 pnpm dev                        # as DUAS aplicações: posts-api em :3000 e tagging (sem porta)
 ```
 
@@ -474,6 +545,7 @@ tem porta: o `tagging` é acionado por mensagem e o que ele produz é mensagem.
 Sem broker, dá para subir a `posts-api` sozinha com o tagueamento em processo:
 
 ```bash
+pnpm db:setup
 POSTS_TRANSPORT=memory POSTS_TAGGING_IN_PROCESS=true npx nx serve @nestposts/posts-api
 ```
 
@@ -569,7 +641,7 @@ sobe o `AppModule` em processo, então hoje **nada** verifica que o artefacto bu
 pnpm test        # todos os projetos (nx run-many -t test)
 pnpm test:e2e    # a posts-api inteira, por HTTP + WebSocket, com transporte em memória
 pnpm test:all
-pnpm test:saga   # a saga coreografada: DOIS PROCESSOS sobre RabbitMQ de verdade (docker/e2e/)
+pnpm test:web   # o sistema inteiro no navegador: TRÊS PROCESSOS sobre RabbitMQ de verdade (apps/web-e2e)
 ```
 
 > Os itens acrescentados depois da divisão em monorepo estão em inglês, pela regra do `CLAUDE.md`; os
@@ -577,7 +649,7 @@ pnpm test:saga   # a saga coreografada: DOIS PROCESSOS sobre RabbitMQ de verdade
 
 - `post.entity.spec` / `tag.entity.spec` — domínio puro: sem `EventPublisher`, sem `EventBus`, sem banco. O único colaborador é o próprio aggregate root: `getUncommittedEvents()` diz exatamente o que foi disparado. O `post.entity.spec` inicializa um MikroORM **só para descoberta** (sem `ensureDatabase`, nenhuma tabela criada): desde que `Post.tags` virou relação, uma `Collection` precisa da metadata do dono para saber a que propriedade pertence. Os testes `the state returned by update is the same as sourcing the raised events` (via `loadFromHistory`) e `applying the same event twice leaves the same state` travam o contrato decidir/evoluir.
 - `create-post.command.spec` — inclui os dois testes que tornam verificável a confiança na chave estrangeira: criar com um `authorId` inexistente e criar com o id de um user **sem linha em `authors`** falham na FK, sem gravar nada. São eles que justificam o handler não reler o autor.
-- `create-post.command.spec`, `update-post.command.spec`, `assign-tag-to-post.command.spec`, `create-tag.command.spec` — um por fatia, ao lado do arquivo que ela ocupa, com `@nestjs/testing`. O fixture (`apps/posts-api/test/support/cqrs-testing-module.ts`) monta o `CqsrsModule` de verdade, o MikroORM de verdade num SQLite em memória, os repositórios, o `TransportEventBusModule` com a saída desligada — e **só o handler do teste**, então uma dependência acidental entre dois deles quebra o teste. Não há repositório fake: como salvar é responsabilidade do command, o banco é quem prova que ele salvou, e um `RecordingEvents` pendurado no `EventBus` prova o que ele publicou. Como os handlers são `{ scope: Scope.REQUEST }`, o teste despacha pelo `CommandBus` com uma `PostRequest`: não existe "a" instância de um handler request-scoped para pegar do módulo — e esse é justamente o caminho de produção.
+- `create-post.command.spec`, `update-post.command.spec`, `assign-tag-to-post.command.spec`, `create-tag.command.spec` — um por fatia, ao lado do arquivo que ela ocupa, com `@nestjs/testing`. O fixture (`apps/posts-api/test/support/cqrs-testing-module.ts`) monta o `CqsrsModule` de verdade, o MikroORM de verdade num schema Postgres só dele, os repositórios, o `TransportEventBusModule` com a saída desligada — e **só o handler do teste**, então uma dependência acidental entre dois deles quebra o teste. Não há repositório fake: como salvar é responsabilidade do command, o banco é quem prova que ele salvou, e um `RecordingEvents` pendurado no `EventBus` prova o que ele publicou. Como os handlers são `{ scope: Scope.REQUEST }`, o teste despacha pelo `CommandBus` com uma `PostRequest`: não existe "a" instância de um handler request-scoped para pegar do módulo — e esse é justamente o caminho de produção.
 - `author.entity.spec` (em `apps/posts-api/test/domain/`, porque precisa de Post **e** de Author) — o cast: que `Author.cast(user, authorship)` devolve **o mesmo objeto** (e que ele continua igual ao `User` relido de outra origem, nos dois sentidos), que uma referência não carregada carrega a cadeia inteira e aterra no `Author`, e que um user sem linha delegada é só um user. Os testes de `posted()`/`postCount()`/`wrote()` saíram com os métodos: `libs/users` não pode depender de `libs/posts`, e quem responde "os posts deste autor" é o `PostRepository.findByAuthor`, que é quem já respondia em produção.
 - `user-provisioning.service.spec` — o provisionamento e a **promoção** contra o banco: promover mantém o mesmo id, acrescenta o papel ao mesmo stream (a versão vai a 2) e cria **uma** linha em `authors`; provisionar de novo depois disso não muda nada. O provedor de identidade entra como `FakeIdentityProvider` — nenhum destes testes importa `better-auth`, que é o que a porta comprou.
 - `delegate.spec` — o mecanismo sozinho, com duas classes inventadas e sem ORM nenhum: o mixin encaminha método **e** getter, recusa na construção uma chave que o delegado não declara, mantém o `constructor` apontando para o sujeito, resolve o delegado de volta no sujeito castado (e resolver duas vezes dá o mesmo objeto) e empilha duas delegações sem perder a primeira.
@@ -599,7 +671,7 @@ pnpm test:saga   # a saga coreografada: DOIS PROCESSOS sobre RabbitMQ de verdade
 - `validated-scalar.mixin.spec` — o value object escalar sozinho: normalização pelo schema, `toString`/`toJSON`/`valueOf`/hint numérico (inclusive `Date` → ISO, que o `JSON.stringify` não faria sozinho), igualdade por família, `parse` que não aplica um `transform` duas vezes, e as duas formas de especializar (`narrow` e sobrescrever `static schema`).
 - `validated-dto-embedded.spec` — o value object **dentro** de um DTO: o construtor monta a classe, a serialização a colapsa, o `class-validator` continua reportando a mensagem do schema, e o `design:type` do campo passa a ser a classe (é o que um `@Field` sem thunk leria). Cobre opcional/nulo/default, listas, e o `Embeddable` de vários campos.
 - `post-dto.spec` — a migração dos DTOs: por dentro os campos são os **mesmos** value objects do domínio; por fora sai exatamente o shape de antes, inclusive pelo caminho que o graphql-js percorre ao serializar um campo (`GraphQLID.serialize(view.id)`).
-- `value-object-type.spec` — a ponte VO ↔ coluna, exercitada numa entidade de verdade num SQLite de verdade: hidrata como classe, guarda texto na coluna, aceita value object **e** texto na consulta, não gera UPDATE quando o valor não mudou, e o cursor de paginação vai e volta — inclusive um forjado, que precisa falhar.
+- `value-object-type.spec` — a ponte VO ↔ coluna, exercitada numa entidade de verdade num Postgres de verdade: hidrata como classe, guarda texto na coluna, aceita value object **e** texto na consulta, não gera UPDATE quando o valor não mudou, e o cursor de paginação vai e volta — inclusive um forjado, que precisa falhar.
 - `user-soft-delete.spec` — a exclusão lógica contra o **banco**, e não contra objetos, como o `UserSoftDeleteJpaTest` de lá: `em.remove` marca em vez de remover, a linha da tabela filha da herança sobrevive, restaurar traz o `Author` inteiro, e o caminho do domínio (`softDelete` + `flush`) tem o mesmo efeito. Desligar o subscriber quebra três dos cinco.
 - `soft-delete.spec` — o lado do domínio, sem ORM nenhum no meio: o value object (nasce vivo, e sabe se dizer) e o **mixin sozinho**, sem Post e sem User, como o `SoftDeletableTest` da versão Java — que é o que justifica ele ser um mixin: o comportamento é testado uma vez e as duas entidades herdam o teste junto com o código.
 - `soft-delete-filter.spec` — o lado da infraestrutura: some das consultas sem sumir do banco, volta com `filters: { active: false }`, e **apagar o autor esconde os posts dele sem tocar nas linhas de post**.
@@ -612,7 +684,7 @@ pnpm test:saga   # a saga coreografada: DOIS PROCESSOS sobre RabbitMQ de verdade
 - `author.pipe.spec` / `session-user.pipe.spec` — a guarda da borda agora que ela é um pipe: o cast devolve o mesmo objeto já como `Author` e recusa nomeando o usuário quem não tem o papel — ou quem tem o papel e **não** tem a linha delegada, que é o caso que só um cast de verdade distingue; e a tradução da sessão aceita a entrada **ainda como Promise**, que é como o Nest a entrega ao primeiro pipe. O pipe entrega hoje um **id de credencial**, e não mais email/nome/papel copiados do cookie.
 - `user-provisioning.hooks.spec` — a borda por onde o Better Auth chama para dentro: o id cru vira `CredentialId`, um id inválido não chega ao serviço, e uma falha ao provisionar **não** derruba o sign-up — o que é a regra que sustenta o desenho (autenticar é do provedor, provisionar é nosso).
 - `mikro-orm-exception.filter.spec` — a outra tabela, a de violação de integridade → erro de usuário: FK vira `BAD_USER_INPUT` com mensagem **vaga** (distinguir "não existe" de "é leitor" seria um oráculo), unique vira `CONFLICT`, e nenhuma mensagem de driver vaza.
-- `posts.e2e-spec` — o smoke test como teste: sobe o `AppModule` com SQLite em memória (`POSTS_DB` no `vitest.e2e.config.mts`), fala HTTP para queries/mutations e graphql-ws para subscriptions. Confere a ordem command → evento → entrega, que o `createPost` responde **pré-criado** (v1, sem tag) e que o post **completo** (v2, com a tag) chega por `onPostCreated`, o filtro por tópico (o assinante filtrado vê só o seu post; o global vê tudo), os erros com código, as duas connections — que desassinar tira o assinante do `EventBus` na hora, contando os `observers` do `Subject`, e que **dois assinantes do mesmo tópico compartilham um stream só**: o `EventBus` não passa de um assinante, os dois recebem o mesmo payload, e a fonte só cai quando o segundo sai. E, pendurado no `EventBus`, que a `PostRequest` criada no resolver sobrevive ao caminho de verdade (Express → Apollo → `CommandBus` → saga): todos os eventos daquela mutation carregam o mesmo objeto. O `author` de toda selection deste ficheiro é o `type Author` (`author { id name email }`), subscriptions incluídas — então a resolução do campo está exercitada por todos os testes, e o bloco `Post.author` acrescenta o que só ela permite: navegar `post → author → posts → author` e fechar o ciclo, o autor de um post ser o **mesmo** que o `me` devolve, a resolução funcionar dentro da conexão WebSocket (sem o contexto aberto no adapter o cliente receberia `data: null`), e uma leitura anónima alcançar o autor. O bloco `me` é o polimorfismo ponta a ponta, com três clientes HTTP de verdade: o autor casa com `... on Author` e pagina os posts dele (Posts completos, `tags` aninhadas inclusive), um segundo cliente que fez sign-up **sem papel** vem como `User` e a resposta sai sem `posts` — não com `posts` vazio —, pedir `posts` num `User` é erro de schema, e um terceiro que nunca autenticou leva `UNAUTHENTICATED` do guard global, antes de o resolver existir.
+- `posts.e2e-spec` — o smoke test como teste: sobe o `AppModule` num schema próprio (`POSTS_SCHEMA` no `vitest.e2e.config.mts`, criado pelo `TestSchemaModule`), fala HTTP para queries/mutations e graphql-ws para subscriptions. Confere a ordem command → evento → entrega, que o `createPost` responde **pré-criado** (v1, sem tag) e que o post **completo** (v2, com a tag) chega por `onPostCreated`, o filtro por tópico (o assinante filtrado vê só o seu post; o global vê tudo), os erros com código, as duas connections — que desassinar tira o assinante do `EventBus` na hora, contando os `observers` do `Subject`, e que **dois assinantes do mesmo tópico compartilham um stream só**: o `EventBus` não passa de um assinante, os dois recebem o mesmo payload, e a fonte só cai quando o segundo sai. E, pendurado no `EventBus`, que a `PostRequest` criada no resolver sobrevive ao caminho de verdade (Express → Apollo → `CommandBus` → saga): todos os eventos daquela mutation carregam o mesmo objeto. O `author` de toda selection deste ficheiro é o `type Author` (`author { id name email }`), subscriptions incluídas — então a resolução do campo está exercitada por todos os testes, e o bloco `Post.author` acrescenta o que só ela permite: navegar `post → author → posts → author` e fechar o ciclo, o autor de um post ser o **mesmo** que o `me` devolve, a resolução funcionar dentro da conexão WebSocket (sem o contexto aberto no adapter o cliente receberia `data: null`), e uma leitura anónima alcançar o autor. O bloco `me` é o polimorfismo ponta a ponta, com três clientes HTTP de verdade: o autor casa com `... on Author` e pagina os posts dele (Posts completos, `tags` aninhadas inclusive), um segundo cliente que fez sign-up **sem papel** vem como `User` e a resposta sai sem `posts` — não com `posts` vazio —, pedir `posts` num `User` é erro de schema, e um terceiro que nunca autenticou leva `UNAUTHENTICATED` do guard global, antes de o resolver existir.
 
 And the suites that came with the monorepo and the transport:
 
@@ -685,7 +757,7 @@ And the suites that came with the monorepo and the transport:
   `posts` namespace, the decision published under `posts.PostCreated.<postId>`, both
   events in its own stream, the inbox naming who sent each message, one decision however many times the
   message is delivered, its own echo dropped, and the other service's correlation carried forward.
-- `docker/e2e/saga-choreography.mjs` — **the two processes over real RabbitMQ**, and the only test that
+- `apps/web-e2e` — **the browser over three real processes**, and the only test that
   can prove the topology: `createPost` at version 1 without tags, the complete post arriving on
   `onPostCreated` through the whole loop, each service's durable state, both inboxes naming their
   origin, a message republished by hand through the management API producing no second decision, and
@@ -725,7 +797,7 @@ O ganho de ter isso na mensagem é o `key`: o critério serializado de forma est
 
 **Por que Apollo, e não Mercurius.** A POC começou com Mercurius (Fastify), e tudo funcionava — inclusive o filtro, que na época era o do `@Subscription`. A diferença apareceu no desassinar: o `withFilter` do Mercurius é um `async function*` com `yield*`, e um async generator só processa `return()` depois que o `next()` pendente resolve. Um assinante filtrado que desconectava ficava pendurado no `EventBus` até o próximo `PostUpdatedEvent`. O `withFilter` do caminho Apollo é um iterador explícito; a inscrição cai na hora. Para uma POC sobre subscriptions, a limpeza imediata pesou mais que o Fastify.
 
-**Uma classe por entidade, e o mapeamento do lado de fora.** `Post` é a entidade de domínio e o aggregate root do @nestjs/cqrs, numa classe só. O **mapeamento** não está mais junto: `PostSchema = defineEntity({ class: Post, … })` mora em `infrastructure/persistence/sqlite/entities/post-orm.entity`, com os outros `*-orm.entity`. Continua não existindo entidade espelho — o `defineEntity` aponta para *aquela* classe, e o que se separou foi a camada, não o objeto; o que o domínio ganhou é deixar de saber o tipo da coluna e o nome do índice. O único resquício do ORM que atravessa é herdar de `BaseEntity`, que é o preço de entrada do MikroORM. A base é `AggregateEntity = WithAggregateRoot(BaseEntity)`: a entidade já precisa herdar do `BaseEntity` do ORM, então `extends AggregateRoot` não serve — é exatamente o cenário para o qual o mixin existe. Uma constante compartilhada, e não um `WithAggregateRoot(...)` por entidade, porque o MikroORM descobre a classe-pai de cada entidade como entidade abstrata, e duas classes anônimas de nome `AggregateRoot` seriam ambíguas para ele. (Tentei antes `class Post extends WithAggregateRoot(PostSchema.class)` com `setClass`: a classe intermediária do mixin entra na cadeia de protótipos e a descoberta do ORM entra em loop — `Post extends AggregateRoot extends Post`.)
+**Uma classe por entidade, e o mapeamento do lado de fora.** `Post` é a entidade de domínio e o aggregate root do @nestjs/cqrs, numa classe só. O **mapeamento** não está mais junto: `PostSchema = defineEntity({ class: Post, … })` mora em `infrastructure/persistence/entities/post-orm.entity`, com os outros `*-orm.entity`. Continua não existindo entidade espelho — o `defineEntity` aponta para *aquela* classe, e o que se separou foi a camada, não o objeto; o que o domínio ganhou é deixar de saber o tipo da coluna e o nome do índice. O único resquício do ORM que atravessa é herdar de `BaseEntity`, que é o preço de entrada do MikroORM. A base é `AggregateEntity = WithAggregateRoot(BaseEntity)`: a entidade já precisa herdar do `BaseEntity` do ORM, então `extends AggregateRoot` não serve — é exatamente o cenário para o qual o mixin existe. Uma constante compartilhada, e não um `WithAggregateRoot(...)` por entidade, porque o MikroORM descobre a classe-pai de cada entidade como entidade abstrata, e duas classes anônimas de nome `AggregateRoot` seriam ambíguas para ele. (Tentei antes `class Post extends WithAggregateRoot(PostSchema.class)` com `setClass`: a classe intermediária do mixin entra na cadeia de protótipos e a descoberta do ORM entra em loop — `Post extends AggregateRoot extends Post`.)
 
 **`forceConstructor: true`.** O MikroORM hidrata entidades por `Object.create(prototype)`, sem chamar o construtor — e é no construtor que o mixin inicializa a lista de eventos não-commitados. Sem isso, um `post.apply(...)` numa entidade carregada do banco explode. Com `forceConstructor` no schema, um Post que volta do banco nasce pelo `new` e chega inteiro; o `create-post.command.spec` confere que ele volta com `getUncommittedEvents()` vazio.
 
@@ -807,7 +879,7 @@ O efeito que este README chamava de indireto passou a ser verdade junto: apagar 
 
 É a composição do próprio Nest — um parâmetro aceita vários pipes, aplicados em ordem, e a saída de um alimenta o seguinte (`sessão → User → Author`). Um pipe, e não o corpo de um `createParamDecorator`, porque a factory de um param decorator recebe só o `ExecutionContext` e não participa da injeção de dependência: ela nunca alcançaria o `UserProvisioning`. Cada peça faz uma coisa e é testável sozinha — o que antes era um `requireAuthor` privado, testável só subindo um resolver, virou duas classes com spec próprio.
 
-**O provedor de identidade entrou por uma porta.** O `UserProvisioning` não conhece o Better Auth: ele conhece o `IdentityProvider`, uma `abstract class` em `domain/user` com dois métodos — `findById(credentialId)` e `grantRole(credentialId, role)`. Quem sabe o nome do provedor é um adapter só, o `BetterAuthIdentityProvider`, e trocar o Better Auth por Keycloak (que é de onde este projeto veio) é escrever outro adapter e mudar uma linha do `IdentityModule`. Nada em `application/` muda — e o `user-provisioning.service.spec` inteiro roda contra um `FakeIdentityProvider` que cabe em 50 linhas, sem subir servidor de autenticação nenhum.
+**O provedor de identidade entrou por uma porta.** O `UserProvisioning` não conhece o Better Auth: ele conhece o `IdentityProvider`, uma `abstract class` em `domain/user` com dois métodos — `findById(credentialId)` e `grantRole(credentialId, role)`. Quem sabe o nome do provedor é um adapter só, o `BetterAuthIdentityProvider`, e trocar o Better Auth por Keycloak (que é de onde este projeto veio) é escrever outro adapter e mudar uma linha do `BetterAuthModule` (em `libs/auth`). Nada em `application/` muda — e o `user-provisioning.service.spec` inteiro roda contra um `FakeIdentityProvider` que cabe em 50 linhas, sem subir servidor de autenticação nenhum.
 
 O adapter fala com o `internalAdapter` do `auth.$context`, e não com o `auth.api`. Não é conveniência: o `auth.api` é a superfície **HTTP**, e os endpoints de administração (`setRole`) exigem uma sessão de admin — aqui quem chama é o servidor, sobre si mesmo. O `internalAdapter` é a camada que aqueles endpoints usam por dentro, e tem a propriedade que decide a escolha: `updateUser` passa pelo `updateWithHooks`, então **conceder um papel dispara o hook de `user.update`**. O caminho da promoção é um só, venha ela da API ou de dentro.
 
@@ -817,7 +889,7 @@ O adapter fala com o `internalAdapter` do `auth.$context`, e não com o `auth.ap
 
 Duas armadilhas, as duas custaram teste:
 
-- o `setupDatabaseHooks` da lib começa com `if (!auth.options.databaseHooks) return`. Sem um `databaseHooks: {}` nas `authOptions`, os ganchos são registrados como providers, descobertos pelo `DiscoveryService`… e nunca chamados. É o pior modo de uma integração falhar, e por isso a linha tem um comentário do tamanho dela;
+- o `setupDatabaseHooks` da lib começa com `if (!auth.options.databaseHooks) return`. Sem um `databaseHooks: {}` nas opções que o `betterAuthOptions` monta (`libs/auth`), os ganchos são registrados como providers, descobertos pelo `DiscoveryService`… e nunca chamados. É o pior modo de uma integração falhar, e por isso a linha tem um comentário do tamanho dela;
 - um hook roda dentro da requisição de `/api/auth/*`, que já tem contexto do ORM — mas `grantRole` chama o Better Auth **de dentro do servidor**, sem requisição nenhuma, e `allowGlobalContext: false` recusaria a primeira consulta. `inRequestContext` reaproveita o contexto quando há um e abre um quando não há; é o que faz o hook enxergar o que a chamada que o disparou acabou de gravar.
 
 O pipe continua chamando `provision` a cada requisição, e é de propósito que ele não sumiu: o método é idempotente (com o perfil já lá, provisionar é uma leitura), e ele é a **retaguarda** para uma identidade que tenha nascido por um caminho que não passou pelo hook. Falhar ao provisionar não derruba o sign-up — autenticar é do provedor, provisionar é nosso, e a requisição seguinte refaz o trabalho.
@@ -890,7 +962,7 @@ Repare que só há **uma** função livre: `delegateRef`, que constrói. Resolve
 
 **E a referência entrega o id, porque é o mesmo id.** A chave primária de `Authorship` é a *relação* com o user (`[PrimaryKeyProp]?: 'user'`, coluna `id`), e um `Reference` do MikroORM define getters só para as **chaves primárias** — pelo que `post.author.id` nasceu `undefined`. Houve aqui um getter `Post.authorId` a contornar isso, e ele era exatamente o tipo de coisa que este desenho existe para não ter: um id solto a viajar ao lado de uma referência que já o contém.
 
-O que o substituiu está em `infrastructure/persistence/sqlite/delegation`, e é o mesmo gesto que dá à referência os outros dois métodos:
+O que o substituiu está em `infrastructure/persistence/delegation`, e é o mesmo gesto que dá à referência os outros dois métodos:
 
 ```ts
 Object.defineProperty(Reference.prototype, "id", {
@@ -956,10 +1028,13 @@ Uma consequência que ficou por decidir: o `authorName` dos eventos já **não �
   `tsc --build`; the `@nx/nest` generator would have put a `webpack.config.js` there, and a bundler
   mangles class names and drops the `design:type` metadata AutoMapper reads — mapping breaks at
   runtime while the build still succeeds.
-- **Two concurrent queries on one in-memory SQLite are two databases.** MikroORM opens a second pooled
-  connection and, for `:memory:`, that connection is a *different, empty* database. The symptom is
-  `table … already exists` from the schema generator, or a read that finds nothing it has just
-  written. Serialise them (this bit `MikroOrmEventStore.append`).
+- **A native statement is not resolved against the connection's schema.** `insert into
+  transport_message_inbox` reaches whatever the `search_path` finds, which in a service that lives in
+  a schema of its own is nothing at all. Raw SQL asks the metadata where its table is —
+  `MikroOrmMessageInbox` does, and `tableIn(orm, 'posts')` is the same thing for a spec.
+- **`count(*)` is a bigint, and the `pg` driver gives a bigint back as a STRING.** `'1' === 1` is
+  false, and an idempotency assertion fails for a reason that has nothing to do with idempotency;
+  `apps/web-e2e` registers a type parser for it.
 - **The global auth guard is inherited by the microservice.** `connectMicroservice(..., { inheritAppConfig: true })` brings
   the filters and interceptors, which is what you want, and the guard, which answers `UNAUTHORIZED` to
   every delivery. The messaging controllers carry `@AllowAnonymous()`: what authorises them is the
@@ -981,3 +1056,97 @@ Uma consequência que ficou por decidir: o `authorName` dos eventos já **não �
 - **Tirar o `authorName` dos eventos**, ou assumi-lo como projeção: hoje ninguém o lê. A pergunta que a decisão faz é se este sistema quer poder dizer "o nome do autor na época", que é o que um `authorId` sozinho não diz.
 - `deleteMe` / `restorePost` / `deletePost`: as mutations de exclusão lógica que a versão Axon expõe. O domínio já as tem inteiras (`softDelete`/`restore` no mixin, e `PostRepository.restore`/`UserRepository.restore` para a linha reaparecer); falta o `@Mutation`.
 - `bio` no `Author` — a única diferença de campo entre o `type Author` de lá e o daqui.
+
+## `libs/auth` and `libs/organizations`: authentication is a module, not an adapter
+
+It used to be a folder inside `libs/users` — `infrastructure/auth`, three files, one `betterAuth()`
+call at module scope. That was right while authentication meant "a session and a role". It stopped
+being right the moment organizations arrived, because an organization is not a detail of the user
+aggregate: it has its own tables, its own rules about who may do what, and its own reason to exist
+whether or not anybody reads a `User`.
+
+So they are two domain modules of their own, with the shape every other one here has — `domain/` and
+`infrastructure/`, ports as abstract classes, mappings in `defineEntity`. `libs/users` went back to
+being about the user and nothing else.
+
+**And organizations is a module of its own, on top of auth.** The dependency runs one way and only
+one way: authentication does not know organizations exist, which is what lets a service authenticate
+without having one. The seam is that the plugin registry is a **core, not a closed list** —
+`AuthInfrastructureModule.forRoot({ plugins: organizationAuthPluginProviders, entities:
+authWithOrganizationEntities() })` is the whole composition, and it happens at the root, where a
+composition belongs. The plugin list decides the tables (`session` grows an `active_organization_id`
+the moment the organization plugin is on), which is why the entity list is composed in exactly one
+place that the migrator, the standalone runtime and the Nest modules all read.
+
+Each has a README; the decisions worth repeating here:
+
+**The plugin registry is a tuple of Nest providers, and that is not ceremony.** One provider per
+plugin (Nest has no multi-provider support, so two plugins sharing a token would silently overwrite
+each other), folded back into one ordered array by a factory whose `inject` list *is* the
+declaration. Declared `as const`, that array is also the compile-time tuple `betterAuth()` infers
+from — which is what puts `setActiveOrganization`, `hasPermission` and `generateOpenAPISchema` on
+`auth.api` at all. Flatten it to `BetterAuthPlugin[]` and nothing breaks loudly: the API surface
+narrows to the plugin-less one and every call through it stops type-checking. There is a test that
+asserts those endpoints exist, because that is the only way this fails visibly.
+
+**The services take the request, not headers.** `AuthService` and `OrganizationService` are
+`Scope.REQUEST`: they receive Nest's `REQUEST` and turn it into a `Headers` in the constructor, so a
+method reads `requireActiveMember()` rather than `requireActiveMember(headers)`. An instance belongs
+to one request, so "the active organization" cannot be ambiguous about whose, and passing the wrong
+headers stops being something you can express. The cost is Nest's scope bubbling — whatever injects
+them is request-scoped too — which is why the pipes are and why a saga, which has a `PostRequest` and
+not an HTTP one, does not.
+
+**Four tables are mapped by hand; the rest are still generated.** Better Auth describes its own
+schema, and turning that description into `EntitySchema`s is drift-free — it is how every table used
+to be mapped and how most still are. But `auth_user`, `organization`, `member` and `invitation` are
+the ones this system has something to say about, so they follow the same rules as `Post`: a domain
+class carrying value objects and `Ref` relations, a `defineEntity` mapping beside it, a repository
+port. Better Auth finds them anyway, because it looks a model up by the name its naming strategy
+derives — `organization` → `Organization`, which is our class — and the `organizationId`/`userId` it
+writes resolve against the `manyToOne` join columns. A spec drives that round trip against a real
+schema, which is the only way to know it.
+
+**The instance is reachable three ways, and they are one object.** `AuthService` is the port the
+application talks to, in this repository's value objects. `BETTER_AUTH` is the typed instance, for
+the endpoints the port does not wrap. `createStandaloneAuth` is the same instance outside Nest, which
+is what `apps/web` runs: the Next server holds its *own* Better Auth against the same database and
+the same secret, sets the session cookie on its own origin, and the posts-api validates it — because
+a session is a row they both read. The hand-rolled `fetch` wrapper, its forged `origin` header and
+its second cookie jar all went away with it.
+
+## `x-tenant`: what "the request travels" is actually worth
+
+The request context was already the piece that makes a choreographed saga *one* request instead of
+several — `PostRequest` crosses the wire as metadata and `PostRequestContextCodec` rebuilds it. A
+tenant is the smallest honest thing to hang on that, and the best demonstration of it, because it has
+to be right in a place nobody looks: the second service, deciding on its own.
+
+```
+x-tenant: Acme  ──▶  @CurrentTenant()  ──▶  new PostRequest(postId, 'acme')  ──▶  AMQP header
+                                                                                      │
+                                     apps/tagging  ◀── TransportTenantResolver ◀──────┘
+                                          │ decides, under the context it was handed
+                                          └──▶ its OWN event goes back out carrying the same x-tenant
+```
+
+**Both halves of the context, because neither covers everything.** `TenantMiddleware` runs before the
+guards, so an HTTP request is in the right entity manager by the time a guard reads the session. A
+message and a subscription never pass through Express at all, and `allowGlobalContext: false` refuses
+their first query — that is `TenantInterceptor`, which defers to a context that already exists so one
+request is never two entity managers.
+
+**Reading the tenant is a port, because the answer depends on the transport.** A header for HTTP and
+GraphQL; the envelope's metadata for a message. The second is decoded through `IncomingRequest` and
+**not** `@TransportRequest()`, because an interceptor runs before the pipes — the same reason the
+library's own docs give a guard as the example.
+
+**And the one that took a failing test to find:** making the generic context re-emit what it arrived
+with is what carries the tenant through a service that knows nothing about tenants — but re-emitting
+*everything* also re-emits `cqrs-transport-origin`, the mark that says who authored the event. Tagging
+would have published its decisions under `posts-api`'s name, posts-api would have read its own name
+on them and dropped them as its echo, and the saga would have stopped dead with every message still
+flowing. So `toAttributes()` carries the application's attributes and refuses anything under
+`cqrs-transport-`. `tagging.spec` is what caught it; `pnpm test:web` is what proves the whole path,
+asserting `x-tenant` on the AMQP headers of both events — the second one published by the other
+process.

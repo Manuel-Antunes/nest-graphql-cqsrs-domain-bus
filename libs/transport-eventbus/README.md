@@ -64,7 +64,7 @@ ordered by either.
 ```ts
 import { Module } from '@nestjs/common';
 import { CqsrsModule } from '@nestposts/cqsrs';
-import { DatabaseModule } from '@nestposts/platform/infrastructure/persistence/database.module';
+import { DatabaseModule } from '@nestposts/database';
 import {
   MikroOrmMessageInbox,
   TRANSPORT_EVENT_BUS_PUBLISHER,

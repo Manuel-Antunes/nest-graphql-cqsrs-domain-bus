@@ -1,19 +1,20 @@
 import { AutomapperModule } from "@automapper/nestjs";
-import { MikroORM, RequestContext } from "@mikro-orm/core";
-import { MikroOrmModule } from "@mikro-orm/nestjs";
 import { Module } from "@nestjs/common";
-import { AuthModule } from "@thallesp/nestjs-better-auth";
 import { GraphQLISODateTime, GraphQLModule } from "@nestjs/graphql";
 import { ApolloDriver, type ApolloDriverConfig } from "@nestjs/apollo";
 import { join } from "node:path";
+import { AuthInfrastructureModule } from "@nestposts/auth/infrastructure/auth-infrastructure.module";
+import { organizationAuthPluginProviders } from "@nestposts/organizations/infrastructure/better-auth/organization-better-auth.plugin";
+import { OrganizationsInfrastructureModule } from "@nestposts/organizations/infrastructure/organizations-infrastructure.module";
+import { OrganizationEntities } from "@nestposts/organizations/infrastructure/persistence/organization-entities";
 import { CqsrsModule } from "@nestposts/cqsrs";
-import { DatabaseModule } from "@nestposts/platform/infrastructure/persistence/database.module";
+import { DatabaseModule, TenancyModule } from "@nestposts/database";
 import {
   MikroOrmMessageInbox,
   TRANSPORT_EVENT_BUS_PUBLISHER,
   TransportEventBusModule,
+  TransportTenantResolver,
 } from "@nestposts/transport-eventbus";
-import { createAuth } from "@nestposts/users/infrastructure/auth/auth";
 import { mikroOrmConfig } from "./infrastructure/persistence/mikro-orm.config";
 import { InterfacesModule } from "./interfaces/interfaces.module";
 import { PostEventsPublisher } from "./infrastructure/outbox/post-events.publisher";
@@ -24,21 +25,17 @@ import {
 } from "./infrastructure/transport/transport.config";
 import { MapperErrorHandler } from "./interfaces/mapper/mapper-error.handler";
 import { validatedDtoClasses } from "./interfaces/mapper/validated-dto.strategy";
-import { DefaultTagSeeder } from "./infrastructure/persistence/default-tag.seeder";
 import { PostRequestContextCodec } from "./application/shared/post-request-context.codec";
 
 @Module({
   imports: [
     CqsrsModule.forRoot({ aggregatePublisher: TRANSPORT_EVENT_BUS_PUBLISHER }),
     DatabaseModule.forRoot(mikroOrmConfig()),
-    AuthModule.forRootAsync({
-      imports: [MikroOrmModule],
-      inject: [MikroORM],
-      useFactory: (orm: MikroORM) => ({
-        auth: createAuth(orm),
-        middleware: (_req: unknown, _res: unknown, next: () => void) =>
-          RequestContext.create(orm.em, next),
-      }),
+    TenancyModule.forRoot({ resolver: TransportTenantResolver }),
+    AuthInfrastructureModule.forRoot({
+      plugins: organizationAuthPluginProviders,
+      entities: OrganizationEntities.withAuth(),
+      imports: [OrganizationsInfrastructureModule],
     }),
     GraphQLModule.forRoot<ApolloDriverConfig>({
       driver: ApolloDriver,
@@ -64,6 +61,5 @@ import { PostRequestContextCodec } from "./application/shared/post-request-conte
     }),
     InterfacesModule,
   ],
-  providers: [DefaultTagSeeder],
 })
 export class AppModule {}

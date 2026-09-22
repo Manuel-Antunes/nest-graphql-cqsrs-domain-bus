@@ -1,5 +1,5 @@
+import { closeTestDatabase, testDatabase } from '@nestposts/database/testing';
 import { MikroORM, ref } from '@mikro-orm/core';
-import { defineConfig } from '@mikro-orm/sqlite';
 import { PostEntitySchema } from '@nestposts/posts/infrastructure/persistence/entities/post-orm.entity';
 import { TagSchema } from '@nestposts/posts/infrastructure/persistence/entities/tag-orm.entity';
 import {
@@ -18,16 +18,12 @@ describe('Author: the user, cast over its authorship', () => {
   const now = new Date('2026-09-08T12:00:00.000Z');
 
   beforeAll(async () => {
-    orm = await MikroORM.init(
-      defineConfig({
-        dbName: ':memory:',
+    orm = await testDatabase({
         entities: [PostEntitySchema, TagSchema, UserEntitySchema, AuthorshipEntitySchema],
-        ensureDatabase: { create: true },
-      }),
-    );
+      });
   });
 
-  afterAll(() => orm.close(true));
+  afterAll(() => closeTestDatabase(orm));
 
   const givenAUser = async (roles: readonly string[]): Promise<UserId> => {
     const em = orm.em.fork();

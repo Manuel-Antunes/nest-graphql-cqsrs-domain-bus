@@ -1,0 +1,33 @@
+{
+  "name": "@nestposts/web-e2e",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "nx": {
+    "implicitDependencies": ["@nestposts/web"],
+    "targets": {
+      "e2e": {
+        "executor": "nx:run-commands",
+        "cache": false,
+        "dependsOn": [
+          {
+            "projects": [
+              "@nestposts/migrator",
+              "@nestposts/posts-api",
+              "@nestposts/tagging"
+            ],
+            "target": "build"
+          },
+          {
+            "projects": ["@nestposts/web"],
+            "target": "build"
+          }
+        ],
+        "options": {
+          "cwd": "{projectRoot}",
+          "command": "playwright test"
+        }
+      }
+    }
+  }
+}

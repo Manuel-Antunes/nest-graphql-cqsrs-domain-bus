@@ -4,6 +4,7 @@
   "private": true,
   "dependencies": {
     "@nestposts/cqsrs": "workspace:*",
+    "@nestposts/database": "workspace:*",
     "@nestposts/platform": "workspace:*",
     "@nestposts/posts": "workspace:*",
     "@nestposts/transport-eventbus": "workspace:*",

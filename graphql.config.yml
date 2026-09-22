@@ -1,0 +1,28 @@
+projects:
+  posts-api:
+    schema: apps/posts-api/src/main/resources/schema.graphql
+    include:
+      - apps/posts-api/src/**
+    extensions:
+      endpoints:
+        local:
+          url: http://localhost:8080/graphql
+          headers:
+            Authorization: Bearer ${env:GRAPHQL_TOKEN}
+          introspect: false
+
+  web:
+    schema: apps/web/schema.graphql
+    documents:
+      - apps/web/src/**/*.{ts,tsx}
+    include:
+      - apps/web/src/**
+    exclude:
+      - apps/web/src/gql/**
+    extensions:
+      endpoints:
+        local:
+          url: http://localhost:8080/graphql
+          headers:
+            Authorization: Bearer ${env:GRAPHQL_TOKEN}
+          introspect: false

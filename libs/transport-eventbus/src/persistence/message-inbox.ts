@@ -1,5 +1,6 @@
 import { EntityManager } from '@mikro-orm/core';
 import { Injectable } from '@nestjs/common';
+import { TransportMessage } from './message-inbox.entity';
 
 /** One message as the inbox remembers it. */
 export interface ReceivedMessage {
@@ -70,29 +71,32 @@ export class NoMessageInbox extends MessageInbox {
   }
 }
 
-/** The inbox on MikroORM, which is the ORM this repository uses. */
+/**
+ * The inbox on MikroORM, which is the ORM this repository uses.
+ *
+ * ## Why the table name is read off the metadata
+ * Because the statement is native, and a native statement is not resolved against the schema the
+ * connection was configured with: `insert into transport_message_inbox` reaches whatever the
+ * `search_path` finds, which in a service that lives in a schema of its own is nothing at all. Asking
+ * the metadata for the table — and for the schema MikroORM assigned it — is what keeps the raw
+ * statement addressing the same table the mapped entity does.
+ */
 @Injectable()
 export class MikroOrmMessageInbox extends MessageInbox {
-  private static readonly RECORD = `
-    insert into transport_message_inbox (identifier, message_type, origin, received_at)
-    values (?, ?, ?, ?)
-    on conflict (identifier) do nothing
-  `;
-
   constructor(private readonly em: EntityManager) {
     super();
   }
 
   async register(identifier: string, messageType: string, origin?: string): Promise<boolean> {
     const em = this.em.getContext();
-    const affected = await em
-      .getConnection()
-      .execute(
-        MikroOrmMessageInbox.RECORD,
-        [identifier, messageType, origin ?? null, new Date()],
-        'run',
-        em.getTransactionContext(),
-      );
+    const affected = await em.getConnection().execute(
+      `insert into ${table(em)} (identifier, message_type, origin, received_at)
+       values (?, ?, ?, ?)
+       on conflict (identifier) do nothing`,
+      [identifier, messageType, origin ?? null, new Date()],
+      'run',
+      em.getTransactionContext(),
+    );
     return rowsIn(affected) === 1;
   }
 
@@ -101,7 +105,7 @@ export class MikroOrmMessageInbox extends MessageInbox {
     return em
       .getConnection()
       .execute(
-        `select identifier, message_type as "messageType", origin from transport_message_inbox
+        `select identifier, message_type as "messageType", origin from ${table(em)}
          order by received_at desc, identifier`,
         [],
         'all',
@@ -109,6 +113,14 @@ export class MikroOrmMessageInbox extends MessageInbox {
       );
   }
 }
+
+const table = (em: EntityManager): string => {
+  const metadata = em.getMetadata().find(TransportMessage);
+  const platform = em.getPlatform();
+  const name = platform.quoteIdentifier(metadata?.tableName ?? 'transport_message_inbox');
+  const schema = metadata?.schema ?? em.config.get('schema');
+  return schema && schema !== '*' ? `${platform.quoteIdentifier(schema)}.${name}` : name;
+};
 
 /**
  * Drivers disagree on what an `execute(..., 'run')` gives back — `affectedRows` on some, `changes` on

@@ -1,5 +1,5 @@
+import { metadataOnly } from '@nestposts/database/testing';
 import { MikroORM } from '@mikro-orm/core';
-import { defineConfig } from '@mikro-orm/sqlite';
 import {
   AuthorshipEntitySchema,
   UserEntitySchema,
@@ -20,12 +20,7 @@ describe('User', () => {
   let orm: MikroORM;
 
   beforeAll(async () => {
-    orm = await MikroORM.init(
-      defineConfig({
-        dbName: ':memory:',
-        entities: [UserEntitySchema, AuthorshipEntitySchema],
-      }),
-    );
+    orm = await metadataOnly([UserEntitySchema, AuthorshipEntitySchema]);
   });
 
   afterAll(() => orm.close());

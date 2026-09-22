@@ -1,5 +1,5 @@
+import { closeTestDatabase, testDatabase } from '@nestposts/database/testing';
 import { MikroORM } from '@mikro-orm/core';
-import { defineConfig } from '@mikro-orm/sqlite';
 import type { QueryBus } from '@nestjs/cqrs';
 import { FindAuthorQuery } from '../../application/user/query/find-author.query';
 import { User } from '@nestposts/users/domain/user/user.entity';
@@ -21,15 +21,12 @@ describe('PostAuthorResolver', () => {
   let orm: MikroORM;
 
   beforeAll(async () => {
-    orm = await MikroORM.init(
-      defineConfig({
-        dbName: ':memory:',
+    orm = await testDatabase({
         entities: [PostEntitySchema, TagSchema, UserEntitySchema, AuthorshipEntitySchema],
-      }),
-    );
+      });
   });
 
-  afterAll(() => orm.close());
+  afterAll(() => closeTestDatabase(orm));
 
   const authorId = UserId.parse('3a7b1c2d-4e5f-4a6b-8c9d-0e1f2a3b4c5d');
   const now = new Date('2026-09-08T12:00:00.000Z');

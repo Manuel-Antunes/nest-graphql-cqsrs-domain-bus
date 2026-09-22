@@ -1,0 +1,29 @@
+{
+  "name": "@nestposts/database",
+  "version": "0.1.0",
+  "private": true,
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "@nestposts/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./testing": {
+      "@nestposts/source": "./src/testing/index.ts",
+      "types": "./dist/testing/index.d.ts",
+      "require": "./dist/testing/index.js",
+      "default": "./dist/testing/index.js"
+    },
+    "./*": {
+      "@nestposts/source": "./src/*.ts",
+      "types": "./dist/*.d.ts",
+      "require": "./dist/*.js",
+      "default": "./dist/*.js"
+    }
+  },
+  "dependencies": {
+    "@nestposts/validated-dto": "workspace:*"
+  }
+}

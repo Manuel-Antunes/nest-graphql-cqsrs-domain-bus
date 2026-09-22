@@ -76,6 +76,30 @@ export class SubscriptionCollector<T> {
     );
   }
 
+  /**
+   * The event this caller is waiting for, whichever position it arrives in.
+   *
+   * A subscription is a stream of everything the criteria match, and the saga that completes a post
+   * is eventual: another case's completion can land on this stream first. Asking for the one that
+   * matches is what makes the assertion about the post the test created.
+   */
+  async waitForMatch(matches: (event: T) => boolean, timeoutMs = 5000): Promise<T> {
+    const deadline = Date.now() + timeoutMs;
+    for (;;) {
+      const found = this.received.find(matches);
+      if (found) {
+        return found;
+      }
+      if (Date.now() > deadline) {
+        throw new Error(`nenhum evento correspondeu em ${timeoutMs}ms: ${JSON.stringify(this.received)}`);
+      }
+      await new Promise<void>((resolve) => {
+        this.waiters.push(resolve);
+        setTimeout(resolve, 100);
+      });
+    }
+  }
+
   async waitFor(count: number, timeoutMs = 5000): Promise<T[]> {
     const deadline = Date.now() + timeoutMs;
     while (this.received.length < count) {

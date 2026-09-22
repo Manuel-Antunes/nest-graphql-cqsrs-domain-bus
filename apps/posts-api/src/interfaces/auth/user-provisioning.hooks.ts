@@ -3,7 +3,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { AfterCreate, AfterUpdate, DatabaseHook } from '@thallesp/nestjs-better-auth';
 import { UserProvisioning } from '../../application/user/user-provisioning.service';
 import { CredentialId } from '@nestposts/users/domain/user/vo/credential-id';
-import { inRequestContext } from '@nestposts/platform/infrastructure/persistence/request-context';
+import { inRequestContext } from '@nestposts/database';
 
 interface AuthUserRow {
   id: string;

@@ -75,11 +75,6 @@ export class MikroOrmEventStore extends EventStore {
       return;
     }
     const em = this.em.getContext();
-    /*
-     * Two queries, one after the other, and not a Promise.all: on an in-memory SQLite two concurrent
-     * queries make MikroORM open a second pooled connection, which for ':memory:' is a different and
-     * empty database — the symptom is a read that finds nothing it just wrote.
-     */
     const first = await em.findOne(StoredEvent, { streamId }, { orderBy: { sequence: 'asc' } });
     const last = await em.findOne(StoredEvent, { streamId }, { orderBy: { sequence: 'desc' } });
     let sequence = (last?.sequence ?? -1) + 1;

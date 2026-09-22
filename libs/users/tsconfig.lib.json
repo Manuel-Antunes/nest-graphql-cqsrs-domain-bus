@@ -18,6 +18,9 @@
     },
     {
       "path": "../platform/tsconfig.lib.json"
+    },
+    {
+      "path": "../database/tsconfig.lib.json"
     }
   ]
 }

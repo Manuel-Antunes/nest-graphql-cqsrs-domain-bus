@@ -1,5 +1,5 @@
+import { metadataOnly } from '@nestposts/database/testing';
 import { MikroORM, ref, type Ref } from '@mikro-orm/core';
-import { defineConfig } from '@mikro-orm/sqlite';
 import { Tag } from '../tag/tag.entity';
 import { TagId } from '../tag/vo/tag-id';
 import { User } from '@nestposts/users/domain/user/user.entity';
@@ -28,7 +28,7 @@ describe('Post', () => {
   let orm: MikroORM;
 
   beforeAll(async () => {
-    orm = await MikroORM.init(defineConfig({ dbName: ':memory:', entities: [PostEntitySchema, TagSchema] }));
+    orm = await metadataOnly([PostEntitySchema, TagSchema]);
   });
 
   afterAll(() => orm.close());

@@ -5,7 +5,7 @@ import { Author, Authorship } from '../../../domain/user/author.entity';
 import { AuthorRepository } from '../../../domain/user/author.repository';
 import type { User } from '../../../domain/user/user.entity';
 import type { UserId } from '../../../domain/user/vo/user-id';
-import { inRequestContext } from '@nestposts/platform/infrastructure/persistence/request-context';
+import { inRequestContext } from '@nestposts/database';
 
 @Injectable()
 export class MikroOrmAuthorRepository extends AuthorRepository {

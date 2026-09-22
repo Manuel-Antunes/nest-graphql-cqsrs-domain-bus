@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { DatabaseModule } from '@nestposts/platform/infrastructure/persistence/database.module';
+import { DatabaseModule } from '@nestposts/database';
 import { PostRepository } from '../domain/post/post.repository';
 import { TagRepository } from '../domain/tag/tag.repository';
 import { PostEntitySchema } from './persistence/entities/post-orm.entity';

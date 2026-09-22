@@ -1,7 +1,7 @@
 import { EntityManager } from '@mikro-orm/core';
 import { Injectable, Logger } from '@nestjs/common';
 import { type AsyncContext, EventBus } from '@nestjs/cqrs';
-import { inRequestContext } from '@nestposts/platform/infrastructure/persistence/request-context';
+import { inRequestContext } from '@nestposts/database';
 import { MessageInbox } from '../persistence/message-inbox';
 import { RequestContextCodec } from '../request-context';
 import { type Ingestion, ingestionOf } from '../outbound/transport-metadata';

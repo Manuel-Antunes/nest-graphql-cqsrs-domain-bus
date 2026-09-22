@@ -140,7 +140,7 @@ describe('one entry per namespace, through @TransportEvent() and @TransportReque
     arrivals = consuming.app.get(Arrivals);
   });
 
-  afterAll(() => consuming.app.close());
+  afterAll(() => consuming.close());
 
   beforeEach(() => {
     arrivals.arrivals.length = 0;

@@ -1,5 +1,5 @@
+import { closeTestDatabase, testDatabase } from '@nestposts/database/testing';
 import { MikroORM, ref } from '@mikro-orm/core';
-import { defineConfig } from '@mikro-orm/sqlite';
 import { Post } from '@nestposts/posts/domain/post/post.entity';
 import { PostId } from '@nestposts/posts/domain/post/vo/post-id';
 import { BrokenDelegationException } from '@nestposts/platform/domain/shared/delegation/broken-delegation.exception';
@@ -19,16 +19,12 @@ describe('a referência de um delegado serve o id do sujeito', () => {
   const now = new Date('2026-09-08T12:00:00.000Z');
 
   beforeAll(async () => {
-    orm = await MikroORM.init(
-      defineConfig({
-        dbName: ':memory:',
+    orm = await testDatabase({
         entities: [PostEntitySchema, TagSchema, UserEntitySchema, AuthorshipEntitySchema],
-        ensureDatabase: { create: true },
-      }),
-    );
+      });
   });
 
-  afterAll(() => orm.close(true));
+  afterAll(() => closeTestDatabase(orm));
 
   const givenAPost = async (): Promise<{ postId: PostId; userId: UserId }> => {
     const em = orm.em.fork();

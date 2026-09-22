@@ -1,6 +1,6 @@
+import { closeTestDatabase, testDatabase } from '@nestposts/database/testing';
 import { createMapper, type Mapper } from '@automapper/core';
 import { MikroORM, ref, type Ref } from '@mikro-orm/core';
-import { defineConfig } from '@mikro-orm/sqlite';
 import { CreatePostCommand } from '../../application/post/command/create-post.command';
 import { UpdatePostCommand } from '../../application/post/command/update-post.command';
 import { PostCreatedEvent } from '@nestposts/posts/domain/post/event/post-created.event';
@@ -45,15 +45,12 @@ describe('PostProfile', () => {
   const updatedAt = new Date('2024-01-02T10:00:00.000Z');
 
   beforeAll(async () => {
-    orm = await MikroORM.init(
-      defineConfig({
-        dbName: ':memory:',
+    orm = await testDatabase({
         entities: [PostEntitySchema, TagSchema, UserEntitySchema, AuthorshipEntitySchema],
-      }),
-    );
+      });
   });
 
-  afterAll(() => orm.close());
+  afterAll(() => closeTestDatabase(orm));
 
   beforeEach(async () => {
     mapper = createMapper({ strategyInitializer: validatedDtoClasses() });

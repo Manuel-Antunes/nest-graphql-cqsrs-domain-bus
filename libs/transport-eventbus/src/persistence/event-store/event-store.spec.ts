@@ -1,10 +1,10 @@
+import { closeTestDatabase, testDatabase } from '@nestposts/database/testing';
 import { MikroORM } from '@mikro-orm/core';
-import { defineConfig } from '@mikro-orm/sqlite';
 import { AggregateRoot } from '@nestposts/platform/domain/shared/aggregate-root';
 import { BaseEntity } from '@nestposts/platform/domain/shared/base-entity';
 import type { DomainEvent } from '@nestposts/platform/domain/shared/domain-event';
 import { EventType } from '@nestposts/platform/domain/shared/event-type';
-import { inRequestContext } from '@nestposts/platform/infrastructure/persistence/request-context';
+import { inRequestContext } from '@nestposts/database';
 import { EventSourcedRepository } from './event-sourced.repository';
 import { EventStore, MikroOrmEventStore } from './event-store';
 import { StoredEvent, eventStoreEntities } from './event-store.entity';
@@ -69,20 +69,16 @@ describe('the event store', () => {
   const closed = (id = thingId) => new ThingClosedEvent(id, 'done', 2, now);
 
   beforeAll(async () => {
-    orm = await MikroORM.init(
-      defineConfig({
-        dbName: ':memory:',
+    orm = await testDatabase({
         entities: [...eventStoreEntities],
-        ensureDatabase: { create: true },
-      }),
-    );
+      });
     store = new MikroOrmEventStore(orm.em);
     things = new EventSourcedRepository(Thing, store);
   });
 
-  afterAll(() => orm.close(true));
+  afterAll(() => closeTestDatabase(orm));
 
-  beforeEach(() => orm.em.getConnection().execute('delete from event_log'));
+  beforeEach(() => orm.em.fork().nativeDelete(StoredEvent, {}));
 
   const append = (events: object[], id = thingId) =>
     inRequestContext(orm.em, () => store.append(id, events));

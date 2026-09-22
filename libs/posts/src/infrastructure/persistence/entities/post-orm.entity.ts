@@ -1,4 +1,4 @@
-import { defineEntity, p } from "@mikro-orm/core";
+import { defineEntity, p } from "@nestposts/database";
 import { Post } from "../../../domain/post/post.entity";
 import { InvalidPostException } from "../../../domain/post/exception/invalid-post.exception";
 import { PostSchema } from "../../../domain/post/schemas/post.schema";
@@ -14,7 +14,7 @@ import {
 } from "@nestposts/platform/infrastructure/persistence/soft-delete/soft-delete-orm.entity";
 import { TagSchema } from "./tag-orm.entity";
 import { AuthorshipEntitySchema } from "@nestposts/users/infrastructure/persistence/entities/user-orm.entity";
-import { valueObjectType } from "@nestposts/platform/infrastructure/persistence/helpers/value-object-type";
+import { valueObjectType } from "@nestposts/database";
 
 const PostIdType = valueObjectType(PostId, { columnType: "varchar(36)" });
 const PostTitleType = valueObjectType(PostTitle, {

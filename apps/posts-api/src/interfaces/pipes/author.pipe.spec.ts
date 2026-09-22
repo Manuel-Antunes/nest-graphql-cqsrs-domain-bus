@@ -1,5 +1,5 @@
+import { closeTestDatabase, testDatabase } from '@nestposts/database/testing';
 import { MikroORM } from '@mikro-orm/core';
-import { defineConfig } from '@mikro-orm/sqlite';
 import type { QueryBus } from '@nestjs/cqrs';
 import { FindAuthorQuery } from '../../application/user/query/find-author.query';
 import { AUTHOR_ROLE, Author, Authorship } from '@nestposts/users/domain/user/author.entity';
@@ -19,15 +19,12 @@ describe('AuthorPipe', () => {
   const now = new Date('2026-09-08T12:00:00.000Z');
 
   beforeAll(async () => {
-    orm = await MikroORM.init(
-      defineConfig({
-        dbName: ':memory:',
+    orm = await testDatabase({
         entities: [PostEntitySchema, TagSchema, UserEntitySchema, AuthorshipEntitySchema],
-      }),
-    );
+      });
   });
 
-  afterAll(() => orm.close());
+  afterAll(() => closeTestDatabase(orm));
 
   const pipeFinding = (author: Author | null) => {
     const dispatched: unknown[] = [];

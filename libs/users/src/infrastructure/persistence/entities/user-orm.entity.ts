@@ -1,4 +1,4 @@
-import { defineEntity, p } from "@mikro-orm/core";
+import { defineEntity, p } from "@nestposts/database";
 import { Authorship } from "../../../domain/user/author.entity";
 import { InvalidUserException } from "../../../domain/user/exception/invalid-user.exception";
 import { UserSchema } from "../../../domain/user/schemas/user.schema";
@@ -14,7 +14,7 @@ import {
   softDeleteProperty,
 } from "@nestposts/platform/infrastructure/persistence/soft-delete/soft-delete-orm.entity";
 import { referencesServeDelegations } from "@nestposts/platform/infrastructure/persistence/delegation/delegated-reference";
-import { valueObjectType } from "@nestposts/platform/infrastructure/persistence/helpers/value-object-type";
+import { valueObjectType } from "@nestposts/database";
 
 const UserIdType = valueObjectType(UserId, { columnType: "varchar(36)" });
 const EmailType = valueObjectType(Email, { columnType: "varchar(320)" });

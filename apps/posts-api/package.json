@@ -12,7 +12,10 @@
     }
   },
   "dependencies": {
+    "@nestposts/auth": "workspace:*",
     "@nestposts/cqsrs": "workspace:*",
+    "@nestposts/database": "workspace:*",
+    "@nestposts/organizations": "workspace:*",
     "@nestposts/platform": "workspace:*",
     "@nestposts/posts": "workspace:*",
     "@nestposts/transport-eventbus": "workspace:*",
@@ -68,6 +71,7 @@
     }
   },
   "devDependencies": {
-    "@camcima/nestjs-memory-microservices": "^0.3.0"
+    "@camcima/nestjs-memory-microservices": "^0.3.0",
+    "@nestposts/migrator": "workspace:*"
   }
 }

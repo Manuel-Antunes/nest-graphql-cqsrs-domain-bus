@@ -8,5 +8,12 @@
   },
   "include": ["src/**/*.ts"],
   "exclude": ["src/**/*.spec.ts"],
-  "references": [{ "path": "../platform/tsconfig.lib.json" }]
+  "references": [
+    {
+      "path": "../platform/tsconfig.lib.json"
+    },
+    {
+      "path": "../database/tsconfig.lib.json"
+    }
+  ]
 }

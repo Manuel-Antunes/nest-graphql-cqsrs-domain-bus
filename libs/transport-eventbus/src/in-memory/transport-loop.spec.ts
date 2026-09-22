@@ -1,17 +1,20 @@
+import { dropTestSchema, ensureTestSchema, testDatabaseConfig } from '@nestposts/database/testing';
 import { MikroOrmModule } from '@mikro-orm/nestjs';
-import { defineConfig } from '@mikro-orm/sqlite';
 import type { MemoryServer } from '@camcima/nestjs-memory-microservices';
 import { Controller, Injectable } from '@nestjs/common';
 import { DiscoveryModule } from '@nestjs/core';
 import { AsyncContext, CqrsModule, EventsHandler, type IEventHandler } from '@nestjs/cqrs';
 import { EventPattern } from '@nestjs/microservices';
 import { EventType } from '@nestposts/platform/domain/shared/event-type';
+import { ROOT_TENANT, TENANT_HEADER, Tenant } from '@nestposts/database';
 import { TRANSPORT_EVENT_BUS_SERVICE } from '../constants';
 import { Publisher } from '../decorators/publisher.decorator';
 import { EventIngestion } from '../inbound/event-ingestion';
 import { IngestionSink, NoDurableState } from '../inbound/ingestion-sink';
 import { TransportEvent } from '../decorators/transport-event.decorator';
 import { MemoryEventEnvelopeSerializer } from '../outbound/serializers/memory-event-envelope.serializer';
+import { TRANSPORT_ORIGIN } from '../outbound/event-envelope';
+import { type Ingestion, ingestionOf } from '../outbound/transport-metadata';
 import { MessageInbox, MikroOrmMessageInbox } from '../persistence/message-inbox';
 import { transportEntities } from '../persistence/message-inbox.entity';
 import {
@@ -45,12 +48,15 @@ class UserRegisteredEvent {
 }
 
 class PostRequest extends AsyncContext {
-  constructor(readonly postId: string) {
+  constructor(
+    readonly postId: string,
+    readonly tenantId: string = ROOT_TENANT,
+  ) {
     super();
   }
 
   toAttributes(): Record<string, string> {
-    return { 'post-id': this.postId };
+    return { 'post-id': this.postId, [TENANT_HEADER]: this.tenantId };
   }
 }
 
@@ -76,6 +82,7 @@ class PublishingOutbox {
 @Injectable()
 class Arrivals {
   readonly messages: object[] = [];
+  readonly envelopes: (Ingestion | undefined)[] = [];
 }
 
 @Controller()
@@ -85,6 +92,7 @@ class ArrivalsController {
   @EventPattern('posts.PostPreCreated.*')
   record(@TransportEvent() event: PostPreCreatedEvent): void {
     this.arrivals.messages.push(event);
+    this.arrivals.envelopes.push(ingestionOf(event));
   }
 }
 
@@ -162,10 +170,8 @@ describe('one hop between two services, over the in-process transport', () => {
         CqrsModule.forRoot(),
         DiscoveryModule,
         MikroOrmModule.forRoot(
-          defineConfig({
-            dbName: ':memory:',
+          testDatabaseConfig({
             entities: [...transportEntities],
-            ensureDatabase: { create: true },
             allowGlobalContext: true,
           }),
         ),
@@ -193,12 +199,13 @@ describe('one hop between two services, over the in-process transport', () => {
   });
 
   afterAll(async () => {
-    await publishing.app.close();
-    await consuming.app.close();
+    await publishing.close();
+    await consuming.close();
   });
 
   beforeEach(() => {
     arrivals.messages.length = 0;
+    arrivals.envelopes.length = 0;
     received.events.length = 0;
     received.contexts.length = 0;
   });
@@ -290,5 +297,55 @@ describe('one hop between two services, over the in-process transport', () => {
 
     expect(arrivals.messages).toHaveLength(1);
     expect(arrivals.messages[0]).toBeInstanceOf(PostPreCreatedEvent);
+  });
+
+  describe('what the request carries survives the hop, and the hop back', () => {
+    const tenanted = async (postId: string, tenantId: string) => {
+      await publishingBus.publish(
+        new PostPreCreatedEvent(postId, 'tenanted', new Date()),
+        new PostRequest(postId, tenantId),
+      );
+      await settle();
+      return received.contexts.at(-1) as TransportRequestContext;
+    };
+
+    it('the tenant the first service named arrives as an attribute of the restored context', async () => {
+      const context = await tenanted('p-8', 'acme');
+
+      expect(context.attributes).toMatchObject({ [TENANT_HEADER]: 'acme', 'post-id': 'p-8' });
+    });
+
+    it('and goes back out on the second service own event, without it having to know about tenants', async () => {
+      const context = await tenanted('p-9', 'globex');
+      arrivals.envelopes.length = 0;
+
+      await consumingBus.publish(new PostPreCreatedEvent('p-9', 'decided', new Date()), context);
+      await settle();
+
+      expect(arrivals.envelopes.at(-1)?.metadata).toMatchObject({ [TENANT_HEADER]: 'globex' });
+    });
+
+    it('but the authorship does NOT: the second service publishes under its own name', async () => {
+      const context = await tenanted('p-10', 'initech');
+      arrivals.envelopes.length = 0;
+
+      await consumingBus.publish(new PostPreCreatedEvent('p-10', 'decided', new Date()), context);
+      await settle();
+
+      const metadata = arrivals.envelopes.at(-1)?.metadata ?? {};
+      expect(metadata[TRANSPORT_ORIGIN]).toBe('consuming-service');
+      expect(metadata[TRANSPORT_ORIGIN]).not.toBe('publishing-service');
+    });
+
+    it('a tenant nobody named crosses as the root one', async () => {
+      expect((await tenanted('p-11', ROOT_TENANT)).attributes[TENANT_HEADER]).toBe(ROOT_TENANT);
+    });
+
+    it('the wire carries whatever the producer wrote — the reader is what normalizes it', async () => {
+      const onTheWire = (await tenanted('p-12', 'undefined')).attributes[TENANT_HEADER];
+
+      expect(onTheWire).toBe('undefined');
+      expect(Tenant.normalize(onTheWire)).toBe(ROOT_TENANT);
+    });
   });
 });

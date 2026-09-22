@@ -1,5 +1,5 @@
+import { dropTestSchema, ensureTestSchema, testDatabaseConfig } from '@nestposts/database/testing';
 import { MikroOrmModule } from '@mikro-orm/nestjs';
-import { defineConfig } from '@mikro-orm/sqlite';
 import {
   type CanActivate,
   Controller,
@@ -207,10 +207,8 @@ describe('the request that crosses: what a guard, a saga and a command all see',
         CqrsModule.forRoot(),
         DiscoveryModule,
         MikroOrmModule.forRoot(
-          defineConfig({
-            dbName: ':memory:',
+          testDatabaseConfig({
             entities: [...transportEntities],
-            ensureDatabase: { create: true },
             allowGlobalContext: true,
           }),
         ),
@@ -242,7 +240,7 @@ describe('the request that crosses: what a guard, a saga and a command all see',
     bus = consuming.app.get(TRANSPORT_EVENT_BUS_SERVICE);
   });
 
-  afterAll(() => consuming.app.close());
+  afterAll(() => consuming.close());
 
   beforeEach(() => {
     seen.guarded.length = 0;

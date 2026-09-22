@@ -1,7 +1,7 @@
 import { EntityManager } from '@mikro-orm/core';
 import { Injectable, Logger } from '@nestjs/common';
 import { EventsHandler, type IEventHandler } from '@nestjs/cqrs';
-import { inRequestContext } from '@nestposts/platform/infrastructure/persistence/request-context';
+import { inRequestContext } from '@nestposts/database';
 import { PostCreatedEvent } from '@nestposts/posts/domain/post/event/post-created.event';
 import { PostRepository } from '@nestposts/posts/domain/post/post.repository';
 import { PostId } from '@nestposts/posts/domain/post/vo/post-id';

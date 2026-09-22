@@ -1,12 +1,16 @@
 import { MemoryServer } from '@camcima/nestjs-memory-microservices';
+import { MikroORM } from '@mikro-orm/core';
 import type { INestMicroservice, ModuleMetadata } from '@nestjs/common';
 import type { MicroserviceOptions } from '@nestjs/microservices';
 import { Test, type TestingModule } from '@nestjs/testing';
+import { dropTestSchema, ensureTestSchema, type AnyMikroORM } from '@nestposts/database/testing';
 
 /** A microservice running in this process, and the server a {@link MemoryClient} delivers to. */
 export interface InProcessService {
   readonly app: INestMicroservice;
   readonly server: MemoryServer;
+  /** Closes the application and drops the schema it was given, if it had one. */
+  readonly close: () => Promise<void>;
 }
 
 /**
@@ -37,7 +41,29 @@ export const startInProcessService = async (
 
   await app.listen();
 
-  return { app, server };
+  const orm = ormOf(app);
+  if (orm) {
+    await ensureTestSchema(orm);
+  }
+
+  return {
+    app,
+    server,
+    close: async () => {
+      if (orm) {
+        await dropTestSchema(orm);
+      }
+      await app.close();
+    },
+  };
+};
+
+const ormOf = (app: INestMicroservice): AnyMikroORM | undefined => {
+  try {
+    return app.get(MikroORM, { strict: false });
+  } catch {
+    return undefined;
+  }
 };
 
 const isCompiled = (source: ModuleMetadata | TestingModule): source is TestingModule =>

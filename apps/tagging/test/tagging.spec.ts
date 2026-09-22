@@ -1,6 +1,6 @@
 import { MikroORM } from '@mikro-orm/core';
 import { Test } from '@nestjs/testing';
-import { inRequestContext } from '@nestposts/platform/infrastructure/persistence/request-context';
+import { inRequestContext } from '@nestposts/database';
 import { PostCreatedEvent } from '@nestposts/posts/domain/post/event/post-created.event';
 import { PostPreCreatedEvent } from '@nestposts/posts/domain/post/event/post-pre-created.event';
 import { PostId } from '@nestposts/posts/domain/post/vo/post-id';
@@ -89,7 +89,7 @@ describe('the tagging service', () => {
     inbox = tagging.app.get(MessageInbox);
   });
 
-  afterAll(() => tagging.app.close());
+  afterAll(() => tagging.close());
 
   beforeEach(() => {
     outbound.clear();
