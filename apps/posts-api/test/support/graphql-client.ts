@@ -1,16 +1,22 @@
 import type { INestApplication } from '@nestjs/common';
-import { type Client, createClient, type ExecutionResult } from 'graphql-ws';
-import WebSocket from 'ws';
+import type { ExecutionResult } from 'graphql';
+import { type Client, createClient } from 'graphql-sse';
 
 export class GraphqlClient {
-  private readonly ws: Client;
+  private readonly sse: Client;
   private cookie = '';
 
   constructor(
     private readonly url: string,
     private readonly origin: string,
   ) {
-    this.ws = createClient({ url: url.replace(/^http/, 'ws'), webSocketImpl: WebSocket, lazy: false });
+    this.sse = createClient({
+      url,
+      singleConnection: false,
+      retryAttempts: 5,
+      headers: (): Record<string, string> =>
+        this.cookie ? { cookie: this.cookie } : {},
+    });
   }
 
   static async for(app: INestApplication): Promise<GraphqlClient> {
@@ -48,11 +54,11 @@ export class GraphqlClient {
   }
 
   subscribe<T = Record<string, any>>(query: string, variables?: Record<string, unknown>): SubscriptionCollector<T> {
-    return new SubscriptionCollector<T>(this.ws, query, variables);
+    return new SubscriptionCollector<T>(this.sse, query, variables);
   }
 
   async dispose(): Promise<void> {
-    await this.ws.dispose();
+    await this.sse.dispose();
   }
 }
 
@@ -62,8 +68,8 @@ export class SubscriptionCollector<T> {
   private readonly waiters: Array<() => void> = [];
   readonly unsubscribe: () => void;
 
-  constructor(ws: Client, query: string, variables?: Record<string, unknown>) {
-    this.unsubscribe = ws.subscribe<T>(
+  constructor(sse: Client, query: string, variables?: Record<string, unknown>) {
+    this.unsubscribe = sse.subscribe<T>(
       { query, variables },
       {
         next: (result) => {

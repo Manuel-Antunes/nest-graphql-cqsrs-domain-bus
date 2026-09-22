@@ -124,3 +124,18 @@ Everything under `outbound/`, `inbound/` and `persistence/`, none of which upstr
   needs, and what a list of per-type bindings silently gets wrong as the other side grows;
 - the **doubles** that make all of the above testable with nothing running: `MemoryClient`,
   `startInProcessService` and `RecordingClient`.
+- **a transport of its own on AWS** (`aws/`), which upstream has none of: `SnsClientProxy` and
+  `SqsClientProxy` on the way out, `SqsStrategy` on the way in, and the pair of serializers between
+  them. Three things had to be decided there that RabbitMQ decides for you — the metadata travels in
+  the body because SNS allows ten message attributes and an envelope with a tenant and a trace needs
+  more; the subscription's **filter policy** is the binding, built from the same namespace or event
+  class `@EventPattern` takes (`SnsFilterPolicy`); and the routing key is matched against the
+  handlers' patterns **in the strategy**, because a queue has no bindings and nothing has matched
+  anything by the time a record arrives;
+- **two ways to drive that strategy** — a long-polling receive loop for a process, and
+  `processSqsEvent` for a Lambda, which reports `batchItemFailures` rather than throwing on the first
+  failure (throwing redrives the records that succeeded; returning deletes the ones that did not);
+- **a trace on the envelope** (`tracing.ts`): W3C trace context injected where the metadata is built,
+  a consumer span around the whole ingestion, and both trace keys excluded from what a service in the
+  middle of a chain re-emits — for the same reason the origin mark is. It is `@opentelemetry/api`
+  alone, so it costs a function call until an application starts an SDK.

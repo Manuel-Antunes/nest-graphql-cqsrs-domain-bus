@@ -8,11 +8,9 @@ import { DEFAULT_TAG_ID, DEFAULT_TAG_NAME } from '@nestposts/posts/domain/tag/ta
 import {
   EventEnvelope,
   EventSourcedRepository,
-  type InProcessService,
   MemoryClient,
   MemoryEventEnvelopeSerializer,
   MessageInbox,
-  RecordingClient,
   TRANSPORT_IDENTIFIER,
   TRANSPORT_MESSAGE_TYPE,
   TRANSPORT_ORIGIN,
@@ -20,8 +18,12 @@ import {
   TRANSPORT_TIMESTAMP,
   envelopeFrom,
   reconstruct,
-  startInProcessService,
 } from '@nestposts/transport-eventbus';
+import {
+  type InProcessService,
+  RecordingClient,
+  startInProcessService,
+} from '@nestposts/transport-eventbus/testing';
 import { UserId } from '@nestposts/users/domain/user/vo/user-id';
 import { lastValueFrom } from 'rxjs';
 import { Post } from '@nestposts/posts/domain/post/post.entity';

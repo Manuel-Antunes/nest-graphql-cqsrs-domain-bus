@@ -11,10 +11,10 @@ export const GRAPHQL_UPSTREAM = `${API_URL}/graphql`;
 export const GRAPHQL_PROXY = '/api/graphql';
 
 /**
- * Subscriptions do not go through the proxy: a Next route handler answers a request, and graphql-ws
- * needs a socket. They are `@AllowAnonymous` on the API, so the browser opens this one itself.
+ * Subscriptions do not go through the proxy: a Next route handler answers a request, and a
+ * subscription is a stream that stays open. They are `@AllowAnonymous` on the API, so the browser
+ * opens this one itself — on the same `/graphql` URL, asking for `text/event-stream`.
  */
-export const GRAPHQL_SOCKET = GRAPHQL_UPSTREAM.replace(/^http/, 'ws');
 
 export function upstreamHost(): string {
   try {

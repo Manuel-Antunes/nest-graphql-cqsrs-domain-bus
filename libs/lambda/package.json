@@ -1,0 +1,26 @@
+{
+  "name": "@nestposts/lambda",
+  "version": "0.1.0",
+  "private": true,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "@nestposts/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./*": {
+      "@nestposts/source": "./src/*.ts",
+      "types": "./dist/*.d.ts",
+      "require": "./dist/*.js",
+      "default": "./dist/*.js"
+    }
+  },
+  "dependencies": {
+    "@nestposts/observability": "workspace:*",
+    "@nestposts/transport-eventbus": "workspace:*"
+  }
+}

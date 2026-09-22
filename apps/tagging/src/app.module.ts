@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { CqsrsModule } from "@nestposts/cqsrs";
+import { loggingModule } from "@nestposts/observability";
 import { DatabaseModule, TenancyModule } from "@nestposts/database";
 import { Post } from "@nestposts/posts/domain/post/post.entity";
 import { postsEntities } from "@nestposts/posts/infrastructure/posts-infrastructure.module";
@@ -23,6 +24,7 @@ import { PostEventsController } from "./interfaces/messaging/post-events.control
 
 @Module({
   imports: [
+    loggingModule({ serviceName: process.env.OTEL_SERVICE_NAME ?? "tagging" }),
     CqsrsModule.forRoot({ aggregatePublisher: TRANSPORT_EVENT_BUS_PUBLISHER }),
     DatabaseModule.forRoot(mikroOrmConfig()),
     DatabaseModule.forFeature([...postsEntities, ...usersEntities]),

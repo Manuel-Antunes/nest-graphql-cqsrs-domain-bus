@@ -8,7 +8,6 @@ export default testProject({
   env: {
     POSTS_SCHEMA: `e2e_${Date.now().toString(36)}`,
     POSTS_TRANSPORT: 'memory',
-    POSTS_TAGGING_IN_PROCESS: 'true',
   },
   testTimeout: 30000,
 });

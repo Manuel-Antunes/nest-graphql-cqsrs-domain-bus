@@ -1,30 +1,21 @@
+import type { MikroORM } from '@mikro-orm/postgresql';
 import type { Seeder } from '@mikro-orm/seeder';
-import { MikroORM } from '@mikro-orm/postgresql';
-import type { MigratedDatabaseConfig } from './connection';
-import postsConfig from './posts-mikro-orm.config';
+import { withPosts, withTagging, type MigratorContext } from './app/bootstrap';
 import { DatabaseSeeder } from './seeders/database.seeder';
-import taggingConfig from './tagging-mikro-orm.config';
+import { TestUsersSeeder } from './seeders/test-users.seeder';
+import { withSeederContainer } from './seeders/container';
 
 export type SeederClass = new () => Seeder;
 
-async function withOrm<T>(config: MigratedDatabaseConfig, work: (orm: MikroORM) => Promise<T>): Promise<T> {
-  const orm = (await MikroORM.init(await config())) as MikroORM;
-  try {
-    return await work(orm);
-  } finally {
-    await orm.close(true);
-  }
-}
-
-const applyMigrations = async (orm: MikroORM): Promise<void> => {
+const applyMigrations = async ({ orm }: MigratorContext): Promise<void> => {
   await orm.schema.ensureDatabase();
   await orm.schema.createNamespace(orm.config.get('schema'));
-  await orm.migrator.up();
+  await (orm as MikroORM).migrator.up();
 };
 
-export const migratePosts = (): Promise<void> => withOrm(postsConfig, applyMigrations);
+export const migratePosts = (): Promise<void> => withPosts(applyMigrations);
 
-export const migrateTagging = (): Promise<void> => withOrm(taggingConfig, applyMigrations);
+export const migrateTagging = (): Promise<void> => withTagging(applyMigrations);
 
 export async function migrate(): Promise<void> {
   await migratePosts();
@@ -32,7 +23,13 @@ export async function migrate(): Promise<void> {
 }
 
 export const seed = (seeders: SeederClass[] = [DatabaseSeeder]): Promise<void> =>
-  withOrm(postsConfig, orm => orm.seeder.seed(...seeders));
+  withPosts(({ app, orm }) =>
+    withSeederContainer(app, () => (orm as MikroORM).seeder.seed(...seeders)),
+  );
+
+export const seedUsers = (): Promise<void> => seed([TestUsersSeeder]);
+
+export const seedDeployment = (): Promise<void> => seed([DatabaseSeeder, TestUsersSeeder]);
 
 export async function setup(): Promise<void> {
   await migrate();
@@ -41,12 +38,19 @@ export async function setup(): Promise<void> {
 
 export { DatabaseSeeder } from './seeders/database.seeder';
 export { DefaultTagSeeder } from './seeders/default-tag.seeder';
+export { TestUsersSeeder, SEED_PASSWORD, seededUsers } from './seeders/test-users.seeder';
+export { PostsMigratorModule } from './app/posts.module';
+export { TaggingMigratorModule } from './app/tagging.module';
+export { bootstrap, withPosts, withTagging } from './app/bootstrap';
+export { postsSchema, taggingSchema } from './app/connections';
 
 const commands: Record<string, () => Promise<unknown>> = {
   migrate,
   'migrate:posts': migratePosts,
   'migrate:tagging': migrateTagging,
   seed: () => seed(),
+  'seed:users': seedUsers,
+  'seed:deployment': seedDeployment,
   setup,
 };
 

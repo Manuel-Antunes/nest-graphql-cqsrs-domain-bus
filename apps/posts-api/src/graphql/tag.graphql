@@ -1,5 +1,5 @@
 """Uma tag. Agregado próprio: tem id e eventos independentes do post."""
-type Tag {
+type Tag @key(fields: "id") {
   id: ID!
   name: String!
 }

@@ -38,6 +38,12 @@
     },
     {
       "path": "./libs/organizations"
+    },
+    {
+      "path": "./libs/observability"
+    },
+    {
+      "path": "./libs/lambda"
     }
   ]
 }

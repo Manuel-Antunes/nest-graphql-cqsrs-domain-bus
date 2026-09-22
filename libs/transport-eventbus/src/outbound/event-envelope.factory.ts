@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { AsyncContext } from '@nestjs/cqrs';
 import { RequestContextCodec } from '../request-context';
+import { injectTraceContext } from '../tracing';
 import { TransportIdentity } from '../transport-identity';
 import type { EventAddress } from './event-address';
 import {
@@ -33,15 +34,22 @@ export class EventEnvelopeFactory {
     return new EventEnvelope(event, this.metadataFor(event, address));
   }
 
+  /**
+   * The trace is injected **last**, and the order is the point: a service in the middle of a chain
+   * hands back what arrived ({@link TransportRequestContext.toAttributes}), and anything of the
+   * previous hop's that slipped through is overwritten here by the trace this service is in now.
+   * A stale `traceparent` does not break anything visibly — it just reparents this service's work
+   * onto the first one, which is the kind of wrongness a trace is supposed to rule out.
+   */
   private metadataFor(event: object, address: EventAddress): EnvelopeMetadata {
     const timestamp = (event as { occurredAt?: Date }).occurredAt ?? new Date();
-    return {
+    return injectTraceContext({
       [TRANSPORT_MESSAGE_TYPE]: address.messageType,
       [TRANSPORT_IDENTIFIER]: address.identifier,
       [TRANSPORT_TIMESTAMP]: timestamp.toISOString(),
       [TRANSPORT_ORIGIN]: this.identity.applicationName,
       [TRANSPORT_TAGS]: encodeTags(address.tags),
       ...this.context.encode(AsyncContext.of(event), event),
-    };
+    });
   }
 }

@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { AsyncContext } from '@nestjs/cqrs';
-import { isTransportMetadata } from './outbound/event-envelope';
+import { isTraceContext, isTransportMetadata } from './outbound/event-envelope';
 import type { Ingestion } from './outbound/transport-metadata';
 
 /**
@@ -80,10 +80,17 @@ export class TransportRequestContext extends AsyncContext implements ContextAttr
    * would then read its own name on them and drop them as its echo — the saga stopping dead, with every
    * message still flowing. The trace ids are excluded by the same rule, and `encode` writes them itself:
    * the causation it writes is this message's, while the one that arrived is the previous hop's.
+   *
+   * `traceparent` and its companions are excluded for the third time in the same sentence: the
+   * envelope factory injects the trace this service is in right now, and the one that arrived names
+   * the span that published the message being reacted to — re-emitting it would make every hop a
+   * sibling of the first instead of a child of the previous.
    */
   toAttributes(): Record<string, string> {
     return Object.fromEntries(
-      Object.entries(this.attributes).filter(([key]) => !isTransportMetadata(key)),
+      Object.entries(this.attributes).filter(
+        ([key]) => !isTransportMetadata(key) && !isTraceContext(key),
+      ),
     );
   }
 }

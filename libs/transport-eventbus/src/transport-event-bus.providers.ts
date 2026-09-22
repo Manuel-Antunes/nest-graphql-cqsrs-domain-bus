@@ -26,7 +26,6 @@ import { TransportEventBusService } from './transport-event-bus.service';
  *     ...transportEventBusProviders,
  *     { provide: TransportIdentity, useValue: TransportIdentity.named('posts-api') },
  *     { provide: RequestContextCodec, useClass: PostRequestContextCodec },
- *     { provide: IngestionSink, useClass: NoDurableState },
  *     { provide: MessageInbox, useClass: MikroOrmMessageInbox },
  *     PostEventsPublisher,
  *     { provide: POST_EVENTS_CLIENT, useFactory: postEventsClient },
@@ -40,8 +39,8 @@ import { TransportEventBusService } from './transport-event-bus.service';
  * (what a request means here) — the second with `CorrelatedRequestContext` to bind when correlation
  * and causation are all that need to cross.
  *
- * A service that also **receives** adds {@link eventIngestionProviders} and the two bindings the
- * inbound half needs: {@link IngestionSink} (`NoDurableState`, or one of its own) and
+ * A service that also **receives** adds {@link eventIngestionProviders} and the one binding the
+ * inbound half needs:
  * {@link MessageInbox} (`MikroOrmMessageInbox`, or `NoMessageInbox` when it keeps no memory). They are
  * a separate array because publishing needs no database, and a service that only publishes should not
  * have to have one.
@@ -63,6 +62,8 @@ export const transportEventBusProviders: readonly Provider[] = [
 
 /**
  * **The inbound half**, for a service that receives: {@link EventIngestion}, which needs an
- * `EntityManager`, an {@link IngestionSink} and a {@link MessageInbox} bound alongside it.
+ * `EntityManager` and a {@link MessageInbox} bound alongside it. An {@link EventLog}, if one is
+ * bound, is appended **inside the ingestion's transaction**: what arrived is remembered before
+ * anything reacts to it.
  */
 export const eventIngestionProviders: readonly Provider[] = [EventIngestion];

@@ -42,14 +42,13 @@ import {
   correlationIdOf,
 } from '../request-context';
 import type { Ingestion } from '../outbound/transport-metadata';
-import { startInProcessService } from '../testing/in-process-service';
+import { startInProcessService } from '../testing';
 import { TRANSPORT_EVENT_BUS_SERVICE } from '../constants';
 import { transportEventBusProviders, eventIngestionProviders } from '../transport-event-bus.providers';
 import { TransportIdentity } from '../transport-identity';
 import type { TransportEventBusService } from '../transport-event-bus.service';
 import { EventIngestion } from './event-ingestion';
 import { IncomingRequest } from './incoming-request';
-import { IngestionSink, NoDurableState } from './ingestion-sink';
 
 const SHOP = 'shop';
 const TENANT = 'x-tenant-id';
@@ -219,7 +218,6 @@ describe('the request that crosses: what a guard, a saga and a command all see',
         ...eventIngestionProviders,
         { provide: TransportIdentity, useValue: TransportIdentity.named('shop') },
         { provide: RequestContextCodec, useClass: ShopRequestCodec },
-        { provide: IngestionSink, useClass: NoDurableState },
         { provide: MessageInbox, useClass: MikroOrmMessageInbox },
         Seen,
         TenantGuard,

@@ -23,7 +23,7 @@ import { MemoryEventEnvelopeSerializer } from '../outbound/serializers/memory-ev
 import { MemoryEventEnvelopeDeserializer } from './deserializers/memory-event-envelope.deserializer';
 import { EventIngestion } from './event-ingestion';
 import { TransportEventPipe } from './transport-event.pipe';
-import { IngestionSink, NoDurableState } from './ingestion-sink';
+import { EventLog } from '../persistence/event-log/event-log';
 
 @EventType({ namespace: 'posts', tags: ['postId'] })
 class PostCreatedEvent {
@@ -95,7 +95,6 @@ const moduleWith = async (overrides: Provider[] = []): Promise<TestingModule> =>
       ...eventIngestionProviders,
       { provide: TransportIdentity, useValue: TransportIdentity.silent('posts-api') },
       { provide: RequestContextCodec, useClass: CorrelatedRequestContext },
-      { provide: IngestionSink, useClass: NoDurableState },
       { provide: MessageInbox, useClass: MikroOrmMessageInbox },
       Received,
       PostCreatedHandler,
@@ -200,26 +199,38 @@ describe('EventIngestion', () => {
     );
   });
 
-  describe('a sink of the application', () => {
+  describe('the event log', () => {
     @Injectable()
-    class RecordingSink extends IngestionSink {
-      static readonly seen: object[] = [];
+    class RecordingLog extends EventLog {
+      static readonly appended: object[] = [];
 
-      async receive(event: object): Promise<void> {
-        RecordingSink.seen.push(event);
+      async append(events: readonly object[]): Promise<void> {
+        RecordingLog.appended.push(...events);
+      }
+
+      async readStream(): Promise<object[]> {
+        return [];
+      }
+
+      async readAfter(): Promise<never[]> {
+        return [];
+      }
+
+      async head(): Promise<string> {
+        return '0';
       }
     }
 
-    it('receives the event, inside the transaction, before anything reacts', async () => {
-      const custom = await moduleWith([{ provide: IngestionSink, useClass: RecordingSink }]);
-      RecordingSink.seen.length = 0;
+    it('is appended inside the transaction, before anything reacts', async () => {
+      const custom = await moduleWith([{ provide: EventLog, useClass: RecordingLog }]);
+      RecordingLog.appended.length = 0;
 
       try {
-        await custom.get(EventIngestion).ingest(arrivingFrom('tagging', 'evt-sink'));
+        await custom.get(EventIngestion).ingest(arrivingFrom('tagging', 'evt-log'));
         await settle();
 
-        expect(RecordingSink.seen).toHaveLength(1);
-        expect(RecordingSink.seen[0]).toBeInstanceOf(PostCreatedEvent);
+        expect(RecordingLog.appended).toHaveLength(1);
+        expect(RecordingLog.appended[0]).toBeInstanceOf(PostCreatedEvent);
       } finally {
         await dropTestSchema(custom.get(MikroORM));
         await custom.close();

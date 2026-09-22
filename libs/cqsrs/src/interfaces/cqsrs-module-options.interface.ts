@@ -30,6 +30,7 @@ export interface CqsrsModuleOptions extends CqrsModuleOptions {
    * @default DefaultSubscriptionPubSub (in memory, the bus's own `Subject`)
    */
   subscriptionPublisher?: ISubscriptionPublisher;
+
 }
 
 /** Whoever knows how to build the CQSRS options — the target of `useClass` / `useExisting` in `forRootAsync`. */
@@ -59,4 +60,5 @@ export interface CqsrsModuleAsyncOptions {
    * module has to know it while it is being built, which is before any factory runs.
    */
   aggregatePublisher?: InjectionToken;
+
 }

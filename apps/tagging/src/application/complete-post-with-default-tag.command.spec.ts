@@ -13,7 +13,7 @@ import { UserId } from '@nestposts/users/domain/user/vo/user-id';
 import { Post } from '@nestposts/posts/domain/post/post.entity';
 import {
   EventSourcedRepository,
-  EventStore,
+  EventLog,
   TRANSPORT_EVENT_BUS_PUBLISHER,
 } from '@nestposts/transport-eventbus';
 import { persistenceTesting, transportTesting } from '../../test/support/transport-testing.module';
@@ -23,7 +23,7 @@ import { CompletePostWithDefaultTagCommand } from './complete-post-with-default-
 describe('CompletePostWithDefaultTagCommand.Handler', () => {
   let module: TestingModule;
   let commands: CommandBus;
-  let store: EventStore;
+  let log: EventLog;
   let posts: EventSourcedRepository<Post>;
   const published: IEvent[] = [];
 
@@ -63,7 +63,7 @@ describe('CompletePostWithDefaultTagCommand.Handler', () => {
     }).compile();
     await module.init();
     commands = module.get(CommandBus);
-    store = module.get(EventStore);
+    log = module.get(EventLog);
     posts = module.get(EventSourcedRepository);
     published.length = 0;
     module.get(EventBus).subscribe((event) => published.push(event));
@@ -72,7 +72,7 @@ describe('CompletePostWithDefaultTagCommand.Handler', () => {
   afterEach(() => module.close());
 
   it('completes the post its stream describes, with the tag the domain decides', async () => {
-    await inContext(() => store.append(postId.value, [preCreated()]));
+    await inContext(() => log.append([preCreated()], postId.value));
 
     await complete();
 
@@ -83,7 +83,7 @@ describe('CompletePostWithDefaultTagCommand.Handler', () => {
   });
 
   it('publishes the decision as a fact of the Post aggregate', async () => {
-    await inContext(() => store.append(postId.value, [preCreated()]));
+    await inContext(() => log.append([preCreated()], postId.value));
 
     await complete();
 
@@ -97,11 +97,11 @@ describe('CompletePostWithDefaultTagCommand.Handler', () => {
   });
 
   it('appends its decision to the stream, so the next delivery reads it back', async () => {
-    await inContext(() => store.append(postId.value, [preCreated()]));
+    await inContext(() => log.append([preCreated()], postId.value));
 
     await complete();
 
-    const history = await inContext(() => store.read(postId.value));
+    const history = await inContext(() => log.readStream(postId.value));
     expect(history.map((event) => event.constructor.name)).toEqual([
       'PostPreCreatedEvent',
       'PostCreatedEvent',
@@ -109,12 +109,12 @@ describe('CompletePostWithDefaultTagCommand.Handler', () => {
   });
 
   it('drops a decision the stream already carries: the aggregate is the last guard', async () => {
-    await inContext(() => store.append(postId.value, [preCreated(), alreadyComplete()]));
+    await inContext(() => log.append([preCreated(), alreadyComplete()], postId.value));
 
     await expect(complete()).resolves.toBeUndefined();
 
     expect(published).toHaveLength(0);
-    expect(await inContext(() => store.read(postId.value))).toHaveLength(2);
+    expect(await inContext(() => log.readStream(postId.value))).toHaveLength(2);
   });
 
   it('refuses a post it has never heard of', async () => {

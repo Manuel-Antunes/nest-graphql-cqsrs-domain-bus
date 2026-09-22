@@ -66,6 +66,11 @@ is for a domain spec that needs an ORM only so a `Collection` can find its owner
 container when there is none. A project opts in with `database: true` in its `vitest.config.mts`; one
 of pure domain rules leaves it off and needs no infrastructure at all.
 
+Which of the two it is costs a `select 1`. `MikroORM.init` resolves without reaching the server, so a
+probe that only initialises says "already listening" to a dead port — and to **another project's**
+Postgres holding 5432, which is how ten suites came to fail at once with `password authentication
+failed`, a port conflict wearing a credentials bug's clothes.
+
 **Native SQL has to say where the table is.** `tableIn(orm, 'posts')` qualifies a table with the
 configured schema, because a raw statement is resolved against the `search_path` and not against the
 connection's schema — which is a spec reading the column behind a mapping, and which is also why

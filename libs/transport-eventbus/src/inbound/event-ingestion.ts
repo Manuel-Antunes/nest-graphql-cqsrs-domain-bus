@@ -1,12 +1,14 @@
 import { EntityManager } from '@mikro-orm/core';
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { type AsyncContext, EventBus } from '@nestjs/cqrs';
 import { inRequestContext } from '@nestposts/database';
 import { MessageInbox } from '../persistence/message-inbox';
 import { RequestContextCodec } from '../request-context';
 import { type Ingestion, ingestionOf } from '../outbound/transport-metadata';
+import { ingesting } from '../tracing';
 import { TransportIdentity } from '../transport-identity';
-import { IngestionSink } from './ingestion-sink';
+import { UnitOfWork } from '@nestposts/cqsrs';
+import { EventLog } from '../persistence/event-log/event-log';
 
 /**
  * **The inbound half: an event that arrived becomes an event of this process, exactly once.**
@@ -32,13 +34,13 @@ import { IngestionSink } from './ingestion-sink';
  * ## The three guards that make each delivery one thing
  * In order, and each covers what the others do not:
  * 1. **origin**: an event this service produced and got back is dropped. It cuts the resend loop;
- * 2. **inbox**: {@link MessageInbox} writes the identifier in the SAME transaction as the sink's work.
+ * 2. **inbox**: {@link MessageInbox} writes the identifier in the SAME transaction as the append.
  *    A redelivery finds the row and does nothing;
  * 3. **the aggregate**: the handler on the other side decides against its own state. It is the last
  *    line of defence and the only one that survives an emptied inbox.
  *
  * ## What the transaction covers
- * The inbox row and whatever the {@link IngestionSink} writes. The event reaches the local bus **after**
+ * The inbox row and the {@link EventLog} append. The event reaches the local bus **after**
  * it commits — a handler triggered from inside the transaction inherits it through the async store and
  * then finds it gone (`Transaction is already committed`).
  */
@@ -49,10 +51,15 @@ export class EventIngestion {
   constructor(
     private readonly em: EntityManager,
     private readonly inbox: MessageInbox,
-    private readonly sink: IngestionSink,
     private readonly context: RequestContextCodec,
     private readonly eventBus: EventBus,
     private readonly identity: TransportIdentity,
+    /**
+     * Typed `EventLog` and not `EventLog | undefined`: a union makes `tsc` emit `Object` as the
+     * `design:paramtypes` entry, and Nest then has no token to resolve — the parameter arrives
+     * `undefined` even when the log is bound, and nothing says so.
+     */
+    @Optional() private readonly log?: EventLog,
   ) {}
 
   /**
@@ -63,9 +70,27 @@ export class EventIngestion {
    * sign is a saga that never closes. The rethrow keeps the message rejected, which is the right
    * behaviour for a poison message.
    */
+  /**
+   * **One message, one unit of work** — which is what makes the caller's `await` mean "the whole
+   * thing", not "the transaction".
+   *
+   * Publishing an ingested event sets off the saga and the projections, and `@nestjs/cqrs` hands
+   * them the event and returns. Whoever called this — `processSqsEvent`, in a function — would
+   * otherwise answer while the saga was still deciding, and Lambda freezes the container the moment
+   * the handler returns: the log ends one line after the saga said what it was about to do. Inside a
+   * unit, that work registers itself and the unit waits for it, so this promise covers the chain.
+   */
   async ingest(event: object): Promise<void> {
     try {
-      await this.ingestEvent(event);
+      const message = this.messageOf(event);
+      /**
+       * Decoded **once**, here, and handed both to the unit and to the publish. Decoding it twice
+       * would make two `AsyncContext` objects for one message, and the unit would then not recognise
+       * the command a saga dispatches with the request it received — a unit of its own, untracked,
+       * and the Lambda freeze is back.
+       */
+      const context = this.context.decode(message);
+      await UnitOfWork.run(() => this.ingestOnce(event, message, context), context);
     } catch (failure) {
       this.logger.error(
         `inbox ← failed to ingest ${event?.constructor?.name ?? typeof event}; it will be REJECTED`,
@@ -75,9 +100,11 @@ export class EventIngestion {
     }
   }
 
-  private async ingestEvent(event: object): Promise<void> {
-    const message = this.messageOf(event);
-
+  private async ingestOnce(
+    event: object,
+    message: Ingestion,
+    context?: AsyncContext,
+  ): Promise<void> {
     if (message.origin && message.origin === this.identity.applicationName) {
       this.logger.debug(
         `inbox ← ${message.messageType} (${message.identifier}) dropped: this service's own echo`,
@@ -85,8 +112,14 @@ export class EventIngestion {
       return;
     }
 
-    const context = this.context.decode(message);
+    await ingesting(message, () => this.ingestMessage(event, message, context));
+  }
 
+  private async ingestMessage(
+    event: object,
+    message: Ingestion,
+    context?: AsyncContext,
+  ): Promise<void> {
     await inRequestContext(this.em, async () => {
       const ingested = await this.em.transactional(async () => {
         if (!(await this.inbox.register(message.identifier, message.messageType, message.origin))) {
@@ -98,7 +131,7 @@ export class EventIngestion {
         this.logger.debug(
           `inbox ← ${message.messageType} (${message.identifier}) from '${message.origin ?? 'unknown'}'`,
         );
-        await this.sink.receive(event, context);
+        await this.log?.append([event]);
         return true;
       });
 

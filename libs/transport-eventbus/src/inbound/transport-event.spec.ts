@@ -21,7 +21,7 @@ import {
   RequestContextCodec,
   TransportRequestContext,
 } from '../request-context';
-import { startInProcessService } from '../testing/in-process-service';
+import { startInProcessService } from '../testing';
 import { TransportIdentity } from '../transport-identity';
 import { IncomingRequest } from './incoming-request';
 import { TransportRequestPipe } from './transport-request.pipe';

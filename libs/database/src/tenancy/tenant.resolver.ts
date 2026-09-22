@@ -1,6 +1,7 @@
 import type { ExecutionContext, Provider, Type } from '@nestjs/common';
 import { Injectable } from '@nestjs/common';
-import { ROOT_TENANT, TENANT_HEADER, Tenant } from './tenant';
+
+import { ROOT_TENANT, Tenant, TENANT_HEADER } from './tenant';
 
 /**
  * **Where the tenant is read from, per transport.**
@@ -22,7 +23,8 @@ export interface TenantResolver {
 export type TenantResolverFn = (context: ExecutionContext) => string;
 
 /** Every shape {@link TenancyModule} accepts: a class, an instance, or a function. */
-export type TenantResolverLike = Type<TenantResolver> | TenantResolver | TenantResolverFn;
+export type TenantResolverLike =
+  Type<TenantResolver> | TenantResolver | TenantResolverFn;
 
 type HeaderBag = Record<string, string | string[] | undefined>;
 
@@ -44,7 +46,8 @@ export class HeaderTenantResolver implements TenantResolver {
     const type = context.getType<string>();
 
     if (type === 'http') {
-      return context.switchToHttp().getRequest<{ headers?: HeaderBag }>()?.headers;
+      return context.switchToHttp().getRequest<{ headers?: HeaderBag }>()
+        ?.headers;
     }
     if (type === 'graphql') {
       /**
@@ -52,7 +55,9 @@ export class HeaderTenantResolver implements TenantResolver {
        * `GqlExecutionContext`, so this package keeps no dependency on `@nestjs/graphql`. It is the
        * same argument that helper unwraps.
        */
-      const graphql = context.getArgByIndex<{ req?: { headers?: HeaderBag } } | undefined>(2);
+      const graphql = context.getArgByIndex<
+        { req?: { headers?: HeaderBag } } | undefined
+      >(2);
       return graphql?.req?.headers;
     }
     return undefined;
@@ -60,7 +65,8 @@ export class HeaderTenantResolver implements TenantResolver {
 
   /** The tenant a header names, for a caller that has a context but no container. */
   static read(context: ExecutionContext): string {
-    const fromHeaders = HeaderTenantResolver.headersOf(context)?.[TENANT_HEADER];
+    const fromHeaders =
+      HeaderTenantResolver.headersOf(context)?.[TENANT_HEADER];
     if (fromHeaders) {
       return Tenant.normalize(fromHeaders);
     }
@@ -88,21 +94,33 @@ export class TenantResolverProviders {
     if (TenantResolverProviders.isClass(resolver)) {
       return [resolver, { provide: TENANT_RESOLVER, useExisting: resolver }];
     }
-    return [{ provide: TENANT_RESOLVER, useValue: TenantResolverProviders.asResolver(resolver) }];
+    return [
+      {
+        provide: TENANT_RESOLVER,
+        useValue: TenantResolverProviders.asResolver(resolver),
+      },
+    ];
   }
 
   /**
    * A class and a function are both `typeof 'function'`, so the prototype is what tells them apart:
    * a resolver class carries `tenantOf` on it, and a plain function carries nothing.
    */
-  private static isClass(resolver: TenantResolverLike): resolver is Type<TenantResolver> {
+  private static isClass(
+    resolver: TenantResolverLike,
+  ): resolver is Type<TenantResolver> {
     return (
       typeof resolver === 'function' &&
-      typeof (resolver as Type<TenantResolver>).prototype?.tenantOf === 'function'
+      typeof (resolver as Type<TenantResolver>).prototype?.tenantOf ===
+        'function'
     );
   }
 
-  private static asResolver(resolver: TenantResolver | TenantResolverFn): TenantResolver {
-    return typeof resolver === 'function' ? { tenantOf: (context) => resolver(context) } : resolver;
+  private static asResolver(
+    resolver: TenantResolver | TenantResolverFn,
+  ): TenantResolver {
+    return typeof resolver === 'function'
+      ? { tenantOf: (context) => resolver(context) }
+      : resolver;
   }
 }

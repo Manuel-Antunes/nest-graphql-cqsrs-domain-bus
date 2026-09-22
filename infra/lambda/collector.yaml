@@ -1,0 +1,72 @@
+# The OpenTelemetry collector that runs as a Lambda EXTENSION, beside the function.
+#
+# WHY IT EXISTS, AND WHAT IT REPLACES
+# ===================================
+# A function's container is frozen the moment its handler returns, so anything an in-process batch
+# processor is still holding is sent whenever — or never. The usual workaround is to flush by hand at
+# the end of every invocation: a round trip per request, and a telemetry concern sitting in the
+# middle of application code.
+#
+# This moves the batching out of the process. The SDK exports each span to localhost as it ends —
+# cheap, because it never leaves the sandbox — and the collector does the batching, the retrying and
+# the sending. The Lambda runtime tells an extension when an invocation is over, so nothing has to
+# remember to flush.
+#
+# THE `decouple` PROCESSOR IS THE WHOLE TRICK
+# ===========================================
+# Without it the collector exports while the invocation is still open, and the function waits for the
+# network before it can answer. `decouple` lets the invocation finish and the export carry on across
+# the next one — which is exactly the trade worth making for telemetry and never for work.
+#
+# `otlp_http`, AND NOT `otlphttp`
+# ===============================
+# The exporter's type is `otlp_http`, and the name is version-dependent — which is the reason to
+# write this down rather than to trust a memory of it. The layer pinned below carries collector
+# v0.157.0, where `otlp_http` is canonical and `otlphttp` is an accepted alias that logs
+# `"otlphttp" alias is deprecated; use "otlp_http" instead` on every cold start. Older collectors are
+# the other way round: v0.109.0 knows only `otlphttp` and refuses the whole file with
+# `unknown type: "otlp_http"`. Both were run to check.
+#
+# What makes this worth a paragraph is the failure mode. An extension that cannot load its
+# configuration does not fail the function — so a wrong name here is a stack that deploys, serves
+# traffic and reports nothing, forever. Whoever moves the layer version checks this line.
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 'localhost:4317'
+      http:
+        endpoint: 'localhost:4318'
+
+processors:
+  decouple:
+
+exporters:
+  otlp_http/betterstack:
+    endpoint: ${env:BETTER_STACK_URL}
+    headers:
+      Authorization: 'Bearer ${env:BETTER_STACK_API_KEY}'
+    timeout: 30s
+    retry_on_failure:
+      enabled: true
+      initial_interval: 1s
+      max_elapsed_time: 30s
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [decouple]
+      exporters: [otlp_http/betterstack]
+    metrics:
+      receivers: [otlp]
+      processors: [decouple]
+      exporters: [otlp_http/betterstack]
+    logs:
+      receivers: [otlp]
+      processors: [decouple]
+      exporters: [otlp_http/betterstack]
+
+  telemetry:
+    metrics:
+      level: none

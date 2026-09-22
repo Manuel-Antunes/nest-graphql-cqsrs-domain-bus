@@ -31,6 +31,12 @@
       "path": "../../libs/organizations/tsconfig.lib.json"
     },
     {
+      "path": "../../libs/observability/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/lambda/tsconfig.lib.json"
+    },
+    {
       "path": "../../libs/database/tsconfig.lib.json"
     },
     {

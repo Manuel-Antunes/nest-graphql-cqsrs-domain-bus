@@ -1,4 +1,4 @@
-import { Injectable, Logger, type OnModuleDestroy } from '@nestjs/common';
+import { Injectable, Logger, type OnModuleDestroy, Optional } from '@nestjs/common';
 import type { InstanceWrapper } from '@nestjs/core/injector/instance-wrapper';
 import {
   AsyncContext,
@@ -11,6 +11,8 @@ import {
 import { lastValueFrom, merge } from 'rxjs';
 import { isExcludedLocally } from './decorators/exclude-def.decorator';
 import { EventForwarder } from './outbound/event-forwarder';
+import { EventLog } from './persistence/event-log/event-log';
+import { UnitOfWork } from '@nestposts/cqsrs';
 
 /**
  * **The integration point: an `IEventBus` that publishes locally and through the transports.**
@@ -49,6 +51,7 @@ export class TransportEventBusService implements IEventBus, OnModuleDestroy {
   constructor(
     private readonly eventBus: EventBus,
     private readonly forwarder: EventForwarder,
+    @Optional() private readonly log?: EventLog,
   ) {}
 
   get publisher(): IEventPublisher {
@@ -85,12 +88,51 @@ export class TransportEventBusService implements IEventBus, OnModuleDestroy {
     asyncContext?: AsyncContext,
   ): Promise<void> {
     const [dispatcherContext, context] = normalize(dispatcherOrAsyncContext, asyncContext);
-    const outbound = (events ?? []).map((event) => {
-      this.attach(event as object, context);
-      return this.forwarder.forward(event as object);
-    });
+    /**
+     * **Copied, and that copy is load-bearing.** `AggregateRoot.commit()` hands `publishAll` its
+     * INTERNAL array and then calls `uncommit()`, which empties it. Publishing straight away never
+     * noticed; a unit of work holds the events until its commit phase, and by then the array it was
+     * given has been cleared — the command succeeds, appends nothing and tells nobody.
+     */
+    const staged = [...(events ?? [])];
+    staged.forEach((event) => this.attach(event as object, context));
 
-    for (const event of events ?? []) {
+    const unit = UnitOfWork.current();
+    if (unit?.staging) {
+      unit.on('prepareCommit', () => this.record(staged));
+      unit.on('commit', () => this.dispatch(staged, dispatcherContext, context));
+      return Promise.resolve();
+    }
+
+    /**
+     * No unit of work — a message arriving on a queue, a projection reacting, a spec. The phases
+     * still happen, in the same order, one after the other: Axon's `AbstractEventBus` does exactly
+     * this when `CurrentUnitOfWork` is not started, and the ordering is the part that matters. What
+     * is recorded before it is told cannot be told without being recorded.
+     *
+     * A service with no log takes the branch above and publishes **synchronously**, exactly as it
+     * always did. Going through a resolved promise instead would delay every local handler by a
+     * microtask, which is invisible until a caller asserts right after an unawaited `commit()`.
+     */
+    if (!this.log) {
+      return this.dispatch(staged, dispatcherContext, context);
+    }
+    return this.record(staged).then(() => this.dispatch(staged, dispatcherContext, context));
+  }
+
+  /**
+   * **What publishing actually is**, once there is nothing left to decide: the event goes out and it
+   * reaches this process. Called straight away when no unit of work is open — a message arriving on a
+   * queue, a projection reacting — and at the unit's `commit` phase when one is.
+   */
+  private dispatch<TEvent extends IEvent>(
+    events: TEvent[],
+    dispatcherContext: unknown,
+    context?: AsyncContext,
+  ): Promise<void> {
+    const outbound = events.map((event) => this.forwarder.forward(event as object));
+
+    for (const event of events) {
       if (!isExcludedLocally(event as object)) {
         this.locally(event, dispatcherContext, context);
       }
@@ -104,12 +146,28 @@ export class TransportEventBusService implements IEventBus, OnModuleDestroy {
        * event in it.
        */
       this.logger.error(
-        `${(events ?? []).map((event) => (event as object).constructor.name).join(', ')} was not ` +
+        `${events.map((event) => (event as object).constructor.name).join(', ')} was not ` +
           `published to the transport: ${failure.message}`,
         failure.stack,
       );
       throw failure;
     });
+  }
+
+  /**
+   * What this process publishes, written where every container can read it — which is what makes a
+   * subscription on one container see what another decided. Appending an identifier the log already
+   * has is a no-op, so an event that `EventIngestion` already appended inside its transaction costs
+   * one statement here and nothing else.
+   *
+   * It runs at the unit of work's **prepare** phase, before anything is told: a failure here fails
+   * the command, which is the point. An event nobody could record is not a fact.
+   */
+  private async record<TEvent extends IEvent>(events: TEvent[]): Promise<void> {
+    if (!this.log || events.length === 0) {
+      return;
+    }
+    await this.log.append(events as object[]);
   }
 
   private attach(event: object, context?: AsyncContext): void {

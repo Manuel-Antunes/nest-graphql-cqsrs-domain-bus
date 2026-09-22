@@ -12,6 +12,12 @@
       "require": "./dist/index.js",
       "default": "./dist/index.js"
     },
+    "./testing": {
+      "@nestposts/source": "./src/testing/index.ts",
+      "types": "./dist/testing/index.d.ts",
+      "require": "./dist/testing/index.js",
+      "default": "./dist/testing/index.js"
+    },
     "./*": {
       "@nestposts/source": "./src/*.ts",
       "types": "./dist/*.d.ts",
@@ -20,6 +26,7 @@
     }
   },
   "dependencies": {
+    "@nestposts/cqsrs": "workspace:*",
     "@nestposts/database": "workspace:*",
     "@nestposts/platform": "workspace:*"
   }

@@ -29,9 +29,9 @@ export default async function LoginPage() {
           <CardDescription>
             A senha vai para uma{' '}
             <span className="font-mono">server action</span>, que fala com o
-            Cognito e guarda os tokens em cookies{' '}
+            Better Auth desta aplicação e guarda a sessão num cookie{' '}
             <span className="font-mono">httpOnly</span>. O navegador nunca vê o
-            refresh token.
+            token.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

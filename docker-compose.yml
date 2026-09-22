@@ -13,10 +13,12 @@ services:
     image: rabbitmq:4-management
     container_name: nestposts-rabbitmq
     ports:
-      - '5672:5672'
+      # RABBITMQ_PORT exists for the same reason POSTGRES_PORT does: another project on the machine
+      # may already hold the default. Whoever moves it moves RABBITMQ_URL with it.
+      - '${RABBITMQ_PORT:-5672}:5672'
       # A API de management, que o teste da saga usa para republicar uma mensagem na mão — é assim que
       # ele prova a idempotência do inbox, e de passagem valida o formato de fio.
-      - '15672:15672'
+      - '${RABBITMQ_MANAGEMENT_PORT:-15672}:15672'
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-guest}
@@ -41,4 +43,122 @@ services:
       test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-nestposts} -d ${POSTGRES_DB:-nestposts}']
       interval: 5s
       timeout: 5s
+      retries: 20
+
+  # THE APPLICATIONS, under the `apps` profile — `docker compose --profile apps up -d --build`.
+  #
+  # They are off by default because the ordinary loop is `pnpm dev`, which runs them from source with
+  # a watcher. What the profile is for is the other two: a stack somebody can bring up without a
+  # toolchain, and the images `apps/web-e2e` drives through Testcontainers.
+  #
+  # Each image is the one its own `Dockerfile` builds, named exactly as `nx run <app>:docker:build`
+  # tags it — so a `docker compose --profile apps up` after an `nx docker:build` reuses what Nx
+  # already produced instead of building it twice.
+  #
+  # INSIDE the network everything addresses everything by service name on its REAL port: the
+  # applications talk to `postgres:5432` and `rabbitmq:5672`, never to a published one. Only what the
+  # host has to reach is published.
+  migrator:
+    profiles: ['apps']
+    image: nestposts/migrator:dev
+    build:
+      context: .
+      dockerfile: apps/migrator/Dockerfile
+    container_name: nestposts-migrator
+    command: ['setup']
+    environment:
+      POSTGRES_URL: postgresql://${POSTGRES_USER:-nestposts}:${POSTGRES_PASSWORD:-nestposts}@postgres:5432/${POSTGRES_DB:-nestposts}
+      AUTH_SECRET: ${AUTH_SECRET:-nestposts-compose-secret}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: 'no'
+
+  posts-api:
+    profiles: ['apps']
+    image: nestposts/posts-api:dev
+    build:
+      context: .
+      dockerfile: apps/posts-api/Dockerfile
+    container_name: nestposts-posts-api
+    ports:
+      - '${API_PORT:-3000}:3000'
+    environment:
+      PORT: '3000'
+      POSTGRES_URL: postgresql://${POSTGRES_USER:-nestposts}:${POSTGRES_PASSWORD:-nestposts}@postgres:5432/${POSTGRES_DB:-nestposts}
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672
+      POSTS_TRANSPORT: rabbitmq
+      AUTH_SECRET: ${AUTH_SECRET:-nestposts-compose-secret}
+      AUTH_URL: http://localhost:${API_PORT:-3000}
+      WEB_URL: http://localhost:${WEB_PORT:-4300}
+      AUTH_TRUSTED_ORIGINS: http://localhost:${API_PORT:-3000},http://localhost:${WEB_PORT:-4300}
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      migrator:
+        condition: service_completed_successfully
+
+  tagging:
+    profiles: ['apps']
+    image: nestposts/tagging:dev
+    build:
+      context: .
+      dockerfile: apps/tagging/Dockerfile
+    container_name: nestposts-tagging
+    environment:
+      POSTGRES_URL: postgresql://${POSTGRES_USER:-nestposts}:${POSTGRES_PASSWORD:-nestposts}@postgres:5432/${POSTGRES_DB:-nestposts}
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672
+      TAGGING_TRANSPORT: rabbitmq
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      migrator:
+        condition: service_completed_successfully
+
+  # `NEXT_PUBLIC_API_URL` is the INTERNAL address, and that is not a slip: `apps/web/src/lib/env.ts`
+  # is read by server components and by the `/api/graphql` route, never by the browser — the browser
+  # only ever talks to this origin.
+  web:
+    profiles: ['apps']
+    image: nestposts/web:dev
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    container_name: nestposts-web
+    ports:
+      - '${WEB_PORT:-4300}:3000'
+    environment:
+      PORT: '3000'
+      POSTGRES_URL: postgresql://${POSTGRES_USER:-nestposts}:${POSTGRES_PASSWORD:-nestposts}@postgres:5432/${POSTGRES_DB:-nestposts}
+      AUTH_SECRET: ${AUTH_SECRET:-nestposts-compose-secret}
+      WEB_URL: http://localhost:${WEB_PORT:-4300}
+      NEXT_PUBLIC_API_URL: http://posts-api:3000
+    depends_on:
+      posts-api:
+        condition: service_started
+
+  # SNS and SQS, locally. The AWS transport is the same code path as the RabbitMQ one — the topic is
+  # the exchange, a queue subscribed with a filter policy is a binding — so this is what makes
+  # `POSTS_TRANSPORT=aws pnpm dev` a real exercise of what deploys, rather than a mock.
+  #
+  # The topology is created by `docker/localstack/init/10-messaging.sh`, which LocalStack runs once
+  # the services are ready. Point the applications at it with:
+  #
+  #   export AWS_ENDPOINT_URL=http://localhost:4566
+  #   export AWS_REGION=us-east-1
+  localstack:
+    image: localstack/localstack:4
+    container_name: nestposts-localstack
+    ports:
+      - '${LOCALSTACK_PORT:-4566}:4566'
+    environment:
+      SERVICES: sns,sqs
+      DEBUG: ${LOCALSTACK_DEBUG:-0}
+      AWS_DEFAULT_REGION: ${AWS_REGION:-us-east-1}
+    volumes:
+      - ./docker/localstack/init:/etc/localstack/init/ready.d:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'awslocal sqs list-queues && awslocal sns list-topics']
+      interval: 5s
+      timeout: 10s
       retries: 20

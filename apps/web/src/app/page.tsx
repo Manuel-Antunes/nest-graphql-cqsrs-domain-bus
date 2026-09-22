@@ -25,8 +25,8 @@ const flows = [
     href: '/login',
     icon: KeyRoundIcon,
     title: 'Entrar',
-    what: 'USER_PASSWORD_AUTH no Cognito, por server action',
-    proves: 'O bearer é o ID token, e o `aud` dele é conferido pela API.',
+    what: 'e-mail e senha no Better Auth, por server action',
+    proves: 'O cookie que esta aplicação assina é o que a API resolve.',
   },
   {
     href: '/feed',
@@ -65,7 +65,7 @@ const flows = [
     title: 'Identidade',
     what: 'me — a interface User, polimórfica',
     proves:
-      'possibleTypes no cache, e o account linking entre Keycloak e Cognito.',
+      'possibleTypes no cache, e o perfil de domínio criado no primeiro pedido.',
   },
   {
     href: '/federation',

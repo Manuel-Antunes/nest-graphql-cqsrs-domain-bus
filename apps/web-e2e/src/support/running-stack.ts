@@ -34,8 +34,8 @@ export class RunningStack {
     writeFileSync(RunningStack.accountsFile, JSON.stringify(accounts, null, 2));
   }
 
-  static down(): void {
-    RunningStack.stack?.down();
+  static async down(): Promise<void> {
+    await RunningStack.stack?.down();
     RunningStack.stack = undefined;
   }
 

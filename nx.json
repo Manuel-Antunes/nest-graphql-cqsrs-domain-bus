@@ -46,6 +46,19 @@
       "options": {
         "targetName": "e2e-ci"
       }
+    },
+    {
+      "plugin": "@nx/docker",
+      "options": {
+        "buildTarget": {
+          "name": "docker:build",
+          "cwd": ".",
+          "skipDefaultTag": true
+        },
+        "runTarget": {
+          "name": "docker:run"
+        }
+      }
     }
   ],
   "analytics": false

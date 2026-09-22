@@ -5,7 +5,7 @@ import { Test } from '@nestjs/testing';
 import { EventType } from '@nestposts/platform/domain/shared/event-type';
 import { MemoryClient } from '../in-memory/memory-client';
 import { EVERY_NAMESPACE, Publisher } from '../decorators/publisher.decorator';
-import { RecordingClient } from '../testing/recording-client';
+import { RecordingClient } from '../testing';
 import { EventAddress } from './event-address';
 import { OutboxRouting } from './outbox-routing';
 

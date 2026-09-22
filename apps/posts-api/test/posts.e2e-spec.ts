@@ -1,8 +1,10 @@
 import type { INestApplication } from '@nestjs/common';
 import { MikroORM } from '@mikro-orm/core';
 import { EventBus, type IEvent } from '@nestjs/cqrs';
+import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import { Test } from '@nestjs/testing';
 import { TestSchemaModule } from '@nestposts/database/testing';
+import { TaggingStandIn } from './support/tagging-stand-in.saga';
 import { DefaultTagSeeder } from '@nestposts/migrator/seeders/default-tag.seeder';
 import { AppModule } from '../src/app.module';
 import { PostRequest } from '../src/application/shared/post-request';
@@ -75,8 +77,11 @@ describe('posts (e2e)', () => {
   };
 
   beforeAll(async () => {
-    const module = await Test.createTestingModule({ imports: [AppModule, TestSchemaModule.forRoot()] }).compile();
-    app = module.createNestApplication();
+    const module = await Test.createTestingModule({
+      imports: [AppModule, TestSchemaModule.forRoot()],
+      providers: [TaggingStandIn],
+    }).compile();
+    app = module.createNestApplication<NestFastifyApplication>(new FastifyAdapter());
     await app.listen(0, '127.0.0.1');
     await app.get(MikroORM).seeder.seed(DefaultTagSeeder);
     client = await GraphqlClient.for(app);
@@ -490,6 +495,167 @@ describe('posts (e2e)', () => {
 
       expect(errors).toBeUndefined();
       expect(data!.post.author.name).toBe('manuel');
+      await anonymous.dispose();
+    });
+  });
+
+
+  describe('federation', () => {
+    const ENTITIES = `
+      query Entities($representations: [_Any!]!) {
+        _entities(representations: $representations) {
+          __typename
+          ... on Post { id title version }
+          ... on Tag { id name }
+          ... on Author { id name email }
+          ... on User { id name email }
+        }
+      }`;
+    const MISSING = '00000000-0000-4000-8000-000000000000';
+
+    type Representation = { __typename: string; id: string };
+    type Entity = Record<string, unknown> | null;
+
+    const ref = (typename: string, id: string): Representation => ({ __typename: typename, id });
+
+    const resolvedBy = async (
+      by: GraphqlClient,
+      representations: Representation[],
+    ): Promise<Entity[]> => {
+      const { data, errors } = await by.execute<{ _entities: Entity[] }>(ENTITIES, {
+        representations,
+      });
+      expect(errors, JSON.stringify(errors)).toBeUndefined();
+      return data!._entities;
+    };
+
+    const resolve = (...representations: Representation[]) => resolvedBy(client, representations);
+
+    const completedPost = async (title: string) => {
+      const created = await createCompletePost(title);
+      const { data } = await client.execute(
+        `query($id: ID!) { post(id: $id) { id title version author { id email } tags(first: 1) { edges { node { id name } } } } }`,
+        { id: created.id },
+      );
+      return data!.post;
+    };
+
+    const sdl = async (): Promise<string> => {
+      const { data, errors } = await client.execute<{ _service: { sdl: string } }>(
+        '{ _service { sdl } }',
+      );
+      expect(errors, JSON.stringify(errors)).toBeUndefined();
+      return data!._service.sdl;
+    };
+
+    let reader: GraphqlClient;
+    let readerId: string;
+
+    beforeAll(async () => {
+      reader = await GraphqlClient.for(app);
+      await reader.signUp('reader@example.com', 'reader');
+      const { data } = await reader.execute('{ me { id } }');
+      readerId = data!.me.id;
+    });
+
+    afterAll(() => reader.dispose());
+
+    it('answers _service with the SDL, announcing the federation spec it speaks', async () => {
+      expect(await sdl()).toContain('https://specs.apollo.dev/federation/v2.7');
+    });
+
+    it('the directives it imported come unprefixed, and the ones it did not stay prefixed', async () => {
+      const schema = await sdl();
+
+      expect(schema).toContain('@key(fields: "id")');
+      expect(schema).not.toContain('@federation__key');
+      expect(schema).toContain('federation__external');
+    });
+
+    it('every entity carries its key, and PageInfo is the shared value type', async () => {
+      const schema = await sdl();
+
+      expect(schema).toContain('type Post @key(fields: "id")');
+      expect(schema).toContain('type Tag @key(fields: "id")');
+      expect(schema).toContain('type Author implements IUser @key(fields: "id")');
+      expect(schema).toContain('type User implements IUser @key(fields: "id")');
+      expect(schema).toContain('interface IUser @key(fields: "id")');
+      expect(schema).toContain('type PageInfo @shareable');
+    });
+
+    it('a post is reachable by its key alone', async () => {
+      const post = await completedPost('Federated');
+
+      const [entity] = await resolve(ref('Post', post.id));
+
+      expect(entity).toMatchObject({ __typename: 'Post', id: post.id, title: 'Federated', version: 2 });
+    });
+
+    it('the answer comes back in the order the representations were sent', async () => {
+      const first = await createCompletePost('First federated');
+      const second = await createCompletePost('Second federated');
+
+      const entities = await resolve(ref('Post', second.id), ref('Post', first.id));
+
+      expect(entities.map((entity) => entity!.title)).toEqual([
+        'Second federated',
+        'First federated',
+      ]);
+    });
+
+    it('an entity that does not exist is null in its own position', async () => {
+      const post = await createCompletePost('It exists');
+
+      const entities = await resolve(ref('Post', MISSING), ref('Post', post.id), ref('Post', MISSING));
+
+      expect(entities).toHaveLength(3);
+      expect(entities[0]).toBeNull();
+      expect(entities[1]).toMatchObject({ title: 'It exists' });
+      expect(entities[2]).toBeNull();
+    });
+
+    it('several types travel in the same call', async () => {
+      const post = await completedPost('With a tag');
+      const tagId = post.tags.edges[0].node.id;
+
+      const entities = await resolve(
+        ref('Tag', tagId),
+        ref('Post', post.id),
+        ref('Author', post.author.id),
+      );
+
+      expect(entities.map((entity) => entity!.__typename)).toEqual(['Tag', 'Post', 'Author']);
+      expect(entities[0]).toMatchObject({ name: 'Untagged' });
+      expect(entities[2]).toMatchObject({ email: 'manuel@example.com' });
+    });
+
+    it('asking for the wrong concrete type answers null, and not the other type', async () => {
+      const authorId = (await client.execute('{ me { id } }')).data!.me.id;
+
+      const entities = await resolve(
+        ref('User', authorId),
+        ref('Author', readerId),
+        ref('User', readerId),
+        ref('Author', authorId),
+      );
+
+      expect(entities[0]).toBeNull();
+      expect(entities[1]).toBeNull();
+      expect(entities[2]).toMatchObject({ __typename: 'User', email: 'reader@example.com' });
+      expect(entities[3]).toMatchObject({ __typename: 'Author', email: 'manuel@example.com' });
+    });
+
+    it('the router calls without a session, and the subgraph answers', async () => {
+      const post = await completedPost('No session');
+      const anonymous = await GraphqlClient.for(app);
+
+      const entities = await resolvedBy(anonymous, [
+        ref('Post', post.id),
+        ref('Author', post.author.id),
+      ]);
+
+      expect(entities[0]).toMatchObject({ id: post.id, title: 'No session' });
+      expect(entities[1]).toMatchObject({ id: post.author.id });
       await anonymous.dispose();
     });
   });

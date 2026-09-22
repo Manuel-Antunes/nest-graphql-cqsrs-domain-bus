@@ -149,6 +149,21 @@
         "options": {
           "command": "node apps/migrator/dist/main.js setup"
         }
+      },
+      "docker:build": {
+        "options": {
+          "args": [
+            "--file apps/migrator/Dockerfile",
+            "--tag nestposts/migrator:dev"
+          ]
+        },
+        "parallelism": false
+      },
+      "docker:run": {
+        "options": {
+          "cwd": ".",
+          "command": "docker run {args} nestposts/migrator:dev"
+        }
       }
     }
   }

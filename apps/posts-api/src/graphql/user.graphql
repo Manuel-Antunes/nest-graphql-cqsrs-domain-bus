@@ -4,7 +4,7 @@ Anyone with an account.
 An interface rather than a type because what a user *can do* is not a class they were born in: it is
 composed, at read time, from the roles they carry. Each capability shows up as its own concrete type.
 """
-interface IUser {
+interface IUser @key(fields: "id") {
   id: ID!
   name: String!
   email: String!
@@ -15,7 +15,7 @@ A user with no capability attached: authenticates, reads posts, subscribes to up
 
 Not writing is not a permission that is missing: it is a field that does not exist.
 """
-type User implements IUser {
+type User implements IUser @key(fields: "id") {
   id: ID!
   name: String!
   email: String!
@@ -27,7 +27,7 @@ the posts. `Author` is that same user, cast over the delegate; there is no secon
 
 The `posts` field is not declared here: it has a resolver of its own, in `author-posts.graphql`.
 """
-type Author implements IUser {
+type Author implements IUser @key(fields: "id") {
   id: ID!
   name: String!
   email: String!

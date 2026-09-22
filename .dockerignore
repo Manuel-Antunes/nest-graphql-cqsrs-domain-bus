@@ -1,0 +1,14 @@
+**/node_modules
+**/dist
+**/.next
+**/.open-next
+**/target
+**/coverage
+.nx
+.sst
+.git
+.github
+**/*.log
+apps/web-e2e/test-results
+apps/web-e2e/playwright-report
+infra/dist

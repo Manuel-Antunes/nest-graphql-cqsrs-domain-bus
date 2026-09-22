@@ -1,17 +1,18 @@
 import { type DynamicModule, Module, type Provider } from '@nestjs/common';
 import { DiscoveryModule } from '@nestjs/core';
+import { EventBus } from '@nestjs/cqrs';
 import { DatabaseModule } from '@nestposts/database';
 import { TRANSPORT_EVENT_BUS_PUBLISHER, TRANSPORT_EVENT_BUS_SERVICE } from './constants';
 import { EventIngestion } from './inbound/event-ingestion';
 import { IncomingRequest } from './inbound/incoming-request';
-import { IngestionSink, NoDurableState } from './inbound/ingestion-sink';
 import { TransportRequestPipe } from './inbound/transport-request.pipe';
 import { EventEnvelopeFactory } from './outbound/event-envelope.factory';
 import { OutboxRouting } from './outbound/outbox-routing';
-import { EventSourcedRepository } from './persistence/event-store/event-sourced.repository';
-import { EventStore } from './persistence/event-store/event-store';
-import { eventStoreEntities } from './persistence/event-store/event-store.entity';
-import { eventStoreProviders } from './persistence/event-store/event-store.providers';
+import { EventSourcedRepository } from './persistence/event-log/event-sourced.repository';
+import { EventLog } from './persistence/event-log/event-log';
+import { EventSourcedEventBus } from './subscriptions/event-sourced-event-bus';
+import { eventLogEntities } from './persistence/event-log/event-log.entity';
+import { eventLogProviders } from './persistence/event-log/event-log.providers';
 import { MessageInbox } from './persistence/message-inbox';
 import { transportEntities } from './persistence/message-inbox.entity';
 import { CorrelatedRequestContext, RequestContextCodec } from './request-context';
@@ -110,14 +111,18 @@ type Composed = Omit<TransportEventBusModuleOptions, 'identity' | 'publishes'>;
  * all.
  */
 const tables = (options: Composed): DynamicModule[] =>
-  options.inbox || options.eventStore
+  options.inbox || logged(options)
     ? [
         DatabaseModule.forFeature([
           ...(options.inbox ? transportEntities : []),
-          ...(options.eventStore ? eventStoreEntities : []),
+          ...(logged(options) ? eventLogEntities : []),
         ]),
       ]
     : [];
+
+/** Whether this service keeps a log at all: it replays an aggregate, or it serves subscriptions. */
+const logged = (options: Composed): boolean =>
+  Boolean(options.eventStore) || Boolean(options.subscriptions);
 
 const mechanism = (options: Composed): Provider[] => {
   refuseAmbiguity(options);
@@ -125,15 +130,12 @@ const mechanism = (options: Composed): Provider[] => {
   return [
     ...transportEventBusProviders,
     { provide: RequestContextCodec, useClass: options.requestContext ?? CorrelatedRequestContext },
-    ...(options.eventStore
-      ? [
-          ...eventStoreProviders,
-          ...options.eventStore.map((aggregate) => EventSourcedRepository.of(aggregate)),
-        ]
-      : [{ provide: IngestionSink, useClass: options.sink ?? NoDurableState }]),
+    ...(logged(options) ? eventLogProviders : []),
+    ...(options.eventStore ?? []).map((aggregate) => EventSourcedRepository.of(aggregate)),
     ...(options.inbox
       ? [...eventIngestionProviders, { provide: MessageInbox, useClass: options.inbox }]
       : []),
+    ...(options.subscriptions ? [EventSourcedEventBus] : []),
     ...(options.publishers ?? []),
     ...(options.providers ?? []),
   ];
@@ -148,7 +150,9 @@ const exported = (options: Composed): NonNullable<TransportEventBusModuleOptions
   TransportRequestPipe,
   RequestContextCodec,
   ...(options.inbox ? [EventIngestion, MessageInbox] : []),
-  ...(options.eventStore ? [EventStore, EventSourcedRepository] : []),
+  ...(logged(options) ? [EventLog] : []),
+  ...(options.eventStore ? [EventSourcedRepository] : []),
+  ...(options.subscriptions ? [EventSourcedEventBus] : []),
 ];
 
 const identityOf = (declared: DeclaredIdentity, publishes?: boolean): TransportIdentity =>
@@ -160,11 +164,4 @@ const identityFrom = (answer: TransportEventBusIdentity | DeclaredIdentity): Tra
     : identityOf(answer.identity, answer.publishes);
 
 const refuseAmbiguity = (options: Composed): void => {
-  if (options.eventStore && options.sink) {
-    throw new Error(
-      `TransportEventBusModule was given both a sink (${options.sink.name}) and an eventStore: they ` +
-        `bind the same port, and one of them would quietly never run. An event-sourced service makes ` +
-        `the stream durable — drop the sink, or drop the eventStore and append in your own.`,
-    );
-  }
 };

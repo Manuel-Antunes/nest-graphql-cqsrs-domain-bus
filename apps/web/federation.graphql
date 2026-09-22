@@ -1,0 +1,7 @@
+scalar _Any
+
+union _Entity = Author | Post | Tag | User
+
+extend type Query {
+  _entities(representations: [_Any!]!): [_Entity]!
+}

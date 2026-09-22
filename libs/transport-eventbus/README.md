@@ -14,7 +14,7 @@ upstream, what the new versions forced, and what was added here; this file is ho
 | | |
 |---|---|
 | publishing | `TransportEventBusService` (an `IEventBus`) → `EventForwarder` → `OutboxRouting` → a `ClientProxy`, serialising with the transport's `EventEnvelopeSerializer` |
-| receiving | the transport's `EventEnvelopeDeserializer` → `@TransportEvent()` (a pipe) → your `@EventPattern` controller → `EventIngestion` → `MessageInbox` + `IngestionSink` → the local `EventBus` |
+| receiving | the transport's `EventEnvelopeDeserializer` → `@TransportEvent()` (a pipe) → your `@EventPattern` controller → `EventIngestion` → `MessageInbox` + `EventLog` → the `EventBus` |
 | what crosses | `EventEnvelope`: **`data`**, the event as the application wrote it, and **`metadata`**, a flat map that becomes the transport's headers |
 | what keeps it once | the origin mark, the inbox, and your aggregate |
 
@@ -554,6 +554,21 @@ A guard cannot use `@TransportRequest()`, because a pipe runs **after** the guar
 service put in its context (a tenant, a user, a locale, a feature flag) is on the envelope's metadata,
 so authorisation on a message is the same code as authorisation on a request.
 
+### The trace travels with it
+
+`traceparent` goes on the envelope's metadata, written where the metadata is built and read where a
+message is ingested — so the far side's work is a **child** of the request that caused it, and a
+choreographed saga is one trace rather than two that share a correlation id. The ingestion opens one
+`CONSUMER` span around the whole of itself, the transaction included.
+
+It is `@opentelemetry/api` and nothing else, which is a no-op until an application starts an SDK
+(`@nestposts/observability`). Nothing behaves differently when none is running.
+
+Like the correlation ids, the trace keys are **excluded** from what
+`TransportRequestContext.toAttributes()` hands back: re-emitting the previous hop's `traceparent`
+would make everything this service publishes a sibling of the message it received instead of a child
+of what it is doing now. The trace stays one trace, which is what makes it hard to notice.
+
 `src/inbound/request-propagation.spec.ts` is that chain as a test: the guard sees the tenant, the saga
 reads the application's own context back, the request-scoped command handler resolves under the same
 correlation id, and a delivery whose tenant is refused never reaches the ingestion.
@@ -686,7 +701,217 @@ The one thing the body still encodes is a `Date`: `{"@date":"…"}` goes out and
 because JSON has no date type and JavaScript has no field types at runtime to guess one.
 
 In process there are no headers, so `MemoryEventEnvelopeSerializer` puts both halves in the value —
-same pair, same names.
+same pair, same names. On SNS and SQS there are headers, but only ten of them, so the metadata
+travels in the body and the routing facts are lifted into attributes: see **On AWS**, below.
+
+---
+
+## On AWS: SNS is the exchange, SQS is the queue
+
+Nothing in a controller, a handler or an event changes. What changes is the bootstrap, and the
+mapping is close enough to read straight across:
+
+| RabbitMQ | AWS | |
+|---|---|---|
+| topic exchange | **SNS topic** | one destination, every interested consumer |
+| queue bound to `posts.#` | **SQS queue** subscribed with a filter policy | `SnsFilterPolicy.everyEventOf(POSTS_NAMESPACE)` |
+| routing key | the `routingKey` message attribute, and `pattern` in the body | the same three segments |
+| AMQP headers | the body's `metadata` | SQS allows **ten** attributes; an envelope with a tenant and a trace needs more |
+| `ClientRMQ` | `SnsClientProxy` / `SqsClientProxy` | a topic for a fact, a queue for a message addressed to one service |
+| `ServerRMQ` | `SqsStrategy` | polling, or driven by a Lambda |
+
+### Publishing
+
+```ts
+export const postEventsClient = (): ClientProxy =>
+  new SnsClientProxy({
+    topicArn: process.env.POSTS_TOPIC_ARN!,
+    serializer: new AwsEventEnvelopeSerializer(),
+  });
+```
+
+The destination and the wire, and **both** are the caller's to name. `AwsEventEnvelopeSerializer` is
+the one this library ships and almost certainly the one wanted, but it is passed rather than assumed:
+a client that defaults its own wire format is a client that decides, quietly, what a service talking
+to something it did not write is allowed to say. It is the same rule
+`ClientProxyFactory.create({ transport: Transport.RMQ, options: { serializer } })` follows, and the
+memory pair, and now these two.
+
+It is **optional**, and left out these behave like any plain `ClientProxy`: Nest's own
+`IdentitySerializer`, the packet on the wire as it came in. That is a deliberate nothing rather than
+a helpful guess — but it is nothing, so a client meant to publish envelopes and given no serializer
+publishes something the far side cannot read. `SqsStrategy`'s **deserializer** is the one that stayed
+required, because it is the whole of how a message becomes an event again.
+
+`SqsClientProxy` writes the **same** body, so a queue fed both ways — subscribed to the topic and
+written to directly — needs one consumer and one deserializer. Use it for what is not a fact: a
+command sent to one worker, a delayed sentinel (`new SqsRecordBuilder(payload).setDelaySeconds(40)`),
+a queue somebody else owns.
+
+On a **FIFO** topic or queue the client fills both ordering fields from the event itself:
+`MessageGroupId` is the aggregate (the last segment of the routing key), so one post's events are
+ordered against each other while different posts proceed in parallel; `MessageDeduplicationId` is the
+envelope's identifier, so a retried publish is deduplicated by AWS before the far side's inbox has
+to.
+
+### Receiving
+
+```ts
+// a long-running process — `docker compose`, `pnpm dev`, a container
+{
+  strategy: new SqsStrategy({
+    queueUrl: process.env.TAGGING_QUEUE_URL!,
+    deserializer: new SqsEventEnvelopeDeserializer(),
+  }),
+}
+
+// a Lambda: no queueUrl, because the invocation brings the records
+export const handler = queueHandler(booted);      // @nestposts/lambda
+```
+
+`queueUrl` also takes a **list**, because a process can serve several queues where a function serves
+exactly one. Be careful what that buys: SQS orders messages *within* a queue, so a consumer that
+appends to an aggregate's stream wants one queue and not several — `infra/aws/messaging/queues.ts`
+has that failure measured.
+
+Same class, same `processRecord`, same controllers — so what local development exercises is what
+deploys. The polling loop deletes what succeeded and leaves what failed, which is the whole of the
+acknowledgement protocol: an undeleted message comes back when its visibility timeout runs out.
+
+**`batch: { partialResponses: true }` is not optional on the Lambda's event-source mapping.** Without
+it AWS ignores `batchItemFailures` and decides the whole batch by whether the invocation threw — so
+one poison message redrives the nine that succeeded beside it, and a handler that returns instead
+deletes the one that failed.
+
+A record whose handler threw fails, and SQS redelivers it after the queue's visibility timeout. That
+is the whole protocol: the strategy has no opinion about what a particular failure means, and a
+service that wants one — a poison message to drop, a rate limit to wait out — expresses it in its own
+handler, where the failure is understood, rather than in a transport that only sees an exception.
+
+### The binding is a filter policy
+
+A queue has no bindings, so the selection happens twice and in two places: the **subscription**
+decides what reaches the queue, and the **strategy** matches the routing key against the handlers'
+patterns once it is there. `SnsFilterPolicy` is the first half, built from the same namespace or
+event class `@EventPattern` takes:
+
+```ts
+SnsFilterPolicy.everyEventOf(POSTS_NAMESPACE)      // { namespace: ['posts'] }         ← posts.#
+SnsFilterPolicy.everyEventOf(PostCreatedEvent)     // { qualifiedName: [...] }          ← posts.PostCreated.*
+SnsFilterPolicy.everyEventNamed('posts.PostCreated')  // the same, for infrastructure code
+SnsFilterPolicy.exceptFrom('tagging')              // { origin: [{ 'anything-but': [...] }] }
+```
+
+`exceptFrom` is an **economy, not a guard**: the origin mark on the message is what stops a service
+ingesting its own echo, and this is what stops it being delivered, stored and read first.
+
+**Turn raw message delivery on.** Without it SNS wraps every message in a notification of its own
+and the message attributes never reach SQS — which is what the filter policy reads. The deserializer
+unwraps the notification anyway, so the symptom of forgetting is not a crash: it is a queue that
+receives everything, and a console showing a wrapper instead of the event.
+
+### What a message looks like
+
+```
+message attributes  namespace      posts                        ← what the filter policy reads
+                    qualifiedName  posts.PostCreated
+                    messageType    posts.PostCreated#2.0.0
+                    routingKey     posts.PostCreated.9f1d…
+                    origin         tagging
+
+body                {"pattern":"posts.PostCreated.9f1d…",
+                     "data":{"postId":"9f1d…","title":"Nest","version":2,
+                             "occurredAt":{"@date":"2026-09-08T12:00:00.000Z"}},
+                     "metadata":{"cqrs-transport-message-type":"posts.PostCreated#2.0.0",
+                                 "cqrs-transport-identifier":"0f0d2a5e-…",
+                                 "cqrs-transport-origin":"tagging",
+                                 "cqrs-transport-correlation-id":"7b2c…",
+                                 "x-tenant":"acme","traceparent":"00-4bf9…-01"}}
+```
+
+`data` is still the event, readable as itself. `metadata` is beside it rather than in the attributes
+because ten is not enough: five transport keys, correlation, causation, the tenant, whatever the
+application's context declares and `traceparent` are eleven before anybody adds anything. A wire
+format that spent an attribute per key would work until the eleventh was added, on whichever service
+happened to add it.
+
+### Locally
+
+`docker compose up -d localstack` brings up SNS and SQS and creates the topology —
+`docker/localstack/init/10-messaging.sh`, which is the same FIFO topic, the same two queues and the
+same filter policies `infra/aws/messaging/` deploys. Then:
+
+```bash
+export AWS_ENDPOINT_URL=http://localhost:4566
+export AWS_REGION=us-east-1
+POSTS_TRANSPORT=aws TAGGING_TRANSPORT=aws pnpm dev
+```
+
+`awsClientConfig()` is what makes that enough: with an endpoint set and no key in the environment it
+supplies the pair LocalStack documents, because the SDK refuses to run without credentials and says
+so in a message that reads like a broken deployment.
+
+---
+
+## Subscriptions across processes
+
+A `SubscriptionBus` stream is fed by the `EventBus`, which is **one per process**. For a service that
+is one process that is exactly right. It stops being right the moment the service runs as several — a
+function per trigger, a few replicas — because a subscriber is connected to one of them and the
+container that closes a choreographed saga is usually another.
+
+The answer is not a second port. It is that **the bus itself is event sourced**, so a handler writes
+what `@nestjs/cqrs` always let it write:
+
+```ts
+@SubscriptionHandler(OnPostCreated)
+export class Handler implements ISubscriptionHandler<OnPostCreated> {
+  constructor(private readonly eventBus: EventBus) {}
+
+  subscribe(): Observable<PostCreatedEvent> {
+    return this.eventBus.pipe(ofType(PostCreatedEvent));
+  }
+}
+```
+
+One option turns it on, and it binds the `EventBus` token to `EventSourcedEventBus`:
+
+```ts
+TransportEventBusModule.forRoot({ /* … */ subscriptions: true }),
+```
+
+### The three readers of a bus are not the same reader
+
+This is what makes it safe, and it is the whole design:
+
+| who | reads | gets |
+|---|---|---|
+| `@EventsHandler` | `subject$`, directly, inside `bind()` | **this process** |
+| a saga | the observable, **at registration** | **this process** |
+| anything that pipes the bus — a `@SubscriptionHandler` | the observable | **the log** |
+
+A projection must run once per event: delivered to every container's bus it would be written as many
+times as there are containers. A saga must dispatch once, for the same reason — so
+`registerSagas` swaps the source to `subject$` while Nest registers them, which works because
+`registerSaga` subscribes as it registers. A subscription is the opposite: the container holding the
+stream open is usually not the one that did the work.
+
+`src/subscriptions/event-sourced-event-bus.spec.ts` asserts all three, so a Nest upgrade that moves a
+saga's subscription out of registration fails a test rather than duplicating commands in production.
+
+### A new subscriber starts at the head
+
+The cursor is in memory and dies with the process. A subscriber gets what happens from the moment it
+subscribed, which is what a subscription means, and one that went away is not owed what it missed.
+
+### One thing to know before pointing a suite at it
+
+`apps/posts-api`'s e2e asserts the **`EventBus` subscriber count** — that opening a subscription adds
+one observer, that two subscribers of one topic share a single one, that unsubscribing removes it on
+the spot. Those assertions are about `subject$`, and with the log-backed bus they are false by
+construction: the subscription reads the log. The suite runs in the default mode, which is the mode
+it describes; running it with `POSTS_SUBSCRIPTION_SOURCE=feed` fails six tests for that reason and
+not because anything is broken.
 
 ---
 
@@ -730,7 +955,7 @@ an `EventEnvelope` under the event's own key and never learns a protocol.
 The options of `forRoot` are the table in **Start it**, above. Under them are the same four bindings the
 library asks for, which a service composing the provider arrays by hand binds itself:
 `TransportIdentity` (required), `RequestContextCodec` (defaulted), and — for a service that receives —
-`IngestionSink` and `MessageInbox`.
+`MessageInbox`, and the `EventLog` if one is bound.
 
 `transportEventBusProviders` brings the outbound half and the bus itself
 (`TRANSPORT_EVENT_BUS_SERVICE`, `TRANSPORT_EVENT_BUS_PUBLISHER`, `OutboxRouting`,
@@ -748,16 +973,23 @@ library asks for, which a service composing the provider arrays by hand binds it
 | `EventEnvelope` | what crosses: `data` (the event) and `metadata` (a flat map of strings) |
 | `RmqEventEnvelopeSerializer` / `RmqEventEnvelopeDeserializer` | the RabbitMQ wire: body and AMQP headers, through `RmqRecordBuilder` |
 | `MemoryEventEnvelopeSerializer` / `MemoryEventEnvelopeDeserializer` | the in-process wire: both halves in the value |
+| `AwsEventEnvelopeSerializer` / `SqsEventEnvelopeDeserializer` | the AWS wire: both halves in the body, the routing facts in the message attributes |
+| `SnsClientProxy` / `SqsClientProxy` | a topic for a fact, a queue for a message addressed to one service |
+| `SqsStrategy` / `processSqsEvent` | the consumer: a polling loop, or a Lambda invocation |
+| `SnsFilterPolicy.everyEventOf(...)` / `.exceptFrom(...)` | the binding, for a subscription |
+| `SqsRecordBuilder` | SQS's own options on one message: a delay, a FIFO group |
+| `injectTraceContext` / `isTraceContext` | the trace on the envelope, and what must not be re-emitted |
+| `EventLog` / `MikroOrmEventLog` / `eventLogEntities` | the one log: an aggregate's history and the service's order, two reads of one table |
+| `EventSourcedEventBus` | the `EventBus` whose observable side is that log |
 | `@TransportEvent()` / `TransportEventPipe` | the parameter that is the event, rebuilt from the envelope |
 | `@TransportRequest()` / `TransportRequestPipe` | the parameter that is the request the message belongs to |
 | `IncomingRequest` | the same request, for a guard, an interceptor or a filter |
 | `EventAddress.everyEventOf(namespace)` / `.everyEventOf(EventClass)` | the binding: `posts.#`, or `posts.PostCreated.*` |
 | `EventIngestion.ingest(event)` | what a controller calls |
-| `IngestionSink` / `MessageInbox` | the two ports of the inbound half |
+| `MessageInbox` | what the inbound half remembers, so a redelivery is not new work |
 | `TransportEventBusModule.forRoot` / `.forRootAsync` | the transport, started in one call |
 | `DatabaseModule.forRoot` / `.forFeature` (in `@nestposts/platform`) | the connection, and the tables each module owns |
 | `eventStoreProviders` / `EventSourcedRepository.of(Aggregate)` | the event store, the sink that fills it, and the replay |
-| `EventStore` / `MikroOrmEventStore` / `eventStoreEntities` | the stream's port, its adapter and its table |
 | `isIngested` / `originOf` / `identifierOf` | what an event says about where it came from |
 | `EventEnvelope` / `EventAddress` | the wire format, and what an event says about itself — its message type, its tags and its `routingKey` |
 | `MemoryClient` / `startInProcessService` / `RecordingClient` | the doubles |
@@ -766,3 +998,8 @@ library asks for, which a service composing the provider arrays by hand binds it
 
 `TRANSPORT_EVENT_BUS_PATTERN` renames the single pattern (upstream's, and the default for events with
 no namespace).
+
+`AWS_ENDPOINT_URL` points the SNS and SQS clients at LocalStack and is what makes the AWS transport
+usable without an account; `AWS_REGION` and the credentials are the SDK's own, except that a local
+endpoint with no key in the environment gets LocalStack's documented pair rather than a
+`CredentialsProviderError`.

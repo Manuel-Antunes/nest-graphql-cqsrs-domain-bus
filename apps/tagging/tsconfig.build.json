@@ -10,9 +10,7 @@
     "customConditions": []
   },
   "include": ["src/**/*.ts"],
-  "exclude": [
-    "src/**/*.spec.ts"
-  ],
+  "exclude": ["src/**/*.spec.ts"],
   "references": [
     {
       "path": "../../libs/users/tsconfig.lib.json"
@@ -25,6 +23,12 @@
     },
     {
       "path": "../../libs/platform/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/observability/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/lambda/tsconfig.lib.json"
     },
     {
       "path": "../../libs/database/tsconfig.lib.json"

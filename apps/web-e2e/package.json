@@ -3,23 +3,61 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "devDependencies": {
+    "@graphql-codegen/cli": "^7.4.1",
+    "@graphql-codegen/client-preset": "^6.2.0",
+    "@graphql-typed-document-node/core": "^3.2.0",
+    "graphql": "^16.14.2"
+  },
   "nx": {
-    "implicitDependencies": ["@nestposts/web"],
+    "implicitDependencies": [
+      "@nestposts/web"
+    ],
     "targets": {
-      "e2e": {
+      "codegen": {
+        "executor": "nx:run-commands",
+        "cache": true,
+        "inputs": [
+          "{workspaceRoot}/apps/posts-api/src/graphql/**/*.graphql",
+          "{projectRoot}/codegen.ts",
+          "{projectRoot}/src/**/*.ts"
+        ],
+        "outputs": [
+          "{projectRoot}/src/gql"
+        ],
+        "options": {
+          "cwd": "{projectRoot}",
+          "command": "graphql-codegen --config codegen.ts"
+        }
+      },
+      "typecheck": {
+        "executor": "nx:run-commands",
+        "cache": true,
+        "dependsOn": [
+          "codegen"
+        ],
+        "options": {
+          "cwd": "{projectRoot}",
+          "command": "tsc --noEmit"
+        }
+      },
+      "test-e2e": {
         "executor": "nx:run-commands",
         "cache": false,
         "dependsOn": [
+          "codegen",
           {
             "projects": [
               "@nestposts/migrator",
               "@nestposts/posts-api",
               "@nestposts/tagging"
             ],
-            "target": "build"
+            "target": "docker:build"
           },
           {
-            "projects": ["@nestposts/web"],
+            "projects": [
+              "@nestposts/web"
+            ],
             "target": "build"
           }
         ],

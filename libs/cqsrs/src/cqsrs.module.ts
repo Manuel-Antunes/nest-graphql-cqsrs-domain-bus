@@ -10,6 +10,7 @@ import { CQSRS_MODULE_OPTIONS } from './constants';
 import type { CqsrsModuleAsyncOptions, CqsrsModuleOptions, CqsrsModuleOptionsFactory } from './interfaces/index';
 import { SubscriptionExplorerService } from './services/subscription-explorer.service';
 import { SubscriptionBus } from './subscription-bus';
+import { UnitOfWorkCommands } from './unit-of-work-commands';
 
 /**
  * The module that resolves the options and exports them under the `CQSRS_MODULE_OPTIONS` token — the
@@ -85,7 +86,11 @@ export class AggregatePublisherModule {
  * `SubscriptionBus` without the CQRS buses.
  */
 @Module({
-  providers: [SubscriptionBus, SubscriptionExplorerService],
+  providers: [
+    SubscriptionBus,
+    SubscriptionExplorerService,
+    UnitOfWorkCommands,
+  ],
   exports: [SubscriptionBus],
 })
 export class CqsrsModule implements OnApplicationBootstrap {
@@ -95,7 +100,9 @@ export class CqsrsModule implements OnApplicationBootstrap {
       module: CqsrsModule,
       global: true,
       imports: [...publisher, CqrsModule.forRoot(options)],
-      providers: [{ provide: CQSRS_MODULE_OPTIONS, useValue: options ?? {} }],
+      providers: [
+        { provide: CQSRS_MODULE_OPTIONS, useValue: options ?? {} },
+      ],
       exports: [...publisher, CqrsModule],
     };
   }
@@ -184,3 +191,4 @@ export class CqsrsModule implements OnApplicationBootstrap {
 
 const aggregatePublisherModule = (publisher?: InjectionToken): DynamicModule[] =>
   publisher && publisher !== EventPublisher ? [AggregatePublisherModule.bind(publisher)] : [];
+

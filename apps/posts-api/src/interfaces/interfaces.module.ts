@@ -3,11 +3,16 @@ import { APP_FILTER } from '@nestjs/core';
 import { ApplicationModule } from '../application/application.module';
 import { AuthExceptionFilter } from './filters/auth-exception.filter';
 import { DomainExceptionFilter } from './filters/domain-exception.filter';
+import { HttpExceptionFilter } from './filters/http-exception.filter';
 import { PostMutationResolver } from './graphql/post-mutation.resolver';
 import { PostQueryResolver } from './graphql/post-query.resolver';
 import { PostSubscriptionResolver } from './graphql/post-subscription.resolver';
 import { PostTagsResolver } from './graphql/post-tags.resolver';
 import { PostAuthorResolver } from './graphql/post-author.resolver';
+import { PostEntityResolver } from './graphql/post-entity.resolver';
+import { TagEntityResolver } from './graphql/tag-entity.resolver';
+import { UserEntityResolver } from './graphql/user-entity.resolver';
+import { AuthorEntityResolver } from './graphql/author-entity.resolver';
 import { UserQueryResolver } from './graphql/user-query.resolver';
 import { AuthorPostsResolver } from './graphql/author-posts.resolver';
 import { UserProvisioningHooks } from './auth/user-provisioning.hooks';
@@ -32,6 +37,10 @@ import { SessionUserPipe } from './pipes/session-user.pipe';
     PostAuthorResolver,
     UserQueryResolver,
     AuthorPostsResolver,
+    PostEntityResolver,
+    TagEntityResolver,
+    UserEntityResolver,
+    AuthorEntityResolver,
     PostProfile,
     UserProfile,
     UserViewInterceptor,
@@ -41,6 +50,7 @@ import { SessionUserPipe } from './pipes/session-user.pipe';
     ActiveOrganizationPipe,
     ActiveMemberPipe,
     UserProvisioningHooks,
+    { provide: APP_FILTER, useClass: HttpExceptionFilter },
     { provide: APP_FILTER, useClass: AuthExceptionFilter },
     { provide: APP_FILTER, useClass: DomainExceptionFilter },
   ],

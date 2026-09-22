@@ -21,3 +21,5 @@ export * from './helpers/index';
 export * from './interfaces/index';
 export * from './services/subscription-explorer.service';
 export * from './subscription-bus';
+export * from './unit-of-work';
+export * from './unit-of-work-commands';

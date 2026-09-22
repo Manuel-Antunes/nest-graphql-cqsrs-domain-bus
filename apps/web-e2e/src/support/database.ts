@@ -9,7 +9,12 @@ const { Client } = pg;
  */
 pg.types.setTypeParser(pg.types.builtins.INT8, Number);
 
-export const POSTGRES_URL =
+/**
+ * Read per call, never captured. The database this suite asserts against is a container started by
+ * the global setup, on a port Docker chose — so the value does not exist yet when this module is
+ * first imported, and a `const` here would freeze the default from before there was a stack.
+ */
+export const postgresUrl = (): string =>
   process.env.POSTGRES_URL ?? 'postgresql://nestposts:nestposts@localhost:5432/nestposts';
 
 /** `?` is what the statements here are written with; Postgres calls it `$1`. */
@@ -29,7 +34,7 @@ export class ServiceDatabase {
   constructor(readonly schema: string) {}
 
   async query<T = Record<string, unknown>>(sql: string, ...parameters: unknown[]): Promise<T[]> {
-    const client = new Client({ connectionString: POSTGRES_URL });
+    const client = new Client({ connectionString: postgresUrl() });
     await client.connect();
     try {
       await client.query(`set search_path to "${this.schema}"`);

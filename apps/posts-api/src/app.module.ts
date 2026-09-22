@@ -1,13 +1,17 @@
 import { AutomapperModule } from "@automapper/nestjs";
 import { Module } from "@nestjs/common";
 import { GraphQLISODateTime, GraphQLModule } from "@nestjs/graphql";
-import { ApolloDriver, type ApolloDriverConfig } from "@nestjs/apollo";
+import {
+  YogaFederationDriver,
+  type YogaFederationDriverConfig,
+} from "@graphql-yoga/nestjs-federation";
 import { join } from "node:path";
 import { AuthInfrastructureModule } from "@nestposts/auth/infrastructure/auth-infrastructure.module";
 import { organizationAuthPluginProviders } from "@nestposts/organizations/infrastructure/better-auth/organization-better-auth.plugin";
 import { OrganizationsInfrastructureModule } from "@nestposts/organizations/infrastructure/organizations-infrastructure.module";
 import { OrganizationEntities } from "@nestposts/organizations/infrastructure/persistence/organization-entities";
 import { CqsrsModule } from "@nestposts/cqsrs";
+import { loggingModule } from "@nestposts/observability";
 import { DatabaseModule, TenancyModule } from "@nestposts/database";
 import {
   MikroOrmMessageInbox,
@@ -22,6 +26,7 @@ import {
   POST_EVENTS_CLIENT,
   postEventsClient,
   postsApiIdentity,
+  subscriptionsFromFeed,
 } from "./infrastructure/transport/transport.config";
 import { MapperErrorHandler } from "./interfaces/mapper/mapper-error.handler";
 import { validatedDtoClasses } from "./interfaces/mapper/validated-dto.strategy";
@@ -29,6 +34,7 @@ import { PostRequestContextCodec } from "./application/shared/post-request-conte
 
 @Module({
   imports: [
+    loggingModule({ serviceName: process.env.OTEL_SERVICE_NAME ?? "posts-api" }),
     CqsrsModule.forRoot({ aggregatePublisher: TRANSPORT_EVENT_BUS_PUBLISHER }),
     DatabaseModule.forRoot(mikroOrmConfig()),
     TenancyModule.forRoot({ resolver: TransportTenantResolver }),
@@ -37,14 +43,13 @@ import { PostRequestContextCodec } from "./application/shared/post-request-conte
       entities: OrganizationEntities.withAuth(),
       imports: [OrganizationsInfrastructureModule],
     }),
-    GraphQLModule.forRoot<ApolloDriverConfig>({
-      driver: ApolloDriver,
+    GraphQLModule.forRoot<YogaFederationDriverConfig>({
+      driver: YogaFederationDriver,
       typePaths: [join(__dirname, "graphql", "**/*.graphql")],
       resolvers: { DateTime: GraphQLISODateTime },
       fieldResolverEnhancers: ["interceptors"],
       graphiql: true,
-      subscriptions: { "graphql-ws": true },
-      includeStacktraceInErrorResponses: false,
+      maskedErrors: false,
     }),
     AutomapperModule.forRoot({
       strategyInitializer: validatedDtoClasses(),
@@ -54,6 +59,7 @@ import { PostRequestContextCodec } from "./application/shared/post-request-conte
       identity: postsApiIdentity(),
       inbox: MikroOrmMessageInbox,
       requestContext: PostRequestContextCodec,
+      subscriptions: subscriptionsFromFeed(),
       publishers: [
         PostEventsPublisher,
         { provide: POST_EVENTS_CLIENT, useFactory: postEventsClient },

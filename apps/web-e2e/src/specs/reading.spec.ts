@@ -1,4 +1,21 @@
 import { expect, test } from '../fixtures/test';
+import { graphql } from '../gql';
+
+const MissingPost = graphql(`
+  query MissingPost($id: ID!) {
+    post(id: $id) {
+      id
+    }
+  }
+`);
+
+const PostByInvalidId = graphql(`
+  query PostByInvalidId {
+    post(id: "isto-nao-e-um-uuid") {
+      id
+    }
+  }
+`);
 
 /**
  * O caminho de leitura, que é anônimo de propósito: um post escrito por um autor tem de aparecer para
@@ -48,17 +65,17 @@ test.describe.serial('o feed, lido de fora', () => {
    * diferença entre "não achei" e "quebrou", e quem consulta um id que pode não existir recebe a
    * primeira. Uma seleção inválida, por outro lado, é erro antes de existir query.
    */
-  test('um id que não existe responde null, e não um erro', async ({ graphql }) => {
-    const missing = await graphql<{ post: unknown }>(
-      '{ post(id: "00000000-0000-4000-8000-000000000000") { id } }',
-    );
+  test('um id que não existe responde null, e não um erro', async ({ executeGraphql }) => {
+    const missing = await executeGraphql(MissingPost, {
+      id: '00000000-0000-4000-8000-000000000000',
+    });
 
     expect(missing.errors, JSON.stringify(missing.errors)).toBeUndefined();
     expect(missing.data!.post).toBeNull();
   });
 
-  test('e um id que não é um id é recusado pelo schema', async ({ graphql }) => {
-    const invalid = await graphql('{ post(id: "isto-nao-e-um-uuid") { id } }');
+  test('e um id que não é um id é recusado pelo schema', async ({ executeGraphql }) => {
+    const invalid = await executeGraphql(PostByInvalidId);
 
     expect(JSON.stringify(invalid.errors)).toMatch(/BAD_USER_INPUT|inválido|invalid/i);
   });

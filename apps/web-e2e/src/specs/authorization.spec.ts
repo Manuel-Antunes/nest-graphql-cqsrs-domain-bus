@@ -1,4 +1,29 @@
 import { expect, test } from '../fixtures/test';
+import { graphql } from '../gql';
+
+const ReaderCreatePost = graphql(`
+  mutation ReaderCreatePost {
+    createPost(input: { title: "Do leitor", content: "c" }) {
+      id
+    }
+  }
+`);
+
+const FeedTotalCount = graphql(`
+  query FeedTotalCount {
+    posts(first: 1) {
+      totalCount
+    }
+  }
+`);
+
+const WhoAmI = graphql(`
+  query WhoAmI {
+    me {
+      __typename
+    }
+  }
+`);
 
 /**
  * Os três estados de `/posts/new`, que é onde a autorização deste sistema é visível: quem não entrou,
@@ -35,22 +60,20 @@ test.describe('autorização', () => {
   test('a recusa vem do servidor, não da tela: o leitor é barrado na mutation', async ({
     accounts,
     signIn,
-    graphql,
+    executeGraphql,
   }) => {
     await signIn(accounts.reader);
 
-    const refused = await graphql<{ createPost: { id: string } | null }>(
-      'mutation { createPost(input: { title: "Do leitor", content: "c" }) { id } }',
-    );
+    const refused = await executeGraphql(ReaderCreatePost);
 
     expect(refused.data?.createPost ?? null).toBeNull();
     expect(JSON.stringify(refused.errors)).toMatch(/FORBIDDEN|UNAUTHENTICATED|not an author|autor/i);
   });
 
-  test('e a leitura é anônima de propósito: o feed responde sem sessão', async ({ graphql }) => {
-    const posts = await graphql<{ posts: { totalCount: number } }>(
-      '{ posts(first: 1) { totalCount } }',
-    );
+  test('e a leitura é anônima de propósito: o feed responde sem sessão', async ({
+    executeGraphql,
+  }) => {
+    const posts = await executeGraphql(FeedTotalCount);
 
     expect(posts.errors, JSON.stringify(posts.errors)).toBeUndefined();
     expect(typeof posts.data!.posts.totalCount).toBe('number');
@@ -60,10 +83,9 @@ test.describe('autorização', () => {
     page,
     accounts,
     signIn,
-    graphql,
+    executeGraphql,
   }) => {
-    const typeOfMe = async () =>
-      (await graphql<{ me: { __typename: string } }>('{ me { __typename } }')).data!.me.__typename;
+    const typeOfMe = async () => (await executeGraphql(WhoAmI)).data!.me.__typename;
 
     await signIn(accounts.reader);
     expect(await typeOfMe()).toBe('User');

@@ -80,7 +80,7 @@ export function LoginForm() {
         {state.status === 'error' ? (
           <ErrorNotice
             title={state.code ?? 'Falha na autenticação'}
-            error={state.message ?? 'O Cognito recusou as credenciais.'}
+            error={state.message ?? 'O Better Auth recusou as credenciais.'}
           />
         ) : null}
 
@@ -116,10 +116,9 @@ export function LoginForm() {
           ))}
         </div>
         <p className="text-[11px] text-muted-foreground">
-          Senha <span className="font-mono">segredo123</span> para os três — a
-          mesma do realm. A política do pool foi afrouxada em{' '}
-          <span className="font-mono">infra/aws/identity</span> exatamente para
-          isso.
+          Senha <span className="font-mono">segredo123</span> para os três. O{' '}
+          <span className="font-mono">TestUsersSeeder</span> cria cada um pelo
+          próprio Better Auth, então a credencial é emitida e não inserida.
         </p>
       </div>
     </div>

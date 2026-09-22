@@ -6,11 +6,17 @@ import {
   Transport,
 } from '@nestjs/microservices';
 import {
+  AwsEventEnvelopeSerializer,
   MemoryClient,
   MemoryEventEnvelopeSerializer,
   RmqEventEnvelopeDeserializer,
   RmqEventEnvelopeSerializer,
+  SnsClientProxy,
+  SqsEventEnvelopeDeserializer,
+  SqsStrategy,
   TransportIdentity,
+  localQueueUrl,
+  localTopicArn,
 } from '@nestposts/transport-eventbus';
 
 export const POST_EVENTS_CLIENT = 'POST_EVENTS_CLIENT';
@@ -25,17 +31,44 @@ export const EXCHANGE = process.env.TAGGING_EXCHANGE ?? 'nestposts.events';
 
 export const INBOUND_QUEUE = process.env.TAGGING_QUEUE ?? 'nestposts.tagging.post-events';
 
-export type TransportMode = 'rabbitmq' | 'memory';
+export const EVENTS_TOPIC_ARN = process.env.TAGGING_TOPIC_ARN ?? localTopicArn('nestposts-events.fifo');
 
-export const transportMode = (): TransportMode =>
-  process.env.TAGGING_TRANSPORT === 'memory' ? 'memory' : 'rabbitmq';
+const LOCAL_QUEUES = ['nestposts-tagging-post-events.fifo'];
+
+export const INBOUND_QUEUE_URLS = (
+  process.env.TAGGING_QUEUE_URL ?? LOCAL_QUEUES.map(localQueueUrl).join(',')
+)
+  .split(',')
+  .map((url) => url.trim())
+  .filter(Boolean);
+
+export type TransportMode = 'rabbitmq' | 'memory' | 'aws';
+
+export const transportMode = (): TransportMode => {
+  const declared = process.env.TAGGING_TRANSPORT;
+  return declared === 'memory' || declared === 'aws' ? declared : 'rabbitmq';
+};
+
+export const inboundDestination = (): string =>
+  ({
+    rabbitmq: INBOUND_QUEUE,
+    aws: INBOUND_QUEUE_URLS.join(', '),
+    memory: 'in process',
+  })[transportMode()];
 
 const urls = (): string[] => [process.env.RABBITMQ_URL ?? 'amqp://localhost:5672'];
 
-
-export const postEventsClient = (): ClientProxy =>
-  transportMode() === 'rabbitmq'
-    ? ClientProxyFactory.create({
+export const postEventsClient = (): ClientProxy => {
+  switch (transportMode()) {
+    case 'aws':
+      return new SnsClientProxy({
+        topicArn: EVENTS_TOPIC_ARN,
+        serializer: new AwsEventEnvelopeSerializer(),
+      });
+    case 'memory':
+      return new MemoryClient({ servers: [], serializer: new MemoryEventEnvelopeSerializer() });
+    default:
+      return ClientProxyFactory.create({
         transport: Transport.RMQ,
         options: {
           urls: urls(),
@@ -45,8 +78,13 @@ export const postEventsClient = (): ClientProxy =>
           persistent: true,
           serializer: new RmqEventEnvelopeSerializer(),
         },
-      })
-    : new MemoryClient({ servers: [], serializer: new MemoryEventEnvelopeSerializer() });
+      });
+  }
+};
+
+export const lambdaTransport = (): MicroserviceOptions => ({
+  strategy: new SqsStrategy({ deserializer: new SqsEventEnvelopeDeserializer() }),
+});
 
 /**
  * One queue for this service, bound to the routing keys its controllers declare.
@@ -55,9 +93,19 @@ export const postEventsClient = (): ClientProxy =>
  * so two applications sharing a queue would compete for the messages instead of each receiving one —
  * and whichever discards it acknowledges it, killing it for the other.
  */
-export const inboundTransport = (): MicroserviceOptions =>
-  transportMode() === 'rabbitmq'
-    ? {
+export const inboundTransport = (): MicroserviceOptions => {
+  switch (transportMode()) {
+    case 'aws':
+      return {
+        strategy: new SqsStrategy({
+          queueUrl: INBOUND_QUEUE_URLS,
+          deserializer: new SqsEventEnvelopeDeserializer(),
+        }),
+      };
+    case 'memory':
+      return { strategy: new MemoryServer() };
+    default:
+      return {
         transport: Transport.RMQ,
         options: {
           urls: urls(),
@@ -69,5 +117,6 @@ export const inboundTransport = (): MicroserviceOptions =>
           noAck: false,
           deserializer: new RmqEventEnvelopeDeserializer(),
         },
-      }
-    : { strategy: new MemoryServer() };
+      };
+  }
+};

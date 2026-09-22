@@ -1,12 +1,42 @@
+import type { ResultOf } from '@graphql-typed-document-node/core';
+import { print } from 'graphql';
+
+import { type GraphQlAnswer, expect, test } from '../fixtures/test';
+import { graphql } from '../gql';
 import { EXCHANGE, type SpiedMessage, republished } from '../support/broker';
 import { until } from '../support/posts-api';
-import { expect, test } from '../fixtures/test';
 
 const PRE_CREATED = 'posts.PostPreCreated';
 const CREATED = 'posts.PostCreated';
 const UPDATED = 'posts.PostUpdated';
 
 const stripVersion = (messageType: string): string => messageType.split('#')[0]!;
+
+const EditSagaPost = graphql(`
+  mutation EditSagaPost($id: ID!) {
+    updatePost(input: { id: $id, title: "Saga editada" }) {
+      version
+    }
+  }
+`);
+
+const CreateCorrelatedPost = graphql(`
+  mutation CreateCorrelatedPost($title: String!) {
+    createPost(input: { title: $title, content: "oi" }) {
+      id
+    }
+  }
+`);
+
+const CreateTenantPost = graphql(`
+  mutation CreateTenantPost {
+    createPost(input: { title: "Com tenant", content: "oi" }) {
+      id
+    }
+  }
+`);
+
+type TenantPostAnswer = GraphQlAnswer<ResultOf<typeof CreateTenantPost>>;
 
 /**
  * **A saga coreografada, vista do navegador** — e conferida onde o navegador não chega.
@@ -106,15 +136,12 @@ test.describe.serial('a saga coreografada, escrita no navegador', () => {
   test('o canal de RÉPLICA mantém o stream do Post completo no outro serviço', async ({
     accounts,
     signIn,
-    graphql,
+    executeGraphql,
     taggingStore,
   }) => {
     await signIn(accounts.author);
 
-    const edited = await graphql<{ updatePost: { version: number } }>(
-      'mutation Editar($id: ID!) { updatePost(input: { id: $id, title: "Saga editada" }) { version } }',
-      { id: postId },
-    );
+    const edited = await executeGraphql(EditSagaPost, { id: postId });
 
     expect(edited.errors, JSON.stringify(edited.errors)).toBeUndefined();
     expect(edited.data!.updatePost.version).toBe(3);
@@ -149,16 +176,12 @@ test.describe.serial('o que a request carrega atravessa os dois processos', () =
     return seen;
   };
 
-  const CREATE = 'mutation Criar($title: String!) { createPost(input: { title: $title, content: "oi" }) { id } }';
-
-  test('uma request, um correlation id', async ({ accounts, signIn, graphql, broker }) => {
+  test('uma request, um correlation id', async ({ accounts, signIn, executeGraphql, broker }) => {
     const queue = 'nestposts.e2e.correlation-spy';
     await broker.spyOn(queue, 'posts.#');
     await signIn(accounts.author);
 
-    const created = await graphql<{ createPost: { id: string } }>(CREATE, {
-      title: 'Uma request só',
-    });
+    const created = await executeGraphql(CreateCorrelatedPost, { title: 'Uma request só' });
     expect(created.errors, JSON.stringify(created.errors)).toBeUndefined();
     const seen = await messagesFor(broker, queue, created.data!.createPost.id);
 
@@ -180,6 +203,9 @@ test.describe.serial('o que a request carrega atravessa os dois processos', () =
    * O `x-tenant` sai do NAVEGADOR — `extraHTTPHeaders` no contexto — atravessa o proxy do Next, a
    * mutation, o broker, o outro processo, e volta nos headers da decisão dele. É o caminho inteiro da
    * propagação, com um cliente de verdade em cada ponta.
+   *
+   * O `fetch` é do navegador porque o contexto com o header é dele, mas a query que ele manda é a
+   * mesma tipada do resto: impressa aqui, no Node, e passada como argumento.
    */
   test('o x-tenant do navegador chega aos dois processos, e volta na decisão do outro', async ({
     browser,
@@ -197,19 +223,16 @@ test.describe.serial('o que a request carrega atravessa os dois processos', () =
     await page.getByRole('button', { name: 'Entrar' }).click();
     await expect(page.getByText(accounts.author.email).first()).toBeVisible();
 
-    const created = await page.evaluate(async () => {
+    const created = await page.evaluate<TenantPostAnswer, string>(async (query) => {
       const response = await fetch('/api/graphql', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          query:
-            'mutation Criar { createPost(input: { title: "Com tenant", content: "oi" }) { id } }',
-        }),
+        body: JSON.stringify({ query }),
       });
-      return response.json();
-    });
+      return response.json() as Promise<TenantPostAnswer>;
+    }, print(CreateTenantPost));
     expect(created.errors, JSON.stringify(created.errors)).toBeUndefined();
-    const seen = await messagesFor(broker, queue, created.data.createPost.id);
+    const seen = await messagesFor(broker, queue, created.data!.createPost.id);
 
     const [born, completed] = ['PostPreCreated', 'PostCreated'].map(
       (name) => seen.get(name)!.properties.headers,

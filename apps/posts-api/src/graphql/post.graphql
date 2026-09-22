@@ -1,7 +1,7 @@
 """
 Read model de um Post. Mesmo shape em queries, mutations e subscriptions.
 """
-type Post {
+type Post @key(fields: "id") {
   id: ID!
   title: String!
   content: String!

@@ -7,7 +7,7 @@ import { PostPreCreatedEvent } from '@nestposts/posts/domain/post/event/post-pre
 import { PostId } from '@nestposts/posts/domain/post/vo/post-id';
 import { CompletePostCommand } from '../post/command/complete-post.command';
 import { CreatePostCommand } from '../post/command/create-post.command';
-import { InProcessTagAssignment } from '../post/saga/in-process-tag-assignment.saga';
+import { TaggingStandIn } from '../../../test/support/tagging-stand-in.saga';
 import { PostRequest } from './post-request';
 
 describe('PostRequest', () => {
@@ -20,7 +20,7 @@ describe('PostRequest', () => {
     module = await createCqrsTestingModule([
       CreatePostCommand.Handler,
       CompletePostCommand.Handler,
-      InProcessTagAssignment,
+      TaggingStandIn,
     ]);
     commands = module.get(CommandBus);
     await givenTheDefaultTag(module);

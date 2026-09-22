@@ -3,9 +3,9 @@
 *.md
 
 apps/web/src/gql/
+apps/web-e2e/src/gql/
 apps/web/schema.graphql
 schema.graphql
-docker/federation/supergraph.graphql
 sst-env.d.ts
 apps/web/next-env.d.ts
 

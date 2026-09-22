@@ -83,9 +83,28 @@ export class Broker {
   }
 
   /** A queue bound to everything the namespace says, so the suite can read the headers off the wire. */
+  /**
+   * The queue is **durable**, which is not a preference: RabbitMQ 4 refuses a transient non-exclusive
+   * one outright (`transient_nonexcl_queues` is deprecated and not permitted by default), and the
+   * management API answers `400` to the declaration. It is `auto_delete` that takes it away, and the
+   * broker is a container that goes away with the run anyway.
+   */
   async spyOn(queue: string, routingKey: string): Promise<void> {
-    await this.request('PUT', `/queues/%2F/${queue}`, JSON.stringify({ durable: false, auto_delete: true }));
-    await this.request('POST', `/bindings/%2F/e/${EXCHANGE}/q/${queue}`, JSON.stringify({ routing_key: routingKey }));
+    await this.mustSucceed(
+      this.request('PUT', `/queues/%2F/${queue}`, JSON.stringify({ durable: true, auto_delete: true })),
+      `declarando a fila ${queue}`,
+    );
+    await this.mustSucceed(
+      this.request('POST', `/bindings/%2F/e/${EXCHANGE}/q/${queue}`, JSON.stringify({ routing_key: routingKey })),
+      `ligando ${queue} a ${EXCHANGE} por ${routingKey}`,
+    );
+  }
+
+  private async mustSucceed(call: Promise<Response>, what: string): Promise<void> {
+    const response = await call;
+    if (!response.ok) {
+      throw new Error(`${what}: ${response.status} ${await response.text()}`);
+    }
   }
 
   /** Each `get` CONSUMES what it returns, so a caller polling has to accumulate what it saw. */

@@ -1,6 +1,5 @@
 import type { ModuleMetadata, Provider, Type } from '@nestjs/common';
-import type { IngestionSink } from './inbound/ingestion-sink';
-import type { EventSourced, EventSourcedClass } from './persistence/event-store/event-sourced.repository';
+import type { EventSourced, EventSourcedClass } from './persistence/event-log/event-sourced.repository';
 import type { MessageInbox } from './persistence/message-inbox';
 import type { RequestContextCodec } from './request-context';
 import type { TransportIdentity } from './transport-identity';
@@ -45,15 +44,28 @@ export interface TransportEventBusModuleOptions extends Pick<ModuleMetadata, 'im
    */
   readonly inbox?: Type<MessageInbox>;
 
-  /** What an ingested event leaves durable, inside the ingestion's transaction. */
-  readonly sink?: Type<IngestionSink>;
 
   /**
-   * The aggregates this service event-sources. Given, the event store and the sink that fills it are
-   * wired, and each aggregate gets its {@link EventSourcedRepository} — `eventStore: [Post]` is a
-   * service that decides about a Post it has no table for.
+   * The aggregates this service event-sources. Given, the {@link EventLog} is wired and each
+   * aggregate gets its {@link EventSourcedRepository} — `eventStore: [Post]` is a service that
+   * decides about a Post it has no table for. It is the same log {@link subscriptions} reads, because
+   * an aggregate's history and the service's order are two reads of one table.
    */
   readonly eventStore?: readonly EventSourcedClass<EventSourced>[];
+
+  /**
+   * **Turns on the log-backed `EventBus`, so a subscription works across processes.**
+   *
+   * A `SubscriptionBus` stream is fed by the `EventBus`, which is one per process — so a service that
+   * runs as several (a function per trigger, several replicas) has subscribers that cannot see what
+   * the other processes published. Given, the `EventBus` token is bound to
+   * {@link EventSourcedEventBus}, whose observable side is the {@link EventLog}. Nothing downstream
+   * changes: a handler still pipes `EventBus`.
+   *
+   * A service that is one process wants none of this: the plain bus has no table and no polling in
+   * the way.
+   */
+  readonly subscriptions?: boolean;
 }
 
 /** What the factory of {@link TransportEventBusModule.forRootAsync} answers: who this service is. */

@@ -1,8 +1,8 @@
 # nest-graphql-posts
 
-POC: **NestJS 12** + **@nestjs/cqrs 12** + **MikroORM 7** + **@nestjs/graphql 14 (Apollo)** com subscriptions GraphQL alimentadas **pelo próprio `EventBus` do CQRS**, numa API DDD de posts e tags. É a reescrita em TypeScript do [axon-graphql-posts](https://github.com/Manuel-Antunes/axon-graphql-posts) (Axon Framework 5 + Quarkus), com a mesma estrutura e o mesmo schema.
+POC: **NestJS 12** + **@nestjs/cqrs 12** + **MikroORM 7** + **@nestjs/graphql 14 (Yoga)** com subscriptions GraphQL alimentadas **pelo próprio `EventBus` do CQRS**, numa API DDD de posts e tags. É a reescrita em TypeScript do [axon-graphql-posts](https://github.com/Manuel-Antunes/axon-graphql-posts) (Axon Framework 5 + Quarkus), com a mesma estrutura e o mesmo schema.
 
-Hoje é um **monorepo Nx com duas aplicações** que conversam por **RabbitMQ**: a `posts-api` (híbrida — HTTP, WebSocket e um microserviço no mesmo processo) e o `tagging` (microserviço puro, sem porta nenhuma), com o domínio e a infraestrutura em `libs/`. A saga que dá a primeira tag a um post é **coreografada** entre as duas — ver *The shape of the monorepo* e *Events across services*.
+Hoje é um **monorepo Nx com duas aplicações** que conversam por **RabbitMQ**: a `posts-api` (híbrida — HTTP, subscriptions por SSE e um microserviço no mesmo processo) e o `tagging` (microserviço puro, sem porta nenhuma), com o domínio e a infraestrutura em `libs/`. A saga que dá a primeira tag a um post é **coreografada** entre as duas — ver *The shape of the monorepo* e *Events across services*.
 
 A ideia central: o `EventBus` do @nestjs/cqrs **é um `Observable`** do RxJS (um `Subject` por baixo) — o mesmo objeto em que os event handlers e as sagas se inscrevem. Uma subscription GraphQL é, no fundo, "devolva um async iterator". Então basta ligar um ao outro.
 
@@ -43,8 +43,6 @@ mutation createPost(input, @CurrentAuthor() author)                      [protoc
                      │                                              [quem decide a primeira tag é apps/tagging;
                      │                                               a volta é posts.PostCreated.<postId>]
                      │
-                     ├── ofType(PostPreCreatedEvent) ──► InProcessTagAssignment (@Saga)  [só na suíte: em produção
-                     │                                     └─► CompletePostCommand        quem decide é o outro serviço]
                      ├── ofType(PostCreatedEvent) ──┬─► OnPostCreatedSubscription.Handler.subscribe()
                      │                              │      └─► PostView do payload ──► onPostCreated (o post COMPLETO)
                      │                              └─► ProjectPostCompletion  [se o evento veio de fora, ele vira
@@ -61,7 +59,7 @@ mutation createPost(input, @CurrentAuthor() author)                      [protoc
                                    que passa pelo stream  ──► @Subscription({ resolve })
                                                                     │
                                                                     ▼
-                  Apollo ──► graphql-ws (WebSocket em /graphql) ──► { "data": { "onPostUpdated": { ... } } }
+                   Yoga ──► SSE (text/event-stream em /graphql) ──► { "data": { "onPostUpdated": { ... } } }
 ```
 
 ## Stack
@@ -70,9 +68,9 @@ mutation createPost(input, @CurrentAuthor() author)                      [protoc
 |---|---|
 | Node | 22 (`require(esm)` nativo — o MikroORM 7 é ESM-only) |
 | TypeScript | 6 (o 7 ainda não expõe a API programática que o Nest CLI usa) |
-| NestJS (`@nestjs/core`, `platform-express`) | 12.x |
+| NestJS (`@nestjs/core`, `platform-fastify`) | 12.x — Fastify porque é o que o `@fastify/aws-lambda` devolve como **stream** |
 | `@nestjs/cqrs` | 12.x — `Command<T>`/`Query<T>` tipados, `WithAggregateRoot`, `@Saga`, `ofType` |
-| `@nestjs/graphql` + `@nestjs/apollo` + `@apollo/server` | 14.x / 5.x — schema-first (`typePaths`), subscriptions por `graphql-ws` |
+| `@nestjs/graphql` + `@graphql-yoga/nestjs` + `graphql-yoga` | 14.x / 3.x / 5.x — schema-first (`typePaths`), subscriptions por **GraphQL-over-SSE** no mesmo `/graphql` |
 | MikroORM (`core`, `postgresql`, `migrations`, `seeder`, `nestjs`, `decorators`) | 7.x — `defineEntity`, `findByCursor`, `@CreateRequestContext` |
 | Zod | 4.x — os value objects |
 | AutoMapper (`@automapper/core`, `classes`, `nestjs`) | 9.x — `@AutoMap()` nas classes (e no shape Zod, pelo `DECORATOR_REGISTRY`, nos DTOs gerados), perfis, `typeConverter` para os value objects, e `MapPipe`/`MapInterceptor` para que nenhum resolver chame o mapper (ESM-only, como o MikroORM: roda pelo `require(esm)` do Node) |
@@ -111,7 +109,7 @@ wrong: import everything, or redeclare the event on the other side.
 | `libs/cqsrs` | CQSRS: the third CQRS message. Knows nothing about GraphQL |
 | `libs/validated-dto` | the Zod → DTO / value object mixins |
 | `libs/transport-eventbus` | the CQRS event bus across services. Knows nothing about this domain |
-| `apps/posts-api` | the GraphQL API. A **hybrid application**: HTTP and WebSocket, plus a RabbitMQ microservice in the same process |
+| `apps/posts-api` | the GraphQL API. A **hybrid application**: HTTP (subscriptions over SSE) plus a microservice in the same process |
 | `apps/tagging` | one step of the saga. A **full microservice**: no HTTP port at all |
 | `apps/migrator` | the migrations and the seeders of both schemas. The only thing that writes DDL, and the only thing that seeds |
 | `apps/web-e2e` | the whole system through a **browser**: Playwright over three processes, a real broker and a real Postgres |
@@ -161,7 +159,7 @@ libs/database/src                                    # everything ORM that needs
 ├── database.module                                  # forRoot (the connection) + forFeature (a module's tables)
 ├── entities/value-object.type                       # the VO ↔ column bridge: a Type generated from the class
 ├── helpers/request-context                          # reuses the ORM's context, or opens one — what makes
-│                                                    #   Post.author resolve inside a WebSocket or a queue
+│                                                    #   Post.author resolve inside an SSE stream or a queue
 └── filters/database-error                           # what a driver exception MEANS; the message is the edge's
 
 libs/posts/src
@@ -380,6 +378,55 @@ instead: it owns the read model and waits for one decision, not for the namespac
 `{"@date":"…"}`, because JSON has no date type and JavaScript has no field types at runtime to guess
 one back.
 
+### Three transports, and the applications cannot tell which
+
+The bus speaks through `@nestjs/microservices`, so a transport is a pair of classes — how a message
+is written and how it is read — plus a client and a server. There are three, and a controller, a
+handler and an event are identical on all of them:
+
+| | RabbitMQ | AWS | in process |
+|---|---|---|---|
+| the exchange | topic exchange | **SNS topic** (`SnsClientProxy`) | `MemoryClient` |
+| the queue | a queue bound to `posts.#` | an **SQS queue** subscribed with a filter policy (`SqsStrategy`) | `MemoryServer` |
+| the binding | the routing key pattern | `SnsFilterPolicy.everyEventOf(POSTS_NAMESPACE)` | the pattern, matched in process |
+| the metadata | AMQP headers | the message body | the value |
+| chosen with | `POSTS_TRANSPORT=rabbitmq` | `=aws` | `=memory` |
+
+Two things are different enough on AWS to be worth saying here. **A queue has no bindings**, so the
+selection happens twice: the subscription's *filter policy* decides what reaches the queue, and the
+strategy matches the routing key against the handlers' patterns once it is there — the same
+`topicMatches` the in-process transport uses. And **SNS allows ten message attributes**, which an
+envelope carrying a tenant and a trace passes immediately, so the metadata travels in the body and
+only the five routing facts are lifted into attributes: they are what a filter policy can read, and
+the only thing it can read.
+
+`SqsStrategy` runs either as a long-polling loop in a process or driven by a Lambda invocation
+(`processSqsEvent`, which answers `batchItemFailures` instead of throwing on the first failure).
+
+`libs/transport-eventbus/README.md` is the guide, and `docker/localstack/init/10-messaging.sh` is the
+same topology locally — the two are meant to be read side by side.
+
+### And the whole thing runs on Lambda
+
+`infra/` is the deployed shape, and `infra/aws/README.md` is its guide: a FIFO topic, one FIFO queue
+per consuming service, four functions and a CloudFront router that puts the API and the web
+application on **one origin** — which is what makes a session signed by one and resolved by the other
+need no cookie domain, no SameSite policy and no CORS list.
+
+`apps/posts-api` is a function too, answering through a **Function URL with
+`InvokeMode: RESPONSE_STREAM`**: `@nestjs/platform-fastify` is what allows it, because
+`@fastify/aws-lambda` can hand a response back as a stream and `awslambda.streamifyResponse` is what
+AWS wants around it. `@nestposts/lambda` holds the three pieces — one boot per container, the HTTP
+handler and the queue handler — and the applications themselves are unchanged.
+
+Two things worth knowing before reading further. **SQS FIFO orders within a queue and not between
+queues**, which is why `apps/tagging` has one queue and not one per slice of the flow — o README tem a
+falha medida. E **subscriptions** funcionam, o que exigiu resolver duas coisas: o **transporte** é
+GraphQL-over-SSE, que é o que uma Function URL com `RESPONSE_STREAM` carrega e o que um WebSocket
+nunca ia conseguir; e a **fonte** virou um port (`SubscriptionSource`), porque o `EventBus` local só
+alcança o container onde roda — em processo continua sendo o barramento, e em várias funções é um log
+compartilhado que todo container lê.
+
 ### Each delivery happens once, and three guards say so
 
 | guard | where | what it catches |
@@ -438,10 +485,13 @@ names, the replay, and the refusal to append a second creation to a stream that 
 Axon side has no such code either, for the same reason: an event store is a framework's job, and a
 service that writes its own writes the framework once per service.
 
-In the `apps/posts-api` suite the tagging step is doubled in process (`InProcessTagAssignment`, behind
-`POSTS_TAGGING_IN_PROCESS`), and that is declared doubling rather than a second production path:
-eventual consistency makes an in-flight message cross the boundary of a test that isolates each case.
-The real path has its own test, out of the suite, where there is nobody to share isolation with.
+In the `apps/posts-api` suite the tagging step is stood in for by `TaggingStandIn`, which lives in
+`test/support/` and is registered by the suite that needs it — not by `ApplicationModule`, and not
+behind an environment variable. Eventual consistency makes an in-flight message cross the boundary of
+a test that isolates each case, so a single-service suite needs something to close the saga; what it
+does **not** need is for the application to carry a second path that decides a tag it has no business
+deciding. The real path has its own test, out of the suite, where there is nobody to share isolation
+with.
 
 ### Four levels of test, and what only each one proves
 
@@ -482,7 +532,7 @@ channel per purpose buys and what a single "catch everything" queue would have c
 | `ProcessingContext` propagado do command para os eventos e para o que reage a eles | request scoping do @nestjs/cqrs: `@CommandHandler(Cmd, { scope: Scope.REQUEST })` + `@Inject(REQUEST)`; a saga repassa com `PostRequest.of(event)` e `request.attachTo(command)` |
 | `@EventHandler` + `ProcessingContext.onAfterCommit(...)` despachando commands | `@Saga()`: `Observable<evento> → Observable<command>`, o `EventBus` executa o que sai |
 | `subscriptionQuery` + `QueryUpdateEmitter.emit(...)` | `Subscription<Evento, Critério>` + `@SubscriptionHandler`; `subscriptionBus.subscribe(sub)` devolve `eventBus.pipe(ofType(Evento))` filtrado |
-| `Flux` no `@SubscriptionMapping` + SSE | `subscribeAsAsyncIterable(bus, sub, projeção)` no `@Subscription` + graphql-ws |
+| `Flux` no `@SubscriptionMapping` + SSE | `subscribeAsAsyncIterable(bus, sub, projeção)` no `@Subscription` + SSE, pelo driver do Yoga |
 | filtro por tópico avaliado no `emit` (`sub -> sub.matches(id)`) | `filter(event)` na própria `Subscription`, aplicado pelo bus dentro do stream — e o critério é a chave que compartilha o stream |
 | `ScrollSubrange` / `Window` do Spring Data | `em.findByCursor` do MikroORM: itens + `hasNextPage` + cursores prontos |
 | `@Embeddable record PostTitle` com validação no construtor | `class PostTitle extends ValidatedDto.Scalar(schema)`: a regra fica no schema Zod, o comportamento (`toString`/`equals`/`parse`) na classe |
@@ -539,19 +589,52 @@ pnpm db:setup                   # as migrations dos dois bancos e os seeders (o 
 pnpm dev                        # as DUAS aplicações: posts-api em :3000 e tagging (sem porta)
 ```
 
-`http://localhost:3000/graphql` — GraphiQL no browser, subscriptions por graphql-ws. Só a `posts-api`
+`http://localhost:3000/graphql` — GraphiQL no browser, subscriptions por SSE no mesmo endereço. Só a `posts-api`
 tem porta: o `tagging` é acionado por mensagem e o que ele produz é mensagem.
 
-Sem broker, dá para subir a `posts-api` sozinha com o tagueamento em processo:
+Sem broker, dá para subir a `posts-api` sozinha — mas o post fica na versão 1, sem tag, porque quem
+decide a primeira tag é o outro serviço e não há dublê nenhum na aplicação:
 
 ```bash
 pnpm db:setup
-POSTS_TRANSPORT=memory POSTS_TAGGING_IN_PROCESS=true npx nx serve @nestposts/posts-api
+POSTS_TRANSPORT=memory npx nx serve @nestposts/posts-api
+```
+
+On SNS and SQS instead, with LocalStack standing in for AWS — the topic, the queues and the filter
+policies are created by `docker/localstack/init/10-messaging.sh` when the container comes up:
+
+```bash
+docker compose up -d localstack postgres
+export AWS_ENDPOINT_URL=http://localhost:4566 AWS_REGION=us-east-1
+POSTS_TRANSPORT=aws TAGGING_TRANSPORT=aws pnpm dev
+```
+
+And on AWS, with everything as a function:
+
+```bash
+npx sst secret set AuthSecret "$(openssl rand -base64 32)" --stage dev
+npx sst deploy --stage dev      # builds, deploys and runs the migrations
+npx sst remove --stage dev      # this stack exists to be torn down
+```
+
+And with traces, into anything that speaks OTLP — SigNoz, Jaeger, Tempo, a collector. The SDK does
+not start at all unless an endpoint says where to send them, which is what keeps a local run quiet:
+
+```bash
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 pnpm dev
 ```
 
 ## Testando na mão
 
-Terminal 1 — abre a subscription global (com [`graphql-ws` CLI](https://the-guild.dev/graphql/ws) ou qualquer cliente; ou pelo GraphiQL):
+Terminal 1 — abre a subscription global. Como é SSE, `curl` basta (ou o GraphiQL, ou o cliente
+[`graphql-sse`](https://the-guild.dev/graphql/sse)):
+
+```bash
+curl -N -X POST http://localhost:3000/graphql -H 'accept: text/event-stream' \
+     -H 'content-type: application/json' \
+     -d '{"query":"subscription { onPostCreated { id title version } }"}'
+```
+
 
 ```graphql
 subscription { onPostCreated { id title version author { id name email } } }
@@ -624,9 +707,9 @@ Recém-inscrito, o `__typename` é `User` e o fragmento não casa — **`posts` 
 em vez de voltar vazio. Conceder o papel `author` (é o que o realm do Keycloak fazia na versão Axon)
 promove o **mesmo** perfil — mesmo id, mesma sessão —, e o mesmo `me` passa a casar com `... on Author`.
 
-Houve aqui um `pnpm smoke` — um script que buildava, subia a app com banco novo, abria subscriptions por
-graphql-ws e conferia contagens. Ele saiu: tudo o que ele verificava está no `posts.e2e-spec`, que sobe a
-mesma aplicação e fala o mesmo HTTP e o mesmo WebSocket, só que com asserções que falham com nome e
+Houve aqui um `pnpm smoke` — um script que buildava, subia a app com banco novo, abria subscriptions e
+conferia contagens. Ele saiu: tudo o que ele verificava está no `posts.e2e-spec`, que sobe a
+mesma aplicação e fala o mesmo HTTP, só que com asserções que falham com nome e
 diff em vez de um `FAIL` numa linha de log. Dois roteiros para o mesmo caminho é um que envelhece sem
 ninguém notar — e era o que estava a acontecer: o script ainda mandava `author` dentro do
 `CreatePostInput`, campo que deixou de existir quando o autor passou a vir da sessão.
@@ -639,9 +722,9 @@ sobe o `AppModule` em processo, então hoje **nada** verifica que o artefacto bu
 
 ```bash
 pnpm test        # todos os projetos (nx run-many -t test)
-pnpm test:e2e    # a posts-api inteira, por HTTP + WebSocket, com transporte em memória
-pnpm test:all
-pnpm test:web   # o sistema inteiro no navegador: TRÊS PROCESSOS sobre RabbitMQ de verdade (apps/web-e2e)
+pnpm test:e2e    # TODO o e2e: a posts-api por HTTP + SSE, e depois o sistema inteiro no navegador
+pnpm test:web    # só o navegador: os serviços como IMAGENS, sobre RabbitMQ de verdade (apps/web-e2e)
+pnpm test:all    # as suites unitárias, e depois os dois níveis de e2e
 ```
 
 > Os itens acrescentados depois da divisão em monorepo estão em inglês, pela regra do `CLAUDE.md`; os
@@ -684,7 +767,7 @@ pnpm test:web   # o sistema inteiro no navegador: TRÊS PROCESSOS sobre RabbitMQ
 - `author.pipe.spec` / `session-user.pipe.spec` — a guarda da borda agora que ela é um pipe: o cast devolve o mesmo objeto já como `Author` e recusa nomeando o usuário quem não tem o papel — ou quem tem o papel e **não** tem a linha delegada, que é o caso que só um cast de verdade distingue; e a tradução da sessão aceita a entrada **ainda como Promise**, que é como o Nest a entrega ao primeiro pipe. O pipe entrega hoje um **id de credencial**, e não mais email/nome/papel copiados do cookie.
 - `user-provisioning.hooks.spec` — a borda por onde o Better Auth chama para dentro: o id cru vira `CredentialId`, um id inválido não chega ao serviço, e uma falha ao provisionar **não** derruba o sign-up — o que é a regra que sustenta o desenho (autenticar é do provedor, provisionar é nosso).
 - `mikro-orm-exception.filter.spec` — a outra tabela, a de violação de integridade → erro de usuário: FK vira `BAD_USER_INPUT` com mensagem **vaga** (distinguir "não existe" de "é leitor" seria um oráculo), unique vira `CONFLICT`, e nenhuma mensagem de driver vaza.
-- `posts.e2e-spec` — o smoke test como teste: sobe o `AppModule` num schema próprio (`POSTS_SCHEMA` no `vitest.e2e.config.mts`, criado pelo `TestSchemaModule`), fala HTTP para queries/mutations e graphql-ws para subscriptions. Confere a ordem command → evento → entrega, que o `createPost` responde **pré-criado** (v1, sem tag) e que o post **completo** (v2, com a tag) chega por `onPostCreated`, o filtro por tópico (o assinante filtrado vê só o seu post; o global vê tudo), os erros com código, as duas connections — que desassinar tira o assinante do `EventBus` na hora, contando os `observers` do `Subject`, e que **dois assinantes do mesmo tópico compartilham um stream só**: o `EventBus` não passa de um assinante, os dois recebem o mesmo payload, e a fonte só cai quando o segundo sai. E, pendurado no `EventBus`, que a `PostRequest` criada no resolver sobrevive ao caminho de verdade (Express → Apollo → `CommandBus` → saga): todos os eventos daquela mutation carregam o mesmo objeto. O `author` de toda selection deste ficheiro é o `type Author` (`author { id name email }`), subscriptions incluídas — então a resolução do campo está exercitada por todos os testes, e o bloco `Post.author` acrescenta o que só ela permite: navegar `post → author → posts → author` e fechar o ciclo, o autor de um post ser o **mesmo** que o `me` devolve, a resolução funcionar dentro da conexão WebSocket (sem o contexto aberto no adapter o cliente receberia `data: null`), e uma leitura anónima alcançar o autor. O bloco `me` é o polimorfismo ponta a ponta, com três clientes HTTP de verdade: o autor casa com `... on Author` e pagina os posts dele (Posts completos, `tags` aninhadas inclusive), um segundo cliente que fez sign-up **sem papel** vem como `User` e a resposta sai sem `posts` — não com `posts` vazio —, pedir `posts` num `User` é erro de schema, e um terceiro que nunca autenticou leva `UNAUTHENTICATED` do guard global, antes de o resolver existir.
+- `posts.e2e-spec` — o smoke test como teste: sobe o `AppModule` num schema próprio (`POSTS_SCHEMA` no `vitest.e2e.config.mts`, criado pelo `TestSchemaModule`), fala HTTP para queries/mutations e SSE para subscriptions — o mesmo endereço, com `accept: text/event-stream`. Confere a ordem command → evento → entrega, que o `createPost` responde **pré-criado** (v1, sem tag) e que o post **completo** (v2, com a tag) chega por `onPostCreated`, o filtro por tópico (o assinante filtrado vê só o seu post; o global vê tudo), os erros com código, as duas connections — que desassinar tira o assinante do `EventBus` na hora, contando os `observers` do `Subject`, e que **dois assinantes do mesmo tópico compartilham um stream só**: o `EventBus` não passa de um assinante, os dois recebem o mesmo payload, e a fonte só cai quando o segundo sai. E, pendurado no `EventBus`, que a `PostRequest` criada no resolver sobrevive ao caminho de verdade (Fastify → Yoga → `CommandBus` → saga): todos os eventos daquela mutation carregam o mesmo objeto. O `author` de toda selection deste ficheiro é o `type Author` (`author { id name email }`), subscriptions incluídas — então a resolução do campo está exercitada por todos os testes, e o bloco `Post.author` acrescenta o que só ela permite: navegar `post → author → posts → author` e fechar o ciclo, o autor de um post ser o **mesmo** que o `me` devolve, a resolução funcionar dentro do stream da subscription (sem o contexto aberto no adapter o cliente receberia `data: null`), e uma leitura anónima alcançar o autor. O bloco `me` é o polimorfismo ponta a ponta, com três clientes HTTP de verdade: o autor casa com `... on Author` e pagina os posts dele (Posts completos, `tags` aninhadas inclusive), um segundo cliente que fez sign-up **sem papel** vem como `User` e a resposta sai sem `posts` — não com `posts` vazio —, pedir `posts` num `User` é erro de schema, e um terceiro que nunca autenticou leva `UNAUTHENTICATED` do guard global, antes de o resolver existir.
 
 And the suites that came with the monorepo and the transport:
 
@@ -795,13 +878,66 @@ O ganho de ter isso na mensagem é o `key`: o critério serializado de forma est
 
 `resolve: (payload) => payload` continua lá: diz ao graphql-js que o payload **é** o valor, em vez de procurar `payload.onPostUpdated`. E o resolver devolve um `AsyncIterableIterator` (iterator que também é iterable) porque um wrapper como o `withFilter` chama `next()`/`return()` direto no que o resolver devolveu, enquanto o graphql-js pede o `[Symbol.asyncIterator]()`.
 
-**Por que Apollo, e não Mercurius.** A POC começou com Mercurius (Fastify), e tudo funcionava — inclusive o filtro, que na época era o do `@Subscription`. A diferença apareceu no desassinar: o `withFilter` do Mercurius é um `async function*` com `yield*`, e um async generator só processa `return()` depois que o `next()` pendente resolve. Um assinante filtrado que desconectava ficava pendurado no `EventBus` até o próximo `PostUpdatedEvent`. O `withFilter` do caminho Apollo é um iterador explícito; a inscrição cai na hora. Para uma POC sobre subscriptions, a limpeza imediata pesou mais que o Fastify.
+**Mercurius, depois Apollo, agora Yoga — e o motivo mudou duas vezes.** A POC começou com Mercurius (Fastify) e tudo funcionava, inclusive o filtro, que na época era o do `@Subscription`. A diferença apareceu no desassinar: o `withFilter` do Mercurius é um `async function*` com `yield*`, e um async generator só processa `return()` depois que o `next()` pendente resolve — um assinante filtrado que desconectava ficava pendurado no `EventBus` até o próximo `PostUpdatedEvent`. O caminho do Apollo usava um iterador explícito e a inscrição caía na hora, então o Apollo ganhou.
+
+Esse motivo já não existe: o filtro saiu do `withFilter` e virou `subscribeAsAsyncIterable`, que é código daqui e resolve os `next()` pendentes com `done: true` na hora. O que decidiu a terceira troca foi **Lambda**. Um `graphql-ws` precisa de um socket que sobreviva à invocação, e uma Function URL não faz upgrade de WebSocket; o que ela carrega é um **stream**. O driver do Yoga serve subscription por **GraphQL-over-SSE** no mesmo `/graphql`, para quem pede `text/event-stream` — o mesmo transporte em processo e em função, sem nada condicional no código. O `@graphql-yoga/nestjs-federation` é o **mesmo driver** com o schema publicado como subgraph — é o que roda hoje, e é por isso que a troca não custou nada às subscriptions.
+
+### A unidade de trabalho: o comando espera pelos eventos que disparou
+
+O `UnitOfWork` (`@nestposts/cqsrs`) é o do Axon, na forma que este framework permite. Enquanto o
+handler de um comando corre, cada `publish` fica **em fila**; quando ele devolve, os eventos em fila
+são gravados no `EventLog` (`prepareCommit`) e só então publicados e encaminhados (`commit`). O
+`commandBus.execute` resolve depois disso, por isso quem espera pelo comando esperou pelos eventos.
+
+E a unidade espera também **pelo que a publicação desencadeou**: o `@nestjs/cqrs` descarta o que um
+`@EventsHandler` ou um saga devolvem, por isso o `UnitOfWorkCommands` envolve o `execute` e o
+`handle` de cada handler descoberto para registarem as suas promessas na unidade aberta. A
+`EventIngestion.ingest` corre numa unidade também — é isso que faz o `processSqsEvent` esperar pela
+cadeia inteira em vez de congelar o contentor a meio da saga.
+
+**O escopo é a request.** Tal como o Axon guarda a mensagem que está a tratar, a nossa unidade guarda
+a `AsyncContext` — o mesmo objeto que o `PostRequest.of(event)` devolve. Juntar-se a uma unidade
+aberta só acontece quando a request bate: trabalho que traz outra request tem unidade própria, em vez
+de ser confirmado como parte da de outrem.
+
+Um handler que falha faz `rollback` e os eventos em fila são **descartados** — antes já tinham sido
+publicados quando a falha acontecia, ou seja, um comando podia falhar e na mesma ter contado ao mundo
+que correu bem.
+
+### Federação: o `apps/posts-api` é um subgraph
+
+O driver é o `YogaFederationDriver`, e tudo o que decidiu o Yoga continua valendo — Fastify, o stream
+que a Function URL carrega, subscription por SSE no mesmo `/graphql`. Trocar `YogaDriver` por ele não
+mexeu em `typePaths`, `fieldResolverEnhancers` nem em nada das subscriptions: o que ele acrescenta é
+o `useApolloInlineTrace` e o `buildSubgraphSchema`.
+
+O `@key(fields: "id")` está em `Post`, `Tag`, `IUser`, `User` e `Author`; o `PageInfo` é
+`@shareable`, porque paginação é a mesma forma em todo subgraph e sem isso a composição acusa
+conflito. As diretivas importadas chegam sem prefixo e o resto vem como `federation__*` — é assim
+que se confere que o `@link` da v2.7 foi lido.
+
+**`_entities` não passa pela autenticação daqui, e isso não é descuido — é o que ele é.** O resolver
+é do Apollo, então o guard global não o vê; e o `__resolveReference` é resolver de **propriedade**,
+cujos enhancers saem do `fieldResolverEnhancers`, que lista só `interceptors`. O `@AllowAnonymous()`
+nos resolvers de referência documenta isso, não é o que o causa. A consequência prática: a superfície
+de entidades é alcançável por qualquer um que alcance o subgraph, e o lugar de uma política é o
+router — que **não existe neste repositório**. O que está verificado é o subgraph, não a composição.
+
+**O `User` responde `null` para quem é autor.** Uma representação `{ __typename: "User", id }` de um
+autor resolveria um `User` que o `me` devolveria como `Author`, e duas respostas discordando do tipo
+concreto da mesma pessoa é pior do que nenhuma resposta.
+
+**O `apps/web` guarda o próprio `federation.graphql`.** `_Any`, `_Entity` e `Query._entities` nascem
+em tempo de execução, dentro do `buildSubgraphSchema` — não estão no SDL que o codegen lê do disco, e
+não dá para acrescentá-los ao SDL da API porque o `buildSubgraphSchema` veria definição duplicada.
+
+O preço foi um: o `@nestjs/apollo` traduzia o status de uma `HttpException` do Nest para `extensions.code` dentro do driver, e o Yoga não faz isso. Agora é o `HttpExceptionFilter` que traduz, explicitamente — e é melhor onde está, porque um código que o cliente usa para ramificar não devia ser detalhe de implementação de um driver.
 
 **Uma classe por entidade, e o mapeamento do lado de fora.** `Post` é a entidade de domínio e o aggregate root do @nestjs/cqrs, numa classe só. O **mapeamento** não está mais junto: `PostSchema = defineEntity({ class: Post, … })` mora em `infrastructure/persistence/entities/post-orm.entity`, com os outros `*-orm.entity`. Continua não existindo entidade espelho — o `defineEntity` aponta para *aquela* classe, e o que se separou foi a camada, não o objeto; o que o domínio ganhou é deixar de saber o tipo da coluna e o nome do índice. O único resquício do ORM que atravessa é herdar de `BaseEntity`, que é o preço de entrada do MikroORM. A base é `AggregateEntity = WithAggregateRoot(BaseEntity)`: a entidade já precisa herdar do `BaseEntity` do ORM, então `extends AggregateRoot` não serve — é exatamente o cenário para o qual o mixin existe. Uma constante compartilhada, e não um `WithAggregateRoot(...)` por entidade, porque o MikroORM descobre a classe-pai de cada entidade como entidade abstrata, e duas classes anônimas de nome `AggregateRoot` seriam ambíguas para ele. (Tentei antes `class Post extends WithAggregateRoot(PostSchema.class)` com `setClass`: a classe intermediária do mixin entra na cadeia de protótipos e a descoberta do ORM entra em loop — `Post extends AggregateRoot extends Post`.)
 
 **`forceConstructor: true`.** O MikroORM hidrata entidades por `Object.create(prototype)`, sem chamar o construtor — e é no construtor que o mixin inicializa a lista de eventos não-commitados. Sem isso, um `post.apply(...)` numa entidade carregada do banco explode. Com `forceConstructor` no schema, um Post que volta do banco nasce pelo `new` e chega inteiro; o `create-post.command.spec` confere que ele volta com `getUncommittedEvents()` vazio.
 
-**Um fork do EntityManager por command.** `@CreateRequestContext()` em todo command handler. Sem ele, um command despachado pela saga herda (pelo `AsyncLocalStorage`) o contexto da request HTTP que publicou o evento, e dois fluxos concorrentes dividem o mesmo identity map — o post que a mutation lê de volta e o que a saga está mutando seriam o mesmo objeto. É **metade** do `ProcessingContext` por command do Axon — a transacional —, dita com a ferramenta do ORM; a outra metade, a identidade do pedido, é o bloco acima. As queries usam `@EnsureRequestContext()`: rodam no contexto da request quando há um, e criam o seu quando não há (teste, WebSocket). O preço é o handler receber `EntityManager` no construtor só para o decorator achar `this.em`.
+**Um fork do EntityManager por command.** `@CreateRequestContext()` em todo command handler. Sem ele, um command despachado pela saga herda (pelo `AsyncLocalStorage`) o contexto da request HTTP que publicou o evento, e dois fluxos concorrentes dividem o mesmo identity map — o post que a mutation lê de volta e o que a saga está mutando seriam o mesmo objeto. É **metade** do `ProcessingContext` por command do Axon — a transacional —, dita com a ferramenta do ORM; a outra metade, a identidade do pedido, é o bloco acima. As queries usam `@EnsureRequestContext()`: rodam no contexto da request quando há um, e criam o seu quando não há (teste, stream de subscription). O preço é o handler receber `EntityManager` no construtor só para o decorator achar `this.em`.
 
 **Uma fatia, um arquivo — a mensagem e o handler dentro de um `namespace`.** Command, query e subscription moram no mesmo arquivo do handler que os trata, sob um `namespace` de mesmo nome do arquivo:
 
@@ -859,7 +995,7 @@ As queries ficam de fora de propósito: uma leitura não abre cadeia causal, e o
 
 **E eles vão até a coluna.** `Post.id` é um `PostId` de verdade, chave primária inclusive. Quem faz a travessia é o `valueObjectType`: um `Type` do MikroORM gerado a partir da própria classe, que escreve o valor cru, hidrata a classe de volta, serializa o cursor de paginação como texto e o **valida** na volta (`fromJSON`) — um cursor forjado vira `CursorError`, e não um id impossível. O DDL não mudou uma linha (`varchar(36)`, `varchar(200)`, `text`), consultar aceita os dois lados (`em.findOne(Post, { id })` com o value object ou com o texto), e hidratar **não** revalida: é a mesma escolha de sempre, e é por isso que `PostId.wrap` existe ao lado de `PostId.parse`.
 
-**O que os eventos carregam continua primitivo.** `PostCreatedEvent` guarda `string`, e não `PostTitle` — um evento é um fato que atravessa processo, e é isso que deixa a subscription `onPostUpdated` montar a `PostView` do payload sem tocar o banco dentro de um WebSocket. A conversão mora exatamente na fronteira que o `decidir → evoluir` já tinha: decidir escreve `title.value` no evento, evoluir faz `PostTitle.parse(event.title)` de volta — então a invariante roda também no replay. O `post-request.spec` trava os dois lados: o payload primitivo, e o `PostId` como value object viajando **por fora**, como metadado.
+**O que os eventos carregam continua primitivo.** `PostCreatedEvent` guarda `string`, e não `PostTitle` — um evento é um fato que atravessa processo, e é isso que deixa a subscription `onPostUpdated` montar a `PostView` do payload sem tocar o banco de dentro do stream. A conversão mora exatamente na fronteira que o `decidir → evoluir` já tinha: decidir escreve `title.value` no evento, evoluir faz `PostTitle.parse(event.title)` de volta — então a invariante roda também no replay. O `post-request.spec` trava os dois lados: o payload primitivo, e o `PostId` como value object viajando **por fora**, como metadado.
 
 **Soft delete: um embeddable, um mixin, um filtro e um subscriber.** É a tradução peça a peça da versão Java, e as duas primeiras têm lá o mesmo nome. O **`SoftDeletion`** é o `@Embeddable`: o instante em que foi apagado (`null` = vivo), com `isDeleted`/`at()` e um `toString` que diz "vivo" ou "apagado em …". O **`WithSoftDelete`** é o `interface SoftDeletable` com métodos default: quem herda dá `identity()` e ganha o estado, as perguntas e **dois pares** de transição. `softDelete`/`restore` **decidem**: recusam quando não há fato novo (`AlreadyDeletedException`, `NotDeletedException`, as duas compartilhadas em `domain/shared`) — e são também o ponto de extensão, porque o agregado que precisa registrar o fato **sobrescreve** e chama `super` antes de disparar o evento, que é o que garante a guarda rodando antes de existir evento. (Em Java isso é uma sobrecarga; aqui é uma sobrescrita, mesma relação.) `applyDeletion`/`applyRestoration` **evoluem**: aplicam um fato já acontecido sem verificar nada. A distinção é a mesma de `decidir → evoluir` e não é estética: o mesmo `PostDeletedEvent` é aplicado duas vezes (ao decidir, e de novo ao reconstituir), e um handler `on<Evento>` que chamasse a versão que decide estouraria na segunda. E o **filtro `active`** é o `@SQLRestriction(ALIVE)`, dito com a ferramenta que o MikroORM recomenda para soft delete: viaja no `defineEntity` de cada agregado (do lado da infraestrutura, com o resto do mapeamento) com `default: true`, então toda consulta já nasce filtrada e quem precisar do apagado pede (`{ filters: { active: false } }`). Foi ele que deixou o repositório de User parar de repetir `deletedAt: null` à mão.
 
@@ -985,7 +1121,7 @@ Por isso também a relação `Authorship.user` é `eager`: um autor sem o seu us
 
 **Primeiro: o ganho de dataloading é parcialmente circular.** Com as tags na linha não havia N+1 nenhum — N posts eram N linhas com as tags dentro. A relação *cria* o N+1 que o dataloader depois resolve. Na prática o caminho do GraphQL nem chega lá: o `MikroOrmPostRepository` popula (`populate: ['tags']`) no `findById` e no `findByCursor`, o que resolve tudo em uma consulta a mais. O `dataloader: DataloaderType.ALL` no config cobre o acesso preguiçoso que aparecer.
 
-**Segundo: `decidir → evoluir` entra em atrito com a relação.** O evento carrega primitivos (`{ tagId, name }`) — isso não mudou, e é o que deixa a subscription `onPostUpdated` montar a `PostView` do payload sem tocar o banco dentro de um WebSocket. Mas de primitivos não se materializa um agregado: o evento devolve **ids**, e o `Tag` como objeto só existe se alguém o trouxe. Por isso `assignTag` põe a Tag na coleção **antes** de levantar o evento, e `onPostUpdatedEvent` remonta a lista reaproveitando o que a coleção já tem (`rel()` cobre só o que faltar). O evento continua mandando na participação — quem não estiver nele sai; os objetos apenas sobrevivem à travessia.
+**Segundo: `decidir → evoluir` entra em atrito com a relação.** O evento carrega primitivos (`{ tagId, name }`) — isso não mudou, e é o que deixa a subscription `onPostUpdated` montar a `PostView` do payload sem tocar o banco de dentro do stream. Mas de primitivos não se materializa um agregado: o evento devolve **ids**, e o `Tag` como objeto só existe se alguém o trouxe. Por isso `assignTag` põe a Tag na coleção **antes** de levantar o evento, e `onPostUpdatedEvent` remonta a lista reaproveitando o que a coleção já tem (`rel()` cobre só o que faltar). O evento continua mandando na participação — quem não estiver nele sai; os objetos apenas sobrevivem à travessia.
 
 A saída que *parece* óbvia não funciona, e vale saber por quê: confiar no identity map. `EntityFactory.createReference` de fato consulta `unitOfWork.getById(...)` antes de fabricar um stub, mas aquele `unitOfWork` não é o da request — `rel()` chega ao factory por `entityType.prototype.__factory`, e o `EntityHelper.decorate` o prende, **uma vez, na descoberta**, a um `em.fork()` dedicado guardado como campo privado. Medido: dentro do mesmo fork que acabou de carregar a Tag, `em.getReference(Tag, id).name` é `'Untagged'` e `rel(Tag, id).name` é `undefined`. Um eager load no command não muda isso. O que resta como limitação é o replay puro (`loadFromHistory` num Post novo): os ids voltam, os nomes não — reidratá-los exige um EntityManager, que o domínio não tem.
 
@@ -1003,7 +1139,7 @@ Trocar herança por composição não mudou o que o cliente vê — mudou de ond
 
 A troca tem um custo, e ele não é o mesmo nos dois caminhos. Nas **leituras** é zero: o repositório já populava o autor junto do post, então ele está no identity map da requisição e a resolução não emite consulta — medido no driver, com um controle, no `find-author.query.spec`. Nas **subscriptions** é uma consulta por payload entregue, e isso é a parte interessante: a view de `onPostCreated` nasce do payload do evento justamente para não tocar o banco, e o evento carrega `authorId` **e** `authorName`, mas não e-mail — porque o e-mail de alguém não é um fato sobre um post. Quem pede `author` numa subscription está pedindo algo que não está no evento, e paga por isso; quem pede só `id title version` continua sem tocar o banco.
 
-Isso trouxe um segundo efeito, que é o que faltava descobrir: a resolução de um campo disparado por subscription roda **fora** do middleware do Express, dentro do WebSocket, e portanto sem contexto do ORM — `allowGlobalContext: false` recusava a consulta e o cliente recebia `data: null`. A correção é o `inRequestContext` nas duas leituras que um resolver de campo alcança (`UserRepository.findById` e `PostRepository.findByAuthor`): havendo contexto, o envelope é inerte e o identity map continua o da requisição; não havendo, abre-se um. Qualquer leitura nova alcançável por um campo precisa do mesmo envelope — são duas hoje, e está dito nos dois lugares.
+Isso trouxe um segundo efeito, que é o que faltava descobrir: a resolução de um campo disparado por subscription roda **fora** do ciclo da requisição — num tick posterior do stream — e portanto sem contexto do ORM — `allowGlobalContext: false` recusava a consulta e o cliente recebia `data: null`. A correção é o `inRequestContext` nas duas leituras que um resolver de campo alcança (`UserRepository.findById` e `PostRepository.findByAuthor`): havendo contexto, o envelope é inerte e o identity map continua o da requisição; não havendo, abre-se um. Qualquer leitura nova alcançável por um campo precisa do mesmo envelope — são duas hoje, e está dito nos dois lugares.
 
 Uma consequência que ficou por decidir: o `authorName` dos eventos já **não é lido por ninguém**. Ele continua no payload porque um fato gravado não se reescreve por ter deixado de ser consultado, e porque é o que permitiria um dia dizer "o nome na época" — que é precisamente o que um `authorId` sozinho não diz. Tirá-lo é uma decisão à parte, e está anotada como tal no `Post.create`.
 
@@ -1015,7 +1151,7 @@ Uma consequência que ficou por decidir: o `authorName` dos eventos já **não �
 
 **Uma altura de validação — mesmo com value objects na borda.** A versão Java validava na borda (Bean Validation) e no domínio. Aqui só o domínio valida, e isso não mudou quando `CreatePostInput` passou a declarar `title: PostTitle`: o construtor de um value object gerado **não lança** — ele normaliza pelo schema e, se o valor for inválido, guarda o valor cru para quem quiser perguntar (`isValid()`, ou o `class-validator`). Um título em branco continua atravessando a borda e sendo rejeitado pelo domínio, e o `DomainExceptionFilter` o entrega ao cliente como `BAD_USER_INPUT` com a mensagem do value object. A única exceção continua sendo a mesma de antes, agora escrita como `id.assertValid()` num `forMember` do `PostProfile` — um id que não é UUID nem vira command. Quando ela dispara, o AutoMapper embrulha a falha num `MapMemberError`, e o `DomainExceptionFilter` a descasca de volta para o erro de domínio: o cliente continua recebendo `BAD_USER_INPUT` com a mensagem do value object, e não um 500 falando do mapeador.
 
-**Exception filter que devolve, não escreve.** Num resolver GraphQL, um `ExceptionFilter` não escreve resposta: **devolve** o erro, e o @nestjs/graphql o lança de volta para o graphql-js, que o coloca em `errors[]`. `includeStacktraceInErrorResponses: false` no Apollo mantém `extensions` só com o `code`.
+**Exception filter que devolve, não escreve.** Num resolver GraphQL, um `ExceptionFilter` não escreve resposta: **devolve** o erro, e o @nestjs/graphql o lança de volta para o graphql-js, que o coloca em `errors[]`. No Yoga o `maskedErrors: false` é o que deixa a mensagem do domínio chegar ao cliente — ligado (o padrão dele), todo erro que não é `GraphQLError` vira `Unexpected error.`, que é o certo para uma API pública e o errado para uma cujos erros de domínio são a resposta.
 
 ## Pegadinhas de versão (setembro de 2026)
 

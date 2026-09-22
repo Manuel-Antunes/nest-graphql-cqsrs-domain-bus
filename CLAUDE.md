@@ -63,10 +63,16 @@ pnpm dev                       # db:setup, then nx run-many -t serve: the two ap
 pnpm build                     # every project; each app builds with `nest build` (tsc, no bundler)
 pnpm typecheck                 # nx run-many -t typecheck: tsc --build per project
 pnpm test                      # nx run-many -t test: every project's Vitest suite
-pnpm test:e2e                  # apps/posts-api over HTTP + WebSocket, in-memory transport
-pnpm test:web                  # apps/web-e2e: Playwright, THREE PROCESSES over real RabbitMQ
-pnpm test:all                  # every level, the browser included
+pnpm test:e2e                  # EVERY app's test-e2e, one at a time: posts-api, then the browser
+pnpm test:web                  # apps/web-e2e alone: Playwright, THREE PROCESSES over real RabbitMQ
+pnpm test:all                  # the unit suites, then both e2e levels
 pnpm graph                     # the project graph, which is also the layer graph
+
+docker compose up -d localstack   # SNS + SQS, with the topology docker/localstack/init creates
+docker compose --profile apps up -d --build   # the infrastructure AND the four applications, as images
+npx nx run @nestposts/posts-api:docker:build  # one image; `-t docker:build` builds all four
+npx sst deploy --stage <name>     # the topic, the queues and apps/tagging as a Lambda
+pnpm graph:stack <name>           # the DEPLOYED graph: sst state export → pulumi stack graph
 ```
 
 The schema is **never** created by an application (see `apps/migrator/README.md`):
@@ -97,17 +103,21 @@ Environment variables, per application:
 | database | one Postgres for both: `POSTGRES_URL` (default `postgresql://nestposts:nestposts@localhost:5432/nestposts`) | idem |
 | schema | `POSTS_SCHEMA` (default `posts`) | `TAGGING_SCHEMA` (default `tagging`) |
 | | the same variables address `apps/migrator`, which is what creates those schemas | |
-| transport | `POSTS_TRANSPORT` = `rabbitmq` (default) \| `memory` | `TAGGING_TRANSPORT`, same |
+| transport | `POSTS_TRANSPORT` = `rabbitmq` (default) \| `memory` \| `aws` | `TAGGING_TRANSPORT`, same |
 | publishing | `POSTS_PUBLISH_EVENTS=false` turns the outbound half off | `TAGGING_PUBLISH_EVENTS` |
-| the tagging step | `POSTS_TAGGING_IN_PROCESS=true` doubles it in process (the suite sets it) | — |
 | broker | `RABBITMQ_URL`, `POSTS_EXCHANGE`, `POSTS_COMPLETED_QUEUE` | `RABBITMQ_URL`, `TAGGING_EXCHANGE`, `TAGGING_QUEUE` |
+| aws | `POSTS_TOPIC_ARN`, `POSTS_COMPLETED_QUEUE_URL` — both default to LocalStack | `TAGGING_TOPIC_ARN`, `TAGGING_QUEUE_URL` |
+| | `AWS_ENDPOINT_URL` (LocalStack), `AWS_REGION` and the SDK's own credentials address both | |
+| subscriptions | `POSTS_SUBSCRIPTION_SOURCE` = `local` (default, this process's `EventBus`) \| `feed` (the shared table, for a service running as several processes) | — |
+| logging | `LOG_LEVEL` (default `info`); pretty when stdout is a terminal, JSON otherwise | idem |
+| telemetry | `OTEL_EXPORTER_OTLP_ENDPOINT` turns tracing **on** — unset, the SDK never starts; `OTEL_SERVICE_NAME`, and the rest of `OTEL_*` | idem |
 | auth | `AUTH_URL`, `AUTH_SECRET`, `AUTH_BASE_PATH` (default `/api/auth`), `WEB_URL`, `AUTH_TRUSTED_ORIGINS`, `AUTH_COOKIE_DOMAIN`, `AUTH_GOOGLE_ID`/`AUTH_GOOGLE_SECRET`, `AUTH_GITHUB_ID`/`AUTH_GITHUB_SECRET` — see `libs/auth/README.md`. **Every process that reads a session shares `AUTH_SECRET`**, `apps/web` included | — |
 | other | `PORT`, `MIKRO_ORM_DEBUG=true` | `MIKRO_ORM_DEBUG=true` |
 
 ## Architecture
 
 DDD/CQRS proof of concept: an Nx monorepo with **two NestJS 12 applications** talking over
-**RabbitMQ**, on `@nestjs/cqrs` 12 + MikroORM 7 (PostgreSQL, one schema per service) + `@nestjs/graphql` 14 (Apollo,
+**RabbitMQ**, on `@nestjs/cqrs` 12 + MikroORM 7 (PostgreSQL, one schema per service) + `@nestjs/graphql` 14 (**Yoga**,
 **schema-first**). A TypeScript rewrite of `axon-graphql-posts` (Axon 5 + Quarkus) — the README carries
 the Axon → Nest translation table, which is worth reading whenever a choice looks arbitrary.
 
@@ -136,13 +146,22 @@ libs/posts               domain/post + domain/tag + their ORM mappings and repos
                          wired by PostsInfrastructureModule
 libs/cqsrs               the third CQRS message (see below)
 libs/validated-dto       Zod → DTO/value object mixins
-libs/transport-eventbus  the CQRS event bus over Nest's microservice transports (see below)
+libs/transport-eventbus  the CQRS event bus over Nest's microservice transports (see below),
+                         RabbitMQ / SNS+SQS / in-process
+libs/observability       the one door to observability: startTelemetry (the OTel SDK) and
+                         loggingModule (pino, with trace_id on every record). A library depends on
+                         @opentelemetry/api; an application depends on this
+libs/lambda              how AWS enters a Nest application: bootOnce (one boot per container),
+                         streamingHandler (HTTP over a Function URL) and queueHandler (SQS)
 
 apps/posts-api           application + interfaces (GraphQL, messaging), a HYBRID application:
-                         HTTP/WebSocket and a RabbitMQ microservice in one process
+                         HTTP (GraphQL, and subscriptions over SSE) and a microservice, one process
 apps/tagging             one step of the saga, a FULL microservice: no HTTP port at all
 apps/migrator            the migrations and the seeders of both schemas — the only thing that
                          writes DDL, and the only thing that seeds (see below)
+infra/aws                the deployed shape: the topic, the queues, the four functions and the
+                         router, in SST. `infra/aws/README.md` is the guide — read it before
+                         touching a filter policy or the bundling options
 apps/web-e2e             the whole system through a BROWSER: Playwright over three processes and a
                          real broker — authentication, authorization, the reading path and the saga
 apps/web                 a Next.js client, to see the API from outside (not part of the saga). It boots
@@ -236,8 +255,14 @@ before changing the library's shape. The essentials:
 - **`TransportEventBusModule.forRoot(...)` starts it**, in each application's `AppModule`: `identity`,
   `publishers`, `inbox` (which turns receiving on), `eventStore: [Post]`, `requestContext`, `sink`. It
   is global, and `forRootAsync` is the same with the identity resolved at runtime. Underneath it are the
-  provider arrays (`transportEventBusProviders`, `eventIngestionProviders`, `eventStoreProviders`),
+  provider arrays (`transportEventBusProviders`, `eventIngestionProviders`, `eventLogProviders`),
   still exported for a service — or a spec — that wants to compose them by hand.
+- **Three transports, one wire idea.** RabbitMQ (`Rmq*` pair, the metadata in the AMQP headers),
+  AWS (`SnsClientProxy`/`SqsClientProxy` out, `SqsStrategy` in — the topic is the exchange, a
+  subscription's **filter policy** is the binding, and the metadata travels in the body because SNS
+  allows ten message attributes) and the in-process pair. `SqsStrategy` runs either as a polling loop
+  (`queueUrl`) or driven by a Lambda (`processSqsEvent`, which reports `batchItemFailures`); the
+  controllers, the handlers and the events are the same on all three.
 - **The transport's tables come with its options**: `inbox` brings the inbox's schema and `eventStore`
   the streams', through `DatabaseModule.forFeature`. A publish-only service needs no database at all.
 - **`TransportIdentity` is the mark of authorship, not an address.** Bound with
@@ -249,7 +274,14 @@ before changing the library's shape. The essentials:
   map of strings).** Each transport has a pair — `RmqEventEnvelopeSerializer`/`Deserializer` put the
   metadata in the **AMQP headers** (through `RmqRecordBuilder`) and the event in the body;
   the `Memory*` pair keeps both halves in the value. They are declared in the client's and the
-  server's options, which is where `@nestjs/microservices` asks for them.
+  server's options, which is where `@nestjs/microservices` asks for them — the AWS pair included.
+  `SnsClientProxy` and `SqsClientProxy` used to default to `AwsEventEnvelopeSerializer` and
+  `SqsStrategy` to `SqsEventEnvelopeDeserializer`, which made the transport the one deciding what a
+  service is allowed to say to something it did not write. They do not any more: the two clients take
+  an **optional** serializer and fall through to Nest's own `IdentitySerializer` when given none, like
+  any plain `ClientProxy`, and the strategy **requires** its deserializer, because that is the whole
+  of how a message becomes an event again. A default wire format is a decision, and it belongs to the
+  composition root like every other one here.
 - **A controller's parameter is the event, through `@TransportEvent()`** — a `@Payload()` bound to
   `TransportEventPipe`, which rebuilds the real class from the envelope and marks it as ingested. Extra
   pipes compose (`@TransportEvent(new ValidationPipe())`), and `@TransportRequest()` is the other half:
@@ -272,12 +304,14 @@ before changing the library's shape. The essentials:
   the only one that survives an emptied inbox.
 - **The inbound half is opt-in** (`...eventIngestionProviders` plus a `MessageInbox` binding), because
   the outbound half needs no database.
-- **Event sourcing is the framework's, not an application's** (`persistence/event-store`):
-  `...eventStoreProviders` binds the `EventStore` and the `IngestionSink` that appends every ingested
-  event to the stream of the aggregate its `@EventType({ tags })` names, and
-  `EventSourcedRepository.of(Post)` is the replay — load, let the domain decide, `save()`, `commit()`.
-  A service that event-sources adds `eventStoreEntities` to its MikroORM list and writes **no** store,
-  no sink and no repository of its own.
+- **Event sourcing is the framework's, not an application's** (`persistence/event-log`): there is ONE
+  table, `event_log`, and two reads of it. `readStream(streamId)` is an aggregate's history, keyed by
+  `(stream_id, sequence)`, and `EventSourcedRepository.of(Post)` replays from it;
+  `readAfter(position)` is the service's own order, keyed by a global `position`, and it is what a
+  subscription reads. They were two tables with the same columns, filled by two write paths with two
+  different guarantees, until they were not — the shape is Axon's event store, which reads one store
+  by `aggregateIdentifier + sequenceNumber` and by `globalIndex`. A service that event-sources adds
+  `eventLogEntities` to its MikroORM list and writes **no** store, no sink and no repository.
 - **The request crosses the wire.** `publish(event, request)` attaches the `AsyncContext` exactly as
   `EventBus` does; `RequestContextCodec` writes what it stands for onto the envelope (correlation,
   causation, and whatever the application's context declares in `toAttributes()`); the ingestion
@@ -287,10 +321,38 @@ before changing the library's shape. The essentials:
 - **A guard reads the request with `IncomingRequest.of(executionContext)`**, because a pipe (and so
   `@TransportRequest()`) runs after the guards. That is what lets a shared guard authorise a message by
   the tenant or the session the publishing service put in its context.
-- **What the ingestion's transaction covers**: the inbox row and whatever the `IngestionSink` awaits.
+- **What the ingestion's transaction covers**: the inbox row and the `EventLog` append.
   The event reaches the local bus **after** that transaction commits — a handler triggered from
   inside it inherits the transaction through the async store and then finds it gone
   (`Transaction is already committed`).
+
+### The applications are images too, and `@nx/docker` is what discovers them
+
+Each application carries an `apps/<app>/Dockerfile`, and the `@nx/docker` plugin in `nx.json` turns
+every one of them into a `docker:build` and a `docker:run` target — inferred from the file's
+existence, the same way the Vitest and TypeScript plugins infer theirs. The image is named in that
+application's `package.json` (`nestposts/posts-api:dev`), which is also the name `docker-compose.yml`
+gives it under the **`apps` profile**, so `docker compose --profile apps up` runs what
+`nx run-many -t docker:build` produced rather than building a second copy.
+
+- **The build context is the repository, never the project.** The plugin's default is
+  `docker build .` in the project directory, and `nx.json` overrides `cwd` to the workspace root
+  because no application here declares a single third-party dependency: `@nestjs/core`, MikroORM and
+  the rest live in the **root** `package.json`, and an app resolves them by walking up. An image built
+  from `apps/posts-api` alone would have nothing to install.
+- **The first stage exists to make the install layer cacheable.** It copies the whole repository and
+  then extracts only the `package.json` files, the lockfile and `pnpm-workspace.yaml`; the next stage
+  copies *that* and installs. A source change leaves the extracted manifests byte-identical, so the
+  install layer survives it — and because the four Dockerfiles share those stages verbatim, the
+  install happens once for all of them.
+- **Nothing here deploys as an image**, and that is worth saying out loud: production is
+  `sst.aws.Function`, a zip. These exist for `apps/web-e2e` and for bringing the system up without a
+  toolchain, and they are the only packaging in the repository that no deploy consumes.
+- **`apps/web`'s build depends on `^build`**, which it did not until the image needed it. `next build`
+  typechecks against `@nestposts/*`, which resolve through their **`dist`** — so on a machine that
+  had never run `pnpm build`, `nx build @nestposts/web` failed with
+  `Cannot find module '@nestposts/auth/domain/auth/auth.service'`. It passed locally only because
+  some earlier run had left the `dist` behind.
 
 ### The choreographed saga: a post is born in two phases
 
@@ -311,15 +373,19 @@ ProjectPostCompletion        ◀──  posts.PostCreated.<postId>      ◀─�
   choreography, and it is deliberate.
 - Neither application names the other: each declares the routing keys it binds to.
 - `apps/tagging` has **no read model**. It event-sources the `Post` through the framework's event store
-  (`...eventStoreProviders` + `EventSourcedRepository.of(Post)` in its `TransportModule`): what it
+  (`eventStore: [Post]` in its `TransportModule`): what it
   ingests is appended to the aggregate's stream, the `Post` is replayed from it with `loadFromHistory`,
   and its own decision is appended and published. That is why it can decide about a Post without having
   a row for one — and why it also ingests `PostUpdated`/`Deleted`/`Restored`, which nothing there reacts
   to: a decision taken against half a history is a wrong decision.
 - In the `apps/posts-api` suite the tagging step is **doubled in process**
-  (`InProcessTagAssignment`, behind `POSTS_TAGGING_IN_PROCESS`), because eventual consistency makes an
-  in-flight message cross the boundary of a test that truncates between cases. The real path is
-  covered by `pnpm test:web`.
+  by `TaggingStandIn`, because eventual consistency makes an in-flight message cross the boundary of
+  a test that truncates between cases. It lives in `apps/posts-api/test/support/` and the e2e
+  registers it beside `AppModule` — **not** in `ApplicationModule` and not behind an environment
+  variable, which is where it used to be. A stand-in that the application carries is a second path
+  deciding a tag the application has no business deciding, and the flag that gated it was set in
+  exactly one file in the repository: the e2e's own Vitest config. The real path is covered by
+  `pnpm test:web`.
 - The default tag's id is a **domain fact** (`DEFAULT_TAG_ID` in `libs/posts`), which is what makes two
   services arrive at the same id instead of keeping two constants in step by hand. The row itself is
   `DefaultTagSeeder` in `apps/migrator`, run by `pnpm db:seed` — and, in the e2e, by an explicit
@@ -482,7 +548,7 @@ libs/platform/src/infrastructure/persistence/soft-delete/   ← the mechanism
 The ports are **abstract classes** in `libs/*/src/domain/*/*.repository.ts` (they double as DI tokens)
 and the adapters are bound by the module that owns them — `PostsInfrastructureModule`,
 `UsersInfrastructureModule` — which is what an application imports where it needs them. Paths that do not originate
-in an HTTP request — a field resolver inside a subscription (WebSocket), a message arriving on a queue,
+in an HTTP request — a field resolver inside a subscription's stream, a message arriving on a queue,
 Better Auth hooks, tests — need `inRequestContext(em, work)` (`@nestposts/database`), otherwise the
 first query is rejected.
 
@@ -511,11 +577,14 @@ layer says what to tell the client about it.
   migration there. A throwaway schema is built from the entities — `TestSchemaModule` in the suites —
   never from the migrations, which is why `apps/web-e2e` drops and rebuilds `posts` and `tagging`
   instead of inventing names.
-- **The migrator names no table.** Each config composes the arrays the owning modules already export
-  (`postsEntities`, `usersEntities`, `authWithOrganizationEntities()`, `transportEntities`, `eventStoreEntities`).
-  It boots **no** Nest context to find them, because `DatabaseModule`'s registry is process-wide and
-  would hand the second database the first one's tables.
-- **It depends only on the libraries**, never on the two applications — which is what keeps Apollo,
+- **The migrator is a Nest container per database.** `apps/migrator/src/app/{posts,tagging}.module.ts`
+  import the modules that own their tables, `bootstrap.ts` hands over `{ app, orm }`, and both the
+  MikroORM CLI configs and the lambda handlers run on that. It is what lets `TestUsersSeeder` resolve
+  the **real** `BETTER_AUTH` and create a credential rather than insert a password hash of its own.
+  `DatabaseModule.forRoot({ exclusive: true })` is load-bearing there: the entity registry is filled
+  when a module is **imported**, not when it is booted, so in the one process with two composition
+  roots it already holds the union — and `tagging` would be handed `posts`' `auth_user`.
+- **It depends only on the libraries**, never on the two applications — which is what keeps Yoga,
   Better Auth and the AMQP client out of whatever runs a migration, and what lets
   `apps/posts-api`'s e2e depend on the migrator for `DefaultTagSeeder` without a cycle.
 - `dist/main.js` is a module as well as a script: `migrate()`, `seed()`, `setup()`.
@@ -523,6 +592,46 @@ layer says what to tell the client about it.
 
 ### GraphQL edge
 
+- **Fastify, not Express**, and **Yoga, not Apollo.** `apps/posts-api` runs on
+  `@nestjs/platform-fastify` with `YogaDriver` (`@graphql-yoga/nestjs`), and Better Auth mounts its
+  routes as middleware there. Both choices exist for the same reason: Fastify is what
+  `@fastify/aws-lambda` can hand back as a **stream** (`payloadAsStream`, which is what
+  `awslambda.streamifyResponse` and a Function URL need), and Yoga serves **subscriptions over SSE**
+  on the same `/graphql` endpoint — a stream a Function URL carries, where a WebSocket upgrade dies
+  at the load balancer. `@graphql-yoga/nestjs-federation` is the same driver when a subgraph is
+  wanted.
+- **Subscriptions are GraphQL-over-SSE**, in *distinct connections* mode: the client posts to
+  `/graphql` with `Accept: text/event-stream` and gets one stream per subscription. The other mode
+  reserves a stream with a `PUT` and attaches operations to it, which needs the same process to
+  answer every request of that reservation — exactly what a function behind a load balancer cannot
+  promise.
+- **A subscription reads the `EventBus`, and the bus is what is event sourced.** A
+  `@SubscriptionHandler` writes `this.eventBus.pipe(ofType(PostCreatedEvent))` — what `@nestjs/cqrs`
+  already gives every application — and that works in one process or in twelve. With
+  `subscriptions: true` on `TransportEventBusModule.forRoot`, the `EventBus` token is bound to
+  `EventSourcedEventBus`, whose **observable side** is the `EventLog`. There is no port to implement
+  and no option on `CqsrsModule`: the one that existed bought only "events from other containers",
+  which the bus can carry itself. `POSTS_SUBSCRIPTION_SOURCE=feed` still picks it.
+- **`@nestjs/cqrs` reads a bus three different ways, and the ORDER of boot is what separates them.**
+  An `@EventsHandler` is bound to `subject$` **directly**, inside `bind()`; a saga is handed the
+  observable **at registration**; everything else reads the observable whenever it pipes it.
+  `EventSourcedEventBus` repoints `EventBus.source` at the log in `onApplicationBootstrap`, and
+  `CqrsModule` — which `CqsrsModule` imports — bootstraps **first**: by then the handlers and the
+  sagas hold `subject$` and keep it, so a projection runs once in the container that did the work
+  and a saga dispatches once however many containers run. Only a `@SubscriptionHandler`, resolved
+  per client long after boot, reads the log.
+- **NEVER bind `EventBus` or `CommandBus` to a substitute provider. Decorate the instance.** It cost
+  this repository two outages in one afternoon. `CqrsModule` registers every `@CommandHandler` and
+  every `@EventsHandler` on the instance **it** resolves, and anything outside that module resolves
+  a global override instead — so the handlers end up on one object and the publisher on another.
+  With `CommandBus` that is `CommandHandlerNotFoundException`, which a saga swallows: the chain stops
+  with nothing in the log. With `EventBus` it is worse, because everything looks healthy — the inbox
+  logs `inbox ← posts.PostCreated#2.0.0 from 'tagging'` and the read model simply stays at version 1.
+  `UnitOfWorkCommands` and `EventSourcedEventBus` both wrap what `moduleRef.get(...)` hands back.
+- **The GraphQL error codes are ours now.** `@nestjs/apollo` mapped a Nest `HttpException`'s status
+  to `extensions.code` inside the driver; Yoga does not, so `HttpExceptionFilter` does it explicitly
+  (`UNAUTHORIZED → UNAUTHENTICATED`, `UNPROCESSABLE_ENTITY → BAD_USER_INPUT`, …). It is better where
+  it is: a code a client branches on should not be a driver's implementation detail.
 - **Schema-first**: the SDL in `apps/posts-api/src/graphql/*.graphql` is the source; resolvers bind by
   name (`@Resolver('Post')`, `@Query('posts')`, `@ResolveField('tags')`). No DTO carries a GraphQL
   decorator. A new field means a `.graphql` file + a resolver + registration in `interfaces.module.ts`.
@@ -581,22 +690,38 @@ Four levels, and each answers something the others cannot:
 | unit / slice | every project, beside the code | the rule, the handler, the mapping |
 | integration | `libs/transport-eventbus/src/**`, `libs/auth/src/infrastructure/persistence`, `apps/posts-api/test/persistence` | the envelope, the routing table's refusals, the inbox, the event store and its replay, the ORM mapping — and that Better Auth writes and reads through the entities `libs/auth` maps by hand |
 | one hop, in process | `libs/transport-eventbus/src/in-memory/transport-loop.spec.ts` | two services over `MemoryServer` + `MemoryClient`, each able to reach the other: the real class arrives, the request is restored, a redelivery is deduplicated, the loop is cut |
-| the whole system, in a browser | `pnpm test:web` (`apps/web-e2e`, **Playwright**) | **three processes over real RabbitMQ**, driven through Chromium: signing in, being refused, the three states of `/posts/new`, the polymorphic `me`, a post read by someone who never signed in — and then what the browser cannot see, in the same test: each service's durable state, both inboxes, idempotency through the broker's management API, the replica channel, one correlation id across two processes, and the `x-tenant` **of the browser** on the headers of both events |
+| the whole system, in a browser | `pnpm test:web` (`apps/web-e2e`, **Playwright**) | **the packaged services over real RabbitMQ**, driven through Chromium: signing in, being refused, the three states of `/posts/new`, the polymorphic `me`, a post read by someone who never signed in — and then what the browser cannot see, in the same test: each service's durable state, both inboxes, idempotency through the broker's management API, the replica channel, one correlation id across two processes, and the `x-tenant` **of the browser** on the headers of both events |
 
-`pnpm test:web` uses the infrastructure that is already listening if there is any — its topology lives
-in its own exchange, `nestposts.events` — and `docker compose up` otherwise. The three applications are
-**not** compose services: `apps/web-e2e/src/support/stack.ts` builds them and starts each as its own
-process (`node dist/main.js`, and `next start` for the web), which is what makes it a test of real
-processes. It rebuilds the `posts` and `tagging` schemas from the migrations on every run, so it is not
-a suite to point at a database anybody cares about, and it registers its two accounts — one promoted to
-`author` — through the web's own sign-up endpoint. `apps/web-e2e/README.md` is the guide, including why
-all three processes share one `AUTH_SECRET`.
+**`test-e2e` is the target name for every level of e2e there is**, in `apps/posts-api` and in
+`apps/web-e2e`, which is the whole reason `pnpm test:e2e` can be `nx run-many` and reach both. A new
+one is called `test-e2e` or that command does not know it exists — the same rule the CQRS handlers
+follow. (`e2e` is not free: `@nx/playwright` infers a target and `nx.json` names it `e2e-ci`.) They run
+`--parallel=1`, because both want the same Postgres and the same broker, and a suite that drops the
+`posts` schema while another is reading it fails for a reason that has nothing to do with the code.
+
+`pnpm test:web` provisions everything itself, through **Testcontainers**: Postgres, RabbitMQ, the
+migrator as a one-shot, and then `posts-api` and `tagging` as the images `apps/<app>/Dockerfile`
+build. They share a network and address each other by alias, so nothing has to be taught a port, and
+what the host reaches is published wherever Docker likes — which is why the suite now needs no
+configuration and does not care what else on the machine is holding 5432 or 5672. The one host port
+chosen up front is the API's, by `FreePort`, because it signs cookies against its own origin and so
+must know it before it boots. `apps/web` is the exception and stays a **process** (`next start`): it
+is the thing under the browser, and an image between the test and it would only cost the `tail`.
+There is no schema to rebuild and no queue to delete any more — the container is the clean slate. It
+registers its two accounts — one promoted to `author` — through the web's own sign-up endpoint.
+`apps/web-e2e/README.md` is the guide, including why everything shares one `AUTH_SECRET`.
 
 Coverage excludes `index.ts`, `interfaces/`, `*.interface.ts` and `main.ts`; resolvers, mappers and
 DTOs count.
 
 ## Gotchas
 
+- **RabbitMQ 4 refuses a transient non-exclusive queue.** `transient_nonexcl_queues` is deprecated
+  and not permitted by default, so declaring `{ durable: false }` on a queue nobody holds
+  exclusively answers `400` from the management API — and `apps/web-e2e`'s spy queue was exactly
+  that. It passed for months because the suite reused whatever broker was listening, which on the
+  machine it was written on was **another project's RabbitMQ 3.13**. The repository's own compose
+  has said `rabbitmq:4-management` the whole time. A container per run is what made the two agree.
 - **`fieldResolverEnhancers: ['interceptors']` in `GraphQLModule` is not optional.** Without it the
   `@ResolveField` methods return the raw aggregate, and the symptom is a
   `Cannot return null for non-nullable field ...` that points nowhere useful.
@@ -635,11 +760,139 @@ DTOs count.
   support regardless of what is actually running. Left alone, `seeder:run` on a compiled config loads
   the **sources**, and Node's stripping cannot resolve their extensionless relative imports:
   `ERR_MODULE_NOT_FOUND` on a file that is plainly there. `apps/migrator` sets `preferTs: false`.
+- **`MikroORM.init` resolves without ever reaching the server.** The pool is lazy, so an `init`
+  against a dead port succeeds — and `isConnected()` answers `false` for a healthy server nobody has
+  queried yet. Neither is an answer to "can I reach this database?"; only a statement is,
+  `orm.em.getConnection().execute('select 1')`. The Vitest global setup
+  (`libs/database/src/testing/postgres.ts`) chooses between the Postgres already listening and a
+  throwaway container, and while it asked by initialising, the second branch **never ran once**. The
+  bill came due when another project's Postgres took 5432: no container started, and every spec of
+  the ten projects with `database: true` failed with
+  `password authentication failed for user "nestposts"` — which reads like a credentials bug and is a
+  port conflict. `testing/postgres.spec.ts` covers both branches. The same lie is why wrapping
+  `MikroORM.init` in a retry did nothing for the Migrate lambda's `Connection terminated unexpectedly`.
 - **`seeder.seedersList` is the registration, not the folder.** With it, `seeder:run` resolves classes
   from the config instead of globbing — a new seeder is added there or it does not exist, the same
   rule the CQRS handlers follow.
-- `@automapper/nestjs` 9 declares a peer of `@nestjs/*` 10/11 while the project is on 12 — the pnpm
-  warning is expected.
+- **`migrations.migrationsList` is the same rule, and it was learned the expensive way.** `path` is a
+  glob over the file system, and a **bundled** runtime has no such directory — so on Lambda the
+  migrator found zero migrations, `up()` succeeded, and the first query answered
+  `relation "posts.tags" does not exist`. Listed, they are imports: `src/migrations/posts/index.ts`
+  and its tagging twin are the registration, and a migration missing from one does not exist for
+  anybody, locally included.
+- **An RDS Proxy is reachable long before it is usable.** `RegisterDBProxyTargets` returns at once
+  and the target then spends minutes in `PENDING_PROXY_CAPACITY`, accepting the TCP connection and
+  **closing** it. On the first deploy of a stage that is `Error: Connection terminated unexpectedly`
+  at `pg-pool` in 141ms, from code that is correct — the same function migrated in three seconds six
+  minutes later. Nothing retries it: re-run `sst deploy`, and no deploy after the first has the race
+  to lose.
+- **`_entities` is Apollo's own root resolver, so none of this repository's auth reaches it.** The
+  global guard never sees it, and `__resolveReference` is a **property** resolver, whose enhancers
+  come from `fieldResolverEnhancers` — which lists `interceptors` only, so guards do not run there
+  either. The `@AllowAnonymous()` on the entity resolvers in `apps/posts-api/src/interfaces/graphql/`
+  says what is true; it is not what makes it true. A subgraph's entity surface is reachable by
+  anything that can reach the subgraph, which is why the router is the only place to put a policy.
+- **`nodejs.install` as a LIST ignores the lockfile, and it deployed a different major version.**
+  SST expands `install: ['a', 'b']` to `{ a: "*", b: "*" }` and runs an install inside the artifact,
+  so every version is re-resolved at deploy time — and `*` does not select prereleases. That is how
+  `better-auth-mikro-orm@1.0.0-next.2`, which this repository tests against, was deployed as
+  **0.5.0**: a different major line whose adapter calls `metadata.has()` where MikroORM 7 wants
+  `getByClassName()`. Nothing failed to boot. The first `/api/auth/*` request answered
+  `Cannot find metadata for "AuthUser" entity`, **only on AWS**, and the local suites could not see
+  it because they run the version in `node_modules`. `INSTALLED_PACKAGES` is now pinned through
+  `InstalledPackages.pinnedTo`, which reads each version off the installed tree, so the deployed
+  dependency is the tested one. Anything added to that list inherits the guarantee; anything added
+  to SST's `install` by hand does not.
+- **`@apollo/subgraph` must be BUNDLED, never external and never installed.** `@nestjs/graphql`'s
+  federation factory `loadPackage`s it on every boot, so marking it external stops the application
+  starting; installing it as a real file gives it a second copy of `graphql`, and a schema built by
+  one `graphql` is not executable by another. `infra/aws/support/functions.ts` has the note.
+- **`apps/web` keeps its own `federation.graphql`.** `_Any`, `_Entity` and `Query._entities` are
+  added at runtime by `buildSubgraphSchema`, so they are not in the SDL codegen reads off disk — and
+  they cannot be added to the API's own SDL either, because `buildSubgraphSchema` would then see
+  duplicate definitions.
+- **A seeder is not a migration, and the deploy treats them differently.** `Migrate` is invoked with
+  `Date.now()` and runs every time; `Seed` is invoked with a **digest of
+  `apps/migrator/src/seeders`** and runs when those sources change, because seeding writes rows a
+  person may since have edited. `setup` deliberately does **not** seed users — `apps/web-e2e` runs it
+  and then registers its own accounts through sign-up — so the deployed chain is `seed:deployment`.
+- **`NODE_OPTIONS=--experimental-require-module` belongs to EVERY function, the Next server
+  included.** AWS's managed Node runtimes do not do `require(esm)` on their own — measured on both
+  `nodejs22.x` and the `nodejs24.x` that `sst.aws.Nextjs` hardcodes, while the very same OpenNext
+  bundle loads fine under local Node 24. The failure is
+  `ERR_REQUIRE_ESM: require() of ES Module @nestjs/core/index.js from .next/server/app/page.js`, and
+  because `apps/web` boots a Nest container of its own it is a **500 on every page**. The web
+  function drifted into it by listing its own environment instead of spreading
+  `sharedEnvironment` (`infra/aws/compute/environment.ts`), which is why that object is exported and
+  spread rather than copied.
+- **Telemetry goes to Better Stack through the collector extension, and its destination is the
+  `.env` at the root** — `BETTER_STACK_URL` and `BETTER_STACK_API_KEY`, which `sst deploy` loads by
+  itself and `requiredEnv` refuses to default. The exporter's type in `infra/lambda/collector.yaml`
+  is **`otlp_http`**, which is what the pinned layer's collector (v0.157.0) calls it — older ones
+  know only `otlphttp` and refuse the file with `unknown type: "otlp_http"`. The name travels with
+  the layer version, and an extension that cannot load its config does **not** fail the function, so
+  the wrong one is a stack that deploys, serves traffic and reports nothing, forever. Whoever bumps
+  `COLLECTOR_LAYER` checks it, in the function's log group: `Everything is ready.`
+- **Telemetry is flushed by the collector extension, not by the handler.** `infra/lambda/collector.yaml`
+  runs the OpenTelemetry collector beside each function: the SDK exports **each span as it ends** to
+  `localhost` (`startTelemetry` picks that when `AWS_LAMBDA_FUNCTION_NAME` is set) and the
+  collector's `decouple` processor lets the invocation finish while the export carries on. A
+  `flushTelemetry()` per invocation would cost a round trip per request for the same result. The
+  layer is only attached when an upstream endpoint is configured.
+- **Logs are pino records, and they carry `trace_id`.** `loggingModule()` replaces Nest's logger and
+  `PinoInstrumentation` joins the two halves, so a log line and the span it happened inside are one
+  story. There is no correlation id of our own on a record — `trace_id` already is one. It cannot be
+  tested under Vitest: the instrumentation patches `pino` as it is **required**, and Vitest loads
+  modules through a runner of its own.
+- **A command runs in a unit of work, and that is why there is nothing to drain.** `UnitOfWork`
+  (`@nestposts/cqsrs`) is Axon's, in the shape this framework can have one. While a command handler
+  runs, every `publish` is **staged**; when it returns, the staged events are appended to the
+  `EventLog` (`prepareCommit`) and then published and forwarded (`commit`). It also **waits for what
+  the publish set off**: `@nestjs/cqrs` drops whatever a handler or a saga returns, so
+  `UnitOfWorkCommands` wraps `CommandBus.execute` and every discovered `@EventsHandler`'s `handle`
+  to register their promises on the open unit. `EventIngestion.ingest` runs in a unit too, which is
+  what makes `processSqsEvent` await the whole chain. Measured: before it, the deployed log ended one
+  line after `was born untagged — completing it`, because Lambda froze the container mid-saga.
+  A handler that throws rolls back and the events are **discarded**, where before they had already
+  been published.
+- **The unit of work is scoped to the REQUEST, which is what Axon scopes it to.** Axon's is
+  `UnitOfWork<T extends Message<?>>` — it carries the message being handled — and here that message
+  is the `AsyncContext` this repository already propagates, the same object `PostRequest.of(event)`
+  answers with. `UnitOfWork.run(work, request)` joins an open unit only when the request **matches**:
+  a saga dispatching with `request.attachTo(command)` commits as part of the same unit, while work
+  carrying a different request — one that arrived from another service, say — gets a unit of its own
+  rather than being committed as part of somebody else's. Unknown on either side means no evidence
+  of a difference, and the unit is shared, which is what keeps a command dispatched without a
+  context from starting one by accident.
+- **`EventIngestion` decodes the request ONCE.** Decoding it in `ingest` and again in
+  `ingestMessage` would make two `AsyncContext` objects for one message, and the unit would then not
+  recognise the command a saga dispatches with the request it received — a unit of its own,
+  untracked, and the Lambda freeze is back.
+- **The handlers are found, not intercepted.** Wrapping `EventBus.bind` would be the obvious way to
+  reach them and it is **too late**: `CqrsModule`'s explorer calls it during ITS bootstrap, before
+  the importing module's. They are discovered through the `ModulesContainer` instead, which works
+  after the fact because Nest's `bind` reads `handler.instance.handle` when the event is published,
+  not when it binds.
+- **`publishAll` copies the array it is given.** `AggregateRoot.commit()` hands it the aggregate's
+  INTERNAL event array and then calls `uncommit()`, which empties it. Publishing straight away never
+  noticed; a unit of work holds the events until its commit phase and finds the array cleared — the
+  command succeeds, appends nothing and tells nobody.
+- **Publishing after a unit has started committing goes out immediately.** A handler reacting to a
+  committed event and dispatching a command of its own is new work, not a late addition to work that
+  is already leaving — `UnitOfWork.staging` is the question, and Axon answers it by throwing
+  (`Unit of Work is already committed`).
+- **`context.callbackWaitsForEmptyEventLoop = false` in every Lambda handler.** Without it Lambda
+  waits for the event loop to drain before finishing the invocation, and these applications hold a
+  MikroORM pool, a transport client and OpenTelemetry's batch timers — so it never drains, every
+  invocation runs to its full timeout, no warm container is reused and every request pays a cold
+  start while being billed for the timeout.
+- **SQS FIFO orders messages within a queue, not between queues.** A consumer that appends to an
+  aggregate's stream therefore wants ONE queue: two events of one post arriving through two queues
+  are two appends racing for the same sequence. `infra/aws/messaging/queues.ts` has the failure and
+  the fix.
+- **`batch: { partialResponses: true }` on the Lambda's event-source mapping** is what makes
+  `batchItemFailures` mean anything. Without it AWS decides the whole batch by whether the invocation
+  threw: throwing redrives the records that succeeded, and returning deletes the one that failed.
 
 ## `apps/web` holds its own Better Auth, in a Nest container
 

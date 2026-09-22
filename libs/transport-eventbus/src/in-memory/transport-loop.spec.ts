@@ -10,7 +10,6 @@ import { ROOT_TENANT, TENANT_HEADER, Tenant } from '@nestposts/database';
 import { TRANSPORT_EVENT_BUS_SERVICE } from '../constants';
 import { Publisher } from '../decorators/publisher.decorator';
 import { EventIngestion } from '../inbound/event-ingestion';
-import { IngestionSink, NoDurableState } from '../inbound/ingestion-sink';
 import { TransportEvent } from '../decorators/transport-event.decorator';
 import { MemoryEventEnvelopeSerializer } from '../outbound/serializers/memory-event-envelope.serializer';
 import { TRANSPORT_ORIGIN } from '../outbound/event-envelope';
@@ -22,7 +21,7 @@ import {
   RequestContextCodec,
   TransportRequestContext,
 } from '../request-context';
-import { type InProcessService, startInProcessService } from '../testing/in-process-service';
+import { type InProcessService, startInProcessService } from '../testing';
 import { eventIngestionProviders, transportEventBusProviders } from '../transport-event-bus.providers';
 import type { TransportEventBusService } from '../transport-event-bus.service';
 import { TransportIdentity } from '../transport-identity';
@@ -182,7 +181,6 @@ describe('one hop between two services, over the in-process transport', () => {
         ...eventIngestionProviders,
         { provide: TransportIdentity, useValue: TransportIdentity.named('consuming-service') },
         { provide: RequestContextCodec, useClass: CorrelatedRequestContext },
-        { provide: IngestionSink, useClass: NoDurableState },
         { provide: MessageInbox, useClass: MikroOrmMessageInbox },
         ConsumingOutbox,
         Received,

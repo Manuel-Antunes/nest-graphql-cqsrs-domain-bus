@@ -1,7 +1,7 @@
 import type { CodegenConfig } from '@graphql-codegen/cli';
 
 const config: CodegenConfig = {
-  schema: '../posts-api/src/graphql/**/*.graphql',
+  schema: ['../posts-api/src/graphql/**/*.graphql', 'federation.graphql'],
   documents: ['src/**/*.{ts,tsx}', '!src/gql/**/*'],
   ignoreNoDocuments: true,
   generates: {
@@ -13,6 +13,7 @@ const config: CodegenConfig = {
       config: {
         scalars: {
           DateTime: 'string',
+          _Any: 'Record<string, unknown>',
         },
         useTypeImports: true,
         skipTypename: false,

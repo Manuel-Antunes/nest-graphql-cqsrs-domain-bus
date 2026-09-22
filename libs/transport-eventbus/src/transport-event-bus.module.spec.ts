@@ -13,11 +13,9 @@ import { TRANSPORT_EVENT_BUS_PUBLISHER, TRANSPORT_EVENT_BUS_SERVICE } from './co
 import { Publisher } from './decorators/publisher.decorator';
 import { EventIngestion } from './inbound/event-ingestion';
 import { IncomingRequest } from './inbound/incoming-request';
-import { IngestionSink } from './inbound/ingestion-sink';
 import { OutboxRouting } from './outbound/outbox-routing';
-import { EventSourcedRepository } from './persistence/event-store/event-sourced.repository';
-import { EventStore } from './persistence/event-store/event-store';
-import { EventStoreSink } from './persistence/event-store/event-store.sink';
+import { EventSourcedRepository } from './persistence/event-log/event-sourced.repository';
+import { EventLog } from './persistence/event-log/event-log';
 import { MessageInbox, MikroOrmMessageInbox, NoMessageInbox } from './persistence/message-inbox';
 import { DatabaseModule } from '@nestposts/database';
 import { CorrelatedRequestContext, RequestContextCodec } from './request-context';
@@ -144,7 +142,7 @@ describe('TransportEventBusModule', () => {
       expect(app.get(IncomingRequest)).toBeInstanceOf(IncomingRequest);
     });
 
-    it('wires the event store and a repository per aggregate, and fills the sink with it', async () => {
+    it('wires the event log and a repository per aggregate', async () => {
       const app = await bootstrap([
         ...persistence(),
         TransportEventBusModule.forRoot({
@@ -154,8 +152,7 @@ describe('TransportEventBusModule', () => {
         }),
       ]);
 
-      expect(app.get(EventStore)).toBeDefined();
-      expect(app.get(IngestionSink)).toBeInstanceOf(EventStoreSink);
+      expect(app.get(EventLog)).toBeDefined();
       expect(app.get(EventSourcedRepository)).toBeInstanceOf(EventSourcedRepository);
     });
 
@@ -176,24 +173,13 @@ describe('TransportEventBusModule', () => {
       });
       const replayed = await inRequestContext(em, async () => {
         await app
-          .get(EventStore)
-          .append('thing-1', [new ThingHappenedEvent('thing-1', new Date('2026-09-08T12:00:00.000Z'))]);
+          .get(EventLog)
+          .append([new ThingHappenedEvent('thing-1', new Date('2026-09-08T12:00:00.000Z'))], 'thing-1');
         return app.get<EventSourcedRepository<Thing>>(EventSourcedRepository).load('thing-1');
       });
 
       expect(remembered).toHaveLength(1);
       expect(replayed).toBeInstanceOf(Thing);
-    });
-
-    it('refuses a sink beside an event store: one of them would never run', () => {
-      @Injectable()
-      class MySink extends IngestionSink {
-        async receive(): Promise<void> {}
-      }
-
-      expect(() =>
-        TransportEventBusModule.forRoot({ identity: 'tagging', sink: MySink, eventStore: [Thing] }),
-      ).toThrow(/bind the same port/);
     });
   });
 
@@ -247,7 +233,7 @@ describe('TransportEventBusModule', () => {
       ]);
 
       expect(app.get(EventIngestion)).toBeInstanceOf(EventIngestion);
-      expect(app.get(EventStore)).toBeDefined();
+      expect(app.get(EventLog)).toBeDefined();
       expect(app.get(OutboxRouting).describe()).toEqual(['ThingsPublisher ← [things]']);
     });
   });

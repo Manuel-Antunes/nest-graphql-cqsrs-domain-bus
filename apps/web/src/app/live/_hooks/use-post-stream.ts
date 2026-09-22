@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useSubscription } from '@apollo/client/react';
 
 import type { StreamStatus } from '@/app/_components/status-dot';
-import { onSocketConnected } from '@/lib/apollo/links/socket-link';
+import { onSseConnected } from '@/lib/apollo/links/sse-link';
 
 import { OnPostCreatedSubscription, OnPostUpdatedSubscription } from '../query';
 
@@ -35,10 +35,10 @@ export function usePostStream(active: boolean) {
       setOpen({ created: false, updated: false });
       return;
     }
-    const offCreated = onSocketConnected('OnPostCreated', () =>
+    const offCreated = onSseConnected('OnPostCreated', () =>
       setOpen((current) => ({ ...current, created: true })),
     );
-    const offUpdated = onSocketConnected('OnPostUpdated', () =>
+    const offUpdated = onSseConnected('OnPostUpdated', () =>
       setOpen((current) => ({ ...current, updated: true })),
     );
     return () => {

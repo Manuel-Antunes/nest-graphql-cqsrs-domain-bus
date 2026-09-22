@@ -23,6 +23,21 @@ export const TRANSPORT_METADATA_PREFIX = 'cqrs-transport-';
 export const isTransportMetadata = (key: string): boolean =>
   key.startsWith(TRANSPORT_METADATA_PREFIX);
 
+/** W3C trace context, and the baggage that travels with it — the keys a propagator reads and writes. */
+const TRACE_CONTEXT_KEYS = new Set(['traceparent', 'tracestate', 'baggage']);
+
+/**
+ * Whether a metadata key belongs to the **trace** rather than to the application.
+ *
+ * It answers the same question {@link isTransportMetadata} does, for the same reason: a service in
+ * the middle of a chain re-emits what arrived, and re-emitting the PREVIOUS hop's `traceparent`
+ * would make everything it publishes a sibling of the message it received instead of a child of what
+ * it is doing now. The trace stays one trace, which is what makes it hard to notice — the causality
+ * is just wrong, with every service's work hanging off the first one. `injectTraceContext` writes
+ * the current one instead, at the moment the envelope is built.
+ */
+export const isTraceContext = (key: string): boolean => TRACE_CONTEXT_KEYS.has(key.toLowerCase());
+
 /** `namespace.Name#version` — what the other side resolves the class by. */
 export const TRANSPORT_MESSAGE_TYPE = 'cqrs-transport-message-type';
 
