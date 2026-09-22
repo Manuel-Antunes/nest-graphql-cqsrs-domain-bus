@@ -5,6 +5,7 @@ import { ContainerStack, FreePort, type Endpoints } from './containers';
 import { ServiceDatabase } from './database';
 import { WORKSPACE_ROOT } from './docker';
 import { HttpHealth, Service, nextApplication } from './service';
+import { e2eTransport } from './transport';
 
 export const POSTS_SCHEMA = process.env.POSTS_SCHEMA ?? 'posts';
 export const TAGGING_SCHEMA = process.env.TAGGING_SCHEMA ?? 'tagging';
@@ -43,6 +44,7 @@ export class Stack {
   async up(): Promise<void> {
     mkdirSync(this.logDirectory, { recursive: true });
     const endpoints = await this.containers.up({
+      transport: e2eTransport(),
       apiPort: await FreePort.pick(),
       webUrl: WEB_URL,
       authSecret: AUTH_SECRET,
@@ -76,9 +78,13 @@ export class Stack {
    */
   private publish(endpoints: Endpoints): void {
     process.env.POSTGRES_URL = endpoints.postgresUrl;
-    process.env.RABBITMQ_URL = endpoints.rabbitmqUrl;
-    process.env.RABBITMQ_MANAGEMENT = endpoints.managementUrl;
     process.env.API_URL = endpoints.apiUrl;
+    if (endpoints.managementUrl) {
+      process.env.RABBITMQ_MANAGEMENT = endpoints.managementUrl;
+    }
+    if (endpoints.inngestUrl) {
+      process.env.INNGEST_BASE_URL = endpoints.inngestUrl;
+    }
   }
 
   private async startWeb(endpoints: Endpoints): Promise<void> {

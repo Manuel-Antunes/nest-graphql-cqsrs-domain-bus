@@ -103,7 +103,8 @@ Environment variables, per application:
 | database | one Postgres for both: `POSTGRES_URL` (default `postgresql://nestposts:nestposts@localhost:5432/nestposts`) | idem |
 | schema | `POSTS_SCHEMA` (default `posts`) | `TAGGING_SCHEMA` (default `tagging`) |
 | | the same variables address `apps/migrator`, which is what creates those schemas | |
-| transport | `POSTS_TRANSPORT` = `rabbitmq` (default) \| `memory` \| `aws` | `TAGGING_TRANSPORT`, same |
+| transport | `POSTS_TRANSPORT` = `inngest` (default) \| `rabbitmq` \| `memory` \| `aws` | `TAGGING_TRANSPORT`, same |
+| inngest | `INNGEST_BASE_URL` (default `http://localhost:8288`), `INNGEST_SERVE_ORIGIN`, `INNGEST_DEV`, `INNGEST_EVENT_KEY`, `INNGEST_SIGNING_KEY` | idem, plus `TAGGING_PORT` (default 3001) |
 | publishing | `POSTS_PUBLISH_EVENTS=false` turns the outbound half off | `TAGGING_PUBLISH_EVENTS` |
 | broker | `RABBITMQ_URL`, `POSTS_EXCHANGE`, `POSTS_COMPLETED_QUEUE` | `RABBITMQ_URL`, `TAGGING_EXCHANGE`, `TAGGING_QUEUE` |
 | aws | `POSTS_TOPIC_ARN`, `POSTS_COMPLETED_QUEUE_URL` — both default to LocalStack | `TAGGING_TOPIC_ARN`, `TAGGING_QUEUE_URL` |
@@ -257,12 +258,30 @@ before changing the library's shape. The essentials:
   is global, and `forRootAsync` is the same with the identity resolved at runtime. Underneath it are the
   provider arrays (`transportEventBusProviders`, `eventIngestionProviders`, `eventLogProviders`),
   still exported for a service — or a spec — that wants to compose them by hand.
-- **Three transports, one wire idea.** RabbitMQ (`Rmq*` pair, the metadata in the AMQP headers),
+- **Four transports, one wire idea.** RabbitMQ (`Rmq*` pair, the metadata in the AMQP headers),
   AWS (`SnsClientProxy`/`SqsClientProxy` out, `SqsStrategy` in — the topic is the exchange, a
   subscription's **filter policy** is the binding, and the metadata travels in the body because SNS
   allows ten message attributes) and the in-process pair. `SqsStrategy` runs either as a polling loop
   (`queueUrl`) or driven by a Lambda (`processSqsEvent`, which reports `batchItemFailures`); the
   controllers, the handlers and the events are the same on all three.
+- **Inngest is the local default** (`libs/transport-eventbus/src/inngest`), and it inverts who calls
+  whom: a broker delivers, Inngest **invokes**. The client proxy sends an event, the strategy turns
+  every `@EventPattern` into a function and serves it over the host application's HTTP adapter, and
+  the dev server (a container in `docker-compose.yml`) routes between them.
+  - **The event's name is the QUALIFIED name**, `posts.PostCreated`, not the routing key: Inngest
+    matches a trigger by exact name and has no wildcards, so a name carrying the aggregate would mint
+    one event name per post and no function could be declared for it. The aggregate stays in the
+    metadata, where the ingestion already reads it.
+  - **A binding is resolved at boot**, by `inngestTriggers`: `posts.#` becomes one trigger per
+    registered `@EventType` of that namespace, `posts.PostCreated.*` becomes `posts.PostCreated`. A
+    function takes at most **ten**, and past that the strategy refuses to start rather than serve
+    traffic nothing triggers.
+  - **The metadata travels in the event's `user`**, and the request's correlation id **also** becomes
+    `meta.sessions.correlation_id` — Inngest's own grouping, which from inngest-js 4.18 propagates by
+    itself to every event a run sends. That is `RequestContextCodec`'s job, done by the platform.
+  - **`apps/tagging` is a hybrid on this transport**, with an HTTP port whose only route is
+    `/api/inngest`. It is the one thing this transport costs that a broker does not, and it is why the
+    port exists only in that mode.
 - **The transport's tables come with its options**: `inbox` brings the inbox's schema and `eventStore`
   the streams', through `DatabaseModule.forFeature`. A publish-only service needs no database at all.
 - **`TransportIdentity` is the mark of authorship, not an address.** Bound with
@@ -690,7 +709,7 @@ Four levels, and each answers something the others cannot:
 | unit / slice | every project, beside the code | the rule, the handler, the mapping |
 | integration | `libs/transport-eventbus/src/**`, `libs/auth/src/infrastructure/persistence`, `apps/posts-api/test/persistence` | the envelope, the routing table's refusals, the inbox, the event store and its replay, the ORM mapping — and that Better Auth writes and reads through the entities `libs/auth` maps by hand |
 | one hop, in process | `libs/transport-eventbus/src/in-memory/transport-loop.spec.ts` | two services over `MemoryServer` + `MemoryClient`, each able to reach the other: the real class arrives, the request is restored, a redelivery is deduplicated, the loop is cut |
-| the whole system, in a browser | `pnpm test:web` (`apps/web-e2e`, **Playwright**) | **the packaged services over real RabbitMQ**, driven through Chromium: signing in, being refused, the three states of `/posts/new`, the polymorphic `me`, a post read by someone who never signed in — and then what the browser cannot see, in the same test: each service's durable state, both inboxes, idempotency through the broker's management API, the replica channel, one correlation id across two processes, and the `x-tenant` **of the browser** on the headers of both events |
+| the whole system, in a browser | `pnpm test:web` (`apps/web-e2e`, **Playwright**) | **the packaged services over Inngest AND over real RabbitMQ**, driven through Chromium: signing in, being refused, the three states of `/posts/new`, the polymorphic `me`, a post read by someone who never signed in — and then what the browser cannot see, in the same test: each service's durable state, both inboxes, idempotency through the broker's management API, the replica channel, one correlation id across two processes, and the `x-tenant` **of the browser** on the headers of both events |
 
 **`test-e2e` is the target name for every level of e2e there is**, in `apps/posts-api` and in
 `apps/web-e2e`, which is the whole reason `pnpm test:e2e` can be `nx run-many` and reach both. A new
@@ -699,9 +718,16 @@ follow. (`e2e` is not free: `@nx/playwright` infers a target and `nx.json` names
 `--parallel=1`, because both want the same Postgres and the same broker, and a suite that drops the
 `posts` schema while another is reading it fails for a reason that has nothing to do with the code.
 
-`pnpm test:web` provisions everything itself, through **Testcontainers**: Postgres, RabbitMQ, the
-migrator as a one-shot, and then `posts-api` and `tagging` as the images `apps/<app>/Dockerfile`
-build. They share a network and address each other by alias, so nothing has to be taught a port, and
+`pnpm test:web` runs the **same suite over both transports**, one after the other — Inngest first,
+because it is the default, then RabbitMQ — and nothing is skipped in either. What differs is only
+where a claim is checked, which `support/messages.ts` is: a queue bound to `posts.#` and drained
+through the management API, or the dev server's own `/v1/events`. A test that could only be written
+against one of them would be a test of the transport rather than of the system, which is what that
+port exists to prevent.
+
+It provisions everything itself, through **Testcontainers**: Postgres, the broker or the Inngest dev
+server, the migrator as a one-shot, and then `posts-api` and `tagging` as the images
+`apps/<app>/Dockerfile` build. They share a network and address each other by alias, so nothing has to be taught a port, and
 what the host reaches is published wherever Docker likes — which is why the suite now needs no
 configuration and does not care what else on the machine is holding 5432 or 5672. The one host port
 chosen up front is the API's, by `FreePort`, because it signs cookies against its own origin and so
@@ -716,6 +742,26 @@ DTOs count.
 
 ## Gotchas
 
+- **The Inngest SDK advertises the URL it was REACHED at, not the one it is reachable at.** A
+  registration triggered from outside the network — a `PUT /api/inngest` from the host, say — tells
+  the dev server the service lives at `localhost:<published port>`, which from inside the dev server's
+  container is the dev server itself. Every run then sits in `Running` forever, with nothing in any
+  log on either side, because the call goes somewhere that answers and is not the service.
+  `serveOrigin` (or `INNGEST_SERVE_ORIGIN`) is what declares the truth, and both `docker-compose.yml`
+  and `apps/web-e2e` set it to the address on their network.
+- **`inngest/fastify` exports both `serve` and `fastifyPlugin`, and only one of them is a plugin.**
+  `serve(options)` returns a route handler; handing it to `fastify.register` makes Fastify call it
+  with its own instance, so the first request dies on `req.headers` being undefined and takes the
+  process with it. `fastifyPlugin` is the one to register, with `{ client, functions, options }`.
+- **Multiple triggers go in the CONFIG, not as a second argument.**
+  `createFunction({ id, triggers: [...] }, handler)` — two arguments. The three-argument form takes a
+  single trigger, and passing an array there is a compile error that reads as an arity mistake.
+- **A page renders once, and an assertion on the DOM does not wait for the system.** `toBeVisible`
+  repolls the DOM of a render that already happened, so a page navigated to before the saga closed
+  shows version 1 until the timeout — and whether it does depends on the transport's latency, which
+  made one assertion pass on RabbitMQ (~1s) and fail on Inngest (~330ms). The page is right: a fresh
+  request serves the tag. `expect(async () => { await page.goto(...); ... }).toPass()` is the shape
+  that waits for the system instead of for the browser.
 - **RabbitMQ 4 refuses a transient non-exclusive queue.** `transient_nonexcl_queues` is deprecated
   and not permitted by default, so declaring `{ durable: false }` on a queue nobody holds
   exclusively answers `400` from the management API — and `apps/web-e2e`'s spy queue was exactly

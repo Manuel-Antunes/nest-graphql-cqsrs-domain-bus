@@ -13,6 +13,17 @@ container on a network of its own, published on ports Docker picks — so anothe
 or 5672 is not this suite's problem, and there is no schema to drop or queue to delete before a run,
 because there is nothing there to begin with.
 
+**It runs twice, over both transports**, and nothing is skipped in either: `E2E_TRANSPORT=inngest`
+(the default) and `E2E_TRANSPORT=rabbitmq`. Where a claim is checked differs — a spy queue drained
+through the management API, or the Inngest dev server's `/v1/events` — and `src/support/messages.ts`
+is the one place that knows which. A test that could only be written against one of them would be a
+test of the transport rather than of the system.
+
+`E2E_KEEP_STACK=1` leaves everything running after the report, which is the only way to ask a broker,
+a dev server or a database what it thinks about a failure; with `TESTCONTAINERS_RYUK_DISABLED=true`
+beside it, the reaper leaves it alone too. Both are for a person at a keyboard: the stack they leave
+behind holds ports the next run needs, so clean up before running again.
+
 It replaced `posts-api-e2e`, and the reason is the frontend: the saga was already proven across two
 processes, but nothing proved that a person could sign in, be refused, write a post and watch another
 service complete it. Now the same run does both — and it keeps every assertion the old suite had,

@@ -1,4 +1,6 @@
 import { MemoryServer } from '@camcima/nestjs-memory-microservices';
+import type { HttpServer } from '@nestjs/common';
+import type { Inngest } from 'inngest';
 import {
   type ClientProxy,
   ClientProxyFactory,
@@ -7,7 +9,12 @@ import {
 } from '@nestjs/microservices';
 import {
   AwsEventEnvelopeSerializer,
+  InngestClientProxy,
+  InngestEventEnvelopeDeserializer,
+  InngestEventEnvelopeSerializer,
+  InngestStrategy,
   MemoryClient,
+  inngestApp,
   MemoryEventEnvelopeSerializer,
   RmqEventEnvelopeDeserializer,
   RmqEventEnvelopeSerializer,
@@ -42,17 +49,30 @@ export const INBOUND_QUEUE_URLS = (
   .map((url) => url.trim())
   .filter(Boolean);
 
-export type TransportMode = 'rabbitmq' | 'memory' | 'aws';
+export type TransportMode = 'inngest' | 'rabbitmq' | 'memory' | 'aws';
 
+/**
+ * **Inngest is what a developer gets by default.** It needs no broker to be running and no
+ * credentials, and the dev server it talks to is a container in `docker-compose.yml`. `rabbitmq` is
+ * still here, and still what the deployed shape's non-AWS half would use — it is asked for by name.
+ */
 export const transportMode = (): TransportMode => {
   const declared = process.env.TAGGING_TRANSPORT;
-  return declared === 'memory' || declared === 'aws' ? declared : 'rabbitmq';
+  return declared === 'memory' || declared === 'aws' || declared === 'rabbitmq'
+    ? declared
+    : 'inngest';
 };
+
+let client: Inngest.Any | undefined;
+
+/** One client for both halves: the proxy sends on it and the strategy creates its functions on it. */
+export const inngest = (): Inngest.Any => (client ??= inngestApp('tagging'));
 
 export const inboundDestination = (): string =>
   ({
     rabbitmq: INBOUND_QUEUE,
     aws: INBOUND_QUEUE_URLS.join(', '),
+    inngest: 'inngest functions',
     memory: 'in process',
   })[transportMode()];
 
@@ -60,6 +80,11 @@ const urls = (): string[] => [process.env.RABBITMQ_URL ?? 'amqp://localhost:5672
 
 export const postEventsClient = (): ClientProxy => {
   switch (transportMode()) {
+    case 'inngest':
+      return new InngestClientProxy({
+        inngest: inngest(),
+        serializer: new InngestEventEnvelopeSerializer(),
+      });
     case 'aws':
       return new SnsClientProxy({
         topicArn: EVENTS_TOPIC_ARN,
@@ -93,8 +118,16 @@ export const lambdaTransport = (): MicroserviceOptions => ({
  * so two applications sharing a queue would compete for the messages instead of each receiving one —
  * and whichever discards it acknowledges it, killing it for the other.
  */
-export const inboundTransport = (): MicroserviceOptions => {
+export const inboundTransport = (httpAdapter?: HttpServer): MicroserviceOptions => {
   switch (transportMode()) {
+    case 'inngest':
+      return {
+        strategy: new InngestStrategy({
+          inngest: inngest(),
+          deserializer: new InngestEventEnvelopeDeserializer(),
+          httpAdapter,
+        }),
+      };
     case 'aws':
       return {
         strategy: new SqsStrategy({

@@ -87,7 +87,9 @@ services:
       PORT: '3000'
       POSTGRES_URL: postgresql://${POSTGRES_USER:-nestposts}:${POSTGRES_PASSWORD:-nestposts}@postgres:5432/${POSTGRES_DB:-nestposts}
       RABBITMQ_URL: amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672
-      POSTS_TRANSPORT: rabbitmq
+      POSTS_TRANSPORT: ${POSTS_TRANSPORT:-inngest}
+      INNGEST_BASE_URL: http://inngest:8288
+      INNGEST_SERVE_ORIGIN: http://posts-api:3000
       AUTH_SECRET: ${AUTH_SECRET:-nestposts-compose-secret}
       AUTH_URL: http://localhost:${API_PORT:-3000}
       WEB_URL: http://localhost:${WEB_PORT:-4300}
@@ -95,6 +97,8 @@ services:
     depends_on:
       rabbitmq:
         condition: service_healthy
+      inngest:
+        condition: service_started
       migrator:
         condition: service_completed_successfully
 
@@ -108,10 +112,15 @@ services:
     environment:
       POSTGRES_URL: postgresql://${POSTGRES_USER:-nestposts}:${POSTGRES_PASSWORD:-nestposts}@postgres:5432/${POSTGRES_DB:-nestposts}
       RABBITMQ_URL: amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672
-      TAGGING_TRANSPORT: rabbitmq
+      TAGGING_TRANSPORT: ${TAGGING_TRANSPORT:-inngest}
+      INNGEST_BASE_URL: http://inngest:8288
+      INNGEST_SERVE_ORIGIN: http://tagging:3001
+      TAGGING_PORT: '3001'
     depends_on:
       rabbitmq:
         condition: service_healthy
+      inngest:
+        condition: service_started
       migrator:
         condition: service_completed_successfully
 
@@ -136,6 +145,25 @@ services:
     depends_on:
       posts-api:
         condition: service_started
+
+  # The Inngest dev server: the local default transport's broker-equivalent.
+  #
+  # It is told where each service serves its functions (`-u`), because discovery by scanning ports
+  # finds nothing when the services are containers on a network of their own. Inngest reaches a
+  # service by CALLING it, which is why `tagging` has an HTTP port at all in this mode.
+  inngest:
+    image: inngest/inngest:latest
+    container_name: nestposts-inngest
+    command:
+      - inngest
+      - dev
+      - --no-discovery
+      - -u
+      - http://posts-api:3000/api/inngest
+      - -u
+      - http://tagging:3001/api/inngest
+    ports:
+      - '${INNGEST_PORT:-8288}:8288'
 
   # SNS and SQS, locally. The AWS transport is the same code path as the RabbitMQ one — the topic is
   # the exchange, a queue subscribed with a filter policy is a binding — so this is what makes

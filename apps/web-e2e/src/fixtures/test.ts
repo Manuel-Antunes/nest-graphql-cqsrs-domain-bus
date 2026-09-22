@@ -3,6 +3,7 @@ import { test as base, expect } from '@playwright/test';
 import type { Account, Accounts } from '../support/accounts';
 import type { ExecuteGraphql } from '../support/graphql';
 import { Broker } from '../support/broker';
+import { type Messages, messagesOf } from '../support/messages';
 import { ServiceDatabase } from '../support/database';
 import { graphqlExecutor } from '../support/graphql';
 import { PostsApi } from '../support/posts-api';
@@ -23,6 +24,8 @@ interface Fixtures {
   postsStore: ServiceDatabase;
   taggingStore: ServiceDatabase;
   broker: Broker;
+  /** What went on the wire, whichever wire this run used — see `support/messages.ts`. */
+  messages: (queue: string) => Messages;
 }
 
 /**
@@ -52,6 +55,10 @@ export const test = base.extend<Fixtures>({
 
   broker: async ({}, use) => {
     await use(new Broker());
+  },
+
+  messages: async ({}, use) => {
+    await use(messagesOf);
   },
 
   /**

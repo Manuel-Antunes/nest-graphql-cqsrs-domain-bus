@@ -1,5 +1,7 @@
 import { createServer } from 'node:net';
 
+import type { E2eTransport } from './transport';
+
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import {
   GenericContainer,
@@ -11,6 +13,9 @@ import {
 
 export const POSTGRES_IMAGE = 'postgres:18-alpine';
 export const RABBITMQ_IMAGE = 'rabbitmq:4-management';
+export const INNGEST_IMAGE = 'inngest/inngest:latest';
+
+const TAGGING_PORT = 3001;
 
 export const POSTGRES_USER = 'nestposts';
 export const POSTGRES_PASSWORD = 'nestposts';
@@ -19,9 +24,11 @@ export const POSTGRES_DB = 'nestposts';
 /** Where the host reaches what the containers publish. Everything else is an alias on the network. */
 export interface Endpoints {
   readonly postgresUrl: string;
-  readonly rabbitmqUrl: string;
-  readonly managementUrl: string;
   readonly apiUrl: string;
+  /** The broker's management API, on the run that has a broker. */
+  readonly managementUrl?: string;
+  /** The Inngest dev server, on the run that has one — its `/v1/events` is that run's wire. */
+  readonly inngestUrl?: string;
 }
 
 /**
@@ -46,6 +53,8 @@ export class FreePort {
 }
 
 export interface ContainerStackOptions {
+  /** Which transport this run drives the system over — see `support/transport.ts`. */
+  readonly transport: E2eTransport;
   readonly apiPort: number;
   readonly webUrl: string;
   readonly authSecret: string;
@@ -74,19 +83,33 @@ export class ContainerStack {
   private network?: StartedNetwork;
   private postgres?: StartedPostgreSqlContainer;
   private rabbitmq?: StartedTestContainer;
+  private inngest?: StartedTestContainer;
   private postsApi?: StartedTestContainer;
   private tagging?: StartedTestContainer;
 
   async up(options: ContainerStackOptions): Promise<Endpoints> {
     this.network = await new Network().start();
-    await this.startInfrastructure();
+    await this.startInfrastructure(options);
     await this.migrate(options);
     await this.startApplications(options);
+    if (options.transport === 'inngest') {
+      await this.startInngest();
+      await this.register(`http://localhost:${options.apiPort}`);
+      await this.register(
+        `http://${this.tagging!.getHost()}:${this.tagging!.getMappedPort(TAGGING_PORT)}`,
+      );
+    }
     return this.endpoints(options.apiPort);
   }
 
   async down(): Promise<void> {
-    for (const container of [this.postsApi, this.tagging, this.rabbitmq, this.postgres]) {
+    for (const container of [
+      this.postsApi,
+      this.tagging,
+      this.inngest,
+      this.rabbitmq,
+      this.postgres,
+    ]) {
       await container?.stop({ timeout: 10 }).catch(() => undefined);
     }
     await this.network?.stop().catch(() => undefined);
@@ -100,7 +123,7 @@ export class ContainerStack {
     return 'amqp://guest:guest@rabbitmq:5672';
   }
 
-  private async startInfrastructure(): Promise<void> {
+  private async startInfrastructure(options: ContainerStackOptions): Promise<void> {
     this.postgres = await new PostgreSqlContainer(POSTGRES_IMAGE)
       .withNetwork(this.network!)
       .withNetworkAliases('postgres')
@@ -109,11 +132,39 @@ export class ContainerStack {
       .withPassword(POSTGRES_PASSWORD)
       .start();
 
+    if (options.transport !== 'rabbitmq') {
+      return;
+    }
+
     this.rabbitmq = await new GenericContainer(RABBITMQ_IMAGE)
       .withNetwork(this.network!)
       .withNetworkAliases('rabbitmq')
       .withExposedPorts(5672, 15672)
       .withWaitStrategy(Wait.forLogMessage(/Server startup complete/))
+      .start();
+  }
+
+  /**
+   * **The dev server starts LAST, and that is the whole of it.** It is told where each service serves
+   * its functions, and it resolves those addresses on the network — so starting it before the
+   * containers those aliases name exist leaves it pointed at names that do not resolve. The
+   * applications do not need it at boot: they reach it when they publish, and by then it is up.
+   */
+  private async startInngest(): Promise<void> {
+    this.inngest = await new GenericContainer(INNGEST_IMAGE)
+      .withNetwork(this.network!)
+      .withNetworkAliases('inngest')
+      .withExposedPorts(8288)
+      .withCommand([
+        'inngest',
+        'dev',
+        '--no-discovery',
+        '-u',
+        'http://posts-api:3000/api/inngest',
+        '-u',
+        `http://tagging:${TAGGING_PORT}/api/inngest`,
+      ])
+      .withWaitStrategy(Wait.forLogMessage(/starting server/))
       .start();
   }
 
@@ -141,16 +192,24 @@ export class ContainerStack {
     const shared = {
       POSTGRES_URL: this.internalPostgresUrl,
       RABBITMQ_URL: this.internalRabbitmqUrl,
+      INNGEST_BASE_URL: 'http://inngest:8288',
       POSTS_SCHEMA: options.postsSchema,
       TAGGING_SCHEMA: options.taggingSchema,
       AUTH_SECRET: options.authSecret,
       MIKRO_ORM_DEBUG: 'false',
+      LOG_LEVEL: process.env.E2E_LOG_LEVEL ?? 'info',
     };
 
     this.tagging = await new GenericContainer('nestposts/tagging:dev')
       .withNetwork(this.network!)
       .withNetworkAliases('tagging')
-      .withEnvironment({ ...shared, TAGGING_TRANSPORT: 'rabbitmq' })
+      .withExposedPorts(TAGGING_PORT)
+      .withEnvironment({
+        ...shared,
+        TAGGING_TRANSPORT: options.transport,
+        TAGGING_PORT: String(TAGGING_PORT),
+        INNGEST_SERVE_ORIGIN: `http://tagging:${TAGGING_PORT}`,
+      })
       .withWaitStrategy(Wait.forLogMessage(/tagging is listening/))
       .withLogConsumer((stream) => stream.on('data', (line) => options.logs(`tagging ${line}`)))
       .start();
@@ -162,7 +221,8 @@ export class ContainerStack {
       .withEnvironment({
         ...shared,
         PORT: '3000',
-        POSTS_TRANSPORT: 'rabbitmq',
+        POSTS_TRANSPORT: options.transport,
+        INNGEST_SERVE_ORIGIN: 'http://posts-api:3000',
         AUTH_URL: apiUrl,
         WEB_URL: options.webUrl,
         AUTH_TRUSTED_ORIGINS: `${apiUrl},${options.webUrl}`,
@@ -170,15 +230,45 @@ export class ContainerStack {
       .withWaitStrategy(Wait.forLogMessage(/Nest application successfully started/))
       .withLogConsumer((stream) => stream.on('data', (line) => options.logs(`posts-api ${line}`)))
       .start();
+
+  }
+
+  /**
+   * **A `PUT` on the serve endpoint is how a service tells Inngest what it has.** The dev server also
+   * polls the `-u` addresses it was given, but it was started before these containers existed and a
+   * suite cannot afford to wait out a poll it does not control: a saga that has not been routed yet
+   * looks exactly like a saga that is broken.
+   */
+  private async register(baseUrl: string): Promise<void> {
+    const deadline = Date.now() + 30_000;
+    for (;;) {
+      try {
+        const response = await fetch(`${baseUrl}/api/inngest`, { method: 'PUT' });
+        if (response.ok) {
+          return;
+        }
+      } catch {
+        // the server is up but the route may not be, which is what the deadline is for
+      }
+      if (Date.now() > deadline) {
+        throw new Error(`${baseUrl}/api/inngest never registered its functions with Inngest`);
+      }
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
   }
 
   private endpoints(apiPort: number): Endpoints {
-    const host = this.rabbitmq!.getHost();
     return {
       postgresUrl: this.postgres!.getConnectionUri(),
-      rabbitmqUrl: `amqp://guest:guest@${host}:${this.rabbitmq!.getMappedPort(5672)}`,
-      managementUrl: `http://${host}:${this.rabbitmq!.getMappedPort(15672)}`,
       apiUrl: `http://localhost:${apiPort}`,
+      ...(this.rabbitmq
+        ? {
+            managementUrl: `http://${this.rabbitmq.getHost()}:${this.rabbitmq.getMappedPort(15672)}`,
+          }
+        : {}),
+      ...(this.inngest
+        ? { inngestUrl: `http://${this.inngest.getHost()}:${this.inngest.getMappedPort(8288)}` }
+        : {}),
     };
   }
 }

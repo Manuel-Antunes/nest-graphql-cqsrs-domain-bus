@@ -63,7 +63,7 @@
         ],
         "options": {
           "cwd": "{projectRoot}",
-          "command": "playwright test"
+          "command": "E2E_TRANSPORT=inngest playwright test && E2E_TRANSPORT=rabbitmq playwright test"
         }
       }
     }

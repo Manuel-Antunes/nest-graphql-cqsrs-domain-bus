@@ -27,4 +27,5 @@ COPY --from=build /workspace/package.json /workspace/pnpm-workspace.yaml /worksp
 COPY --from=build /workspace/node_modules ./node_modules
 COPY --from=build /workspace/libs ./libs
 COPY --from=build /workspace/apps/tagging ./apps/tagging
+EXPOSE 3001
 CMD ["node", "apps/tagging/dist/main.js"]

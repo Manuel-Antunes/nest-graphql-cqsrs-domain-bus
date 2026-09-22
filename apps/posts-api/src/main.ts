@@ -19,7 +19,7 @@ async function bootstrap() {
   );
   app.useLogger(app.get(PinoLogger));
 
-  app.connectMicroservice(postCompletedTransport(), { inheritAppConfig: true });
+  app.connectMicroservice(postCompletedTransport(app.getHttpAdapter()), { inheritAppConfig: true });
   await app.startAllMicroservices();
 
   const port = Number(process.env.PORT ?? 3000);

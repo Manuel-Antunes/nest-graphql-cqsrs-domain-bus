@@ -3,7 +3,6 @@ import { print } from 'graphql';
 
 import { type GraphQlAnswer, expect, test } from '../fixtures/test';
 import { graphql } from '../gql';
-import { EXCHANGE, type SpiedMessage, republished } from '../support/broker';
 import { until } from '../support/posts-api';
 
 const PRE_CREATED = 'posts.PostPreCreated';
@@ -68,12 +67,21 @@ test.describe.serial('a saga coreografada, escrita no navegador', () => {
     expect(postId).toMatch(/^[0-9a-f-]{36}$/);
   });
 
+  /**
+   * **Recarrega até ver**, e isso não é frouxidão: a página é renderizada no servidor a cada pedido e
+   * não assina nada, então o que ela mostra é o estado no instante em que foi pedida. A decisão do
+   * outro serviço chega depois — 300ms sobre Inngest, ~1s sobre RabbitMQ — e quem navegou antes disso
+   * fica com a versão 1 na tela para sempre. Um `toBeVisible` sozinho não espera pelo sistema, espera
+   * pelo DOM de um render que já aconteceu; é por isso que ele passava num transporte e falhava no
+   * outro, que é a pior forma de uma asserção existir.
+   */
   test('a página do post alcança a versão 2, com a tag que o outro serviço decidiu', async ({
     page,
   }) => {
-    await page.goto(`/posts/${postId}`);
-
-    await expect(page.getByText('Untagged').first()).toBeVisible();
+    await expect(async () => {
+      await page.goto(`/posts/${postId}`);
+      await expect(page.getByText('Untagged').first()).toBeVisible({ timeout: 1_000 });
+    }).toPass({ timeout: 30_000 });
   });
 
   test('o estado durável de cada serviço é exatamente o esperado', async ({
@@ -115,16 +123,18 @@ test.describe.serial('a saga coreografada, escrita no navegador', () => {
   });
 
   test('reentregar a MESMA mensagem não produz uma segunda decisão', async ({
-    broker,
+    messages,
     taggingStore,
   }) => {
     const ingested = await taggingStore.eventOf(postId, PRE_CREATED);
 
-    const routing = await broker.publish(
-      republished(ingested, `${PRE_CREATED}.${postId}`, `postId=${postId}`),
+    const accepted = await messages('nestposts.e2e.redelivery').redeliver(
+      ingested,
+      `${PRE_CREATED}.${postId}`,
+      `postId=${postId}`,
     );
 
-    expect(routing.routed, 'o broker não roteou: o binding mudou').toBe(true);
+    expect(accepted, 'o transporte não endereçou a reentrega: o binding mudou').toBe(true);
     await new Promise((resolve) => setTimeout(resolve, 4000));
     expect(
       await taggingStore.countEvents(postId, CREATED),
@@ -159,35 +169,23 @@ test.describe.serial('a saga coreografada, escrita no navegador', () => {
 });
 
 test.describe.serial('o que a request carrega atravessa os dois processos', () => {
-  const messagesFor = async (
-    broker: { drain: (queue: string) => Promise<SpiedMessage[]> },
-    queue: string,
-    id: string,
-  ): Promise<Map<string, SpiedMessage>> => {
-    const seen = new Map<string, SpiedMessage>();
-    await until(async () => {
-      for (const message of await broker.drain(queue)) {
-        if (message.routing_key.endsWith(id)) {
-          seen.set(message.routing_key.split('.')[1]!, message);
-        }
-      }
-      return seen.has('PostPreCreated') && seen.has('PostCreated') ? seen : undefined;
-    }, 30_000);
-    return seen;
-  };
-
-  test('uma request, um correlation id', async ({ accounts, signIn, executeGraphql, broker }) => {
-    const queue = 'nestposts.e2e.correlation-spy';
-    await broker.spyOn(queue, 'posts.#');
+  test('uma request, um correlation id', async ({
+    accounts,
+    signIn,
+    executeGraphql,
+    messages,
+  }) => {
+    const wire = messages('nestposts.e2e.correlation-spy');
+    await wire.watch('posts.#');
     await signIn(accounts.author);
 
     const created = await executeGraphql(CreateCorrelatedPost, { title: 'Uma request só' });
     expect(created.errors, JSON.stringify(created.errors)).toBeUndefined();
-    const seen = await messagesFor(broker, queue, created.data!.createPost.id);
+    const seen = await wire.of(created.data!.createPost.id);
 
-    expect(seen.size, `o exchange ${EXCHANGE} não trouxe os dois eventos da saga`).toBe(2);
+    expect(seen.size, 'o transporte não trouxe os dois eventos da saga').toBe(2);
     const [born, completed] = ['PostPreCreated', 'PostCreated'].map(
-      (name) => seen.get(name)!.properties.headers,
+      (name) => seen.get(name)!.headers,
     );
     expect(born['cqrs-transport-origin']).toBe('posts-api');
     expect(completed['cqrs-transport-origin'], 'o segundo evento é decisão do outro processo').toBe(
@@ -210,10 +208,10 @@ test.describe.serial('o que a request carrega atravessa os dois processos', () =
   test('o x-tenant do navegador chega aos dois processos, e volta na decisão do outro', async ({
     browser,
     accounts,
-    broker,
+    messages,
   }) => {
-    const queue = 'nestposts.e2e.tenant-spy';
-    await broker.spyOn(queue, 'posts.#');
+    const wire = messages('nestposts.e2e.tenant-spy');
+    await wire.watch('posts.#');
 
     const context = await browser.newContext({ extraHTTPHeaders: { 'x-tenant': 'Acme' } });
     const page = await context.newPage();
@@ -232,10 +230,10 @@ test.describe.serial('o que a request carrega atravessa os dois processos', () =
       return response.json() as Promise<TenantPostAnswer>;
     }, print(CreateTenantPost));
     expect(created.errors, JSON.stringify(created.errors)).toBeUndefined();
-    const seen = await messagesFor(broker, queue, created.data!.createPost.id);
+    const seen = await wire.of(created.data!.createPost.id);
 
     const [born, completed] = ['PostPreCreated', 'PostCreated'].map(
-      (name) => seen.get(name)!.properties.headers,
+      (name) => seen.get(name)!.headers,
     );
     expect(born['x-tenant'], 'o header do navegador entrou na PostRequest').toBe('acme');
     expect(
