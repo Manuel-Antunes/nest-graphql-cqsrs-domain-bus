@@ -26,6 +26,10 @@ runs:
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
 
+    - name: Build what sst.config.ts imports
+      run: NX_TUI=false npx nx run @nestposts/transport-eventbus:build
+      shell: bash
+
     - name: Force Sst Unlock
       run: pnpm sst unlock --stage ${{ inputs.stage }}
       shell: bash

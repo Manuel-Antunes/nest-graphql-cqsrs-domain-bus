@@ -5,6 +5,7 @@ import type { MigratorContext } from './app/bootstrap';
 import { withPosts, withTagging } from './app/bootstrap';
 import { withSeederContainer } from './seeders/container';
 import { DatabaseSeeder } from './seeders/database.seeder';
+import { DefaultTagSeeder } from './seeders/default-tag.seeder';
 import { TestUsersSeeder } from './seeders/test-users.seeder';
 
 export type SeederClass = new () => Seeder;
@@ -33,12 +34,11 @@ export const seed = (
 
 export const seedUsers = (): Promise<void> => seed([TestUsersSeeder]);
 
-export const seedDeployment = (): Promise<void> =>
-  seed([DatabaseSeeder, TestUsersSeeder]);
+export const seedDeployment = (): Promise<void> => seed([DatabaseSeeder]);
 
 export async function setup(): Promise<void> {
   await migrate();
-  await seed();
+  await seed([DefaultTagSeeder]);
 }
 
 export { bootstrap, withPosts, withTagging } from './app/bootstrap';

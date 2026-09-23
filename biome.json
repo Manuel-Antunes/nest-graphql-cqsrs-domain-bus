@@ -71,10 +71,7 @@
           "options": {
             "patterns": [
               {
-                "group": [
-                  "@nestposts/*/src/**",
-                  "@nestposts/*/dist/**"
-                ],
+                "group": ["@nestposts/*/src/**", "@nestposts/*/dist/**"],
                 "message": "Import a workspace package through its exports map (@nestposts/<pkg>/<path>), not through src/ or dist/."
               }
             ]
@@ -93,25 +90,13 @@
             "groups": [
               ":BUN:",
               ":NODE:",
-              [
-                "react",
-                "react-dom",
-                "react/**",
-                "react-dom/**"
-              ],
-              [
-                "next",
-                "next/**"
-              ],
+              ["react", "react-dom", "react/**", "react-dom/**"],
+              ["next", "next/**"],
               ":PACKAGE:",
               ":BLANK_LINE:",
-              [
-                "@/**"
-              ],
+              ["@/**"],
               ":BLANK_LINE:",
-              [
-                ":PATH:"
-              ]
+              [":PATH:"]
             ],
             "sortBareImports": false
           }
@@ -121,10 +106,7 @@
   },
   "overrides": [
     {
-      "includes": [
-        "apps/web/**",
-        "apps/web-e2e/**"
-      ],
+      "includes": ["apps/web/**", "apps/web-e2e/**"],
       "linter": {
         "domains": {
           "next": "recommended",
@@ -134,10 +116,7 @@
       }
     },
     {
-      "includes": [
-        "apps/web/src/**/*.{ts,tsx}",
-        "!apps/web/src/nest/**"
-      ],
+      "includes": ["apps/web/src/**/*.{ts,tsx}", "!apps/web/src/nest/**"],
       "linter": {
         "rules": {
           "style": {
@@ -147,12 +126,7 @@
             "useSortedClasses": {
               "level": "warn",
               "options": {
-                "functions": [
-                  "cn",
-                  "cva",
-                  "clsx",
-                  "twMerge"
-                ]
+                "functions": ["cn", "cva", "clsx", "twMerge"]
               }
             }
           }
@@ -160,10 +134,7 @@
       }
     },
     {
-      "includes": [
-        "apps/web-e2e/**/*.ts",
-        "infra/**/*.ts"
-      ],
+      "includes": ["apps/web-e2e/**/*.ts", "infra/**/*.ts"],
       "linter": {
         "rules": {
           "style": {
@@ -173,9 +144,7 @@
       }
     },
     {
-      "includes": [
-        "apps/web-e2e/src/fixtures/**/*.ts"
-      ],
+      "includes": ["apps/web-e2e/src/fixtures/**/*.ts"],
       "linter": {
         "rules": {
           "correctness": {
@@ -185,12 +154,8 @@
       }
     },
     {
-      "includes": [
-        "apps/web-e2e/src/specs/**/*.spec.ts"
-      ],
-      "plugins": [
-        "./tools/biome/playwright.grit"
-      ]
+      "includes": ["apps/web-e2e/src/specs/**/*.spec.ts"],
+      "plugins": ["./tools/biome/playwright.grit"]
     },
     {
       "includes": [
