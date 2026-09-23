@@ -1,7 +1,8 @@
-import type { UserSession } from '@thallesp/nestjs-better-auth';
-import type { UserProvisioning } from '../../application/user/user-provisioning.service';
 import type { User } from '@nestposts/users/domain/user/user.entity';
+import type { UserSession } from '@thallesp/nestjs-better-auth';
 import { CredentialId } from '@nestposts/users/domain/user/vo/credential-id';
+
+import type { UserProvisioning } from '../../application/user/user-provisioning.service';
 import { SessionUserPipe } from './session-user.pipe';
 
 describe('SessionUserPipe', () => {
@@ -23,7 +24,11 @@ describe('SessionUserPipe', () => {
   const sessionFor = (user: object) => ({ user }) as unknown as UserSession;
 
   it('provisiona o perfil pelo id da credencial da sessão', async () => {
-    const session = sessionFor({ id: 'cred-1', email: 'manuel@example.com', name: 'manuel' });
+    const session = sessionFor({
+      id: 'cred-1',
+      email: 'manuel@example.com',
+      name: 'manuel',
+    });
 
     const user = await pipe.transform(session);
 
@@ -34,7 +39,9 @@ describe('SessionUserPipe', () => {
   });
 
   it('aceita a sessão ainda como Promise, que é como o Nest a entrega ao primeiro pipe', async () => {
-    const session = Promise.resolve(sessionFor({ id: 'cred-2', email: 'manuel@example.com' }));
+    const session = Promise.resolve(
+      sessionFor({ id: 'cred-2', email: 'manuel@example.com' }),
+    );
 
     const user = await pipe.transform(session);
 

@@ -1,7 +1,9 @@
+import type { User } from '@nestposts/users/domain/user/user.entity';
 import { UseInterceptors } from '@nestjs/common';
 import { Query, ResolveField, Resolver } from '@nestjs/graphql';
-import type { User } from '@nestposts/users/domain/user/user.entity';
-import { AuthorView, type IUserView } from '../../dto/graphql/user.view';
+
+import type { IUserView } from '../../dto/graphql/user.view';
+import { AuthorView } from '../../dto/graphql/user.view';
 import { CurrentUser } from '../decorators/current-user.decorator';
 import { UserViewInterceptor } from '../interceptors/user-view.interceptor';
 

@@ -1,5 +1,7 @@
 import type { FactoryProvider } from '@nestjs/common';
-import { jwt, type JwtOptions } from 'better-auth/plugins';
+import type { JwtOptions } from 'better-auth/plugins';
+import { jwt } from 'better-auth/plugins';
+
 import { JWT_BETTER_AUTH_PLUGIN } from './tokens';
 
 export const jwtPluginOptions = {

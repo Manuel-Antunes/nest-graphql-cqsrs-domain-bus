@@ -1,9 +1,14 @@
 import { MikroORM } from '@mikro-orm/core';
 import { Injectable, Logger } from '@nestjs/common';
-import { AfterCreate, AfterUpdate, DatabaseHook } from '@thallesp/nestjs-better-auth';
-import { UserProvisioning } from '../../application/user/user-provisioning.service';
-import { CredentialId } from '@nestposts/users/domain/user/vo/credential-id';
 import { inRequestContext } from '@nestposts/database';
+import { CredentialId } from '@nestposts/users/domain/user/vo/credential-id';
+import {
+  AfterCreate,
+  AfterUpdate,
+  DatabaseHook,
+} from '@thallesp/nestjs-better-auth';
+
+import { UserProvisioning } from '../../application/user/user-provisioning.service';
 
 interface AuthUserRow {
   id: string;
@@ -29,16 +34,26 @@ export class UserProvisioningHooks {
     await this.provision(user.id, 'credencial atualizada');
   }
 
-  private async provision(credentialId: string, because: string): Promise<void> {
+  private async provision(
+    credentialId: string,
+    because: string,
+  ): Promise<void> {
     const parsed = CredentialId.safeParse(credentialId);
     if (!parsed.success) {
-      this.logger.warn(`${because}: id de credencial inválido (${credentialId})`);
+      this.logger.warn(
+        `${because}: id de credencial inválido (${credentialId})`,
+      );
       return;
     }
     try {
-      await inRequestContext(this.orm, () => this.provisioning.provision(parsed.data));
+      await inRequestContext(this.orm, () =>
+        this.provisioning.provision(parsed.data),
+      );
     } catch (error) {
-      this.logger.error(`${because}: provisionamento adiado para a próxima requisição`, error);
+      this.logger.error(
+        `${because}: provisionamento adiado para a próxima requisição`,
+        error,
+      );
     }
   }
 }

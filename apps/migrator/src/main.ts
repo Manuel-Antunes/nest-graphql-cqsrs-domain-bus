@@ -1,9 +1,11 @@
 import type { MikroORM } from '@mikro-orm/postgresql';
 import type { Seeder } from '@mikro-orm/seeder';
-import { withPosts, withTagging, type MigratorContext } from './app/bootstrap';
+
+import type { MigratorContext } from './app/bootstrap';
+import { withPosts, withTagging } from './app/bootstrap';
+import { withSeederContainer } from './seeders/container';
 import { DatabaseSeeder } from './seeders/database.seeder';
 import { TestUsersSeeder } from './seeders/test-users.seeder';
-import { withSeederContainer } from './seeders/container';
 
 export type SeederClass = new () => Seeder;
 
@@ -22,14 +24,17 @@ export async function migrate(): Promise<void> {
   await migrateTagging();
 }
 
-export const seed = (seeders: SeederClass[] = [DatabaseSeeder]): Promise<void> =>
+export const seed = (
+  seeders: SeederClass[] = [DatabaseSeeder],
+): Promise<void> =>
   withPosts(({ app, orm }) =>
     withSeederContainer(app, () => (orm as MikroORM).seeder.seed(...seeders)),
   );
 
 export const seedUsers = (): Promise<void> => seed([TestUsersSeeder]);
 
-export const seedDeployment = (): Promise<void> => seed([DatabaseSeeder, TestUsersSeeder]);
+export const seedDeployment = (): Promise<void> =>
+  seed([DatabaseSeeder, TestUsersSeeder]);
 
 export async function setup(): Promise<void> {
   await migrate();
@@ -38,7 +43,11 @@ export async function setup(): Promise<void> {
 
 export { DatabaseSeeder } from './seeders/database.seeder';
 export { DefaultTagSeeder } from './seeders/default-tag.seeder';
-export { TestUsersSeeder, SEED_PASSWORD, seededUsers } from './seeders/test-users.seeder';
+export {
+  TestUsersSeeder,
+  SEED_PASSWORD,
+  seededUsers,
+} from './seeders/test-users.seeder';
 export { PostsMigratorModule } from './app/posts.module';
 export { TaggingMigratorModule } from './app/tagging.module';
 export { bootstrap, withPosts, withTagging } from './app/bootstrap';
@@ -48,7 +57,7 @@ const commands: Record<string, () => Promise<unknown>> = {
   migrate,
   'migrate:posts': migratePosts,
   'migrate:tagging': migrateTagging,
-  seed: () => seed(),
+  'seed': () => seed(),
   'seed:users': seedUsers,
   'seed:deployment': seedDeployment,
   setup,
@@ -58,7 +67,9 @@ if (require.main === module) {
   const name = process.argv[2] ?? 'setup';
   const command = commands[name];
   if (!command) {
-    console.error(`unknown command "${name}"; expected one of ${Object.keys(commands).join(', ')}`);
+    console.error(
+      `unknown command "${name}"; expected one of ${Object.keys(commands).join(', ')}`,
+    );
     process.exit(1);
   }
   command().then(

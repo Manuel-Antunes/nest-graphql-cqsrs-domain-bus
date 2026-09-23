@@ -1,8 +1,10 @@
 import { UseInterceptors } from '@nestjs/common';
-import { AllowAnonymous } from '@thallesp/nestjs-better-auth';
 import { Args, Parent, ResolveField, Resolver } from '@nestjs/graphql';
+import { AllowAnonymous } from '@thallesp/nestjs-better-auth';
+
+import type { Page } from '../../dto/graphql/connection';
 import { FindAllPostsQuery } from '../../application/post/query/find-all-posts.query';
-import { pageOf, type Page } from '../../dto/graphql/connection';
+import { pageOf } from '../../dto/graphql/connection';
 import { PostView } from '../../dto/graphql/post.view';
 import { TagView } from '../../dto/graphql/tag.view';
 import { ConnectionInterceptor } from '../interceptors/connection.interceptor';

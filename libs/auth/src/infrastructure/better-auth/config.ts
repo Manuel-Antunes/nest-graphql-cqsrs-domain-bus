@@ -16,7 +16,8 @@ export const AuthConfigSchema = z.object({
 
 export type AuthConfig = z.infer<typeof AuthConfigSchema>;
 
-export const DEFAULT_AUTH_SECRET = 'nest-graphql-posts-dev-secret-nao-use-em-producao';
+export const DEFAULT_AUTH_SECRET =
+  'nest-graphql-posts-dev-secret-nao-use-em-producao';
 
 export const DEFAULT_AUTH_BASE_PATH = '/api/auth';
 
@@ -25,9 +26,12 @@ export const DEFAULT_WEB_URL = 'http://localhost:4200';
 export class AuthConfiguration {
   private static readonly LOOPBACK = ['localhost', '127.0.0.1', '[::1]', '::1'];
 
-  private static readonly CSV = z
-    .string()
-    .transform((value) => value.split(',').map((entry) => entry.trim()).filter(Boolean));
+  private static readonly CSV = z.string().transform((value) =>
+    value
+      .split(',')
+      .map((entry) => entry.trim())
+      .filter(Boolean),
+  );
 
   /** Is this base URL the developer's own machine? */
   static isLoopback(url: string): boolean {
@@ -51,8 +55,12 @@ export class AuthConfiguration {
     nodeEnv: string | undefined,
     cookieDomain: string | undefined,
   ): Pick<AuthConfig, 'cookieDomain' | 'secure'> {
-    const deployed = nodeEnv === 'production' && !AuthConfiguration.isLoopback(baseUrl);
-    return { cookieDomain: deployed ? cookieDomain || undefined : undefined, secure: deployed };
+    const deployed =
+      nodeEnv === 'production' && !AuthConfiguration.isLoopback(baseUrl);
+    return {
+      cookieDomain: deployed ? cookieDomain || undefined : undefined,
+      secure: deployed,
+    };
   }
 
   static fromEnvironment(env: NodeJS.ProcessEnv = process.env): AuthConfig {
@@ -72,7 +80,11 @@ export class AuthConfiguration {
       googleClientSecret: env.AUTH_GOOGLE_SECRET,
       githubClientId: env.AUTH_GITHUB_ID,
       githubClientSecret: env.AUTH_GITHUB_SECRET,
-      ...AuthConfiguration.cookieSecurity(baseUrl, env.NODE_ENV, env.AUTH_COOKIE_DOMAIN),
+      ...AuthConfiguration.cookieSecurity(
+        baseUrl,
+        env.NODE_ENV,
+        env.AUTH_COOKIE_DOMAIN,
+      ),
     });
   }
 }

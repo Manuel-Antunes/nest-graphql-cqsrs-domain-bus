@@ -1,22 +1,24 @@
-import {
-  DeleteMessageBatchCommand,
-  type Message,
-  ReceiveMessageCommand,
-  type SQSClient,
-} from '@aws-sdk/client-sqs';
+import type { Message, SQSClient } from '@aws-sdk/client-sqs';
 import type { MessageHandler } from '@nestjs/microservices';
 import type { SQSEvent, SQSRecord } from 'aws-lambda';
 import {
-  type EventEnvelope,
+  DeleteMessageBatchCommand,
+  ReceiveMessageCommand,
+} from '@aws-sdk/client-sqs';
+
+import type { EventEnvelope } from '../outbound/event-envelope';
+import type { SqsStrategyOptions } from './sqs.strategy';
+import { SqsEventEnvelopeDeserializer } from '../inbound/deserializers/sqs-event-envelope.deserializer';
+import {
   TRANSPORT_IDENTIFIER,
   TRANSPORT_MESSAGE_TYPE,
 } from '../outbound/event-envelope';
 import { SqsContext } from './sqs.context';
-import { SqsEventEnvelopeDeserializer } from '../inbound/deserializers/sqs-event-envelope.deserializer';
-import { SqsStrategy, type SqsStrategyOptions } from './sqs.strategy';
+import { SqsStrategy } from './sqs.strategy';
 
 const QUEUE_ARN = 'arn:aws:sqs:us-east-1:000000000000:nestposts-tagging';
-const QUEUE_URL = 'https://sqs.us-east-1.amazonaws.com/000000000000/nestposts-tagging';
+const QUEUE_URL =
+  'https://sqs.us-east-1.amazonaws.com/000000000000/nestposts-tagging';
 
 const body = (pattern: string, data: object = { postId: 'p-1' }) =>
   JSON.stringify({
@@ -44,13 +46,18 @@ const record = (overrides: Partial<SQSRecord> = {}): SQSRecord => ({
 const delivery = (...records: SQSRecord[]): SQSEvent => ({ Records: records });
 
 const strategyOf = (options: Partial<SqsStrategyOptions> = {}): SqsStrategy =>
-  new SqsStrategy({ deserializer: new SqsEventEnvelopeDeserializer(), ...options });
+  new SqsStrategy({
+    deserializer: new SqsEventEnvelopeDeserializer(),
+    ...options,
+  });
 
-const handlerOf = (implementation: (data: unknown, context: SqsContext) => unknown): MessageHandler =>
-  implementation as unknown as MessageHandler;
+const handlerOf = (
+  implementation: (data: unknown, context: SqsContext) => unknown,
+): MessageHandler => implementation as unknown as MessageHandler;
 
 const postIdOf = (data: unknown): string =>
-  ((data as EventEnvelope<Record<string, unknown>>).data as { postId: string }).postId;
+  ((data as EventEnvelope<Record<string, unknown>>).data as { postId: string })
+    .postId;
 
 class FakeSqs {
   readonly deleted: string[] = [];
@@ -123,8 +130,16 @@ describe('SqsStrategy', () => {
     it('prefers the handler bound to the literal key over the wildcard', async () => {
       const taken: string[] = [];
       const strategy = strategyOf();
-      strategy.addHandler('posts.#', handlerOf(() => taken.push('wildcard')), true);
-      strategy.addHandler('posts.PostCreated.p-1', handlerOf(() => taken.push('exact')), true);
+      strategy.addHandler(
+        'posts.#',
+        handlerOf(() => taken.push('wildcard')),
+        true,
+      );
+      strategy.addHandler(
+        'posts.PostCreated.p-1',
+        handlerOf(() => taken.push('exact')),
+        true,
+      );
 
       await strategy.processEvent(delivery(record()));
 
@@ -133,14 +148,24 @@ describe('SqsStrategy', () => {
 
     it('acknowledges a message nothing is bound to, instead of redriving it forever', async () => {
       const strategy = strategyOf();
-      strategy.addHandler('users.#', handlerOf(() => undefined), true);
+      strategy.addHandler(
+        'users.#',
+        handlerOf(() => undefined),
+        true,
+      );
 
-      expect(await strategy.processEvent(delivery(record()))).toEqual([{ response: undefined }]);
+      expect(await strategy.processEvent(delivery(record()))).toEqual([
+        { response: undefined },
+      ]);
     });
 
     it('fails a record whose body says nothing about what it is', async () => {
       const strategy = strategyOf();
-      strategy.addHandler('posts.#', handlerOf(() => undefined), true);
+      strategy.addHandler(
+        'posts.#',
+        handlerOf(() => undefined),
+        true,
+      );
 
       const [result] = await strategy.processEvent(
         delivery(record({ body: JSON.stringify({ data: { postId: 'p-1' } }) })),
@@ -163,7 +188,13 @@ describe('SqsStrategy', () => {
       );
 
       await strategy.processEvent(
-        delivery(record({ attributes: { ApproximateReceiveCount: '3' } as SQSRecord['attributes'] })),
+        delivery(
+          record({
+            attributes: {
+              ApproximateReceiveCount: '3',
+            } as SQSRecord['attributes'],
+          }),
+        ),
       );
 
       expect(context?.getPattern()).toBe('posts.PostCreated.p-1');
@@ -188,13 +219,26 @@ describe('SqsStrategy', () => {
 
       const results = await strategy.processEvent(
         delivery(
-          record({ messageId: 'm-1', body: body('posts.PostCreated.p-1', { postId: 'p-1' }) }),
-          record({ messageId: 'm-2', body: body('posts.PostCreated.p-2', { postId: 'p-2' }) }),
-          record({ messageId: 'm-3', body: body('posts.PostCreated.p-3', { postId: 'p-3' }) }),
+          record({
+            messageId: 'm-1',
+            body: body('posts.PostCreated.p-1', { postId: 'p-1' }),
+          }),
+          record({
+            messageId: 'm-2',
+            body: body('posts.PostCreated.p-2', { postId: 'p-2' }),
+          }),
+          record({
+            messageId: 'm-3',
+            body: body('posts.PostCreated.p-3', { postId: 'p-3' }),
+          }),
         ),
       );
 
-      expect(results.map((result) => Boolean(result.err))).toEqual([false, true, false]);
+      expect(results.map((result) => Boolean(result.err))).toEqual([
+        false,
+        true,
+        false,
+      ]);
     });
 
     it('does not let the first failure stop the rest', async () => {
@@ -237,18 +281,28 @@ describe('SqsStrategy', () => {
 
       expect((result.err as Error).message).toBe('the database is down');
     });
-
   });
 
   describe('polling a queue', () => {
     it('dispatches what it receives and deletes only what succeeded', async () => {
       const sqs = new FakeSqs();
       sqs.enqueue(
-        { MessageId: 'm-1', ReceiptHandle: 'r-1', Body: body('posts.PostCreated.p-1', { postId: 'p-1' }) },
-        { MessageId: 'm-2', ReceiptHandle: 'r-2', Body: body('posts.PostCreated.p-2', { postId: 'p-2' }) },
+        {
+          MessageId: 'm-1',
+          ReceiptHandle: 'r-1',
+          Body: body('posts.PostCreated.p-1', { postId: 'p-1' }),
+        },
+        {
+          MessageId: 'm-2',
+          ReceiptHandle: 'r-2',
+          Body: body('posts.PostCreated.p-2', { postId: 'p-2' }),
+        },
       );
       const handled: string[] = [];
-      const strategy = strategyOf({ queueUrl: QUEUE_URL, client: sqs.asClient() });
+      const strategy = strategyOf({
+        queueUrl: QUEUE_URL,
+        client: sqs.asClient(),
+      });
       strategy.addHandler(
         'posts.#',
         handlerOf((data) => {

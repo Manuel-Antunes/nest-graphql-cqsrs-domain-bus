@@ -1,8 +1,9 @@
-import { closeTestDatabase, testDatabase } from '@nestposts/database/testing';
 import { MikroORM } from '@mikro-orm/core';
 import { inRequestContext } from '@nestposts/database';
+import { closeTestDatabase, testDatabase } from '@nestposts/database/testing';
+
 import { MikroOrmMessageInbox } from './message-inbox';
-import { TransportMessage, transportEntities } from './message-inbox.entity';
+import { transportEntities, TransportMessage } from './message-inbox.entity';
 
 describe('MessageInbox', () => {
   let orm: MikroORM;
@@ -20,7 +21,9 @@ describe('MessageInbox', () => {
   });
 
   const register = (identifier: string, origin = 'tagging') =>
-    inRequestContext(orm.em, () => inbox.register(identifier, 'posts.PostCreated#1.0.0', origin));
+    inRequestContext(orm.em, () =>
+      inbox.register(identifier, 'posts.PostCreated#1.0.0', origin),
+    );
 
   it('accepts a message it has not seen', async () => {
     await expect(register('evt-1')).resolves.toBe(true);
@@ -57,7 +60,7 @@ describe('MessageInbox', () => {
     );
   });
 
-  it('takes a message with no origin, which is what upstream\'s wire shape has', async () => {
+  it("takes a message with no origin, which is what upstream's wire shape has", async () => {
     await expect(
       inRequestContext(orm.em, () => inbox.register('evt-5', 'PostCreated')),
     ).resolves.toBe(true);

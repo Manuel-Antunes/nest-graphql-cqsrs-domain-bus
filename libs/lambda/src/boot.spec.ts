@@ -1,4 +1,4 @@
-import { BootTimeoutError, bootOnce } from './boot';
+import { bootOnce, BootTimeoutError } from './boot';
 
 const never = new Promise<string>(() => undefined);
 
@@ -31,7 +31,10 @@ describe('bootOnce', () => {
 
   it('does not cancel the boot when one invocation gives up', async () => {
     let resolve: (value: string) => void = () => undefined;
-    const booted = bootOnce(() => new Promise<string>((done) => (resolve = done)), { timeout: 20 });
+    const booted = bootOnce(
+      () => new Promise<string>((done) => (resolve = done)),
+      { timeout: 20 },
+    );
 
     await expect(booted()).rejects.toBeInstanceOf(BootTimeoutError);
     resolve('ready');
@@ -46,7 +49,9 @@ describe('bootOnce', () => {
       { onFailure: (failure) => failures.push(failure) },
     );
 
-    await expect(booted()).rejects.toThrow('the database refused the connection');
+    await expect(booted()).rejects.toThrow(
+      'the database refused the connection',
+    );
     expect(failures).toHaveLength(1);
   });
 });

@@ -1,9 +1,11 @@
+import type { Observable } from 'rxjs';
 import { Injectable } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
-import { type Observable, EMPTY } from 'rxjs';
+import { EMPTY } from 'rxjs';
+
+import type { ISubscriptionHandler } from '../interfaces/subscription-handler.interface';
 import { Subscription } from '../classes/subscription';
 import { SubscriptionHandler } from '../decorators/subscription-handler.decorator';
-import type { ISubscriptionHandler } from '../interfaces/subscription-handler.interface';
 import { SubscriptionExplorerService } from './subscription-explorer.service';
 
 describe('SubscriptionExplorerService', () => {
@@ -40,15 +42,21 @@ describe('SubscriptionExplorerService', () => {
   it('acha os providers anotados e ignora o resto', async () => {
     const { found, close } = await explore([AnnotatedHandler, PlainProvider]);
 
-    expect(found.map((wrapper) => wrapper.metatype)).toContain(AnnotatedHandler);
-    expect(found.map((wrapper) => wrapper.metatype)).not.toContain(PlainProvider);
+    expect(found.map((wrapper) => wrapper.metatype)).toContain(
+      AnnotatedHandler,
+    );
+    expect(found.map((wrapper) => wrapper.metatype)).not.toContain(
+      PlainProvider,
+    );
     await close();
   });
 
   it('devolve o wrapper, não a instância — é ele que sabe do escopo', async () => {
     const { found, close } = await explore([AnnotatedHandler]);
 
-    const wrapper = found.find((candidate) => candidate.metatype === AnnotatedHandler)!;
+    const wrapper = found.find(
+      (candidate) => candidate.metatype === AnnotatedHandler,
+    )!;
     expect(wrapper.isDependencyTreeStatic).toBeTypeOf('function');
     expect(wrapper.instance).toBeInstanceOf(AnnotatedHandler);
     await close();
@@ -56,18 +64,27 @@ describe('SubscriptionExplorerService', () => {
 
   it('enxerga também o handler criado por factory provider', async () => {
     const { found, close } = await explore([
-      { provide: 'FACTORY_HANDLER', useFactory: () => new FactoryBuiltHandler() },
+      {
+        provide: 'FACTORY_HANDLER',
+        useFactory: () => new FactoryBuiltHandler(),
+      },
     ]);
 
-    expect(found.map((wrapper) => wrapper.instance?.constructor)).toContain(FactoryBuiltHandler);
+    expect(found.map((wrapper) => wrapper.instance?.constructor)).toContain(
+      FactoryBuiltHandler,
+    );
     await close();
   });
 
   it('sem nenhum handler anotado, a varredura volta vazia em vez de estourar', async () => {
     const { found, close } = await explore([PlainProvider]);
 
-    expect(found.map((wrapper) => wrapper.metatype)).not.toContain(PlainProvider);
-    expect(found.every((wrapper) => wrapper.metatype !== PlainProvider)).toBe(true);
+    expect(found.map((wrapper) => wrapper.metatype)).not.toContain(
+      PlainProvider,
+    );
+    expect(found.every((wrapper) => wrapper.metatype !== PlainProvider)).toBe(
+      true,
+    );
     await close();
   });
 });

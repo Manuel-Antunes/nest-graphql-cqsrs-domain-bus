@@ -1,17 +1,19 @@
-import { AutoMap } from "@automapper/classes";
-import { AggregateRoot } from "@nestposts/platform/domain/shared/aggregate-root";
-import { BaseEntity } from "@nestposts/platform/domain/shared/base-entity";
-import { WithSoftDelete } from "@nestposts/platform/domain/shared/soft-delete/soft-delete";
-import { UserDeletedEvent } from "./event/user-deleted.event";
-import { UserRegisteredEvent } from "./event/user-registered.event";
-import { UserRestoredEvent } from "./event/user-restored.event";
-import { UserRoleGrantedEvent } from "./event/user-role-granted.event";
-import { InvalidUserException } from "./exception/invalid-user.exception";
-import { type NewUser, NewUserSchema } from "./schemas/new-user.schema";
-import type { IUser } from "./schemas/user.schema";
-import { Email } from "./vo/email";
-import { UserId } from "./vo/user-id";
-import { UserName } from "./vo/user-name";
+import { AutoMap } from '@automapper/classes';
+import { AggregateRoot } from '@nestposts/platform/domain/shared/aggregate-root';
+import { BaseEntity } from '@nestposts/platform/domain/shared/base-entity';
+import { WithSoftDelete } from '@nestposts/platform/domain/shared/soft-delete/soft-delete';
+
+import type { NewUser } from './schemas/new-user.schema';
+import type { IUser } from './schemas/user.schema';
+import { UserDeletedEvent } from './event/user-deleted.event';
+import { UserRegisteredEvent } from './event/user-registered.event';
+import { UserRestoredEvent } from './event/user-restored.event';
+import { UserRoleGrantedEvent } from './event/user-role-granted.event';
+import { InvalidUserException } from './exception/invalid-user.exception';
+import { NewUserSchema } from './schemas/new-user.schema';
+import { Email } from './vo/email';
+import { UserId } from './vo/user-id';
+import { UserName } from './vo/user-name';
 
 export type UserEvent =
   | UserRegisteredEvent
@@ -46,7 +48,7 @@ export class User
   ): User {
     const parsed = NewUserSchema.safeParse(input);
     if (!parsed.success) {
-      throw new InvalidUserException("user inválido", { cause: parsed.error });
+      throw new InvalidUserException('user inválido', { cause: parsed.error });
     }
     const user = new User();
     user.apply(

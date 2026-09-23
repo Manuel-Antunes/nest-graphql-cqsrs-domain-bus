@@ -1,87 +1,87 @@
-import "reflect-metadata";
+import 'reflect-metadata';
 
-import { instanceToPlain, plainToInstance } from "class-transformer";
-import { validate } from "class-validator";
-import { describe, expect, it } from "vitest";
-import { z } from "zod";
+import { instanceToPlain, plainToInstance } from 'class-transformer';
+import { validate } from 'class-validator';
+import { describe, expect, it } from 'vitest';
+import { z } from 'zod';
 
-import { DECORATOR_REGISTRY } from "../schemas/registries/decorators.registry";
+import { DECORATOR_REGISTRY } from '../schemas/registries/decorators.registry';
 import {
   Embeddable,
   InheritValidatedMetadata,
   ValidatedDto,
-} from "./validated-dto.mixin";
-import { ValidatedScalar } from "./validated-scalar.mixin";
+} from './validated-dto.mixin';
+import { ValidatedScalar } from './validated-scalar.mixin';
 
-const PostIdSchema = z.uuid().brand<"PostId">();
+const PostIdSchema = z.uuid().brand<'PostId'>();
 const PostTitleSchema = z
   .string()
   .trim()
-  .min(1, "title não pode ser vazio")
-  .brand<"PostTitle">();
+  .min(1, 'title não pode ser vazio')
+  .brand<'PostTitle'>();
 const TagNameSchema = z
   .string()
   .trim()
-  .min(1, "tag inválida")
-  .brand<"TagName">();
+  .min(1, 'tag inválida')
+  .brand<'TagName'>();
 
-class PostId extends ValidatedDto.Scalar(PostIdSchema, { name: "PostId" }) {}
+class PostId extends ValidatedDto.Scalar(PostIdSchema, { name: 'PostId' }) {}
 class PostTitle extends ValidatedDto.Scalar(PostTitleSchema, {
-  name: "PostTitle",
+  name: 'PostTitle',
 }) {}
-class TagName extends ValidatedScalar(TagNameSchema, { name: "TagName" }) {}
+class TagName extends ValidatedScalar(TagNameSchema, { name: 'TagName' }) {}
 
-const ID = "11111111-1111-4111-8111-111111111111";
-const OTHER_ID = "22222222-2222-4222-8222-222222222222";
+const ID = '11111111-1111-4111-8111-111111111111';
+const OTHER_ID = '22222222-2222-4222-8222-222222222222';
 
-describe("ValidatedDto — value objects embutidos", () => {
-  describe("Escalar embutido", () => {
+describe('ValidatedDto — value objects embutidos', () => {
+  describe('Escalar embutido', () => {
     const PostSchema = z.object({
       id: PostId.field(),
       title: PostTitle.field(),
     });
     const PostDto = ValidatedDto(PostSchema);
 
-    it("o construtor monta a classe a partir do valor cru", () => {
-      const post = new PostDto({ id: ID, title: "  Olá  " });
+    it('o construtor monta a classe a partir do valor cru', () => {
+      const post = new PostDto({ id: ID, title: '  Olá  ' });
 
       expect(post.id).toBeInstanceOf(PostId);
       expect(post.title).toBeInstanceOf(PostTitle);
       expect(post.id.value).toBe(ID);
-      expect(post.title.value).toBe("Olá");
+      expect(post.title.value).toBe('Olá');
     });
 
-    it("aceita um value object já pronto e não o reembrulha", () => {
+    it('aceita um value object já pronto e não o reembrulha', () => {
       const id = new PostId(ID);
 
-      const post = new PostDto({ id, title: "Olá" });
+      const post = new PostDto({ id, title: 'Olá' });
 
       expect(post.id).toBe(id);
     });
 
-    it("serializa colapsando para o valor cru", () => {
-      const post = new PostDto({ id: ID, title: "Olá" });
+    it('serializa colapsando para o valor cru', () => {
+      const post = new PostDto({ id: ID, title: 'Olá' });
 
       const plain = instanceToPlain(post);
 
-      expect(plain).toEqual({ id: ID, title: "Olá" });
+      expect(plain).toEqual({ id: ID, title: 'Olá' });
     });
 
-    it("JSON.stringify vê o primitivo", () => {
-      const post = new PostDto({ id: ID, title: "Olá" });
+    it('JSON.stringify vê o primitivo', () => {
+      const post = new PostDto({ id: ID, title: 'Olá' });
 
       expect(JSON.stringify(post)).toBe(`{"id":"${ID}","title":"Olá"}`);
     });
 
-    it("plainToInstance materializa os value objects", () => {
-      const post = plainToInstance(PostDto, { id: ID, title: "  Olá  " });
+    it('plainToInstance materializa os value objects', () => {
+      const post = plainToInstance(PostDto, { id: ID, title: '  Olá  ' });
 
       expect(post.id).toBeInstanceOf(PostId);
-      expect(post.title.value).toBe("Olá");
+      expect(post.title.value).toBe('Olá');
     });
 
-    it("fecha o round-trip sem perder nada", () => {
-      const original = { id: ID, title: "Olá" };
+    it('fecha o round-trip sem perder nada', () => {
+      const original = { id: ID, title: 'Olá' };
 
       const instance = plainToInstance(PostDto, original);
       const plain = instanceToPlain(instance);
@@ -92,56 +92,56 @@ describe("ValidatedDto — value objects embutidos", () => {
       expect(again.id.equals(instance.id)).toBe(true);
     });
 
-    it("respeita excludeExtraneousValues", () => {
-      const post = new PostDto({ id: ID, title: "Olá" });
+    it('respeita excludeExtraneousValues', () => {
+      const post = new PostDto({ id: ID, title: 'Olá' });
 
       const plain = instanceToPlain(post, { excludeExtraneousValues: true });
 
-      expect(plain).toEqual({ id: ID, title: "Olá" });
+      expect(plain).toEqual({ id: ID, title: 'Olá' });
     });
 
-    it("valida pelo schema do value object", async () => {
-      const invalid = new PostDto({ id: "não-é-uuid", title: "" });
+    it('valida pelo schema do value object', async () => {
+      const invalid = new PostDto({ id: 'não-é-uuid', title: '' });
 
       const errors = await validate(invalid);
 
-      expect(errors.map(error => error.property).sort()).toEqual([
-        "id",
-        "title",
+      expect(errors.map((error) => error.property).sort()).toEqual([
+        'id',
+        'title',
       ]);
       expect(
         Object.values(
-          errors.find(e => e.property === "title")!.constraints ?? {},
+          errors.find((e) => e.property === 'title')!.constraints ?? {},
         ),
-      ).toContain("title não pode ser vazio");
+      ).toContain('title não pode ser vazio');
     });
 
-    it("não acusa erro num DTO válido", async () => {
-      const errors = await validate(new PostDto({ id: ID, title: "Olá" }));
+    it('não acusa erro num DTO válido', async () => {
+      const errors = await validate(new PostDto({ id: ID, title: 'Olá' }));
 
       expect(errors).toHaveLength(0);
     });
 
-    it("marca o design:type com a classe do value object", () => {
-      expect(Reflect.getMetadata("design:type", PostDto.prototype, "id")).toBe(
+    it('marca o design:type com a classe do value object', () => {
+      expect(Reflect.getMetadata('design:type', PostDto.prototype, 'id')).toBe(
         PostId,
       );
       expect(
-        Reflect.getMetadata("design:type", PostDto.prototype, "title"),
+        Reflect.getMetadata('design:type', PostDto.prototype, 'title'),
       ).toBe(PostTitle);
     });
 
-    it("o value object embutido continua se comportando como o valor", () => {
-      const post = new PostDto({ id: ID, title: "Olá" });
+    it('o value object embutido continua se comportando como o valor', () => {
+      const post = new PostDto({ id: ID, title: 'Olá' });
 
-      expect(`${post.title}`).toBe("Olá");
+      expect(`${post.title}`).toBe('Olá');
       expect(post.id.equals(ID)).toBe(true);
       expect(post.id.equals(new PostId(OTHER_ID))).toBe(false);
     });
   });
 
-  describe("Opcionais, nulos e defaults", () => {
-    it("deixa o opcional ausente em paz", async () => {
+  describe('Opcionais, nulos e defaults', () => {
+    it('deixa o opcional ausente em paz', async () => {
       const Dto = ValidatedDto(
         z.object({ id: PostId.field(), title: PostTitle.field().optional() }),
       );
@@ -153,7 +153,7 @@ describe("ValidatedDto — value objects embutidos", () => {
       expect(instanceToPlain(instance)).toEqual({ id: ID });
     });
 
-    it("mantém o null de um campo nullable", async () => {
+    it('mantém o null de um campo nullable', async () => {
       const Dto = ValidatedDto(
         z.object({ id: PostId.field(), title: PostTitle.field().nullable() }),
       );
@@ -165,10 +165,10 @@ describe("ValidatedDto — value objects embutidos", () => {
       expect(instanceToPlain(instance)).toEqual({ id: ID, title: null });
     });
 
-    it("materializa também o valor que veio do default", () => {
+    it('materializa também o valor que veio do default', () => {
       const Dto = ValidatedDto(
         z.object({
-          tag: TagName.field().default(new TagName("Untagged") as any),
+          tag: TagName.field().default(new TagName('Untagged') as any),
         }),
       );
 
@@ -180,52 +180,52 @@ describe("ValidatedDto — value objects embutidos", () => {
       );
 
       expect(fromConstructor.tag).toBeInstanceOf(TagName);
-      expect(fromConstructor.tag.value).toBe("Untagged");
+      expect(fromConstructor.tag.value).toBe('Untagged');
       expect(fromTransform.tag).toBeInstanceOf(TagName);
     });
   });
 
-  describe("Listas de value objects", () => {
+  describe('Listas de value objects', () => {
     const Dto = ValidatedDto(
       z.object({ id: PostId.field(), tags: z.array(TagName.field()) }),
     );
 
-    it("monta cada item da lista", () => {
-      const instance = new Dto({ id: ID, tags: ["  nest ", "graphql"] });
+    it('monta cada item da lista', () => {
+      const instance = new Dto({ id: ID, tags: ['  nest ', 'graphql'] });
 
       expect(instance.tags).toHaveLength(2);
       expect(instance.tags[0]).toBeInstanceOf(TagName);
-      expect(instance.tags[0].value).toBe("nest");
+      expect(instance.tags[0].value).toBe('nest');
     });
 
-    it("serializa a lista colapsada", () => {
-      const instance = new Dto({ id: ID, tags: ["nest", "graphql"] });
+    it('serializa a lista colapsada', () => {
+      const instance = new Dto({ id: ID, tags: ['nest', 'graphql'] });
 
       expect(instanceToPlain(instance)).toEqual({
         id: ID,
-        tags: ["nest", "graphql"],
+        tags: ['nest', 'graphql'],
       });
     });
 
-    it("valida item a item", async () => {
-      const instance = new Dto({ id: ID, tags: ["nest", ""] });
+    it('valida item a item', async () => {
+      const instance = new Dto({ id: ID, tags: ['nest', ''] });
 
       const errors = await validate(instance);
 
-      expect(errors.map(error => error.property)).toEqual(["tags"]);
+      expect(errors.map((error) => error.property)).toEqual(['tags']);
     });
 
-    it("marca o design:type como Array", () => {
-      expect(Reflect.getMetadata("design:type", Dto.prototype, "tags")).toBe(
+    it('marca o design:type como Array', () => {
+      expect(Reflect.getMetadata('design:type', Dto.prototype, 'tags')).toBe(
         Array,
       );
     });
   });
 
-  describe("Embeddable: value object de vários campos", () => {
+  describe('Embeddable: value object de vários campos', () => {
     const MoneySchema = z.object({
-      amount: z.number().nonnegative("amount não pode ser negativo"),
-      currency: z.enum(["BRL", "USD"]).default("BRL"),
+      amount: z.number().nonnegative('amount não pode ser negativo'),
+      currency: z.enum(['BRL', 'USD']).default('BRL'),
     });
 
     class Money extends Embeddable(MoneySchema) {
@@ -234,14 +234,14 @@ describe("ValidatedDto — value objects embutidos", () => {
       }
     }
 
-    it("aplica os defaults do schema", () => {
+    it('aplica os defaults do schema', () => {
       const money = new Money({ amount: 10 });
 
       expect(money.amount).toBe(10);
-      expect(money.currency).toBe("BRL");
+      expect(money.currency).toBe('BRL');
     });
 
-    it("compara por valor, e não por referência", () => {
+    it('compara por valor, e não por referência', () => {
       expect(new Money({ amount: 10 }).equals(new Money({ amount: 10 }))).toBe(
         true,
       );
@@ -251,36 +251,36 @@ describe("ValidatedDto — value objects embutidos", () => {
       expect(new Money({ amount: 10 }).equals(null)).toBe(false);
     });
 
-    it("with devolve uma cópia, sem mutar a original", () => {
+    it('with devolve uma cópia, sem mutar a original', () => {
       const original = new Money({ amount: 10 });
 
       const changed = original.with({ amount: 25 });
 
       expect(changed).toBeInstanceOf(Money);
       expect(changed.amount).toBe(25);
-      expect(changed.currency).toBe("BRL");
+      expect(changed.currency).toBe('BRL');
       expect(original.amount).toBe(10);
     });
 
-    it("os métodos da classe continuam disponíveis", () => {
+    it('os métodos da classe continuam disponíveis', () => {
       const total = new Money({ amount: 10 }).plus(new Money({ amount: 5 }));
 
       expect(total.amount).toBe(15);
     });
 
-    it("parse e safeParse devolvem a classe", () => {
+    it('parse e safeParse devolvem a classe', () => {
       const parsed = Money.parse({ amount: 10 });
       const failed = Money.safeParse({ amount: -1 });
 
       expect(parsed).toBeInstanceOf(Money);
       expect(failed.success).toBe(false);
       expect(failed.error?.issues[0].message).toBe(
-        "amount não pode ser negativo",
+        'amount não pode ser negativo',
       );
       expect(() => Money.parse({ amount: -1 })).toThrow(z.ZodError);
     });
 
-    it("isValid e assertValid olham o estado atual", () => {
+    it('isValid e assertValid olham o estado atual', () => {
       const money = new Money({ amount: 10 });
 
       expect(money.isValid()).toBe(true);
@@ -289,20 +289,20 @@ describe("ValidatedDto — value objects embutidos", () => {
       expect(() => new Money({ amount: -1 }).assertValid()).toThrow(z.ZodError);
     });
 
-    it("validationError devolve o erro do estado atual, ou nada", () => {
+    it('validationError devolve o erro do estado atual, ou nada', () => {
       expect(new Money({ amount: 10 }).validationError()).toBeUndefined();
       expect(new Money({ amount: -1 }).validationError()).toBeInstanceOf(
         z.ZodError,
       );
     });
 
-    it("is reconhece as instâncias da própria classe", () => {
+    it('is reconhece as instâncias da própria classe', () => {
       expect(Money.is(new Money({ amount: 1 }))).toBe(true);
-      expect(Money.is({ amount: 1, currency: "BRL" })).toBe(false);
+      expect(Money.is({ amount: 1, currency: 'BRL' })).toBe(false);
       expect(Money.is(null)).toBe(false);
     });
 
-    it("field sem decorators é cacheado por classe; com decorators, não", () => {
+    it('field sem decorators é cacheado por classe; com decorators, não', () => {
       const primeiro = Money.field();
       const segundo = Money.field();
       const comDecorator = Money.field({ decorators: [() => undefined] });
@@ -311,44 +311,50 @@ describe("ValidatedDto — value objects embutidos", () => {
       expect(comDecorator).not.toBe(primeiro);
     });
 
-    it("parsear pelo schema do campo materializa a classe, e não um objeto cru", () => {
+    it('parsear pelo schema do campo materializa a classe, e não um objeto cru', () => {
       const Pedido = z.object({ total: Money.field() });
 
       const parsed = Pedido.parse({ total: { amount: 10 } });
 
       expect(parsed.total).toBeInstanceOf(Money);
-      expect((parsed.total as Money).currency).toBe("BRL");
-      expect((parsed.total as Money).plus(new Money({ amount: 5 })).amount).toBe(15);
+      expect((parsed.total as Money).currency).toBe('BRL');
+      expect(
+        (parsed.total as Money).plus(new Money({ amount: 5 })).amount,
+      ).toBe(15);
     });
 
-    it("embed é o field da classe, com outro nome", () => {
+    it('embed é o field da classe, com outro nome', () => {
       expect(ValidatedDto.embed(Money)).toBe(Money.field());
       expect(ValidatedDto.embed(PostId)).toBe(PostId.field());
     });
 
-    describe("a igualdade e as famílias de value object", () => {
+    describe('a igualdade e as famílias de value object', () => {
       class Weight extends Embeddable(
         z.object({
           amount: z.number(),
-          currency: z.enum(["BRL", "USD"]).default("BRL"),
+          currency: z.enum(['BRL', 'USD']).default('BRL'),
         }),
       ) {}
 
-      it("um embeddable de outra família nunca é igual, mesmo com o shape idêntico", () => {
-        expect(new Money({ amount: 10 }).equals(new Weight({ amount: 10 }))).toBe(false);
+      it('um embeddable de outra família nunca é igual, mesmo com o shape idêntico', () => {
+        expect(
+          new Money({ amount: 10 }).equals(new Weight({ amount: 10 })),
+        ).toBe(false);
       });
 
-      it("um objeto cru com os mesmos campos é igual: é o valor que se compara", () => {
-        expect(new Money({ amount: 10 }).equals({ amount: 10, currency: "BRL" })).toBe(true);
+      it('um objeto cru com os mesmos campos é igual: é o valor que se compara', () => {
+        expect(
+          new Money({ amount: 10 }).equals({ amount: 10, currency: 'BRL' }),
+        ).toBe(true);
       });
 
-      it("comparar com o que não é objeto é falso, e não um erro", () => {
+      it('comparar com o que não é objeto é falso, e não um erro', () => {
         expect(new Money({ amount: 10 }).equals(undefined)).toBe(false);
-        expect(new Money({ amount: 10 }).equals("10")).toBe(false);
+        expect(new Money({ amount: 10 }).equals('10')).toBe(false);
       });
     });
 
-    describe("a igualdade campo a campo", () => {
+    describe('a igualdade campo a campo', () => {
       class Registro extends Embeddable(
         z.object({
           em: z.date(),
@@ -360,109 +366,119 @@ describe("ValidatedDto — value objects embutidos", () => {
 
       const base = () =>
         new Registro({
-          em: new Date("2026-09-08T12:00:00.000Z"),
-          etiquetas: ["x", "y"],
-          meta: { a: 1, b: "dois" },
+          em: new Date('2026-09-08T12:00:00.000Z'),
+          etiquetas: ['x', 'y'],
+          meta: { a: 1, b: 'dois' },
         });
 
-      it("datas comparam por instante, e não por identidade do objeto", () => {
+      it('datas comparam por instante, e não por identidade do objeto', () => {
         expect(base().equals(base())).toBe(true);
         expect(
-          base().equals(base().with({ em: new Date("2026-09-08T12:00:01.000Z") })),
+          base().equals(
+            base().with({ em: new Date('2026-09-08T12:00:01.000Z') }),
+          ),
         ).toBe(false);
       });
 
-      it("listas comparam item a item, e o tamanho conta", () => {
-        expect(base().equals(base().with({ etiquetas: ["x", "y"] }))).toBe(true);
-        expect(base().equals(base().with({ etiquetas: ["y", "x"] }))).toBe(false);
-        expect(base().equals(base().with({ etiquetas: ["x"] }))).toBe(false);
+      it('listas comparam item a item, e o tamanho conta', () => {
+        expect(base().equals(base().with({ etiquetas: ['x', 'y'] }))).toBe(
+          true,
+        );
+        expect(base().equals(base().with({ etiquetas: ['y', 'x'] }))).toBe(
+          false,
+        );
+        expect(base().equals(base().with({ etiquetas: ['x'] }))).toBe(false);
       });
 
-      it("objetos aninhados comparam chave a chave", () => {
-        expect(base().equals(base().with({ meta: { a: 1, b: "dois" } }))).toBe(true);
-        expect(base().equals(base().with({ meta: { a: 2, b: "dois" } }))).toBe(false);
+      it('objetos aninhados comparam chave a chave', () => {
+        expect(base().equals(base().with({ meta: { a: 1, b: 'dois' } }))).toBe(
+          true,
+        );
+        expect(base().equals(base().with({ meta: { a: 2, b: 'dois' } }))).toBe(
+          false,
+        );
         expect(base().equals(base().with({ meta: undefined }))).toBe(false);
       });
 
-      it("null e ausente não são a mesma coisa", () => {
+      it('null e ausente não são a mesma coisa', () => {
         expect(base().equals(base().with({ nota: null }))).toBe(true);
-        expect(base().equals(base().with({ nota: "algo" }))).toBe(false);
+        expect(base().equals(base().with({ nota: 'algo' }))).toBe(false);
       });
     });
 
-    describe("embutido em outro DTO", () => {
+    describe('embutido em outro DTO', () => {
       const OrderDto = ValidatedDto(
         z.object({ id: PostId.field(), total: Money.field() }),
       );
 
-      it("materializa a classe concreta, com os métodos dela", () => {
+      it('materializa a classe concreta, com os métodos dela', () => {
         const order = new OrderDto({ id: ID, total: { amount: 10 } });
 
         expect(order.total).toBeInstanceOf(Money);
-        expect(order.total.currency).toBe("BRL");
+        expect(order.total.currency).toBe('BRL');
         expect(order.total.plus(new Money({ amount: 5 })).amount).toBe(15);
       });
 
-      it("serializa como objeto aninhado, e não colapsado", () => {
+      it('serializa como objeto aninhado, e não colapsado', () => {
         const order = new OrderDto({ id: ID, total: { amount: 10 } });
 
         expect(instanceToPlain(order)).toEqual({
           id: ID,
-          total: { amount: 10, currency: "BRL" },
+          total: { amount: 10, currency: 'BRL' },
         });
       });
 
-      it("fecha o round-trip pelo class-transformer", () => {
-        const plain = { id: ID, total: { amount: 10, currency: "USD" } };
+      it('fecha o round-trip pelo class-transformer', () => {
+        const plain = { id: ID, total: { amount: 10, currency: 'USD' } };
 
         const order = plainToInstance(OrderDto, plain);
 
         expect(order.total).toBeInstanceOf(Money);
-        expect(order.total.currency).toBe("USD");
+        expect(order.total.currency).toBe('USD');
         expect(instanceToPlain(order)).toEqual(plain);
       });
 
-      it("valida o embeddable pelo schema dele", async () => {
+      it('valida o embeddable pelo schema dele', async () => {
         const order = new OrderDto({ id: ID, total: { amount: -1 } });
 
         const errors = await validate(order);
 
-        expect(errors.map(error => error.property)).toEqual(["total"]);
+        expect(errors.map((error) => error.property)).toEqual(['total']);
       });
 
-      it("marca o design:type com a classe do embeddable", () => {
+      it('marca o design:type com a classe do embeddable', () => {
         expect(
-          Reflect.getMetadata("design:type", OrderDto.prototype, "total"),
+          Reflect.getMetadata('design:type', OrderDto.prototype, 'total'),
         ).toBe(Money);
       });
     });
 
-    it("embute escalares dentro de si", () => {
+    it('embute escalares dentro de si', () => {
       class Authorship extends Embeddable(
         z.object({ authorId: PostId.field(), name: TagName.field() }),
       ) {}
 
-      const authorship = new Authorship({ authorId: ID, name: "manuel" });
+      const authorship = new Authorship({ authorId: ID, name: 'manuel' });
 
       expect(authorship.authorId).toBeInstanceOf(PostId);
       expect(instanceToPlain(authorship)).toEqual({
         authorId: ID,
-        name: "manuel",
+        name: 'manuel',
       });
       expect(
-        authorship.equals(new Authorship({ authorId: ID, name: "manuel" })),
+        authorship.equals(new Authorship({ authorId: ID, name: 'manuel' })),
       ).toBe(true);
     });
   });
 
-  describe("Herança do DTO", () => {
-    it("a subclasse recebe os decorators de campo do registry", () => {
-      const metadataKey = Symbol("field");
+  describe('Herança do DTO', () => {
+    it('a subclasse recebe os decorators de campo do registry', () => {
+      const metadataKey = Symbol('field');
       const idField = PostId.field();
       idField.register(DECORATOR_REGISTRY, {
         decorators: [
           ((target: object, key: string | symbol) => {
-            Reflect.defineMetadata(metadataKey, "id", target, key);
+            Reflect.defineMetadata(metadataKey, 'id', target, key);
           }) as PropertyDecorator,
         ],
       });
@@ -470,13 +486,13 @@ describe("ValidatedDto — value objects embutidos", () => {
       @InheritValidatedMetadata()
       class Dto extends ValidatedDto(z.object({ id: idField })) {}
 
-      expect(Reflect.getMetadata(metadataKey, Dto.prototype, "id")).toBe("id");
-      expect(Reflect.getMetadata("design:type", Dto.prototype, "id")).toBe(
+      expect(Reflect.getMetadata(metadataKey, Dto.prototype, 'id')).toBe('id');
+      expect(Reflect.getMetadata('design:type', Dto.prototype, 'id')).toBe(
         PostId,
       );
     });
 
-    it("a subclasse continua materializando os value objects", () => {
+    it('a subclasse continua materializando os value objects', () => {
       @InheritValidatedMetadata()
       class Dto extends ValidatedDto(z.object({ id: PostId.field() })) {
         get short(): string {
@@ -487,7 +503,7 @@ describe("ValidatedDto — value objects embutidos", () => {
       const instance = new Dto({ id: ID });
 
       expect(instance.id).toBeInstanceOf(PostId);
-      expect(instance.short).toBe("11111111");
+      expect(instance.short).toBe('11111111');
     });
   });
 });

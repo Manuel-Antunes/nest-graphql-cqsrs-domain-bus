@@ -1,4 +1,5 @@
-import { type Identity, IdentityProvider } from '@nestposts/users/domain/user/identity.provider';
+import type { Identity } from '@nestposts/users/domain/user/identity.provider';
+import { IdentityProvider } from '@nestposts/users/domain/user/identity.provider';
 import { CredentialId } from '@nestposts/users/domain/user/vo/credential-id';
 import { Email } from '@nestposts/users/domain/user/vo/email';
 import { UserName } from '@nestposts/users/domain/user/vo/user-name';
@@ -7,7 +8,11 @@ export class FakeIdentityProvider extends IdentityProvider {
   private readonly credentials = new Map<string, Identity>();
   private sequence = 0;
 
-  signUp(email: string, name: string, role: string | null = null): CredentialId {
+  signUp(
+    email: string,
+    name: string,
+    role: string | null = null,
+  ): CredentialId {
     const credentialId = CredentialId.parse(`cred-${++this.sequence}`);
     this.credentials.set(credentialId.value, {
       credentialId,

@@ -1,15 +1,18 @@
-import { Injectable, Logger, type OnApplicationBootstrap, type Type } from '@nestjs/common';
-import { CommandBus } from '@nestjs/cqrs';
+import type { OnApplicationBootstrap, Type } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import { ModulesContainer } from '@nestjs/core/injector/modules-container';
+import { CommandBus } from '@nestjs/cqrs';
+
 import 'reflect-metadata';
+
+import { UnitOfWork } from './unit-of-work';
 
 /**
  * The key `@EventsHandler` writes, copied rather than imported: it lives in
  * `@nestjs/cqrs/dist/decorators/constants`, which the package's `exports` map does not publish.
  */
 const EVENTS_HANDLER_METADATA = '__eventsHandler__';
-import { UnitOfWork } from './unit-of-work';
 
 interface EventHandlerInstance {
   handle(event: unknown): unknown;
@@ -70,19 +73,30 @@ export class UnitOfWorkCommands implements OnApplicationBootstrap {
      * different request gets a unit of its own.
      */
     bus.execute = ((command: never, context: never) =>
-      UnitOfWork.run(() => execute(command, context), context)) as typeof bus.execute;
+      UnitOfWork.run(
+        () => execute(command, context),
+        context,
+      )) as typeof bus.execute;
   }
 
   private aroundHandlers(): number {
     let count = 0;
     for (const moduleRef of this.modulesContainer.values()) {
       for (const wrapper of moduleRef.providers.values()) {
-        const classRef = (wrapper.instance?.constructor ?? wrapper.metatype) as Type | undefined;
+        const classRef = (wrapper.instance?.constructor ?? wrapper.metatype) as
+          Type | undefined;
         const instance = wrapper.instance as EventHandlerInstance | undefined;
-        if (!classRef || !Reflect.getMetadata(EVENTS_HANDLER_METADATA, classRef)) {
+        if (
+          !classRef ||
+          !Reflect.getMetadata(EVENTS_HANDLER_METADATA, classRef)
+        ) {
           continue;
         }
-        if (!instance || typeof instance.handle !== 'function' || wrapped.has(instance)) {
+        if (
+          !instance ||
+          typeof instance.handle !== 'function' ||
+          wrapped.has(instance)
+        ) {
           continue;
         }
         wrapped.add(instance);

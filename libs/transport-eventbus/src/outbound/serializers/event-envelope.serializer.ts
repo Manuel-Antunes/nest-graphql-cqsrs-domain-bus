@@ -1,4 +1,5 @@
 import type { ProducerSerializer, ReadPacket } from '@nestjs/microservices';
+
 import type { EventEnvelope } from '../event-envelope';
 
 /**

@@ -1,8 +1,16 @@
 import type { TestingModule } from '@nestjs/testing';
-import { createCqrsTestingModule, inRequestContext } from '../../../../test/support/cqrs-testing-module';
-import { givenAnAuthor, givenAPost, T0 } from '../../../../test/support/post-fixtures';
 import type { Author } from '@nestposts/users/domain/user/author.entity';
 import { UserId } from '@nestposts/users/domain/user/vo/user-id';
+
+import {
+  createCqrsTestingModule,
+  inRequestContext,
+} from '../../../../test/support/cqrs-testing-module';
+import {
+  givenAnAuthor,
+  givenAPost,
+  T0,
+} from '../../../../test/support/post-fixtures';
 import { FindPostsByAuthorQuery } from './find-posts-by-author.query';
 
 describe('FindPostsByAuthorQuery.Handler', () => {
@@ -12,15 +20,25 @@ describe('FindPostsByAuthorQuery.Handler', () => {
 
   const page = (first?: number | null, after?: string | null) =>
     inRequestContext(module, () =>
-      handler.execute(new FindPostsByAuthorQuery.FindPostsByAuthor(author.id, first, after)),
+      handler.execute(
+        new FindPostsByAuthorQuery.FindPostsByAuthor(author.id, first, after),
+      ),
     );
 
   beforeEach(async () => {
     module = await createCqrsTestingModule([FindPostsByAuthorQuery.Handler]);
     handler = module.get(FindPostsByAuthorQuery.Handler);
     author = await givenAnAuthor(module);
-    for (const [index, title] of ['primeiro', 'segundo', 'terceiro'].entries()) {
-      await givenAPost(module, { title, author, createdAt: new Date(T0.getTime() + index * 1000) });
+    for (const [index, title] of [
+      'primeiro',
+      'segundo',
+      'terceiro',
+    ].entries()) {
+      await givenAPost(module, {
+        title,
+        author,
+        createdAt: new Date(T0.getTime() + index * 1000),
+      });
     }
   });
 
@@ -29,7 +47,10 @@ describe('FindPostsByAuthorQuery.Handler', () => {
   it('devolve a página pedida, do mais recente para o mais antigo', async () => {
     const first = await page(2);
 
-    expect(first.items.map((post) => post.title.value)).toEqual(['terceiro', 'segundo']);
+    expect(first.items.map((post) => post.title.value)).toEqual([
+      'terceiro',
+      'segundo',
+    ]);
     expect(first.hasNextPage).toBe(true);
     expect(first.hasPrevPage).toBe(false);
     expect(first.totalCount).toBe(3);
@@ -51,13 +72,19 @@ describe('FindPostsByAuthorQuery.Handler', () => {
 
     const mine = await page(10);
 
-    expect(mine.items.map((post) => post.title.value)).toEqual(['terceiro', 'segundo', 'primeiro']);
+    expect(mine.items.map((post) => post.title.value)).toEqual([
+      'terceiro',
+      'segundo',
+      'primeiro',
+    ]);
     expect(mine.totalCount).toBe(3);
   });
 
   it('um id desconhecido é uma página vazia', async () => {
     const empty = await inRequestContext(module, () =>
-      handler.execute(new FindPostsByAuthorQuery.FindPostsByAuthor(UserId.generate(), 10)),
+      handler.execute(
+        new FindPostsByAuthorQuery.FindPostsByAuthor(UserId.generate(), 10),
+      ),
     );
 
     expect(empty.items).toEqual([]);

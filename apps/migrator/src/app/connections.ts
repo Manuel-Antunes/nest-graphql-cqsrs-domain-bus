@@ -1,12 +1,11 @@
+import { join } from 'node:path';
+import type { DatabaseEntities, PostgresOptions } from '@nestposts/database';
 import { Migrator } from '@mikro-orm/migrations';
 import { SeedManager } from '@mikro-orm/seeder';
-import { join } from 'node:path';
 import {
+  postgresDatabase,
   POSTS_SCHEMA,
   TAGGING_SCHEMA,
-  postgresDatabase,
-  type DatabaseEntities,
-  type PostgresOptions,
 } from '@nestposts/database';
 import { OrganizationEntities } from '@nestposts/organizations/infrastructure/persistence/organization-entities';
 import { SoftDeleteSubscriber } from '@nestposts/platform/infrastructure/persistence/soft-delete/soft-delete.subscriber';
@@ -14,6 +13,7 @@ import { postsEntities } from '@nestposts/posts/infrastructure/posts-infrastruct
 import { eventLogEntities } from '@nestposts/transport-eventbus/persistence/event-log/event-log.entity';
 import { transportEntities } from '@nestposts/transport-eventbus/persistence/message-inbox.entity';
 import { usersEntities } from '@nestposts/users/infrastructure/users-infrastructure.module';
+
 import { postsMigrations } from '../migrations/posts';
 import { taggingMigrations } from '../migrations/tagging';
 import { DatabaseSeeder } from '../seeders/database.seeder';
@@ -32,9 +32,11 @@ const migrationFiles = (folder: string) => ({
   snapshot: false,
 });
 
-export const postsSchema = (): string => process.env.POSTS_SCHEMA ?? POSTS_SCHEMA;
+export const postsSchema = (): string =>
+  process.env.POSTS_SCHEMA ?? POSTS_SCHEMA;
 
-export const taggingSchema = (): string => process.env.TAGGING_SCHEMA ?? TAGGING_SCHEMA;
+export const taggingSchema = (): string =>
+  process.env.TAGGING_SCHEMA ?? TAGGING_SCHEMA;
 
 export const postsTables = (): DatabaseEntities => [
   ...postsEntities,
@@ -58,7 +60,11 @@ export const postsConnection = (): PostgresOptions =>
     subscribers: [new SoftDeleteSubscriber()],
     extensions: [Migrator, SeedManager],
     migrations: { ...migrationFiles('posts'), migrationsList: postsMigrations },
-    seeder: { seedersList: [DatabaseSeeder, DefaultTagSeeder, TestUsersSeeder], defaultSeeder: 'DatabaseSeeder', emit: 'ts' },
+    seeder: {
+      seedersList: [DatabaseSeeder, DefaultTagSeeder, TestUsersSeeder],
+      defaultSeeder: 'DatabaseSeeder',
+      emit: 'ts',
+    },
   });
 
 export const taggingConnection = (): PostgresOptions =>
@@ -66,5 +72,8 @@ export const taggingConnection = (): PostgresOptions =>
     preferTs: false,
     entities: [...taggingTables()],
     extensions: [Migrator],
-    migrations: { ...migrationFiles('tagging'), migrationsList: taggingMigrations },
+    migrations: {
+      ...migrationFiles('tagging'),
+      migrationsList: taggingMigrations,
+    },
   });

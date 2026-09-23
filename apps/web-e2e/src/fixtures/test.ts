@@ -2,10 +2,11 @@ import { test as base, expect } from '@playwright/test';
 
 import type { Account, Accounts } from '../support/accounts';
 import type { ExecuteGraphql } from '../support/graphql';
+import type { Messages } from '../support/messages';
 import { Broker } from '../support/broker';
-import { type Messages, messagesOf } from '../support/messages';
 import { ServiceDatabase } from '../support/database';
 import { graphqlExecutor } from '../support/graphql';
+import { messagesOf } from '../support/messages';
 import { PostsApi } from '../support/posts-api';
 import { RunningStack } from '../support/running-stack';
 import { POSTS_SCHEMA, TAGGING_SCHEMA } from '../support/stack';

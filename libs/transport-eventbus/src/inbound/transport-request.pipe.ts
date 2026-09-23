@@ -1,5 +1,7 @@
-import { Injectable, type PipeTransform } from '@nestjs/common';
+import type { PipeTransform } from '@nestjs/common';
 import type { AsyncContext } from '@nestjs/cqrs';
+import { Injectable } from '@nestjs/common';
+
 import { IncomingRequest } from './incoming-request';
 
 /**
@@ -25,7 +27,10 @@ import { IncomingRequest } from './incoming-request';
  * ```
  */
 @Injectable()
-export class TransportRequestPipe implements PipeTransform<unknown, AsyncContext | undefined> {
+export class TransportRequestPipe implements PipeTransform<
+  unknown,
+  AsyncContext | undefined
+> {
   constructor(private readonly incoming: IncomingRequest) {}
 
   transform(value: unknown): AsyncContext | undefined {

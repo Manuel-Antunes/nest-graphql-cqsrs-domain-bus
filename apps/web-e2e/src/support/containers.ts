@@ -1,15 +1,10 @@
 import { createServer } from 'node:net';
+import type { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
+import type { StartedNetwork, StartedTestContainer } from 'testcontainers';
+import { PostgreSqlContainer } from '@testcontainers/postgresql';
+import { GenericContainer, Network, Wait } from 'testcontainers';
 
 import type { E2eTransport } from './transport';
-
-import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
-import {
-  GenericContainer,
-  Network,
-  Wait,
-  type StartedNetwork,
-  type StartedTestContainer,
-} from 'testcontainers';
 
 export const POSTGRES_IMAGE = 'postgres:18-alpine';
 export const RABBITMQ_IMAGE = 'rabbitmq:4-management';
@@ -45,8 +40,11 @@ export class FreePort {
       probe.once('error', reject);
       probe.listen(0, '127.0.0.1', () => {
         const address = probe.address();
-        const port = typeof address === 'object' && address !== null ? address.port : 0;
-        probe.close(() => (port === 0 ? reject(new Error('no free port')) : resolve(port)));
+        const port =
+          typeof address === 'object' && address !== null ? address.port : 0;
+        probe.close(() =>
+          port === 0 ? reject(new Error('no free port')) : resolve(port),
+        );
       });
     });
   }
@@ -123,7 +121,9 @@ export class ContainerStack {
     return 'amqp://guest:guest@rabbitmq:5672';
   }
 
-  private async startInfrastructure(options: ContainerStackOptions): Promise<void> {
+  private async startInfrastructure(
+    options: ContainerStackOptions,
+  ): Promise<void> {
     this.postgres = await new PostgreSqlContainer(POSTGRES_IMAGE)
       .withNetwork(this.network!)
       .withNetworkAliases('postgres')
@@ -187,7 +187,9 @@ export class ContainerStack {
     await migrator.stop({ timeout: 10 }).catch(() => undefined);
   }
 
-  private async startApplications(options: ContainerStackOptions): Promise<void> {
+  private async startApplications(
+    options: ContainerStackOptions,
+  ): Promise<void> {
     const apiUrl = `http://localhost:${options.apiPort}`;
     const shared = {
       POSTGRES_URL: this.internalPostgresUrl,
@@ -211,7 +213,9 @@ export class ContainerStack {
         INNGEST_SERVE_ORIGIN: `http://tagging:${TAGGING_PORT}`,
       })
       .withWaitStrategy(Wait.forLogMessage(/tagging is listening/))
-      .withLogConsumer((stream) => stream.on('data', (line) => options.logs(`tagging ${line}`)))
+      .withLogConsumer((stream) =>
+        stream.on('data', (line) => options.logs(`tagging ${line}`)),
+      )
       .start();
 
     this.postsApi = await new GenericContainer('nestposts/posts-api:dev')
@@ -227,10 +231,13 @@ export class ContainerStack {
         WEB_URL: options.webUrl,
         AUTH_TRUSTED_ORIGINS: `${apiUrl},${options.webUrl}`,
       })
-      .withWaitStrategy(Wait.forLogMessage(/Nest application successfully started/))
-      .withLogConsumer((stream) => stream.on('data', (line) => options.logs(`posts-api ${line}`)))
+      .withWaitStrategy(
+        Wait.forLogMessage(/Nest application successfully started/),
+      )
+      .withLogConsumer((stream) =>
+        stream.on('data', (line) => options.logs(`posts-api ${line}`)),
+      )
       .start();
-
   }
 
   /**
@@ -243,7 +250,9 @@ export class ContainerStack {
     const deadline = Date.now() + 30_000;
     for (;;) {
       try {
-        const response = await fetch(`${baseUrl}/api/inngest`, { method: 'PUT' });
+        const response = await fetch(`${baseUrl}/api/inngest`, {
+          method: 'PUT',
+        });
         if (response.ok) {
           return;
         }
@@ -251,7 +260,9 @@ export class ContainerStack {
         // the server is up but the route may not be, which is what the deadline is for
       }
       if (Date.now() > deadline) {
-        throw new Error(`${baseUrl}/api/inngest never registered its functions with Inngest`);
+        throw new Error(
+          `${baseUrl}/api/inngest never registered its functions with Inngest`,
+        );
       }
       await new Promise((resolve) => setTimeout(resolve, 500));
     }
@@ -267,7 +278,9 @@ export class ContainerStack {
           }
         : {}),
       ...(this.inngest
-        ? { inngestUrl: `http://${this.inngest.getHost()}:${this.inngest.getMappedPort(8288)}` }
+        ? {
+            inngestUrl: `http://${this.inngest.getHost()}:${this.inngest.getMappedPort(8288)}`,
+          }
         : {}),
     };
   }

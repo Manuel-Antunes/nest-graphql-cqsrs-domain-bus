@@ -10,7 +10,10 @@ describe('Subscription', () => {
 
   class OnAnyCounter extends Subscription<CounterEvent> {}
 
-  class OnCounter extends Subscription<CounterEvent, { topic?: string | null }> {
+  class OnCounter extends Subscription<
+    CounterEvent,
+    { topic?: string | null }
+  > {
     override match(event: CounterEvent): boolean {
       return !this.criteria.topic || event.topic === this.criteria.topic;
     }
@@ -38,34 +41,54 @@ describe('Subscription', () => {
 
   describe('a chave', () => {
     it('leva o nome do tipo e o critério serializado', () => {
-      expect(new OnCounter({ topic: 'a' }).key).toBe('OnCounter({"topic":"a"})');
+      expect(new OnCounter({ topic: 'a' }).key).toBe(
+        'OnCounter({"topic":"a"})',
+      );
       expect(new OnAnyCounter().key).toBe('OnAnyCounter(void)');
     });
 
     it('dois pedidos iguais têm a mesma chave — é o que faz o bus reusar o stream', () => {
-      expect(new OnCounter({ topic: 'a' }).key).toBe(new OnCounter({ topic: 'a' }).key);
+      expect(new OnCounter({ topic: 'a' }).key).toBe(
+        new OnCounter({ topic: 'a' }).key,
+      );
       expect(new OnAnyCounter().key).toBe(new OnAnyCounter().key);
     });
 
     it('a ordem em que o critério foi montado não muda a chave', () => {
-      class OnPair extends Subscription<CounterEvent, { topic: string; from: number }> {}
+      class OnPair extends Subscription<
+        CounterEvent,
+        { topic: string; from: number }
+      > {}
 
-      expect(new OnPair({ topic: 'a', from: 1 }).key).toBe(new OnPair({ from: 1, topic: 'a' }).key);
+      expect(new OnPair({ topic: 'a', from: 1 }).key).toBe(
+        new OnPair({ from: 1, topic: 'a' }).key,
+      );
     });
 
     it('um critério ausente e um undefined são o mesmo pedido', () => {
-      expect(new OnCounter({}).key).toBe(new OnCounter({ topic: undefined }).key);
+      expect(new OnCounter({}).key).toBe(
+        new OnCounter({ topic: undefined }).key,
+      );
     });
 
     it('critérios diferentes têm chaves diferentes — inclusive null e ausente', () => {
-      expect(new OnCounter({ topic: 'a' }).key).not.toBe(new OnCounter({ topic: 'b' }).key);
-      expect(new OnCounter({ topic: null }).key).not.toBe(new OnCounter({}).key);
+      expect(new OnCounter({ topic: 'a' }).key).not.toBe(
+        new OnCounter({ topic: 'b' }).key,
+      );
+      expect(new OnCounter({ topic: null }).key).not.toBe(
+        new OnCounter({}).key,
+      );
     });
 
     it('duas subscriptions de tipos diferentes não colidem no mesmo critério', () => {
-      class OnOther extends Subscription<CounterEvent, { topic?: string | null }> {}
+      class OnOther extends Subscription<
+        CounterEvent,
+        { topic?: string | null }
+      > {}
 
-      expect(new OnOther({ topic: 'a' }).key).not.toBe(new OnCounter({ topic: 'a' }).key);
+      expect(new OnOther({ topic: 'a' }).key).not.toBe(
+        new OnCounter({ topic: 'a' }).key,
+      );
     });
   });
 

@@ -24,5 +24,8 @@ export const InvitationStatusSchema = z
   .trim()
   .toLowerCase()
   .min(1, 'invitation status must not be empty')
-  .max(INVITATION_STATUS_MAX_LENGTH, `invitation status exceeds ${INVITATION_STATUS_MAX_LENGTH} characters`)
+  .max(
+    INVITATION_STATUS_MAX_LENGTH,
+    `invitation status exceeds ${INVITATION_STATUS_MAX_LENGTH} characters`,
+  )
   .brand<'InvitationStatus'>();

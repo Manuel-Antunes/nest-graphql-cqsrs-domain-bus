@@ -103,9 +103,10 @@ function IdentityCard({
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="flex items-center gap-2 text-sm text-muted-foreground">
-            <ShieldCheckIcon className="size-4" aria-hidden />
-            A credencial é do Better Auth; o que este perfil é — leitor ou autor — sai do
-            <span className="font-mono"> __typename</span>, e não de um papel lido no cliente.
+            <ShieldCheckIcon className="size-4" aria-hidden />A credencial é do
+            Better Auth; o que este perfil é — leitor ou autor — sai do
+            <span className="font-mono"> __typename</span>, e não de um papel
+            lido no cliente.
           </p>
         </CardContent>
       </Card>

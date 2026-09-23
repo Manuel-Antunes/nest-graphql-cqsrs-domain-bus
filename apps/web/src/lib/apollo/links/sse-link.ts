@@ -37,10 +37,16 @@ export class GraphQLSSELink extends ApolloLink {
 
   constructor(url: string) {
     super();
-    this.client = createClient({ url, singleConnection: false, retryAttempts: 5 });
+    this.client = createClient({
+      url,
+      singleConnection: false,
+      retryAttempts: 5,
+    });
   }
 
-  override request(operation: ApolloLink.Operation): Observable<ApolloLink.Result> {
+  override request(
+    operation: ApolloLink.Operation,
+  ): Observable<ApolloLink.Result> {
     return new Observable<ApolloLink.Result>((subscriber) => {
       let connected = false;
 
@@ -58,7 +64,9 @@ export class GraphQLSSELink extends ApolloLink {
         connected = true;
         clearTimeout(deadline);
         connections.dispatchEvent(
-          new CustomEvent('connected', { detail: operation.operationName ?? '' }),
+          new CustomEvent('connected', {
+            detail: operation.operationName ?? '',
+          }),
         );
       };
 

@@ -1,10 +1,23 @@
+import type { OnApplicationBootstrap } from '@nestjs/common';
+import type { Observable } from 'rxjs';
 import { EntityManager } from '@mikro-orm/core';
-import { Inject, Injectable, Logger, type OnApplicationBootstrap, Optional } from '@nestjs/common';
-import { EventBus } from '@nestjs/cqrs';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
+import { EventBus } from '@nestjs/cqrs';
 import { inRequestContext } from '@nestposts/database';
-import { type Observable, concatMap, defer, from, interval, mergeMap, share, switchMap, tap } from 'rxjs';
-import { EventLog, type LoggedRecord } from '../persistence/event-log/event-log';
+import {
+  concatMap,
+  defer,
+  from,
+  interval,
+  mergeMap,
+  share,
+  switchMap,
+  tap,
+} from 'rxjs';
+
+import type { LoggedRecord } from '../persistence/event-log/event-log';
+import { EventLog } from '../persistence/event-log/event-log';
 
 /** How the log is read: how often, and how much at a time. */
 export const EVENT_LOG_OPTIONS = Symbol('EventLogOptions');
@@ -93,11 +106,15 @@ export class EventSourcedEventBus implements OnApplicationBootstrap {
   onApplicationBootstrap(): void {
     const bus = this.moduleRef.get(EventBus, { strict: false });
     bus.source = this.fromLog();
-    this.journal.log('the EventBus now reads the event log for anything that pipes it');
+    this.journal.log(
+      'the EventBus now reads the event log for anything that pipes it',
+    );
   }
 
   private fromLog(): Observable<object> {
-    this.log$ ??= defer(() => this.read()).pipe(share({ resetOnRefCountZero: true }));
+    this.log$ ??= defer(() => this.read()).pipe(
+      share({ resetOnRefCountZero: true }),
+    );
     return this.log$;
   }
 
@@ -114,25 +131,29 @@ export class EventSourcedEventBus implements OnApplicationBootstrap {
 
         return interval(this.interval).pipe(
           concatMap(() =>
-            this.at(() => this.log.readAfter(cursor, this.batch)).catch((failure: unknown) => {
-              /**
-               * A read that fails must not end the stream. A subscriber is connected for as long as
-               * it wants to be, and the reasons a query fails here are transient by nature — a
-               * connection closed while the process was idle, a database restarting. The cursor does
-               * not move, so the next tick asks for the same thing again.
-               */
-              this.journal.error(
-                `could not read the event log past ${cursor}; retrying: ` +
-                  `${(failure as Error)?.message ?? String(failure)}`,
-              );
-              return [] as LoggedRecord[];
-            }),
+            this.at(() => this.log.readAfter(cursor, this.batch)).catch(
+              (failure: unknown) => {
+                /**
+                 * A read that fails must not end the stream. A subscriber is connected for as long as
+                 * it wants to be, and the reasons a query fails here are transient by nature — a
+                 * connection closed while the process was idle, a database restarting. The cursor does
+                 * not move, so the next tick asks for the same thing again.
+                 */
+                this.journal.error(
+                  `could not read the event log past ${cursor}; retrying: ` +
+                    `${(failure as Error)?.message ?? String(failure)}`,
+                );
+                return [] as LoggedRecord[];
+              },
+            ),
           ),
           tap((records) => {
             if (records.length > 0) {
               this.journal.debug(
                 `log → ${records.length} event(s) past ${cursor}: ` +
-                  records.map((record) => record.event.constructor.name).join(', '),
+                  records
+                    .map((record) => record.event.constructor.name)
+                    .join(', '),
               );
               cursor = records[records.length - 1].position;
             }

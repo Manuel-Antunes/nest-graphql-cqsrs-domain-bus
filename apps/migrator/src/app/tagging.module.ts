@@ -4,6 +4,7 @@ import { postsEntities } from '@nestposts/posts/infrastructure/posts-infrastruct
 import { eventLogEntities } from '@nestposts/transport-eventbus/persistence/event-log/event-log.entity';
 import { transportEntities } from '@nestposts/transport-eventbus/persistence/message-inbox.entity';
 import { usersEntities } from '@nestposts/users/infrastructure/users-infrastructure.module';
+
 import { taggingConnection } from './connections';
 
 @Module({

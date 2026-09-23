@@ -1,4 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import type { ICommandHandler, IEvent, IEventHandler } from '@nestjs/cqrs';
+import type { TestingModule } from '@nestjs/testing';
+import type { Observable } from 'rxjs';
+import { Inject, Injectable } from '@nestjs/common';
+import { DiscoveryModule } from '@nestjs/core';
 import {
   AggregateRoot,
   CommandBus,
@@ -6,27 +10,32 @@ import {
   CqrsModule,
   EventPublisher,
   EventsHandler,
-  type ICommandHandler,
-  type IEvent,
-  type IEventHandler,
   ofType,
   Saga,
 } from '@nestjs/cqrs';
 import { ClientProxy } from '@nestjs/microservices';
-import { Test, type TestingModule } from '@nestjs/testing';
-import { map, type Observable } from 'rxjs';
-import { Inject } from '@nestjs/common';
-import { DiscoveryModule } from '@nestjs/core';
+import { Test } from '@nestjs/testing';
 import { EventType } from '@nestposts/platform/domain/shared/event-type';
-import { TRANSPORT_MESSAGE_TYPE, TRANSPORT_ORIGIN } from './outbound/event-envelope';
-import { TRANSPORT_EVENT_BUS_PUBLISHER, TRANSPORT_EVENT_BUS_SERVICE } from './constants';
+import { map } from 'rxjs';
+
+import type { TransportEventBusService } from './transport-event-bus.service';
+import {
+  TRANSPORT_EVENT_BUS_PUBLISHER,
+  TRANSPORT_EVENT_BUS_SERVICE,
+} from './constants';
 import { ExcludeDef } from './decorators/exclude-def.decorator';
 import { EVERY_NAMESPACE, Publisher } from './decorators/publisher.decorator';
-import { CorrelatedRequestContext, RequestContextCodec } from './request-context';
+import {
+  TRANSPORT_MESSAGE_TYPE,
+  TRANSPORT_ORIGIN,
+} from './outbound/event-envelope';
+import {
+  CorrelatedRequestContext,
+  RequestContextCodec,
+} from './request-context';
 import { RecordingClient } from './testing/recording-client';
 import { transportEventBusProviders } from './transport-event-bus.providers';
 import { TransportIdentity } from './transport-identity';
-import type { TransportEventBusService } from './transport-event-bus.service';
 
 /**
  * The integration suite of nestjs-transport-eventbus, ported assertion for assertion.
@@ -191,7 +200,8 @@ class TryAggregateRootCommand {
 @CommandHandler(TryAggregateRootCommand)
 class TryAggregateRootCommandHandler implements ICommandHandler<TryAggregateRootCommand> {
   constructor(
-    @Inject(TRANSPORT_EVENT_BUS_PUBLISHER) private readonly publisher: EventPublisher,
+    @Inject(TRANSPORT_EVENT_BUS_PUBLISHER)
+    private readonly publisher: EventPublisher,
   ) {}
 
   async execute(command: TryAggregateRootCommand): Promise<void> {
@@ -204,7 +214,8 @@ class TryAggregateRootCommandHandler implements ICommandHandler<TryAggregateRoot
 @Injectable()
 class TestEventService {
   constructor(
-    @Inject(TRANSPORT_EVENT_BUS_SERVICE) private readonly eventBus: TransportEventBusService,
+    @Inject(TRANSPORT_EVENT_BUS_SERVICE)
+    private readonly eventBus: TransportEventBusService,
   ) {}
 
   publishEvent(event: object): Promise<void> {
@@ -222,7 +233,6 @@ class RabbitPublisher {
   }
 }
 
-
 const metadataOf = (message: { data: unknown }) =>
   (message.data as { metadata: Record<string, string> }).metadata;
 
@@ -238,7 +248,10 @@ describe('the transport event bus (the vendored base)', () => {
       imports: [CqrsModule.forRoot(), DiscoveryModule],
       providers: [
         ...transportEventBusProviders,
-        { provide: TransportIdentity, useValue: TransportIdentity.named('the-suite') },
+        {
+          provide: TransportIdentity,
+          useValue: TransportIdentity.named('the-suite'),
+        },
         { provide: RequestContextCodec, useClass: CorrelatedRequestContext },
         RabbitPublisher,
         Storage,
@@ -270,7 +283,8 @@ describe('the transport event bus (the vendored base)', () => {
   });
 
   const sentMessages = () => rabbit.sent.map((message) => message.data);
-  const afterFloatingPublishesSettle = () => new Promise((resolve) => setImmediate(resolve));
+  const afterFloatingPublishesSettle = () =>
+    new Promise((resolve) => setImmediate(resolve));
 
   describe('what goes out, and what runs locally', () => {
     it('calls the DefaultEvent handler and sends nothing: no destination takes its namespace', async () => {
@@ -345,16 +359,22 @@ describe('the transport event bus (the vendored base)', () => {
     });
 
     it('is injectable as an IEventBus, and a service publishing through it reaches the handler', async () => {
-      await module.get(TestEventService).publishEvent(new RabbitWithDefEvent('from a service'));
+      await module
+        .get(TestEventService)
+        .publishEvent(new RabbitWithDefEvent('from a service'));
 
       expect(storage.get('RabbitWithDefEvent')).toBe('from a service');
       expect(rabbit.sent).toHaveLength(1);
     });
 
-    it('carries the events an aggregate commits, once commit()\'s unawaited publish settles', async () => {
-      await commandBus.execute(new TryAggregateRootCommand('TryAggregateRootEvent'));
+    it("carries the events an aggregate commits, once commit()'s unawaited publish settles", async () => {
+      await commandBus.execute(
+        new TryAggregateRootCommand('TryAggregateRootEvent'),
+      );
 
-      expect(storage.get('TryAggregateRootEvent')).toBe('TryAggregateRootEvent');
+      expect(storage.get('TryAggregateRootEvent')).toBe(
+        'TryAggregateRootEvent',
+      );
 
       await afterFloatingPublishesSettle();
 
@@ -384,7 +404,10 @@ describe("upstream's own mode: one destination, every namespace", () => {
       imports: [CqrsModule.forRoot(), DiscoveryModule],
       providers: [
         ...transportEventBusProviders,
-        { provide: TransportIdentity, useValue: TransportIdentity.named('the-suite') },
+        {
+          provide: TransportIdentity,
+          useValue: TransportIdentity.named('the-suite'),
+        },
         { provide: RequestContextCodec, useClass: CorrelatedRequestContext },
         EverythingPublisher,
         Storage,

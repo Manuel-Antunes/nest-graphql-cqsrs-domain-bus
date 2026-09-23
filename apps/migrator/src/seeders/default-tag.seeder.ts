@@ -1,6 +1,10 @@
 import type { EntityManager } from '@mikro-orm/postgresql';
 import { Seeder } from '@mikro-orm/seeder';
-import { DEFAULT_TAG_ID, DEFAULT_TAG_NAME, Tag } from '@nestposts/posts/domain/tag/tag.entity';
+import {
+  DEFAULT_TAG_ID,
+  DEFAULT_TAG_NAME,
+  Tag,
+} from '@nestposts/posts/domain/tag/tag.entity';
 import { TagId } from '@nestposts/posts/domain/tag/vo/tag-id';
 
 export class DefaultTagSeeder extends Seeder {

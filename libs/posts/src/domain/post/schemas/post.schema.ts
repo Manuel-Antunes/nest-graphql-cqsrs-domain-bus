@@ -1,7 +1,8 @@
-import { z } from "zod";
-import { PostContent } from "../vo/post-content";
-import { PostId } from "../vo/post-id";
-import { PostTitle } from "../vo/post-title";
+import { z } from 'zod';
+
+import { PostContent } from '../vo/post-content';
+import { PostId } from '../vo/post-id';
+import { PostTitle } from '../vo/post-title';
 
 export const PostSchema = z
   .object({
@@ -14,12 +15,15 @@ export const PostSchema = z
     publishedAt: z.date().nullable().default(null),
   })
   .refine((state) => state.updatedAt >= state.createdAt, {
-    error: "updatedAt cannot precede createdAt",
-    path: ["updatedAt"],
+    error: 'updatedAt cannot precede createdAt',
+    path: ['updatedAt'],
   })
-  .refine((state) => !state.publishedAt || state.publishedAt >= state.createdAt, {
-    error: "publishedAt cannot precede createdAt",
-    path: ["publishedAt"],
-  });
+  .refine(
+    (state) => !state.publishedAt || state.publishedAt >= state.createdAt,
+    {
+      error: 'publishedAt cannot precede createdAt',
+      path: ['publishedAt'],
+    },
+  );
 
 export type IPost = z.input<typeof PostSchema>;

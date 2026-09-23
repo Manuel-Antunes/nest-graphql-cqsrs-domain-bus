@@ -1,19 +1,20 @@
-import { type CallHandler, type ExecutionContext, Global, Injectable, Module } from '@nestjs/common';
-import { RequestContext } from '@mikro-orm/core';
-import { firstValueFrom, of } from 'rxjs';
-import { defineEntity, p } from '@mikro-orm/core';
-import { type AnyMikroORM, metadataOnly } from '../testing/test-database';
+import type { CallHandler, ExecutionContext } from '@nestjs/common';
+import { defineEntity, MikroORM, p, RequestContext } from '@mikro-orm/core';
+import { Global, Injectable, Module } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
-import { MikroORM } from '@mikro-orm/core';
-import { ROOT_TENANT, TENANT_HEADER } from './tenant';
+import { firstValueFrom, of } from 'rxjs';
+
+import type { AnyMikroORM } from '../testing/test-database';
+import type { TenantResolver } from './tenant.resolver';
+import { metadataOnly } from '../testing/test-database';
 import { TenancyModule } from './tenancy.module';
+import { ROOT_TENANT, TENANT_HEADER } from './tenant';
 import { TenantEntityManagers } from './tenant-entity-managers';
 import { SchemaPerTenant, SharedSchemaTenants } from './tenant-schemas';
 import { TenantInterceptor } from './tenant.interceptor';
 import {
   HeaderTenantResolver,
   TENANT_RESOLVER,
-  type TenantResolver,
   TenantResolverProviders,
 } from './tenant.resolver';
 
@@ -26,9 +27,14 @@ const executionContext = (
   ({
     getType: () => type,
     getArgByIndex: (index: number) =>
-      index === 2 && parts.graphql ? { req: { headers: parts.graphql } } : undefined,
+      index === 2 && parts.graphql
+        ? { req: { headers: parts.graphql } }
+        : undefined,
     switchToHttp: () => ({ getRequest: () => ({ headers: parts.headers }) }),
-    switchToRpc: () => ({ getContext: () => parts.rpcContext, getData: () => undefined }),
+    switchToRpc: () => ({
+      getContext: () => parts.rpcContext,
+      getData: () => undefined,
+    }),
   }) as unknown as ExecutionContext;
 
 class Anything {
@@ -54,25 +60,37 @@ describe('putting a request inside its tenant', () => {
     const resolver = new HeaderTenantResolver();
 
     it('an http request says it in a header', () => {
-      expect(resolver.tenantOf(executionContext('http', { headers: { [TENANT_HEADER]: 'Acme' } }))).toBe(
-        'acme',
-      );
+      expect(
+        resolver.tenantOf(
+          executionContext('http', { headers: { [TENANT_HEADER]: 'Acme' } }),
+        ),
+      ).toBe('acme');
     });
 
     it('a graphql request says it in the same header, on the request Apollo was handed', () => {
-      expect(resolver.tenantOf(executionContext('graphql', { graphql: { [TENANT_HEADER]: 'globex' } }))).toBe(
-        'globex',
-      );
+      expect(
+        resolver.tenantOf(
+          executionContext('graphql', {
+            graphql: { [TENANT_HEADER]: 'globex' },
+          }),
+        ),
+      ).toBe('globex');
     });
 
     it('an rpc context may carry it directly', () => {
       expect(
-        resolver.tenantOf(executionContext('rpc', { rpcContext: { [TENANT_HEADER]: 'initech' } })),
+        resolver.tenantOf(
+          executionContext('rpc', {
+            rpcContext: { [TENANT_HEADER]: 'initech' },
+          }),
+        ),
       ).toBe('initech');
     });
 
     it('and whoever says nothing is the root tenant', () => {
-      expect(resolver.tenantOf(executionContext('http', { headers: {} }))).toBe(ROOT_TENANT);
+      expect(resolver.tenantOf(executionContext('http', { headers: {} }))).toBe(
+        ROOT_TENANT,
+      );
       expect(resolver.tenantOf(executionContext('ws'))).toBe(ROOT_TENANT);
     });
   });
@@ -85,7 +103,10 @@ describe('putting a request inside its tenant', () => {
     });
 
     it('binds a schema per tenant, and hands the SAME root back for the same tenant', () => {
-      const tenants = new TenantEntityManagers(orm, new SchemaPerTenant('posts'));
+      const tenants = new TenantEntityManagers(
+        orm,
+        new SchemaPerTenant('posts'),
+      );
 
       const first = tenants.forTenant('acme');
       const second = tenants.forTenant('acme');
@@ -98,29 +119,43 @@ describe('putting a request inside its tenant', () => {
   });
 
   describe('what may be configured as the resolver', () => {
-    const tenantFrom = async (resolver: Parameters<typeof TenantResolverProviders.for>[0]) => {
+    const tenantFrom = async (
+      resolver: Parameters<typeof TenantResolverProviders.for>[0],
+    ) => {
       @Global()
-      @Module({ providers: [{ provide: MikroORM, useValue: orm }], exports: [MikroORM] })
+      @Module({
+        providers: [{ provide: MikroORM, useValue: orm }],
+        exports: [MikroORM],
+      })
       class FakeOrmModule {}
 
       const moduleRef = await Test.createTestingModule({
-        imports: [FakeOrmModule, TenancyModule.forRoot({ resolver, http: false })],
+        imports: [
+          FakeOrmModule,
+          TenancyModule.forRoot({ resolver, http: false }),
+        ],
       }).compile();
 
-      const bound = moduleRef.get<TenantResolver>(TENANT_RESOLVER, { strict: false });
-      const tenantId = bound.tenantOf(executionContext('http', { headers: { [TENANT_HEADER]: 'acme' } }));
+      const bound = moduleRef.get<TenantResolver>(TENANT_RESOLVER, {
+        strict: false,
+      });
+      const tenantId = bound.tenantOf(
+        executionContext('http', { headers: { [TENANT_HEADER]: 'acme' } }),
+      );
       await moduleRef.close();
       return tenantId;
     };
 
     it('a plain function, with nothing to inject and no class to hold it', async () => {
-      await expect(tenantFrom(() => 'from-a-function')).resolves.toBe('from-a-function');
+      await expect(tenantFrom(() => 'from-a-function')).resolves.toBe(
+        'from-a-function',
+      );
     });
 
     it('an instance, handed over ready-made', async () => {
-      await expect(tenantFrom({ tenantOf: () => 'from-an-instance' })).resolves.toBe(
-        'from-an-instance',
-      );
+      await expect(
+        tenantFrom({ tenantOf: () => 'from-an-instance' }),
+      ).resolves.toBe('from-an-instance');
     });
 
     it('a class, which the module registers itself — so its dependencies resolve from here', async () => {
@@ -129,11 +164,15 @@ describe('putting a request inside its tenant', () => {
         constructor(private readonly tenants: TenantEntityManagers) {}
 
         tenantOf(): string {
-          return this.tenants ? 'from-an-injected-class' : 'nothing was injected';
+          return this.tenants
+            ? 'from-an-injected-class'
+            : 'nothing was injected';
         }
       }
 
-      await expect(tenantFrom(DependentResolver)).resolves.toBe('from-an-injected-class');
+      await expect(tenantFrom(DependentResolver)).resolves.toBe(
+        'from-an-injected-class',
+      );
     });
 
     it('and nothing at all, which is the header', async () => {
@@ -145,9 +184,12 @@ describe('putting a request inside its tenant', () => {
     const handler = (): CallHandler => ({ handle: () => of('answered') });
 
     const interceptorFor = (tenantId: string) =>
-      new TenantInterceptor(new TenantEntityManagers(orm, new SchemaPerTenant('posts')), {
-        tenantOf: () => tenantId,
-      });
+      new TenantInterceptor(
+        new TenantEntityManagers(orm, new SchemaPerTenant('posts')),
+        {
+          tenantOf: () => tenantId,
+        },
+      );
 
     it('opens a context for a message, which never passed through the middleware', async () => {
       const seen: (string | undefined)[] = [];
@@ -159,7 +201,9 @@ describe('putting a request inside its tenant', () => {
         },
       };
 
-      await firstValueFrom(interceptor.intercept(executionContext('rpc'), next));
+      await firstValueFrom(
+        interceptor.intercept(executionContext('rpc'), next),
+      );
 
       expect(seen).toEqual(['posts_acme']);
     });

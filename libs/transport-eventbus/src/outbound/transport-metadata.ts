@@ -1,6 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import type { EventTag } from '@nestposts/platform/domain/shared/event-type';
-import type { EnvelopeMetadata, EventEnvelope, WireTag } from './event-envelope';
+
+import type {
+  EnvelopeMetadata,
+  EventEnvelope,
+  WireTag,
+} from './event-envelope';
 
 /**
  * The marks this integration leaves on an event **instance** — what it is called on the wire, and
@@ -85,7 +90,8 @@ export const ingestionOf = (event: object): Ingestion | undefined =>
   (event as Record<symbol, Ingestion | undefined>)[INGESTION];
 
 /** The service that produced the event, or `undefined` when this service did. */
-export const originOf = (event: object): string | undefined => ingestionOf(event)?.origin;
+export const originOf = (event: object): string | undefined =>
+  ingestionOf(event)?.origin;
 
 /**
  * Whether this instance came from outside — and therefore must not be forwarded again.
@@ -94,4 +100,5 @@ export const originOf = (event: object): string | undefined => ingestionOf(event
  * so an event reconstructed from it would have none to read, and the two rules ("everything published
  * locally is forwarded", "everything received is published locally") would feed each other forever.
  */
-export const isIngested = (event: object): boolean => ingestionOf(event) !== undefined;
+export const isIngested = (event: object): boolean =>
+  ingestionOf(event) !== undefined;

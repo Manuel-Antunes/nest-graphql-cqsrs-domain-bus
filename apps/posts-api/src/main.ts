@@ -1,11 +1,16 @@
 import './telemetry';
 
+import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
+import { FastifyAdapter } from '@nestjs/platform-fastify';
 import { Logger as PinoLogger } from 'nestjs-pino';
+
 import { AppModule } from './app.module';
-import { postCompletedTransport, transportMode } from './infrastructure/transport/transport.config';
+import {
+  postCompletedTransport,
+  transportMode,
+} from './infrastructure/transport/transport.config';
 
 /**
  * A hybrid application: GraphQL over HTTP and WebSocket, and a microservice listening on the same
@@ -19,7 +24,9 @@ async function bootstrap() {
   );
   app.useLogger(app.get(PinoLogger));
 
-  app.connectMicroservice(postCompletedTransport(app.getHttpAdapter()), { inheritAppConfig: true });
+  app.connectMicroservice(postCompletedTransport(app.getHttpAdapter()), {
+    inheritAppConfig: true,
+  });
   await app.startAllMicroservices();
 
   const port = Number(process.env.PORT ?? 3000);

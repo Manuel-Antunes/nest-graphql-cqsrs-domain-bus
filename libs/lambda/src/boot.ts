@@ -1,5 +1,5 @@
 import { Logger } from '@nestjs/common';
-import { ReplaySubject, firstValueFrom, throwError, timeout } from 'rxjs';
+import { firstValueFrom, ReplaySubject, throwError, timeout } from 'rxjs';
 
 /** The application did not finish booting in time — see {@link bootOnce}. */
 export class BootTimeoutError extends Error {
@@ -83,7 +83,10 @@ export const bootOnce = <T>(
   return () =>
     firstValueFrom(
       booted$.pipe(
-        timeout({ first: afterMs, with: () => throwError(() => new BootTimeoutError(afterMs)) }),
+        timeout({
+          first: afterMs,
+          with: () => throwError(() => new BootTimeoutError(afterMs)),
+        }),
       ),
     );
 };

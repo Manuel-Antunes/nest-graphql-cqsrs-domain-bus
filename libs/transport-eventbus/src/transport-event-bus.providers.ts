@@ -1,5 +1,9 @@
 import type { Provider } from '@nestjs/common';
-import { TRANSPORT_EVENT_BUS_PUBLISHER, TRANSPORT_EVENT_BUS_SERVICE } from './constants';
+
+import {
+  TRANSPORT_EVENT_BUS_PUBLISHER,
+  TRANSPORT_EVENT_BUS_SERVICE,
+} from './constants';
 import { EventIngestion } from './inbound/event-ingestion';
 import { IncomingRequest } from './inbound/incoming-request';
 import { TransportRequestPipe } from './inbound/transport-request.pipe';
@@ -55,9 +59,15 @@ export const transportEventBusProviders: readonly Provider[] = [
   TransportRequestPipe,
   EventForwarder,
   TransportEventBusService,
-  { provide: TRANSPORT_EVENT_BUS_SERVICE, useExisting: TransportEventBusService },
+  {
+    provide: TRANSPORT_EVENT_BUS_SERVICE,
+    useExisting: TransportEventBusService,
+  },
   TransportEventBusPublisher,
-  { provide: TRANSPORT_EVENT_BUS_PUBLISHER, useExisting: TransportEventBusPublisher },
+  {
+    provide: TRANSPORT_EVENT_BUS_PUBLISHER,
+    useExisting: TransportEventBusPublisher,
+  },
 ];
 
 /**

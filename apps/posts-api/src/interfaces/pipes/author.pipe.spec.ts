@@ -1,17 +1,22 @@
-import { closeTestDatabase, testDatabase } from '@nestposts/database/testing';
-import { MikroORM } from '@mikro-orm/core';
 import type { QueryBus } from '@nestjs/cqrs';
-import { FindAuthorQuery } from '../../application/user/query/find-author.query';
-import { AUTHOR_ROLE, Author, Authorship } from '@nestposts/users/domain/user/author.entity';
+import { MikroORM } from '@mikro-orm/core';
+import { closeTestDatabase, testDatabase } from '@nestposts/database/testing';
+import { PostEntitySchema } from '@nestposts/posts/infrastructure/persistence/entities/post-orm.entity';
+import { TagSchema } from '@nestposts/posts/infrastructure/persistence/entities/tag-orm.entity';
+import {
+  Author,
+  AUTHOR_ROLE,
+  Authorship,
+} from '@nestposts/users/domain/user/author.entity';
 import { NotAnAuthorException } from '@nestposts/users/domain/user/exception/not-an-author.exception';
 import { User } from '@nestposts/users/domain/user/user.entity';
 import { UserId } from '@nestposts/users/domain/user/vo/user-id';
-import { PostEntitySchema } from '@nestposts/posts/infrastructure/persistence/entities/post-orm.entity';
-import { TagSchema } from '@nestposts/posts/infrastructure/persistence/entities/tag-orm.entity';
 import {
   AuthorshipEntitySchema,
   UserEntitySchema,
 } from '@nestposts/users/infrastructure/persistence/entities/user-orm.entity';
+
+import { FindAuthorQuery } from '../../application/user/query/find-author.query';
 import { AuthorPipe } from './author.pipe';
 
 describe('AuthorPipe', () => {
@@ -20,8 +25,13 @@ describe('AuthorPipe', () => {
 
   beforeAll(async () => {
     orm = await testDatabase({
-        entities: [PostEntitySchema, TagSchema, UserEntitySchema, AuthorshipEntitySchema],
-      });
+      entities: [
+        PostEntitySchema,
+        TagSchema,
+        UserEntitySchema,
+        AuthorshipEntitySchema,
+      ],
+    });
   });
 
   afterAll(() => closeTestDatabase(orm));
@@ -38,9 +48,15 @@ describe('AuthorPipe', () => {
   };
 
   const aUser = (roles: readonly string[]): User =>
-    User.register(UserId.generate(), { email: `x+${UserId.generate()}@example.com`, name: 'manuel' }, roles, now);
+    User.register(
+      UserId.generate(),
+      { email: `x+${UserId.generate()}@example.com`, name: 'manuel' },
+      roles,
+      now,
+    );
 
-  const anAuthor = (user: User): Author => Author.cast(user, Authorship.of(user));
+  const anAuthor = (user: User): Author =>
+    Author.cast(user, Authorship.of(user));
 
   it('asks for the author by the id of the session user, as a value object', async () => {
     const user = aUser([AUTHOR_ROLE]);
@@ -49,7 +65,9 @@ describe('AuthorPipe', () => {
     await pipe.transform(user);
 
     expect(dispatched[0]).toBeInstanceOf(FindAuthorQuery.FindAuthor);
-    expect((dispatched[0] as FindAuthorQuery.FindAuthor).authorId.equals(user.id)).toBe(true);
+    expect(
+      (dispatched[0] as FindAuthorQuery.FindAuthor).authorId.equals(user.id),
+    ).toBe(true);
   });
 
   it('hands back what came out of the query, already an Author', async () => {
@@ -78,6 +96,8 @@ describe('AuthorPipe', () => {
   it('the refusal names the user — whoever reads the message owns the session', async () => {
     const user = aUser([]);
 
-    await expect(pipeFinding(null).pipe.transform(user)).rejects.toThrow(new RegExp(String(user.id)));
+    await expect(pipeFinding(null).pipe.transform(user)).rejects.toThrow(
+      new RegExp(String(user.id)),
+    );
   });
 });

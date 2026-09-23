@@ -1,4 +1,5 @@
-import { Logger, type Type } from '@nestjs/common';
+import type { Type } from '@nestjs/common';
+import { Logger } from '@nestjs/common';
 import {
   eventTagsOf,
   eventTypeOf,
@@ -6,8 +7,9 @@ import {
   qualifiedNameIn,
   requireEventTypeOf,
 } from '@nestposts/platform/domain/shared/event-type';
-import { TRANSPORT_EVENT_BUS_PATTERN } from '../constants';
+
 import type { WireTag } from './event-envelope';
+import { TRANSPORT_EVENT_BUS_PATTERN } from '../constants';
 import { identifierOf, wireTagsOf } from './transport-metadata';
 
 /**
@@ -143,7 +145,9 @@ export class EventAddress {
   static everyEventOf<TNamespace extends string>(
     namespace: TNamespace,
   ): `${TNamespace}.${typeof EventAddress.EVERY_SEGMENT}`;
-  static everyEventOf(event: Type<object>): `${string}.${typeof EventAddress.ONE_SEGMENT}`;
+  static everyEventOf(
+    event: Type<object>,
+  ): `${string}.${typeof EventAddress.ONE_SEGMENT}`;
   static everyEventOf(target: string | Type<object>): string {
     return typeof target === 'string'
       ? `${target}.${EventAddress.EVERY_SEGMENT}`
@@ -174,7 +178,10 @@ export class EventAddress {
    * on different consumers. The warning makes that choice visible instead of silent — the tags arrive
    * sorted, so it is stable, just not *informed*.
    */
-  private static orderingKeyOf(messageType: string, tags: readonly WireTag[]): string {
+  private static orderingKeyOf(
+    messageType: string,
+    tags: readonly WireTag[],
+  ): string {
     if (tags.length === 0) {
       return EventAddress.NO_AGGREGATE;
     }
@@ -182,7 +189,9 @@ export class EventAddress {
       EventAddress.logger.warn(
         `${messageType} has ${tags.length} tags (${tags
           .map((tag) => tag.key)
-          .join(', ')}) — the ordering key will be '${tags[0].key}', the first in order. Two tags ` +
+          .join(
+            ', ',
+          )}) — the ordering key will be '${tags[0].key}', the first in order. Two tags ` +
           `mean two aggregates, and a message can only be ordered by one: check the @EventType.`,
       );
     }

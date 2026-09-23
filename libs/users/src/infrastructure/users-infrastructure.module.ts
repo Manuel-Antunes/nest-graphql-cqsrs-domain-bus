@@ -1,8 +1,12 @@
 import { Module } from '@nestjs/common';
 import { DatabaseModule } from '@nestposts/database';
+
 import { AuthorRepository } from '../domain/user/author.repository';
 import { UserRepository } from '../domain/user/user.repository';
-import { AuthorshipEntitySchema, UserEntitySchema } from './persistence/entities/user-orm.entity';
+import {
+  AuthorshipEntitySchema,
+  UserEntitySchema,
+} from './persistence/entities/user-orm.entity';
 import { MikroOrmAuthorRepository } from './persistence/repositories/mikro-orm-author.repository';
 import { MikroOrmUserRepository } from './persistence/repositories/mikro-orm-user.repository';
 

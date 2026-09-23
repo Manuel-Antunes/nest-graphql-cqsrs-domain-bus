@@ -5,12 +5,22 @@ import { UserName } from './user-name';
 describe('value objects do User', () => {
   describe('Email', () => {
     it('normaliza para minúsculas e sem espaços — é o que liga a conta ao perfil', () => {
-      expect(Email.parse('  Manuel@Example.COM  ').value).toBe('manuel@example.com');
+      expect(Email.parse('  Manuel@Example.COM  ').value).toBe(
+        'manuel@example.com',
+      );
     });
 
     it('duas grafias do mesmo endereço são o mesmo valor', () => {
-      expect(Email.parse('Manuel@Example.com').equals(Email.parse('manuel@example.com'))).toBe(true);
-      expect(Email.parse('manuel@example.com').equals(Email.parse('outro@example.com'))).toBe(false);
+      expect(
+        Email.parse('Manuel@Example.com').equals(
+          Email.parse('manuel@example.com'),
+        ),
+      ).toBe(true);
+      expect(
+        Email.parse('manuel@example.com').equals(
+          Email.parse('outro@example.com'),
+        ),
+      ).toBe(false);
     });
 
     it('domain devolve o que vem depois do @, já normalizado', () => {
@@ -46,7 +56,9 @@ describe('value objects do User', () => {
     it('normaliza, recusa o vazio e limita a 100 caracteres', () => {
       expect(UserName.parse('  Manuel  ').value).toBe('Manuel');
       expect(() => UserName.parse('   ')).toThrow(/name não pode ser vazio/);
-      expect(() => UserName.parse('x'.repeat(101))).toThrow(/name excede 100 caracteres/);
+      expect(() => UserName.parse('x'.repeat(101))).toThrow(
+        /name excede 100 caracteres/,
+      );
       expect(UserName.parse('x'.repeat(100)).value).toHaveLength(100);
     });
   });

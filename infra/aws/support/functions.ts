@@ -7,7 +7,7 @@
  */
 
 import { createHash } from 'node:crypto';
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
 /** Node 22, which is what `require(esm)` needs — see the note on MikroORM in `CLAUDE.md`. */
@@ -94,7 +94,9 @@ const INSTALLED_PACKAGES = [
 class InstalledPackages {
   /** Each name mapped to the version this workspace has on disk, ready for `nodejs.install`. */
   static pinnedTo(names: readonly string[]): Record<string, string> {
-    return Object.fromEntries(names.map((name) => [name, InstalledPackages.versionOf(name)]));
+    return Object.fromEntries(
+      names.map((name) => [name, InstalledPackages.versionOf(name)]),
+    );
   }
 
   /** The repository root and every workspace package in it, in lookup order. */
@@ -113,9 +115,16 @@ class InstalledPackages {
 
   private static versionOf(name: string): string {
     for (const root of InstalledPackages.roots()) {
-      const manifest = join(root, 'node_modules', ...name.split('/'), 'package.json');
+      const manifest = join(
+        root,
+        'node_modules',
+        ...name.split('/'),
+        'package.json',
+      );
       if (existsSync(manifest)) {
-        const { version } = JSON.parse(readFileSync(manifest, 'utf8')) as { version: string };
+        const { version } = JSON.parse(readFileSync(manifest, 'utf8')) as {
+          version: string;
+        };
         if (version) return version;
       }
     }
@@ -126,7 +135,8 @@ class InstalledPackages {
   }
 }
 
-const NOT_BUNDLED: Record<string, string> = InstalledPackages.pinnedTo(INSTALLED_PACKAGES);
+const NOT_BUNDLED: Record<string, string> =
+  InstalledPackages.pinnedTo(INSTALLED_PACKAGES);
 
 /**
  * **Left out entirely**, because nothing here uses them and nothing here can resolve them.
@@ -390,7 +400,10 @@ class Fingerprint {
     return digest.digest('hex').slice(0, 32);
   }
 
-  private static absorb(digest: ReturnType<typeof createHash>, path: string): void {
+  private static absorb(
+    digest: ReturnType<typeof createHash>,
+    path: string,
+  ): void {
     if (!statSync(path).isDirectory()) {
       digest.update(path);
       digest.update(readFileSync(path));
@@ -430,7 +443,10 @@ export class Seeder extends NodeFunction {
         `${name}Invocation`,
         {
           functionName: this.fn.name,
-          input: JSON.stringify({ command: 'seed', seeders: Fingerprint.of(args.seeds) }),
+          input: JSON.stringify({
+            command: 'seed',
+            seeders: Fingerprint.of(args.seeds),
+          }),
         },
         { parent: this },
       );

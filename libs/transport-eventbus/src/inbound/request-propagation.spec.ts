@@ -1,9 +1,14 @@
-import { dropTestSchema, ensureTestSchema, testDatabaseConfig } from '@nestposts/database/testing';
+import type { CanActivate, ExecutionContext } from '@nestjs/common';
+import type {
+  ICommand,
+  ICommandHandler,
+  IEvent,
+  IEventHandler,
+} from '@nestjs/cqrs';
+import type { Observable } from 'rxjs';
 import { MikroOrmModule } from '@mikro-orm/nestjs';
 import {
-  type CanActivate,
   Controller,
-  type ExecutionContext,
   Inject,
   Injectable,
   Scope,
@@ -17,36 +22,44 @@ import {
   CommandHandler,
   CqrsModule,
   EventsHandler,
-  type ICommand,
-  type ICommandHandler,
-  type IEvent,
-  type IEventHandler,
-  Saga,
   ofType,
+  Saga,
 } from '@nestjs/cqrs';
 import { EventPattern } from '@nestjs/microservices';
 import { Test } from '@nestjs/testing';
+import {
+  dropTestSchema,
+  ensureTestSchema,
+  testDatabaseConfig,
+} from '@nestposts/database/testing';
 import { EventType } from '@nestposts/platform/domain/shared/event-type';
-import { type Observable, map } from 'rxjs';
+import { map } from 'rxjs';
+
+import type { Ingestion } from '../outbound/transport-metadata';
+import type { ContextAttributes } from '../request-context';
+import type { TransportEventBusService } from '../transport-event-bus.service';
+import { TRANSPORT_EVENT_BUS_SERVICE } from '../constants';
 import { TransportEvent } from '../decorators/transport-event.decorator';
 import { MemoryClient } from '../in-memory/memory-client';
 import { EventAddress } from '../outbound/event-address';
 import { EventEnvelopeFactory } from '../outbound/event-envelope.factory';
 import { MemoryEventEnvelopeSerializer } from '../outbound/serializers/memory-event-envelope.serializer';
-import { MessageInbox, MikroOrmMessageInbox } from '../persistence/message-inbox';
+import {
+  MessageInbox,
+  MikroOrmMessageInbox,
+} from '../persistence/message-inbox';
 import { transportEntities } from '../persistence/message-inbox.entity';
 import {
-  type ContextAttributes,
   CorrelatedRequestContext,
-  RequestContextCodec,
   correlationIdOf,
+  RequestContextCodec,
 } from '../request-context';
-import type { Ingestion } from '../outbound/transport-metadata';
 import { startInProcessService } from '../testing';
-import { TRANSPORT_EVENT_BUS_SERVICE } from '../constants';
-import { transportEventBusProviders, eventIngestionProviders } from '../transport-event-bus.providers';
+import {
+  eventIngestionProviders,
+  transportEventBusProviders,
+} from '../transport-event-bus.providers';
 import { TransportIdentity } from '../transport-identity';
-import type { TransportEventBusService } from '../transport-event-bus.service';
 import { EventIngestion } from './event-ingestion';
 import { IncomingRequest } from './incoming-request';
 
@@ -94,7 +107,11 @@ class ShopRequestCodec extends CorrelatedRequestContext {
 class Seen {
   readonly guarded: { tenantId?: string; userId?: string }[] = [];
   readonly handled: ShopRequest[] = [];
-  readonly commanded: { tenantId?: string; userId?: string; correlationId?: string }[] = [];
+  readonly commanded: {
+    tenantId?: string;
+    userId?: string;
+    correlationId?: string;
+  }[] = [];
 }
 
 @Injectable()
@@ -173,7 +190,6 @@ class ShopEventsController {
   }
 }
 
-
 describe('the request that crosses: what a guard, a saga and a command all see', () => {
   let consuming: Awaited<ReturnType<typeof startInProcessService>>;
   let publishing: MemoryClient;
@@ -194,7 +210,10 @@ describe('the request that crosses: what a guard, a saga and a command all see',
     const address = EventAddress.of(event);
     await new Promise<void>((resolve, reject) =>
       publishing
-        .emit(`${address.qualifiedName}.${address.orderingKey}`, envelopes.of(event, address))
+        .emit(
+          `${address.qualifiedName}.${address.orderingKey}`,
+          envelopes.of(event, address),
+        )
         .subscribe({ complete: () => resolve(), error: reject }),
     );
     await settle();
@@ -216,7 +235,10 @@ describe('the request that crosses: what a guard, a saga and a command all see',
       providers: [
         ...transportEventBusProviders,
         ...eventIngestionProviders,
-        { provide: TransportIdentity, useValue: TransportIdentity.named('shop') },
+        {
+          provide: TransportIdentity,
+          useValue: TransportIdentity.named('shop'),
+        },
         { provide: RequestContextCodec, useClass: ShopRequestCodec },
         { provide: MessageInbox, useClass: MikroOrmMessageInbox },
         Seen,
@@ -248,17 +270,26 @@ describe('the request that crosses: what a guard, a saga and a command all see',
 
   describe('a message from another service', () => {
     it('reaches a GUARD with the tenant and the user the publisher put in the request', async () => {
-      await publish(new OrderPlacedEvent('o-1', new Date()), new ShopRequest('acme', 'u-1'));
+      await publish(
+        new OrderPlacedEvent('o-1', new Date()),
+        new ShopRequest('acme', 'u-1'),
+      );
 
       expect(seen.guarded).toEqual([{ tenantId: 'acme', userId: 'u-1' }]);
     });
 
-    it('reaches the SAGA as the application\'s own context, not as a bag of metadata', async () => {
-      await publish(new OrderPlacedEvent('o-2', new Date()), new ShopRequest('acme', 'u-2'));
+    it("reaches the SAGA as the application's own context, not as a bag of metadata", async () => {
+      await publish(
+        new OrderPlacedEvent('o-2', new Date()),
+        new ShopRequest('acme', 'u-2'),
+      );
 
       expect(seen.handled).toHaveLength(1);
       expect(seen.handled[0]).toBeInstanceOf(ShopRequest);
-      expect(seen.handled[0]).toMatchObject({ tenantId: 'acme', userId: 'u-2' });
+      expect(seen.handled[0]).toMatchObject({
+        tenantId: 'acme',
+        userId: 'u-2',
+      });
     });
 
     it('reaches the request-scoped COMMAND handler, under the same correlation id', async () => {
@@ -267,14 +298,23 @@ describe('the request that crosses: what a guard, a saga and a command all see',
       await publish(new OrderPlacedEvent('o-3', new Date()), request);
 
       expect(seen.commanded).toEqual([
-        { tenantId: 'acme', userId: 'u-3', correlationId: correlationIdOf(request) },
+        {
+          tenantId: 'acme',
+          userId: 'u-3',
+          correlationId: correlationIdOf(request),
+        },
       ]);
     });
 
     it('is refused by the guard before anything is ingested, when the tenant is not allowed', async () => {
-      await publish(new OrderPlacedEvent('o-4', new Date()), new ShopRequest('another-tenant', 'u-4'));
+      await publish(
+        new OrderPlacedEvent('o-4', new Date()),
+        new ShopRequest('another-tenant', 'u-4'),
+      );
 
-      expect(seen.guarded).toEqual([{ tenantId: 'another-tenant', userId: 'u-4' }]);
+      expect(seen.guarded).toEqual([
+        { tenantId: 'another-tenant', userId: 'u-4' },
+      ]);
       expect(seen.handled).toEqual([]);
       expect(seen.commanded).toEqual([]);
     });
@@ -282,7 +322,9 @@ describe('the request that crosses: what a guard, a saga and a command all see',
     it('answers a guard with no request at all when the publisher opened none', async () => {
       await publish(new OrderPlacedEvent('o-5', new Date()));
 
-      expect(seen.guarded).toEqual([{ tenantId: undefined, userId: undefined }]);
+      expect(seen.guarded).toEqual([
+        { tenantId: undefined, userId: undefined },
+      ]);
       expect(seen.commanded).toEqual([]);
     });
   });
@@ -297,7 +339,11 @@ describe('the request that crosses: what a guard, a saga and a command all see',
 
       expect(seen.handled[0]).toBe(request);
       expect(seen.commanded).toEqual([
-        { tenantId: 'acme', userId: 'u-6', correlationId: correlationIdOf(request) },
+        {
+          tenantId: 'acme',
+          userId: 'u-6',
+          correlationId: correlationIdOf(request),
+        },
       ]);
       expect(seen.guarded).toEqual([]);
     });

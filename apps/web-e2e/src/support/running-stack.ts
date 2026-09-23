@@ -1,7 +1,8 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
-import { type Accounts, Registrar } from './accounts';
+import type { Accounts } from './accounts';
+import { Registrar } from './accounts';
 import { Stack, WEB_URL } from './stack';
 
 /**
@@ -41,6 +42,8 @@ export class RunningStack {
 
   /** What the global setup registered, read from a worker that never saw it. */
   static accounts(): Accounts {
-    return JSON.parse(readFileSync(RunningStack.accountsFile, 'utf8')) as Accounts;
+    return JSON.parse(
+      readFileSync(RunningStack.accountsFile, 'utf8'),
+    ) as Accounts;
   }
 }

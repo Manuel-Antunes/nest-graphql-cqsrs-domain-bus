@@ -1,9 +1,11 @@
 import type { MikroORM } from '@mikro-orm/core';
+import { MikroORM as PostgresMikroORM } from '@mikro-orm/postgresql';
+
+import type { PostgresOptions } from '../config/database.config';
+import { postgresDatabase } from '../config/database.config';
 
 /** Any ORM, however its entity list was inferred: a spec hands over whatever Nest gave it. */
 export type AnyMikroORM = MikroORM<any, any, any>;
-import { MikroORM as PostgresMikroORM } from '@mikro-orm/postgresql';
-import { postgresDatabase, type PostgresOptions } from '../config/database.config';
 
 let taken = 0;
 
@@ -16,24 +18,35 @@ export const testSchema = (prefix = 'spec'): string =>
   `${prefix}_${process.pid.toString(36)}_${Date.now().toString(36)}_${taken++}`;
 
 /** The config for a spec that boots Nest. Pair it with {@link ensureTestSchema} after `module.init()`. */
-export const testDatabaseConfig = (options: PostgresOptions = {}, prefix?: string): PostgresOptions =>
-  postgresDatabase(testSchema(prefix), options);
+export const testDatabaseConfig = (
+  options: PostgresOptions = {},
+  prefix?: string,
+): PostgresOptions => postgresDatabase(testSchema(prefix), options);
 
 /** Creates the schema this ORM was configured with, and everything its entities map. */
 export const ensureTestSchema = async (orm: AnyMikroORM): Promise<void> => {
   await orm.schema.ensureDatabase();
-  await orm.em.getConnection().execute(`create schema if not exists "${orm.config.get('schema')}"`);
+  await orm.em
+    .getConnection()
+    .execute(`create schema if not exists "${orm.config.get('schema')}"`);
   await orm.schema.create();
 };
 
 export const dropTestSchema = async (orm: AnyMikroORM): Promise<void> => {
   const schema = orm.config.get('schema');
-  await orm.em.getConnection().execute(`drop schema if exists "${schema}" cascade`);
+  await orm.em
+    .getConnection()
+    .execute(`drop schema if exists "${schema}" cascade`);
 };
 
 /** An ORM on a schema of its own, with the tables its entities map already there. */
-export async function testDatabase(options: PostgresOptions = {}, prefix?: string): Promise<AnyMikroORM> {
-  const orm = (await PostgresMikroORM.init(testDatabaseConfig(options, prefix))) as AnyMikroORM;
+export async function testDatabase(
+  options: PostgresOptions = {},
+  prefix?: string,
+): Promise<AnyMikroORM> {
+  const orm = (await PostgresMikroORM.init(
+    testDatabaseConfig(options, prefix),
+  )) as AnyMikroORM;
   await ensureTestSchema(orm);
   return orm;
 }
@@ -70,5 +83,7 @@ export const tableIn = (orm: AnyMikroORM, table: string): string => {
   const schema = orm.config.get('schema');
   const platform = orm.em.getPlatform();
   const name = platform.quoteIdentifier(table);
-  return schema && schema !== '*' ? `${platform.quoteIdentifier(schema)}.${name}` : name;
+  return schema && schema !== '*'
+    ? `${platform.quoteIdentifier(schema)}.${name}`
+    : name;
 };

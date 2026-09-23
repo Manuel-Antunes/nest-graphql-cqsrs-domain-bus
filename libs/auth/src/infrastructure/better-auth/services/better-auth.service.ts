@@ -3,16 +3,17 @@ import { REQUEST } from '@nestjs/core';
 import { CredentialId } from '@nestposts/users/domain/user/vo/credential-id';
 import { Email } from '@nestposts/users/domain/user/vo/email';
 import { UserName } from '@nestposts/users/domain/user/vo/user-name';
-import {
-  AuthService,
-  type NewCredential,
-  type PasswordCredentials,
-  type PermissionRequest,
-  type SignedIn,
+
+import type {
+  NewCredential,
+  PasswordCredentials,
+  PermissionRequest,
+  SignedIn,
 } from '../../../domain/auth/auth.service';
-import { SessionNotAuthenticatedException } from '../../../domain/auth/exception/session-not-authenticated.exception';
 import type { Session } from '../../../domain/auth/session';
 import type { BetterAuth } from '../init-auth';
+import { AuthService } from '../../../domain/auth/auth.service';
+import { SessionNotAuthenticatedException } from '../../../domain/auth/exception/session-not-authenticated.exception';
 import { RequestHeaders } from '../request-headers';
 import { BETTER_AUTH } from '../tokens';
 
@@ -49,11 +50,14 @@ export class BetterAuthService extends AuthService {
   }
 
   async session(): Promise<Session | null> {
-    const found = await this.betterAuth.api.getSession({ headers: this.headers });
+    const found = await this.betterAuth.api.getSession({
+      headers: this.headers,
+    });
     if (!found) {
       return null;
     }
-    const row = found.session as typeof found.session & OrganizationAwareSessionRow;
+    const row = found.session as typeof found.session &
+      OrganizationAwareSessionRow;
     return {
       user: {
         credentialId: CredentialId.parse(found.user.id),
@@ -75,20 +79,33 @@ export class BetterAuthService extends AuthService {
     return session;
   }
 
-  async signInWithPassword({ email, password }: PasswordCredentials): Promise<SignedIn> {
+  async signInWithPassword({
+    email,
+    password,
+  }: PasswordCredentials): Promise<SignedIn> {
     const signed = await this.betterAuth.api.signInEmail({
       body: { email, password },
       headers: this.headers,
     });
-    return { token: signed.token ?? '', credentialId: CredentialId.parse(signed.user.id) };
+    return {
+      token: signed.token ?? '',
+      credentialId: CredentialId.parse(signed.user.id),
+    };
   }
 
-  async signUpWithPassword({ email, password, name }: NewCredential): Promise<SignedIn> {
+  async signUpWithPassword({
+    email,
+    password,
+    name,
+  }: NewCredential): Promise<SignedIn> {
     const signed = await this.betterAuth.api.signUpEmail({
       body: { email, password, name },
       headers: this.headers,
     });
-    return { token: signed.token ?? '', credentialId: CredentialId.parse(signed.user.id) };
+    return {
+      token: signed.token ?? '',
+      credentialId: CredentialId.parse(signed.user.id),
+    };
   }
 
   async signOut(): Promise<void> {
@@ -97,12 +114,17 @@ export class BetterAuthService extends AuthService {
 
   async hasRole(roles: readonly string[]): Promise<boolean> {
     const session = await this.session();
-    return session ? roles.some((role) => session.user.roles.includes(role)) : false;
+    return session
+      ? roles.some((role) => session.user.roles.includes(role))
+      : false;
   }
 
   async hasPermission(permissions: PermissionRequest): Promise<boolean> {
     const granted = await this.betterAuth.api
-      .userHasPermission({ headers: this.headers, body: { permissions } as never })
+      .userHasPermission({
+        headers: this.headers,
+        body: { permissions } as never,
+      })
       .catch(() => null);
     return granted?.success === true;
   }

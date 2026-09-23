@@ -8,6 +8,7 @@ import { PostsInfrastructureModule } from '@nestposts/posts/infrastructure/posts
 import { eventLogEntities } from '@nestposts/transport-eventbus/persistence/event-log/event-log.entity';
 import { transportEntities } from '@nestposts/transport-eventbus/persistence/message-inbox.entity';
 import { UsersInfrastructureModule } from '@nestposts/users/infrastructure/users-infrastructure.module';
+
 import { postsConnection } from './connections';
 
 @Module({

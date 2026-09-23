@@ -1,11 +1,12 @@
 import 'reflect-metadata';
 import 'server-only';
 
-import { type EntityManager, MikroORM } from '@mikro-orm/core';
+import type { EntityManager } from '@mikro-orm/core';
 import type { INestApplicationContext, Type } from '@nestjs/common';
+import { headers } from 'next/headers';
+import { MikroORM } from '@mikro-orm/core';
 import { ContextIdFactory, NestFactory } from '@nestjs/core';
 import { inRequestContext } from '@nestposts/database';
-import { headers } from 'next/headers';
 
 import { WebAppModule } from './app.module';
 
@@ -14,9 +15,12 @@ import { WebAppModule } from './app.module';
  * repository is declared (`AuthService`, `OrganizationService`). Nest's own `Type<T>` is a concrete
  * constructor, so the abstract shape is spelled out here rather than cast at each call site.
  */
-type Token<T> = Type<T> | (abstract new (...args: never[]) => T) | string | symbol;
+type Token<T> =
+  Type<T> | (abstract new (...args: never[]) => T) | string | symbol;
 
-const cache = globalThis as unknown as { __nestposts_web?: Promise<INestApplicationContext> };
+const cache = globalThis as unknown as {
+  __nestposts_web?: Promise<INestApplicationContext>;
+};
 
 /**
  * **The Nest container, booted once and kept on `globalThis`.**
@@ -27,17 +31,23 @@ const cache = globalThis as unknown as { __nestposts_web?: Promise<INestApplicat
  */
 export class Nest {
   static context(): Promise<INestApplicationContext> {
-    cache.__nestposts_web ??= NestFactory.createApplicationContext(WebAppModule, {
-      logger: ['error', 'warn'],
-      abortOnError: false,
-    });
+    cache.__nestposts_web ??= NestFactory.createApplicationContext(
+      WebAppModule,
+      {
+        logger: ['error', 'warn'],
+        abortOnError: false,
+      },
+    );
     return cache.__nestposts_web;
   }
 
   /** A singleton provider, for what does not belong to a request — the Better Auth instance itself. */
   static async get<T>(token: Token<T>): Promise<T> {
     const context = await Nest.context();
-    return Nest.inDatabaseContext(context, context.get<T>(token as Type<T>, { strict: false }));
+    return Nest.inDatabaseContext(
+      context,
+      context.get<T>(token as Type<T>, { strict: false }),
+    );
   }
 
   /**
@@ -69,7 +79,10 @@ export class Nest {
    * the alternative, turning it on, is one identity map shared by every request this server ever
    * answers.
    */
-  private static inDatabaseContext<T>(context: INestApplicationContext, target: T): T {
+  private static inDatabaseContext<T>(
+    context: INestApplicationContext,
+    target: T,
+  ): T {
     if (!target || typeof target !== 'object') {
       return target;
     }

@@ -1,22 +1,22 @@
 import type { SNSClientConfig } from '@aws-sdk/client-sns';
-import { PublishCommand, SNSClient } from '@aws-sdk/client-sns';
-import { Logger } from '@nestjs/common';
 import type {
   ProducerSerializer,
   ReadPacket,
   WritePacket,
 } from '@nestjs/microservices';
+import { PublishCommand, SNSClient } from '@aws-sdk/client-sns';
+import { Logger } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
 
+import type { AwsEnvelopeMessage } from './aws-message';
+import type { SnsRecordOptions } from './sns-record.builder';
 import { TRANSPORT_IDENTIFIER } from '../outbound/event-envelope';
 import { awsClientConfig } from './aws-client.config';
-import type { AwsEnvelopeMessage } from './aws-message';
 import {
   asMessageAttributes,
   orderingKeyIn,
   withExtraMetadata,
 } from './aws-message';
-import type { SnsRecordOptions } from './sns-record.builder';
 import { SnsRecordBuilder } from './sns-record.builder';
 
 export interface SnsClientProxyOptions {

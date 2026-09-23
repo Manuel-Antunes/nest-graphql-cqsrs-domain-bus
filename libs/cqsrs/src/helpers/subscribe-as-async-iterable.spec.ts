@@ -1,6 +1,7 @@
 import { Subject } from 'rxjs';
-import { Subscription } from '../classes/subscription';
+
 import type { ISubscriptionBus } from '../interfaces/subscription-bus.interface';
+import { Subscription } from '../classes/subscription';
 import { subscribeAsAsyncIterable } from './subscribe-as-async-iterable';
 
 describe('subscribeAsAsyncIterable', () => {
@@ -32,7 +33,11 @@ describe('subscribeAsAsyncIterable', () => {
 
   it('projeta cada evento para a forma que o assinante recebe', async () => {
     const { bus, source } = fixture();
-    const stream = subscribeAsAsyncIterable(bus, new OnCounter({}), (event) => `#${event.value}`);
+    const stream = subscribeAsAsyncIterable(
+      bus,
+      new OnCounter({}),
+      (event) => `#${event.value}`,
+    );
 
     const first = stream.next();
     source.next(new CounterEvent(7));
@@ -53,7 +58,11 @@ describe('subscribeAsAsyncIterable', () => {
 
   it('mantém a ordem e termina quando a fonte completa', async () => {
     const { bus, source } = fixture();
-    const stream = subscribeAsAsyncIterable(bus, new OnCounter({}), (event) => event.value);
+    const stream = subscribeAsAsyncIterable(
+      bus,
+      new OnCounter({}),
+      (event) => event.value,
+    );
 
     source.next(new CounterEvent(1));
     source.next(new CounterEvent(2));

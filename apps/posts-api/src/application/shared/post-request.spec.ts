@@ -1,13 +1,21 @@
-import { AsyncContext, CommandBus } from '@nestjs/cqrs';
 import type { TestingModule } from '@nestjs/testing';
-import { createCqrsTestingModule, RecordingEvents, inRequestContext } from '../../../test/support/cqrs-testing-module';
-import { givenAnAuthor, givenTheDefaultTag } from '../../../test/support/post-fixtures';
+import { AsyncContext, CommandBus } from '@nestjs/cqrs';
 import { PostCreatedEvent } from '@nestposts/posts/domain/post/event/post-created.event';
 import { PostPreCreatedEvent } from '@nestposts/posts/domain/post/event/post-pre-created.event';
 import { PostId } from '@nestposts/posts/domain/post/vo/post-id';
+
+import {
+  createCqrsTestingModule,
+  inRequestContext,
+  RecordingEvents,
+} from '../../../test/support/cqrs-testing-module';
+import {
+  givenAnAuthor,
+  givenTheDefaultTag,
+} from '../../../test/support/post-fixtures';
+import { TaggingStandIn } from '../../../test/support/tagging-stand-in.saga';
 import { CompletePostCommand } from '../post/command/complete-post.command';
 import { CreatePostCommand } from '../post/command/create-post.command';
-import { TaggingStandIn } from '../../../test/support/tagging-stand-in.saga';
 import { PostRequest } from './post-request';
 
 describe('PostRequest', () => {
@@ -35,7 +43,16 @@ describe('PostRequest', () => {
     const request = new PostRequest(postId);
 
     await inRequestContext(module, () =>
-      commands.execute(new CreatePostCommand.CreatePost(postId, 'Nest + GraphQL', 'oi', author.id, author.name), request),
+      commands.execute(
+        new CreatePostCommand.CreatePost(
+          postId,
+          'Nest + GraphQL',
+          'oi',
+          author.id,
+          author.name,
+        ),
+        request,
+      ),
     );
     const [preCreated, created] = await events.waitFor(2);
 
@@ -52,7 +69,16 @@ describe('PostRequest', () => {
     const postId = PostId.generate();
 
     await inRequestContext(module, () =>
-      commands.execute(new CreatePostCommand.CreatePost(postId, 'Nest + GraphQL', 'oi', author.id, author.name), new PostRequest(postId)),
+      commands.execute(
+        new CreatePostCommand.CreatePost(
+          postId,
+          'Nest + GraphQL',
+          'oi',
+          author.id,
+          author.name,
+        ),
+        new PostRequest(postId),
+      ),
     );
     const [created] = await events.waitFor(1);
 
@@ -64,21 +90,52 @@ describe('PostRequest', () => {
     const postId = PostId.generate();
 
     await inRequestContext(module, () =>
-      commands.execute(new CreatePostCommand.CreatePost(postId, 'Nest + GraphQL', 'oi', author.id, author.name), new PostRequest(postId)),
+      commands.execute(
+        new CreatePostCommand.CreatePost(
+          postId,
+          'Nest + GraphQL',
+          'oi',
+          author.id,
+          author.name,
+        ),
+        new PostRequest(postId),
+      ),
     );
     const [created] = await events.waitFor(1);
 
     expect(created).toEqual(
-      new PostPreCreatedEvent(postId.value, 'Nest + GraphQL', 'oi', author.id.value, 'manuel', expect.any(Date)),
+      new PostPreCreatedEvent(
+        postId.value,
+        'Nest + GraphQL',
+        'oi',
+        author.id.value,
+        'manuel',
+        expect.any(Date),
+      ),
     );
-    expect(Object.keys(created as object)).toEqual(['postId', 'title', 'content', 'authorId', 'authorName', 'occurredAt']);
+    expect(Object.keys(created as object)).toEqual([
+      'postId',
+      'title',
+      'content',
+      'authorId',
+      'authorName',
+      'occurredAt',
+    ]);
   });
 
   it('a command dispatched without one still runs — on the anonymous context the CommandBus creates', async () => {
     const postId = PostId.generate();
 
     await inRequestContext(module, () =>
-      commands.execute(new CreatePostCommand.CreatePost(postId, 'sem request', 'oi', author.id, author.name)),
+      commands.execute(
+        new CreatePostCommand.CreatePost(
+          postId,
+          'sem request',
+          'oi',
+          author.id,
+          author.name,
+        ),
+      ),
     );
     const [created] = await events.waitFor(1);
 

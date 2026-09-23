@@ -1,10 +1,12 @@
-import { type HandlerOptions, settle } from './settle';
-import {
-  type SqsBatchResponse,
-  type SqsDrivenApplication,
-  processSqsEvent,
+import type {
+  SqsBatchResponse,
+  SqsDrivenApplication,
 } from '@nestposts/transport-eventbus';
 import type { Context, SQSEvent } from 'aws-lambda';
+import { processSqsEvent } from '@nestposts/transport-eventbus';
+
+import type { HandlerOptions } from './settle';
+import { settle } from './settle';
 
 /**
  * **The queue entry point**: every record of the delivery dispatched, and only the failures

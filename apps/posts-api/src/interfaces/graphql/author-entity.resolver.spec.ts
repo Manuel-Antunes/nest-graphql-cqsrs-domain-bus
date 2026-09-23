@@ -1,8 +1,13 @@
 import type { QueryBus } from '@nestjs/cqrs';
-import { FindAuthorQuery } from '../../application/user/query/find-author.query';
-import { AUTHOR_ROLE, Author, Authorship } from '@nestposts/users/domain/user/author.entity';
+import {
+  Author,
+  AUTHOR_ROLE,
+  Authorship,
+} from '@nestposts/users/domain/user/author.entity';
 import { User } from '@nestposts/users/domain/user/user.entity';
 import { UserId } from '@nestposts/users/domain/user/vo/user-id';
+
+import { FindAuthorQuery } from '../../application/user/query/find-author.query';
 import { AuthorEntityResolver } from './author-entity.resolver';
 
 describe('AuthorEntityResolver', () => {
@@ -33,10 +38,15 @@ describe('AuthorEntityResolver', () => {
   it('dispatches FindAuthor with the id the representation carries, as a value object', async () => {
     const { resolver, dispatched } = resolverOn(anAuthor());
 
-    await resolver.resolveReference({ __typename: 'Author', id: authorId.value });
+    await resolver.resolveReference({
+      __typename: 'Author',
+      id: authorId.value,
+    });
 
     expect(dispatched[0]).toBeInstanceOf(FindAuthorQuery.FindAuthor);
-    expect((dispatched[0] as FindAuthorQuery.FindAuthor).authorId.equals(authorId)).toBe(true);
+    expect(
+      (dispatched[0] as FindAuthorQuery.FindAuthor).authorId.equals(authorId),
+    ).toBe(true);
   });
 
   it('gives back the author the handler found, untouched', async () => {

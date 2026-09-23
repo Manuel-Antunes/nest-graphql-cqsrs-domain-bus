@@ -1,6 +1,8 @@
+import type { NestMiddleware } from '@nestjs/common';
 import { RequestContext } from '@mikro-orm/core';
-import { Injectable, type NestMiddleware } from '@nestjs/common';
-import { TENANT_HEADER, Tenant } from './tenant';
+import { Injectable } from '@nestjs/common';
+
+import { Tenant, TENANT_HEADER } from './tenant';
 import { TenantEntityManagers } from './tenant-entity-managers';
 
 interface TenantRequest {
@@ -20,7 +22,11 @@ interface TenantRequest {
 export class TenantMiddleware implements NestMiddleware {
   constructor(private readonly tenants: TenantEntityManagers) {}
 
-  use(request: TenantRequest, _response: unknown, next: (error?: unknown) => void): void {
+  use(
+    request: TenantRequest,
+    _response: unknown,
+    next: (error?: unknown) => void,
+  ): void {
     const tenantId = Tenant.normalize(request.headers?.[TENANT_HEADER]);
     RequestContext.create(this.tenants.forTenant(tenantId), next);
   }

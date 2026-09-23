@@ -1,5 +1,7 @@
-import { EventEnvelope, type EnvelopeMetadata } from '../../outbound/event-envelope';
-import { EventEnvelopeDeserializer, type IncomingEnvelope } from './event-envelope.deserializer';
+import type { EnvelopeMetadata } from '../../outbound/event-envelope';
+import type { IncomingEnvelope } from './event-envelope.deserializer';
+import { EventEnvelope } from '../../outbound/event-envelope';
+import { EventEnvelopeDeserializer } from './event-envelope.deserializer';
 
 /**
  * **The in-process half of the wire**: both halves came in the body, because `MemoryServer` has no
@@ -10,7 +12,10 @@ import { EventEnvelopeDeserializer, type IncomingEnvelope } from './event-envelo
  * knowing which binding a message arrived through.
  */
 export class MemoryEventEnvelopeDeserializer extends EventEnvelopeDeserializer {
-  deserializeEnvelope(value: unknown, options?: Record<string, unknown>): IncomingEnvelope {
+  deserializeEnvelope(
+    value: unknown,
+    options?: Record<string, unknown>,
+  ): IncomingEnvelope {
     const message = (value ?? {}) as {
       pattern?: unknown;
       data?: { data?: unknown; metadata?: EnvelopeMetadata };

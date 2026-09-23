@@ -1,7 +1,9 @@
 import type { ReadPacket } from '@nestjs/microservices';
 import { qualifiedNameIn } from '@nestposts/platform/domain/shared/event-type';
+
+import type { EnvelopeMetadata } from '../event-envelope';
 import { CORRELATION_ID } from '../../request-context';
-import { type EnvelopeMetadata, EventEnvelope, TRANSPORT_MESSAGE_TYPE } from '../event-envelope';
+import { EventEnvelope, TRANSPORT_MESSAGE_TYPE } from '../event-envelope';
 import { EventEnvelopeSerializer } from './event-envelope.serializer';
 
 /** The session key the request's correlation id is grouped under. */
@@ -39,14 +41,18 @@ export class InngestEventEnvelopeSerializer extends EventEnvelopeSerializer {
     packet: ReadPacket,
   ): InngestEventMessage {
     const messageType = envelope.metadata[TRANSPORT_MESSAGE_TYPE];
-    const name = messageType ? qualifiedNameIn(messageType) : String(packet.pattern);
+    const name = messageType
+      ? qualifiedNameIn(messageType)
+      : String(packet.pattern);
     const correlationId = envelope.metadata[CORRELATION_ID];
 
     return {
       name,
       data: envelope.data,
       user: envelope.metadata,
-      ...(correlationId ? { meta: { sessions: { [CORRELATION_SESSION]: correlationId } } } : {}),
+      ...(correlationId
+        ? { meta: { sessions: { [CORRELATION_SESSION]: correlationId } } }
+        : {}),
     };
   }
 }

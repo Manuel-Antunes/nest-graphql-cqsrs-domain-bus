@@ -1,6 +1,7 @@
-import { Reference } from "@mikro-orm/core";
-import { BrokenDelegationException } from "../../../domain/shared/delegation/broken-delegation.exception";
-import { delegationOf } from "../../../domain/shared/delegation/delegate";
+import { Reference } from '@mikro-orm/core';
+
+import { BrokenDelegationException } from '../../../domain/shared/delegation/broken-delegation.exception';
+import { delegationOf } from '../../../domain/shared/delegation/delegate';
 
 function resolve(delegate: object): object {
   const delegation = delegationOf(delegate.constructor);
@@ -24,21 +25,21 @@ function serve(member: string, descriptor: PropertyDescriptor): void {
 }
 
 export function referencesServeDelegations(): void {
-  serve("id", {
+  serve('id', {
     get(this: Reference<object>) {
       const entity = this.unwrap() as { id?: unknown };
       return delegationOf(entity.constructor) ? entity.id : undefined;
     },
   });
 
-  serve("delegated", {
+  serve('delegated', {
     value(this: Reference<object>) {
       return resolve(this.getEntity());
     },
     writable: false,
   });
 
-  serve("loadDelegated", {
+  serve('loadDelegated', {
     value: async function (this: Reference<object>) {
       await this.load();
       return this.isInitialized() ? resolve(this.unwrap()) : null;

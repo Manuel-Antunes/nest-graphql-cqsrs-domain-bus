@@ -1,12 +1,12 @@
 import 'server-only';
 
+import { cookies } from 'next/headers';
 import { AuthService } from '@nestposts/auth/domain/auth/auth.service';
 import { BETTER_AUTH } from '@nestposts/auth/infrastructure/better-auth/tokens';
 import { OrganizationService } from '@nestposts/organizations/domain/organization/organization.service';
-import { cookies } from 'next/headers';
 
-import { Nest } from '@/nest/container';
 import { TENANT_HEADER } from '@/lib/env';
+import { Nest } from '@/nest/container';
 
 import type { Session } from './session';
 
@@ -72,7 +72,11 @@ export class WebAuth {
     const jar = await cookies();
     const carried = jar
       .getAll()
-      .filter((cookie) => cookie.name.includes('better-auth') || cookie.name.startsWith('__Secure-'))
+      .filter(
+        (cookie) =>
+          cookie.name.includes('better-auth') ||
+          cookie.name.startsWith('__Secure-'),
+      )
       .map((cookie) => `${cookie.name}=${cookie.value}`);
     return carried.length > 0 ? carried.join('; ') : null;
   }

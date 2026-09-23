@@ -109,7 +109,9 @@ describe('Delegate', () => {
 
   it('over builds the same class for the same base, and a new one on top of another', () => {
     expect(Accountable.delegation.over(Party)).toBe(Accountable);
-    expect(Accountable.delegation.over(Party)).toBe(Accountable.delegation.over(Party));
+    expect(Accountable.delegation.over(Party)).toBe(
+      Accountable.delegation.over(Party),
+    );
 
     const both = Noting.delegation.over(Accountable);
 
@@ -124,7 +126,8 @@ describe('Delegate', () => {
     Noting.delegation.attach(subject, new Diary(subject));
     Object.setPrototypeOf(subject, both.prototype);
 
-    const party = subject as InstanceType<typeof Accountable> & InstanceType<typeof Noting>;
+    const party = subject as InstanceType<typeof Accountable> &
+      InstanceType<typeof Noting>;
     party.record('first');
 
     expect(party.note('later')).toBe('noted: later');
@@ -137,7 +140,9 @@ describe('Delegate', () => {
       const subject = new Party('manuel');
       const ledger = new Ledger(subject);
 
-      const party = Accountable.delegation.resolve(ledger) as InstanceType<typeof Accountable>;
+      const party = Accountable.delegation.resolve(ledger) as InstanceType<
+        typeof Accountable
+      >;
 
       expect(party).toBe(subject);
       expect(party).toBeInstanceOf(Accountable);
@@ -148,7 +153,9 @@ describe('Delegate', () => {
       const subject = new Party('manuel');
       const ledger = new Ledger(subject);
 
-      expect(Accountable.delegation.resolve(ledger)).toBe(Accountable.delegation.resolve(ledger));
+      expect(Accountable.delegation.resolve(ledger)).toBe(
+        Accountable.delegation.resolve(ledger),
+      );
     });
   });
 

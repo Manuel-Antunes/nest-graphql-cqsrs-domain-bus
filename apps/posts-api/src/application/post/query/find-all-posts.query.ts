@@ -1,6 +1,7 @@
-import { type Cursor } from '@mikro-orm/core';
-import { type IQueryHandler, Query, QueryHandler } from '@nestjs/cqrs';
+import type { IQueryHandler } from '@nestjs/cqrs';
 import type { Post } from '@nestposts/posts/domain/post/post.entity';
+import { type Cursor } from '@mikro-orm/core';
+import { Query, QueryHandler } from '@nestjs/cqrs';
 import { PostRepository } from '@nestposts/posts/domain/post/post.repository';
 
 export namespace FindAllPostsQuery {
@@ -15,15 +16,16 @@ export namespace FindAllPostsQuery {
       readonly after?: string | null,
     ) {
       super();
-      this.first = Math.min(Math.max(first ?? DEFAULT_PAGE_SIZE, 1), MAX_PAGE_SIZE);
+      this.first = Math.min(
+        Math.max(first ?? DEFAULT_PAGE_SIZE, 1),
+        MAX_PAGE_SIZE,
+      );
     }
   }
 
   @QueryHandler(FindAllPosts)
   export class Handler implements IQueryHandler<FindAllPosts> {
-    constructor(
-      private readonly posts: PostRepository,
-    ) {}
+    constructor(private readonly posts: PostRepository) {}
     async execute(query: FindAllPosts): Promise<Cursor<Post>> {
       return this.posts.findAll({ first: query.first, after: query.after });
     }

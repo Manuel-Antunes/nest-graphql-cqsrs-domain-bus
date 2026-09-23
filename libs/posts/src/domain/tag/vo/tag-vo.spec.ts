@@ -1,5 +1,5 @@
-import { TagId } from './tag-id';
 import { TAG_NAME_MAX_LENGTH } from '../schemas/tag-name.schema';
+import { TagId } from './tag-id';
 import { TagName } from './tag-name';
 
 describe('value objects da Tag', () => {
@@ -23,11 +23,15 @@ describe('value objects da Tag', () => {
   describe('TagName', () => {
     it('normaliza, recusa o vazio e respeita o limite da coluna única', () => {
       expect(TagName.parse('  Untagged  ').value).toBe('Untagged');
-      expect(() => TagName.parse('   ')).toThrow(/nome da tag não pode ser vazio/);
+      expect(() => TagName.parse('   ')).toThrow(
+        /nome da tag não pode ser vazio/,
+      );
       expect(() => TagName.parse('x'.repeat(TAG_NAME_MAX_LENGTH + 1))).toThrow(
         new RegExp(`nome da tag excede ${TAG_NAME_MAX_LENGTH} caracteres`),
       );
-      expect(TagName.parse('x'.repeat(TAG_NAME_MAX_LENGTH)).value).toHaveLength(TAG_NAME_MAX_LENGTH);
+      expect(TagName.parse('x'.repeat(TAG_NAME_MAX_LENGTH)).value).toHaveLength(
+        TAG_NAME_MAX_LENGTH,
+      );
     });
 
     it('a igualdade é sensível a maiúsculas — a unicidade do banco também é', () => {

@@ -1,7 +1,11 @@
 import type { TestingModule } from '@nestjs/testing';
-import { createCqrsTestingModule, inRequestContext } from '../../../../test/support/cqrs-testing-module';
-import { givenATag } from '../../../../test/support/post-fixtures';
 import { TagId } from '@nestposts/posts/domain/tag/vo/tag-id';
+
+import {
+  createCqrsTestingModule,
+  inRequestContext,
+} from '../../../../test/support/cqrs-testing-module';
+import { givenATag } from '../../../../test/support/post-fixtures';
 import { FindTagQuery } from './find-tag.query';
 
 describe('FindTagQuery.Handler', () => {

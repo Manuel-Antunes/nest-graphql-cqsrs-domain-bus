@@ -1,5 +1,7 @@
+import type { AnyMikroORM } from '@nestposts/database/testing';
 import { inRequestContext } from '@nestposts/database';
-import { type AnyMikroORM, closeTestDatabase, testDatabase } from '@nestposts/database/testing';
+import { closeTestDatabase, testDatabase } from '@nestposts/database/testing';
+
 import { Organization } from '../../domain/organization/organization.entity';
 import { OrganizationId } from '../../domain/organization/vo/organization-id';
 import { OrganizationName } from '../../domain/organization/vo/organization-name';
@@ -15,7 +17,9 @@ describe('the tenant schema an organization brings with it', () => {
   const schemasNamed = async (slug: string): Promise<string[]> => {
     const rows = (await orm.em
       .getConnection()
-      .execute(`select nspname from pg_namespace where nspname = 'tenant_${slug}'`)) as {
+      .execute(
+        `select nspname from pg_namespace where nspname = 'tenant_${slug}'`,
+      )) as {
       nspname: string;
     }[];
     return rows.map((row) => row.nspname);
@@ -36,12 +40,17 @@ describe('the tenant schema an organization brings with it', () => {
   };
 
   beforeAll(async () => {
-    orm = await testDatabase({ entities: OrganizationEntities.withAuth() }, 'auth_trigger');
+    orm = await testDatabase(
+      { entities: OrganizationEntities.withAuth() },
+      'auth_trigger',
+    );
   });
 
   afterAll(async () => {
     for (const slug of born) {
-      await orm.em.getConnection().execute(`drop schema if exists "tenant_${slug}" cascade`);
+      await orm.em
+        .getConnection()
+        .execute(`drop schema if exists "tenant_${slug}" cascade`);
     }
     await closeTestDatabase(orm);
   });
@@ -55,7 +64,9 @@ describe('the tenant schema an organization brings with it', () => {
   it('survives a slug that needs quoting — which a %s trigger would have failed to even create', async () => {
     await givenAnOrganization('acme-corp');
 
-    await expect(schemasNamed('acme-corp')).resolves.toEqual(['tenant_acme-corp']);
+    await expect(schemasNamed('acme-corp')).resolves.toEqual([
+      'tenant_acme-corp',
+    ]);
   });
 
   it('goes away with the row, everything in it included', async () => {
@@ -72,10 +83,16 @@ describe('the tenant schema an organization brings with it', () => {
 
   it('is idempotent: a second organization with a slug already taken does not fail the insert', async () => {
     await givenAnOrganization('initech');
-    await orm.em.getConnection().execute(`create schema if not exists "tenant_umbrella"`);
+    await orm.em
+      .getConnection()
+      .execute(`create schema if not exists "tenant_umbrella"`);
     born.push('umbrella');
 
-    await expect(givenAnOrganization('umbrella')).resolves.toBeInstanceOf(Organization);
-    await expect(schemasNamed('umbrella')).resolves.toEqual(['tenant_umbrella']);
+    await expect(givenAnOrganization('umbrella')).resolves.toBeInstanceOf(
+      Organization,
+    );
+    await expect(schemasNamed('umbrella')).resolves.toEqual([
+      'tenant_umbrella',
+    ]);
   });
 });

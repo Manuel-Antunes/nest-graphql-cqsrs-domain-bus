@@ -1,6 +1,9 @@
-import { Cursor } from "@mikro-orm/core";
-import { z } from "zod";
-import { InheritValidatedMetadata, ValidatedDto } from "@nestposts/validated-dto/mixins";
+import { Cursor } from '@mikro-orm/core';
+import {
+  InheritValidatedMetadata,
+  ValidatedDto,
+} from '@nestposts/validated-dto/mixins';
+import { z } from 'zod';
 
 const PageInfoSchema = z.object({
   hasNextPage: z.boolean(),
@@ -40,7 +43,9 @@ export function pageOf<E extends object>(
 ): Page<E> {
   const start = after ? Number(Cursor.decode(after)[0]) + 1 : 0;
   const slice = items.slice(start, start + limit);
-  const cursors = new Map(slice.map((item, offset) => [item, Cursor.encode([start + offset])]));
+  const cursors = new Map(
+    slice.map((item, offset) => [item, Cursor.encode([start + offset])]),
+  );
 
   return {
     items: slice,
@@ -57,7 +62,10 @@ export function connectionOf<E extends object, T>(
   page: Page<E>,
   node: (item: E) => T,
 ): ConnectionType<T> {
-  const edges = page.items.map((item) => ({ cursor: page.from(item), node: node(item) }));
+  const edges = page.items.map((item) => ({
+    cursor: page.from(item),
+    node: node(item),
+  }));
   return {
     edges,
     pageInfo: {

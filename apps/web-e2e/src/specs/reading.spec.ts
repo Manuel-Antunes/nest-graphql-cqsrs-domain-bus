@@ -25,7 +25,11 @@ const PostByInvalidId = graphql(`
 test.describe.serial('o feed, lido de fora', () => {
   let title: string;
 
-  test('um post escrito pelo autor aparece no feed', async ({ page, accounts, signIn }) => {
+  test('um post escrito pelo autor aparece no feed', async ({
+    page,
+    accounts,
+    signIn,
+  }) => {
     title = `Lido de fora ${Date.now()}`;
 
     await signIn(accounts.author);
@@ -65,7 +69,9 @@ test.describe.serial('o feed, lido de fora', () => {
    * diferença entre "não achei" e "quebrou", e quem consulta um id que pode não existir recebe a
    * primeira. Uma seleção inválida, por outro lado, é erro antes de existir query.
    */
-  test('um id que não existe responde null, e não um erro', async ({ executeGraphql }) => {
+  test('um id que não existe responde null, e não um erro', async ({
+    executeGraphql,
+  }) => {
     const missing = await executeGraphql(MissingPost, {
       id: '00000000-0000-4000-8000-000000000000',
     });
@@ -74,9 +80,13 @@ test.describe.serial('o feed, lido de fora', () => {
     expect(missing.data!.post).toBeNull();
   });
 
-  test('e um id que não é um id é recusado pelo schema', async ({ executeGraphql }) => {
+  test('e um id que não é um id é recusado pelo schema', async ({
+    executeGraphql,
+  }) => {
     const invalid = await executeGraphql(PostByInvalidId);
 
-    expect(JSON.stringify(invalid.errors)).toMatch(/BAD_USER_INPUT|inválido|invalid/i);
+    expect(JSON.stringify(invalid.errors)).toMatch(
+      /BAD_USER_INPUT|inválido|invalid/i,
+    );
   });
 });

@@ -1,10 +1,14 @@
-import { closeTestDatabase, tableIn, testDatabase } from '@nestposts/database/testing';
 import { MikroORM } from '@mikro-orm/core';
+import { valueObjectType } from '@nestposts/database';
+import {
+  closeTestDatabase,
+  tableIn,
+  testDatabase,
+} from '@nestposts/database/testing';
 import { Tag } from '@nestposts/posts/domain/tag/tag.entity';
-import { TagSchema } from '@nestposts/posts/infrastructure/persistence/entities/tag-orm.entity';
 import { TagId } from '@nestposts/posts/domain/tag/vo/tag-id';
 import { TagName } from '@nestposts/posts/domain/tag/vo/tag-name';
-import { valueObjectType } from '@nestposts/database';
+import { TagSchema } from '@nestposts/posts/infrastructure/persistence/entities/tag-orm.entity';
 
 describe('valueObjectType', () => {
   let orm: MikroORM;
@@ -39,7 +43,9 @@ describe('valueObjectType', () => {
     const [row] = await orm.em
       .fork()
       .getConnection()
-      .execute(`select id, name from ${tableIn(orm, 'tags')} where id = ?`, [id.value]);
+      .execute(`select id, name from ${tableIn(orm, 'tags')} where id = ?`, [
+        id.value,
+      ]);
 
     expect(row).toEqual({ id: id.value, name: 'texto puro' });
   });
@@ -90,10 +96,15 @@ describe('valueObjectType', () => {
     await givenATag('b');
     const em = orm.em.fork();
 
-    const page = await em.findByCursor(Tag, { first: 1, orderBy: { name: 'asc', id: 'asc' } });
-    const next = await orm.em
-      .fork()
-      .findByCursor(Tag, { first: 1, after: page.endCursor!, orderBy: { name: 'asc', id: 'asc' } });
+    const page = await em.findByCursor(Tag, {
+      first: 1,
+      orderBy: { name: 'asc', id: 'asc' },
+    });
+    const next = await orm.em.fork().findByCursor(Tag, {
+      first: 1,
+      after: page.endCursor!,
+      orderBy: { name: 'asc', id: 'asc' },
+    });
 
     expect(page.items[0].name).toBeInstanceOf(TagName);
     expect(next.items[0].id.equals(page.items[0].id)).toBe(false);
@@ -101,10 +112,16 @@ describe('valueObjectType', () => {
 
   it('um cursor forjado não vira value object impossível', async () => {
     await givenATag();
-    const forged = Buffer.from(JSON.stringify(['a', 'não é uuid'])).toString('base64url');
+    const forged = Buffer.from(JSON.stringify(['a', 'não é uuid'])).toString(
+      'base64url',
+    );
 
     await expect(
-      orm.em.fork().findByCursor(Tag, { first: 1, after: forged, orderBy: { name: 'asc', id: 'asc' } }),
+      orm.em.fork().findByCursor(Tag, {
+        first: 1,
+        after: forged,
+        orderBy: { name: 'asc', id: 'asc' },
+      }),
     ).rejects.toThrow();
   });
 
@@ -125,7 +142,9 @@ describe('valueObjectType', () => {
     });
 
     it('escrever desembrulha o value object; desembrulhar o que já é cru é a identidade', () => {
-      expect(type.convertToDatabaseValue(TagId.parse(uuid), platform)).toBe(uuid);
+      expect(type.convertToDatabaseValue(TagId.parse(uuid), platform)).toBe(
+        uuid,
+      );
       expect(type.convertToDatabaseValue(uuid as any, platform)).toBe(uuid);
     });
 
@@ -150,7 +169,10 @@ describe('valueObjectType', () => {
     });
 
     it('o tipo da coluna e o modo de comparação vêm das opções', () => {
-      const DateLike = valueObjectType(TagId, { columnType: 'text', compareAs: 'date' });
+      const DateLike = valueObjectType(TagId, {
+        columnType: 'text',
+        compareAs: 'date',
+      });
 
       expect(type.getColumnType(prop, platform)).toBe('varchar(36)');
       expect(type.compareAsType()).toBe('string');

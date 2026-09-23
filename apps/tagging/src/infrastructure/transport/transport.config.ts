@@ -1,20 +1,18 @@
-import { MemoryServer } from '@camcima/nestjs-memory-microservices';
 import type { HttpServer } from '@nestjs/common';
+import type { ClientProxy, MicroserviceOptions } from '@nestjs/microservices';
 import type { Inngest } from 'inngest';
-import {
-  type ClientProxy,
-  ClientProxyFactory,
-  type MicroserviceOptions,
-  Transport,
-} from '@nestjs/microservices';
+import { MemoryServer } from '@camcima/nestjs-memory-microservices';
+import { ClientProxyFactory, Transport } from '@nestjs/microservices';
 import {
   AwsEventEnvelopeSerializer,
+  inngestApp,
   InngestClientProxy,
   InngestEventEnvelopeDeserializer,
   InngestEventEnvelopeSerializer,
   InngestStrategy,
+  localQueueUrl,
+  localTopicArn,
   MemoryClient,
-  inngestApp,
   MemoryEventEnvelopeSerializer,
   RmqEventEnvelopeDeserializer,
   RmqEventEnvelopeSerializer,
@@ -22,8 +20,6 @@ import {
   SqsEventEnvelopeDeserializer,
   SqsStrategy,
   TransportIdentity,
-  localQueueUrl,
-  localTopicArn,
 } from '@nestposts/transport-eventbus';
 
 export const POST_EVENTS_CLIENT = 'POST_EVENTS_CLIENT';
@@ -36,9 +32,11 @@ export const taggingIdentity = (): TransportIdentity =>
 
 export const EXCHANGE = process.env.TAGGING_EXCHANGE ?? 'nestposts.events';
 
-export const INBOUND_QUEUE = process.env.TAGGING_QUEUE ?? 'nestposts.tagging.post-events';
+export const INBOUND_QUEUE =
+  process.env.TAGGING_QUEUE ?? 'nestposts.tagging.post-events';
 
-export const EVENTS_TOPIC_ARN = process.env.TAGGING_TOPIC_ARN ?? localTopicArn('nestposts-events.fifo');
+export const EVENTS_TOPIC_ARN =
+  process.env.TAGGING_TOPIC_ARN ?? localTopicArn('nestposts-events.fifo');
 
 const LOCAL_QUEUES = ['nestposts-tagging-post-events.fifo'];
 
@@ -76,7 +74,9 @@ export const inboundDestination = (): string =>
     memory: 'in process',
   })[transportMode()];
 
-const urls = (): string[] => [process.env.RABBITMQ_URL ?? 'amqp://localhost:5672'];
+const urls = (): string[] => [
+  process.env.RABBITMQ_URL ?? 'amqp://localhost:5672',
+];
 
 export const postEventsClient = (): ClientProxy => {
   switch (transportMode()) {
@@ -91,7 +91,10 @@ export const postEventsClient = (): ClientProxy => {
         serializer: new AwsEventEnvelopeSerializer(),
       });
     case 'memory':
-      return new MemoryClient({ servers: [], serializer: new MemoryEventEnvelopeSerializer() });
+      return new MemoryClient({
+        servers: [],
+        serializer: new MemoryEventEnvelopeSerializer(),
+      });
     default:
       return ClientProxyFactory.create({
         transport: Transport.RMQ,
@@ -108,7 +111,9 @@ export const postEventsClient = (): ClientProxy => {
 };
 
 export const lambdaTransport = (): MicroserviceOptions => ({
-  strategy: new SqsStrategy({ deserializer: new SqsEventEnvelopeDeserializer() }),
+  strategy: new SqsStrategy({
+    deserializer: new SqsEventEnvelopeDeserializer(),
+  }),
 });
 
 /**
@@ -118,7 +123,9 @@ export const lambdaTransport = (): MicroserviceOptions => ({
  * so two applications sharing a queue would compete for the messages instead of each receiving one —
  * and whichever discards it acknowledges it, killing it for the other.
  */
-export const inboundTransport = (httpAdapter?: HttpServer): MicroserviceOptions => {
+export const inboundTransport = (
+  httpAdapter?: HttpServer,
+): MicroserviceOptions => {
   switch (transportMode()) {
     case 'inngest':
       return {

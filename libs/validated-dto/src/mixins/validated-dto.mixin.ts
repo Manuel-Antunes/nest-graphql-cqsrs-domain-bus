@@ -1,6 +1,9 @@
 import 'reflect-metadata';
 
-import { type ValidationArguments, type ValidatorConstraintInterface, Validate, ValidatorConstraint } from 'class-validator';
+import type {
+  ValidationArguments,
+  ValidatorConstraintInterface,
+} from 'class-validator';
 import {
   Expose,
   instanceToPlain,
@@ -8,11 +11,26 @@ import {
   TransformationType,
   Type,
 } from 'class-transformer';
+import { Validate, ValidatorConstraint } from 'class-validator';
 import { z } from 'zod';
 
-import { type DECORATOR_REGISTRY_TYPE, DECORATOR_REGISTRY as GLOBAL_DECORATOR_REGISTRY } from '../schemas/registries/decorators.registry';
-import { type EmbeddedBinding, type EMBEDDED_REGISTRY_TYPE, EMBEDDED_REGISTRY, getEmbedded } from '../schemas/registries/embedded.registry';
-import { type ScalarFieldOptions, type ScalarValueObjectStatic, type ValidatedScalarOptions, rawScalarValue, ValidatedScalar } from './validated-scalar.mixin';
+import type { DECORATOR_REGISTRY_TYPE } from '../schemas/registries/decorators.registry';
+import type {
+  EMBEDDED_REGISTRY_TYPE,
+  EmbeddedBinding,
+} from '../schemas/registries/embedded.registry';
+import type {
+  ScalarFieldOptions,
+  ScalarValueObjectStatic,
+  ValidatedScalarOptions,
+} from './validated-scalar.mixin';
+import { DECORATOR_REGISTRY as GLOBAL_DECORATOR_REGISTRY } from '../schemas/registries/decorators.registry';
+import {
+  EMBEDDED_REGISTRY,
+  getEmbedded,
+} from '../schemas/registries/embedded.registry';
+import { rawScalarValue, ValidatedScalar } from './validated-scalar.mixin';
+
 /**
  * Class decorator that copies metadata from the ValidatedDto parent class to the extending class.
  * This is required when using ValidatedDto with frameworks like GraphQL that inspect the final class
@@ -178,7 +196,9 @@ function materializeEmbedded(field: EmbeddedField, value: unknown): unknown {
   }
   if (field.isArray) {
     return Array.isArray(value)
-      ? value.map((item) => materializeEmbedded({ ...field, isArray: false }, item))
+      ? value.map((item) =>
+          materializeEmbedded({ ...field, isArray: false }, item),
+        )
       : value;
   }
   const Target = field.binding.target as new (input: unknown) => unknown;
@@ -202,7 +222,9 @@ function plainifyEmbedded(
   }
   if (field.isArray) {
     return Array.isArray(value)
-      ? value.map((item) => plainifyEmbedded({ ...field, isArray: false }, item, options))
+      ? value.map((item) =>
+          plainifyEmbedded({ ...field, isArray: false }, item, options),
+        )
       : value;
   }
   return field.binding.kind === 'scalar'
@@ -311,8 +333,7 @@ const createObjectClass = <T extends z.ZodRawShape>(
 
     if (embedded && embedded.binding.kind === 'object') {
       Type(() => embedded.binding.target as any)(GeneratedDto.prototype, key);
-    }
-    else if (innerType instanceof z.ZodObject && maxObjectDepth > 0) {
+    } else if (innerType instanceof z.ZodObject && maxObjectDepth > 0) {
       const NestedClass = createObjectClass(innerType, {
         exposeAll,
         maxObjectDepth: maxObjectDepth - 1,
@@ -320,8 +341,7 @@ const createObjectClass = <T extends z.ZodRawShape>(
         EMBEDDED_REGISTRY: options.EMBEDDED_REGISTRY,
       });
       Type(() => NestedClass)(GeneratedDto.prototype, key);
-    }
-    else if (
+    } else if (
       innerType instanceof z.ZodArray &&
       innerType.element instanceof z.ZodObject
     ) {
@@ -332,16 +352,13 @@ const createObjectClass = <T extends z.ZodRawShape>(
         EMBEDDED_REGISTRY: options.EMBEDDED_REGISTRY,
       });
       Type(() => NestedClass)(GeneratedDto.prototype, key);
-    }
-    else if (innerType instanceof z.ZodUnion) {
+    } else if (innerType instanceof z.ZodUnion) {
       const UnionClass = unionClassCache.get(key)!;
       Type(() => UnionClass)(GeneratedDto.prototype, key);
-    }
-    else if (innerType instanceof z.ZodDiscriminatedUnion) {
+    } else if (innerType instanceof z.ZodDiscriminatedUnion) {
       const UnionClass = unionClassCache.get(key)!;
       Type(() => UnionClass)(GeneratedDto.prototype, key);
-    }
-    else if (
+    } else if (
       innerType instanceof z.ZodArray &&
       (innerType.element instanceof z.ZodUnion ||
         innerType.element instanceof z.ZodDiscriminatedUnion)
@@ -509,7 +526,9 @@ export interface ValidatedDtoOptions {
  * It applies to input only: the **instance** type stays flattened on purpose, because a union cannot
  * serve as a base class (`class X extends ValidatedDto(union) {}` needs an object type).
  */
-type DistributiveOmit<T, K extends PropertyKey> = T extends any ? Omit<T, K> : never;
+type DistributiveOmit<T, K extends PropertyKey> = T extends any
+  ? Omit<T, K>
+  : never;
 
 /**
  * ValidatedDto factory that supports:
@@ -942,7 +961,9 @@ function valuesEqual(a: unknown, b: unknown): boolean {
     return a.getTime() === b.getTime();
   }
   if (Array.isArray(a) && Array.isArray(b)) {
-    return a.length === b.length && a.every((item, i) => valuesEqual(item, b[i]));
+    return (
+      a.length === b.length && a.every((item, i) => valuesEqual(item, b[i]))
+    );
   }
   if (typeof a === 'object' && typeof b === 'object') {
     const keysA = Object.keys(a as object);
@@ -1002,14 +1023,20 @@ export function Embeddable<Schema extends z.ZodObject<any>>(
   data?: z.input<Schema>,
 ) => z.infer<Schema> & EmbeddableValueObject<z.infer<Schema>>) & {
   schema: Schema;
-  parse<T extends AnyEmbeddableConstructor>(this: T, value: unknown): InstanceType<T>;
+  parse<T extends AnyEmbeddableConstructor>(
+    this: T,
+    value: unknown,
+  ): InstanceType<T>;
   safeParse<T extends AnyEmbeddableConstructor>(
     this: T,
     value: unknown,
   ):
     | { success: true; data: InstanceType<T>; error?: undefined }
     | { success: false; data?: undefined; error: z.ZodError };
-  is<T extends AnyEmbeddableConstructor>(this: T, value: unknown): value is InstanceType<T>;
+  is<T extends AnyEmbeddableConstructor>(
+    this: T,
+    value: unknown,
+  ): value is InstanceType<T>;
   field<T extends AnyEmbeddableConstructor>(
     this: T,
     options?: ScalarFieldOptions,
@@ -1045,7 +1072,10 @@ export function Embeddable<Schema extends z.ZodObject<any>>(
         if (other === null || typeof other !== 'object') {
           return false;
         }
-        if ((other as any)[EMBEDDABLE_VALUE_OBJECT] === true && !(other instanceof Base)) {
+        if (
+          (other as any)[EMBEDDABLE_VALUE_OBJECT] === true &&
+          !(other instanceof Base)
+        ) {
           return false;
         }
         return keys.every((key) => valuesEqual(this[key], (other as any)[key]));
@@ -1118,7 +1148,10 @@ export function Embeddable<Schema extends z.ZodObject<any>>(
     return value instanceof this;
   };
 
-  Base.field = function field(this: any, fieldOptions?: ScalarFieldOptions): z.ZodType {
+  Base.field = function field(
+    this: any,
+    fieldOptions?: ScalarFieldOptions,
+  ): z.ZodType {
     const decorators = fieldOptions?.decorators ?? [];
     if (decorators.length === 0) {
       const cached = EMBEDDABLE_FIELD_CACHE.get(this);
@@ -1135,7 +1168,10 @@ export function Embeddable<Schema extends z.ZodObject<any>>(
     EMBEDDED_REGISTRY.add(fieldSchema, { kind: 'object', target: VO });
 
     if (decorators.length > 0) {
-      (fieldOptions?.DECORATOR_REGISTRY ?? DECORATOR_REGISTRY).add(fieldSchema, { decorators });
+      (fieldOptions?.DECORATOR_REGISTRY ?? DECORATOR_REGISTRY).add(
+        fieldSchema,
+        { decorators },
+      );
     } else {
       EMBEDDABLE_FIELD_CACHE.set(this, fieldSchema);
     }
@@ -1169,9 +1205,8 @@ ValidatedDto.Scalar = ValidatedScalar as <Schema extends z.ZodType<any, any>>(
  * });
  * ```
  */
-ValidatedDto.embed = function embed<T extends { field(options?: ScalarFieldOptions): z.ZodType }>(
-  valueObject: T,
-  options?: ScalarFieldOptions,
-): ReturnType<T['field']> {
+ValidatedDto.embed = function embed<
+  T extends { field(options?: ScalarFieldOptions): z.ZodType },
+>(valueObject: T, options?: ScalarFieldOptions): ReturnType<T['field']> {
   return valueObject.field(options) as ReturnType<T['field']>;
 };

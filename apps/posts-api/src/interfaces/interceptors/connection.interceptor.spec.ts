@@ -1,10 +1,11 @@
 import type { Mapper } from '@automapper/core';
 import type { CallHandler, ExecutionContext } from '@nestjs/common';
-import { lastValueFrom, of } from 'rxjs';
 import type { Post } from '@nestposts/posts/domain/post/post.entity';
 import { PostId } from '@nestposts/posts/domain/post/vo/post-id';
-import { PostView } from '../../dto/graphql/post.view';
+import { lastValueFrom, of } from 'rxjs';
+
 import type { ConnectionType, Page } from '../../dto/graphql/connection';
+import { PostView } from '../../dto/graphql/post.view';
 import { ConnectionInterceptor } from './connection.interceptor';
 
 describe('ConnectionInterceptor', () => {
@@ -12,7 +13,8 @@ describe('ConnectionInterceptor', () => {
   const otherId = PostId.parse('11111111-2222-4333-8444-555555555555');
 
   const aPost = (postId: PostId) => ({ postId }) as unknown as Post;
-  const aView = (post: Post) => ({ id: (post as any).postId }) as unknown as PostView;
+  const aView = (post: Post) =>
+    ({ id: (post as any).postId }) as unknown as PostView;
 
   const aPage = (overrides: Partial<Record<string, unknown>> = {}) =>
     ({
@@ -39,9 +41,12 @@ describe('ConnectionInterceptor', () => {
 
   const intercept = async (page: Page<Post>) => {
     const { mapper, calls } = mapperSpy();
-    const Interceptor = ConnectionInterceptor({} as never, {} as never) as unknown as new (
-      mapper: Mapper,
-    ) => { intercept: (c: ExecutionContext, n: CallHandler) => any };
+    const Interceptor = ConnectionInterceptor(
+      {} as never,
+      {} as never,
+    ) as unknown as new (mapper: Mapper) => {
+      intercept: (c: ExecutionContext, n: CallHandler) => any;
+    };
     const next: CallHandler = { handle: () => of(page) };
     const connection: ConnectionType<PostView> = await lastValueFrom(
       new Interceptor(mapper).intercept({} as ExecutionContext, next),
@@ -61,7 +66,10 @@ describe('ConnectionInterceptor', () => {
   it('casa cada nó com o item que o originou', async () => {
     const { connection } = await intercept(aPage());
 
-    expect(connection.edges.map((edge) => (edge.node as any).id)).toEqual([id, otherId]);
+    expect(connection.edges.map((edge) => (edge.node as any).id)).toEqual([
+      id,
+      otherId,
+    ]);
   });
 
   it('traduz a página inteira numa passada, e não uma vez por edge', async () => {
@@ -72,7 +80,9 @@ describe('ConnectionInterceptor', () => {
   });
 
   it('o pageInfo é o que o ORM calculou, sem conta refeita aqui', async () => {
-    const { connection } = await intercept(aPage({ hasNextPage: false, hasPrevPage: true }));
+    const { connection } = await intercept(
+      aPage({ hasNextPage: false, hasPrevPage: true }),
+    );
 
     expect(connection.pageInfo).toEqual({
       hasNextPage: false,
@@ -85,7 +95,13 @@ describe('ConnectionInterceptor', () => {
 
   it('uma página vazia é uma connection vazia, não um erro', async () => {
     const { connection } = await intercept(
-      aPage({ items: [], hasNextPage: false, startCursor: null, endCursor: null, totalCount: 0 }),
+      aPage({
+        items: [],
+        hasNextPage: false,
+        startCursor: null,
+        endCursor: null,
+        totalCount: 0,
+      }),
     );
 
     expect(connection.edges).toEqual([]);
@@ -99,7 +115,9 @@ describe('ConnectionInterceptor', () => {
 
   describe('sem o par de modelos: envelope só, nó como veio', () => {
     const envelope = async (page: Page<Post>) => {
-      const Interceptor = ConnectionInterceptor() as unknown as new (mapper: Mapper) => {
+      const Interceptor = ConnectionInterceptor() as unknown as new (
+        mapper: Mapper,
+      ) => {
         intercept: (c: ExecutionContext, n: CallHandler) => any;
       };
       const { mapper } = mapperSpy();
@@ -119,7 +137,9 @@ describe('ConnectionInterceptor', () => {
     });
 
     it('monta o mesmo envelope que a chamada com modelos', async () => {
-      const connection = await envelope(aPage({ hasNextPage: false, hasPrevPage: true }));
+      const connection = await envelope(
+        aPage({ hasNextPage: false, hasPrevPage: true }),
+      );
 
       expect(connection.edges.map((edge) => edge.cursor)).toEqual([
         `cursor:${id.value}`,

@@ -1,25 +1,40 @@
-import { TestSchemaModule, testDatabaseConfig } from '@nestposts/database/testing';
-import { MikroORM } from '@mikro-orm/core';
-import { Inject, Injectable, type ModuleMetadata } from '@nestjs/common';
-import { AsyncContext, CqrsModule } from '@nestjs/cqrs';
+import type { ModuleMetadata } from '@nestjs/common';
 import type { ClientProxy } from '@nestjs/microservices';
-import { Test, type TestingModule } from '@nestjs/testing';
+import type { TestingModule } from '@nestjs/testing';
+import type { DomainEvent } from '@nestposts/platform/domain/shared/domain-event';
+import { MikroORM } from '@mikro-orm/core';
+import { Inject, Injectable } from '@nestjs/common';
+import { AsyncContext, CqrsModule } from '@nestjs/cqrs';
+import { Test } from '@nestjs/testing';
+import { DatabaseModule, inRequestContext } from '@nestposts/database';
+import {
+  testDatabaseConfig,
+  TestSchemaModule,
+} from '@nestposts/database/testing';
 import { AggregateRoot } from '@nestposts/platform/domain/shared/aggregate-root';
 import { BaseEntity } from '@nestposts/platform/domain/shared/base-entity';
-import type { DomainEvent } from '@nestposts/platform/domain/shared/domain-event';
 import { EventType } from '@nestposts/platform/domain/shared/event-type';
-import { inRequestContext } from '@nestposts/database';
-import { TRANSPORT_EVENT_BUS_PUBLISHER, TRANSPORT_EVENT_BUS_SERVICE } from './constants';
+
+import type { Ingestion } from './outbound/transport-metadata';
+import {
+  TRANSPORT_EVENT_BUS_PUBLISHER,
+  TRANSPORT_EVENT_BUS_SERVICE,
+} from './constants';
 import { Publisher } from './decorators/publisher.decorator';
 import { EventIngestion } from './inbound/event-ingestion';
 import { IncomingRequest } from './inbound/incoming-request';
 import { OutboxRouting } from './outbound/outbox-routing';
-import { EventSourcedRepository } from './persistence/event-log/event-sourced.repository';
 import { EventLog } from './persistence/event-log/event-log';
-import { MessageInbox, MikroOrmMessageInbox, NoMessageInbox } from './persistence/message-inbox';
-import { DatabaseModule } from '@nestposts/database';
-import { CorrelatedRequestContext, RequestContextCodec } from './request-context';
-import type { Ingestion } from './outbound/transport-metadata';
+import { EventSourcedRepository } from './persistence/event-log/event-sourced.repository';
+import {
+  MessageInbox,
+  MikroOrmMessageInbox,
+  NoMessageInbox,
+} from './persistence/message-inbox';
+import {
+  CorrelatedRequestContext,
+  RequestContextCodec,
+} from './request-context';
 import { RecordingClient } from './testing/recording-client';
 import { TransportEventBusModule } from './transport-event-bus.module';
 import { TransportIdentity } from './transport-identity';
@@ -73,7 +88,9 @@ describe('TransportEventBusModule', () => {
   afterEach(async () => module?.close());
 
   const bootstrap = async (imports: NonNullable<ModuleMetadata['imports']>) => {
-    module = await Test.createTestingModule({ imports: [CqrsModule.forRoot(), ...imports] }).compile();
+    module = await Test.createTestingModule({
+      imports: [CqrsModule.forRoot(), ...imports],
+    }).compile();
     await module.init();
     return module;
   };
@@ -81,25 +98,37 @@ describe('TransportEventBusModule', () => {
   describe('forRoot', () => {
     it('gives a publish-only service the bus, the publisher and a request codec, and no ingestion', async () => {
       const app = await bootstrap([
-        TransportEventBusModule.forRoot({ identity: 'things-api', publishers: [ThingsPublisher] }),
+        TransportEventBusModule.forRoot({
+          identity: 'things-api',
+          publishers: [ThingsPublisher],
+        }),
       ]);
 
       expect(app.get(TRANSPORT_EVENT_BUS_SERVICE)).toBeDefined();
       expect(app.get(TRANSPORT_EVENT_BUS_PUBLISHER)).toBeDefined();
-      expect(app.get(RequestContextCodec)).toBeInstanceOf(CorrelatedRequestContext);
+      expect(app.get(RequestContextCodec)).toBeInstanceOf(
+        CorrelatedRequestContext,
+      );
       expect(() => app.get(EventIngestion)).toThrow();
     });
 
     it('registers the destinations it was given, so the routing table answers for them', async () => {
       const app = await bootstrap([
-        TransportEventBusModule.forRoot({ identity: 'things-api', publishers: [ThingsPublisher] }),
+        TransportEventBusModule.forRoot({
+          identity: 'things-api',
+          publishers: [ThingsPublisher],
+        }),
       ]);
 
-      expect(app.get(OutboxRouting).describe()).toEqual(['ThingsPublisher ← [things]']);
+      expect(app.get(OutboxRouting).describe()).toEqual([
+        'ThingsPublisher ← [things]',
+      ]);
     });
 
     it('takes the name as the identity, and an identity of its own when there is one', async () => {
-      const named = await bootstrap([TransportEventBusModule.forRoot({ identity: 'things-api' })]);
+      const named = await bootstrap([
+        TransportEventBusModule.forRoot({ identity: 'things-api' }),
+      ]);
       expect(named.get(TransportIdentity)).toMatchObject({
         applicationName: 'things-api',
         publishes: true,
@@ -107,7 +136,9 @@ describe('TransportEventBusModule', () => {
       await named.close();
 
       const silent = await bootstrap([
-        TransportEventBusModule.forRoot({ identity: TransportIdentity.silent('a-suite') }),
+        TransportEventBusModule.forRoot({
+          identity: TransportIdentity.silent('a-suite'),
+        }),
       ]);
       expect(silent.get(TransportIdentity)).toMatchObject({
         applicationName: 'a-suite',
@@ -117,7 +148,10 @@ describe('TransportEventBusModule', () => {
 
     it('turns the outbound half off from the options too', async () => {
       const app = await bootstrap([
-        TransportEventBusModule.forRoot({ identity: 'things-api', publishes: false }),
+        TransportEventBusModule.forRoot({
+          identity: 'things-api',
+          publishes: false,
+        }),
       ]);
 
       expect(app.get(TransportIdentity).publishes).toBe(false);
@@ -125,7 +159,10 @@ describe('TransportEventBusModule', () => {
 
     it("takes the application's own request codec", async () => {
       const app = await bootstrap([
-        TransportEventBusModule.forRoot({ identity: 'things-api', requestContext: MyRequestCodec }),
+        TransportEventBusModule.forRoot({
+          identity: 'things-api',
+          requestContext: MyRequestCodec,
+        }),
       ]);
 
       expect(app.get(RequestContextCodec)).toBeInstanceOf(MyRequestCodec);
@@ -134,7 +171,10 @@ describe('TransportEventBusModule', () => {
     it('turns receiving on with an inbox, and exports what a controller and a guard inject', async () => {
       const app = await bootstrap([
         ...persistence(),
-        TransportEventBusModule.forRoot({ identity: 'things-api', inbox: NoMessageInbox }),
+        TransportEventBusModule.forRoot({
+          identity: 'things-api',
+          inbox: NoMessageInbox,
+        }),
       ]);
 
       expect(app.get(EventIngestion)).toBeInstanceOf(EventIngestion);
@@ -153,7 +193,9 @@ describe('TransportEventBusModule', () => {
       ]);
 
       expect(app.get(EventLog)).toBeDefined();
-      expect(app.get(EventSourcedRepository)).toBeInstanceOf(EventSourcedRepository);
+      expect(app.get(EventSourcedRepository)).toBeInstanceOf(
+        EventSourcedRepository,
+      );
     });
 
     it('brings the tables the library needs, which the application never listed', async () => {
@@ -168,14 +210,26 @@ describe('TransportEventBusModule', () => {
       const em = app.get(MikroORM).em;
 
       const remembered = await inRequestContext(em, async () => {
-        await app.get(MessageInbox).register('evt-1', 'things.ThingHappened#1.0.0', 'elsewhere');
+        await app
+          .get(MessageInbox)
+          .register('evt-1', 'things.ThingHappened#1.0.0', 'elsewhere');
         return app.get(MessageInbox).received();
       });
       const replayed = await inRequestContext(em, async () => {
         await app
           .get(EventLog)
-          .append([new ThingHappenedEvent('thing-1', new Date('2026-09-08T12:00:00.000Z'))], 'thing-1');
-        return app.get<EventSourcedRepository<Thing>>(EventSourcedRepository).load('thing-1');
+          .append(
+            [
+              new ThingHappenedEvent(
+                'thing-1',
+                new Date('2026-09-08T12:00:00.000Z'),
+              ),
+            ],
+            'thing-1',
+          );
+        return app
+          .get<EventSourcedRepository<Thing>>(EventSourcedRepository)
+          .load('thing-1');
       });
 
       expect(remembered).toHaveLength(1);
@@ -193,7 +247,9 @@ describe('TransportEventBusModule', () => {
           imports: [
             {
               module: class ConfigStub {},
-              providers: [{ provide: CONFIG, useValue: { name: 'from-config' } }],
+              providers: [
+                { provide: CONFIG, useValue: { name: 'from-config' } },
+              ],
               exports: [CONFIG],
             },
           ],
@@ -215,10 +271,15 @@ describe('TransportEventBusModule', () => {
 
     it('takes a name, or an identity, straight from the factory', async () => {
       const app = await bootstrap([
-        TransportEventBusModule.forRootAsync({ useFactory: () => TransportIdentity.silent('a-suite') }),
+        TransportEventBusModule.forRootAsync({
+          useFactory: () => TransportIdentity.silent('a-suite'),
+        }),
       ]);
 
-      expect(app.get(TransportIdentity)).toMatchObject({ applicationName: 'a-suite', publishes: false });
+      expect(app.get(TransportIdentity)).toMatchObject({
+        applicationName: 'a-suite',
+        publishes: false,
+      });
     });
 
     it('wires the same mechanism as forRoot around it', async () => {
@@ -234,7 +295,9 @@ describe('TransportEventBusModule', () => {
 
       expect(app.get(EventIngestion)).toBeInstanceOf(EventIngestion);
       expect(app.get(EventLog)).toBeDefined();
-      expect(app.get(OutboxRouting).describe()).toEqual(['ThingsPublisher ← [things]']);
+      expect(app.get(OutboxRouting).describe()).toEqual([
+        'ThingsPublisher ← [things]',
+      ]);
     });
   });
 });

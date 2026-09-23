@@ -1,8 +1,9 @@
-import { type ArgumentsHost, Catch, type ExceptionFilter } from '@nestjs/common';
+import type { ArgumentsHost, ExceptionFilter } from '@nestjs/common';
+import { Catch } from '@nestjs/common';
+import { SessionNotAuthenticatedException } from '@nestposts/auth/domain/auth/exception/session-not-authenticated.exception';
 import { ActiveMemberNotFoundException } from '@nestposts/organizations/domain/organization/exception/active-member-not-found.exception';
 import { OrganizationNotFoundException } from '@nestposts/organizations/domain/organization/exception/organization-not-found.exception';
 import { OrganizationNotSelectedException } from '@nestposts/organizations/domain/organization/exception/organization-not-selected.exception';
-import { SessionNotAuthenticatedException } from '@nestposts/auth/domain/auth/exception/session-not-authenticated.exception';
 import { NotAnAuthorException } from '@nestposts/users/domain/user/exception/not-an-author.exception';
 import { UnknownIdentityException } from '@nestposts/users/domain/user/exception/unknown-identity.exception';
 import { GraphQLError } from 'graphql';

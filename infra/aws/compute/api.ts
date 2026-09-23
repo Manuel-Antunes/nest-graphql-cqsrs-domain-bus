@@ -13,7 +13,9 @@ import { posts } from './platform';
  * `dist/graphql` as an asset. A bundler has no reason to notice a `.graphql` file, so without this
  * the function starts, finds no types, and serves an empty schema.
  */
-export const GRAPHQL_SDL = [{ from: 'apps/posts-api/dist/graphql', to: 'graphql' }];
+export const GRAPHQL_SDL = [
+  { from: 'apps/posts-api/dist/graphql', to: 'graphql' },
+];
 
 export const streaming = new StreamingFunction('PostsApi', {
   platform: posts,

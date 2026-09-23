@@ -1,17 +1,25 @@
-import { type HttpServer, Logger } from '@nestjs/common';
-import {
-  type ConsumerDeserializer,
-  type ConsumerSerializer,
-  type CustomTransportStrategy,
-  Server,
-  type TransportId,
+import type { HttpServer } from '@nestjs/common';
+import type {
+  ConsumerDeserializer,
+  ConsumerSerializer,
+  CustomTransportStrategy,
+  TransportId,
 } from '@nestjs/microservices';
 import type { FastifyInstance } from 'fastify';
 import type { EventPayload, Inngest, InngestFunction } from 'inngest';
+import { Logger } from '@nestjs/common';
+import { Server } from '@nestjs/microservices';
 import { fastifyPlugin } from 'inngest/fastify';
-import { InngestContext, type InngestStepTools } from './inngest.context';
-import { type InngestEvents, InngestEventsMap, InngestStatus } from './inngest.events';
-import { MAX_TRIGGERS, inngestFunctionId, inngestTriggers } from './inngest-triggers';
+
+import type { InngestStepTools } from './inngest.context';
+import type { InngestEvents } from './inngest.events';
+import {
+  inngestFunctionId,
+  inngestTriggers,
+  MAX_TRIGGERS,
+} from './inngest-triggers';
+import { InngestContext } from './inngest.context';
+import { InngestEventsMap, InngestStatus } from './inngest.events';
 
 export const INNGEST_DEFAULT_SERVE_PATH = '/api/inngest';
 
@@ -75,7 +83,9 @@ export class InngestStrategy
   extends Server<InngestEvents, InngestStatus>
   implements CustomTransportStrategy
 {
-  override transportId: TransportId = Symbol.for('nestposts.transport-eventbus.inngest');
+  override transportId: TransportId = Symbol.for(
+    'nestposts.transport-eventbus.inngest',
+  );
 
   protected override readonly logger = new Logger(InngestStrategy.name);
 
@@ -83,7 +93,10 @@ export class InngestStrategy
   private readonly servePath: string;
   private readonly serveOrigin?: string;
   private readonly functions = new Map<string, InngestFunction.Any>();
-  private readonly listeners: { event: keyof InngestEvents; callback: InngestEvents[keyof InngestEvents] }[] = [];
+  private readonly listeners: {
+    event: keyof InngestEvents;
+    callback: InngestEvents[keyof InngestEvents];
+  }[] = [];
 
   private httpAdapter?: HttpServer;
   private fastify?: FastifyInstance;
@@ -103,7 +116,9 @@ export class InngestStrategy
     this.httpAdapter = adapter;
   }
 
-  async listen(callback: (...optionalParams: unknown[]) => void): Promise<void> {
+  async listen(
+    callback: (...optionalParams: unknown[]) => void,
+  ): Promise<void> {
     this._status$.next(InngestStatus.STARTING);
     try {
       this.createFunctions();
@@ -130,7 +145,11 @@ export class InngestStrategy
 
   /** The Inngest client and the server it was mounted on, for a spec that wants to look. */
   override unwrap<T>(): T {
-    return { inngest: this.inngest, fastify: this.fastify, functions: this.functions } as T;
+    return {
+      inngest: this.inngest,
+      fastify: this.fastify,
+      functions: this.functions,
+    } as T;
   }
 
   on<
@@ -152,29 +171,42 @@ export class InngestStrategy
     runId: string,
     attempt: number,
   ): Promise<unknown> {
-    const message = await this.deserializer.deserialize(event, { channel: pattern });
+    const message = await this.deserializer.deserialize(event, {
+      channel: pattern,
+    });
     const context = new InngestContext([event, pattern, step, runId, attempt]);
 
     const handler = this.getHandlerByPattern(pattern);
     if (!handler) {
-      this.logger.warn(`no handler for '${pattern}' — the run is acknowledged and dropped`);
+      this.logger.warn(
+        `no handler for '${pattern}' — the run is acknowledged and dropped`,
+      );
       return undefined;
     }
 
-    return this.onProcessingStartHook(this.transportId as TransportId, context, async () => {
-      const response$ = this.transformToObservable(await handler(message.data, context));
+    return this.onProcessingStartHook(
+      this.transportId as TransportId,
+      context,
+      async () => {
+        const response$ = this.transformToObservable(
+          await handler(message.data, context),
+        );
 
-      return new Promise((resolve, reject) => {
-        this.send(response$, (packet) => {
-          this.onProcessingEndHook?.(this.transportId as TransportId, context);
-          if (packet.err) {
-            reject(packet.err);
-          } else {
-            resolve(this.serializer.serialize(packet.response));
-          }
+        return new Promise((resolve, reject) => {
+          this.send(response$, (packet) => {
+            this.onProcessingEndHook?.(
+              this.transportId as TransportId,
+              context,
+            );
+            if (packet.err) {
+              reject(packet.err);
+            } else {
+              resolve(this.serializer.serialize(packet.response));
+            }
+          });
         });
-      });
-    });
+      },
+    );
   }
 
   private createFunctions(): void {
@@ -198,14 +230,22 @@ export class InngestStrategy
     }
   }
 
-  private functionFor(pattern: string, triggers: string[]): InngestFunction.Any {
+  private functionFor(
+    pattern: string,
+    triggers: string[],
+  ): InngestFunction.Any {
     return this.inngest.createFunction(
       {
         id: inngestFunctionId(pattern),
         name: `Handle ${pattern}`,
         triggers: triggers.map((event) => ({ event })),
       } as never,
-      (async ({ event, step, runId, attempt }: {
+      (async ({
+        event,
+        step,
+        runId,
+        attempt,
+      }: {
         event: EventPayload;
         step: InngestStepTools;
         runId: string;
@@ -232,14 +272,17 @@ export class InngestStrategy
     }
 
     this.fastify = instance as FastifyInstance;
-    this.fastify.register(fastifyPlugin as never, {
-      client: this.inngest,
-      functions: [...this.functions.values()],
-      options: {
-        servePath: this.servePath,
-        ...(this.serveOrigin ? { serveOrigin: this.serveOrigin } : {}),
-      },
-    } as never);
+    this.fastify.register(
+      fastifyPlugin as never,
+      {
+        client: this.inngest,
+        functions: [...this.functions.values()],
+        options: {
+          servePath: this.servePath,
+          ...(this.serveOrigin ? { serveOrigin: this.serveOrigin } : {}),
+        },
+      } as never,
+    );
   }
 
   private triggerSummary(): string {
@@ -249,7 +292,9 @@ export class InngestStrategy
   }
 
   private emitEvent(event: keyof InngestEvents, ...args: unknown[]): void {
-    for (const listener of this.listeners.filter((candidate) => candidate.event === event)) {
+    for (const listener of this.listeners.filter(
+      (candidate) => candidate.event === event,
+    )) {
       (listener.callback as (...params: unknown[]) => void)(...args);
     }
   }

@@ -1,4 +1,5 @@
 import type { InjectionToken, Provider } from '@nestjs/common';
+
 import { EventLog } from './event-log';
 
 /** What a stream is named by: an aggregate's id, or the string inside it. */
@@ -81,8 +82,12 @@ export class EventSourcedRepository<T extends EventSourced> {
    * to publish, which is what keeps the stream and the wire saying the same thing.
    */
   save(aggregate: T): Promise<void> {
-    return this.log.append(aggregate.getUncommittedEvents(), aggregate.id.value);
+    return this.log.append(
+      aggregate.getUncommittedEvents(),
+      aggregate.id.value,
+    );
   }
 }
 
-const streamIdOf = (id: StreamIdentity): string => (typeof id === 'string' ? id : id.value);
+const streamIdOf = (id: StreamIdentity): string =>
+  typeof id === 'string' ? id : id.value;

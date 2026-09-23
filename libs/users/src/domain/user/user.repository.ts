@@ -1,5 +1,5 @@
-import type { Email } from './vo/email';
 import type { User } from './user.entity';
+import type { Email } from './vo/email';
 import type { UserId } from './vo/user-id';
 
 export abstract class UserRepository {

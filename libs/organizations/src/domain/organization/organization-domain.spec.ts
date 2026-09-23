@@ -1,13 +1,18 @@
+import type { AnyMikroORM } from '@nestposts/database/testing';
 import { ref } from '@mikro-orm/core';
-import { type AnyMikroORM, metadataOnly } from '@nestposts/database/testing';
+import { AuthUser } from '@nestposts/auth/domain/auth/auth-user.entity';
+import { metadataOnly } from '@nestposts/database/testing';
 import { CredentialId } from '@nestposts/users/domain/user/vo/credential-id';
 import { Email } from '@nestposts/users/domain/user/vo/email';
-import { AuthUser } from '@nestposts/auth/domain/auth/auth-user.entity';
+
 import { OrganizationEntities } from '../../infrastructure/persistence/organization-entities';
 import { Invitation } from './invitation.entity';
 import { Member } from './member.entity';
 import { Organization } from './organization.entity';
-import { ACCEPTED_INVITATION, PENDING_INVITATION } from './schemas/invitation-status.schema';
+import {
+  ACCEPTED_INVITATION,
+  PENDING_INVITATION,
+} from './schemas/invitation-status.schema';
 import { InvitationId } from './vo/invitation-id';
 import { InvitationStatus } from './vo/invitation-status';
 import { MemberId } from './vo/member-id';
@@ -30,7 +35,11 @@ describe('the organization domain', () => {
 
   afterAll(() => orm.close(true));
 
-  const aMember = (role: string, organization = ORGANIZATION, user = CREDENTIAL): Member => {
+  const aMember = (
+    role: string,
+    organization = ORGANIZATION,
+    user = CREDENTIAL,
+  ): Member => {
     const member = new Member();
     member.id = MemberId.parse('member_1');
     member.role = MemberRole.parse(role);
@@ -108,12 +117,16 @@ describe('the organization domain', () => {
 
     it('pending and unexpired is open', () => {
       expect(anInvitation(PENDING_INVITATION, later).isOpen(NOW)).toBe(true);
-      expect(anInvitation(PENDING_INVITATION, later).hasExpired(NOW)).toBe(false);
+      expect(anInvitation(PENDING_INVITATION, later).hasExpired(NOW)).toBe(
+        false,
+      );
     });
 
     it('pending and past its date is expired, and no longer open', () => {
       expect(anInvitation(PENDING_INVITATION, earlier).isOpen(NOW)).toBe(false);
-      expect(anInvitation(PENDING_INVITATION, earlier).hasExpired(NOW)).toBe(true);
+      expect(anInvitation(PENDING_INVITATION, earlier).hasExpired(NOW)).toBe(
+        true,
+      );
     });
 
     it('a settled invitation is neither open nor expired, whatever its date says', () => {
@@ -127,8 +140,12 @@ describe('the organization domain', () => {
     it('the address it was sent to compares as a value, normalization included', () => {
       const invitation = anInvitation(PENDING_INVITATION, later);
 
-      expect(invitation.wasSentTo(Email.parse('  MANUEL@example.com '))).toBe(true);
-      expect(invitation.wasSentTo(Email.parse('outro@example.com'))).toBe(false);
+      expect(invitation.wasSentTo(Email.parse('  MANUEL@example.com '))).toBe(
+        true,
+      );
+      expect(invitation.wasSentTo(Email.parse('outro@example.com'))).toBe(
+        false,
+      );
     });
   });
 });

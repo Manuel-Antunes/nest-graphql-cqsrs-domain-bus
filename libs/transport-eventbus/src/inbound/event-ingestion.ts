@@ -1,14 +1,17 @@
+import type { AsyncContext } from '@nestjs/cqrs';
 import { EntityManager } from '@mikro-orm/core';
 import { Injectable, Logger, Optional } from '@nestjs/common';
-import { type AsyncContext, EventBus } from '@nestjs/cqrs';
+import { EventBus } from '@nestjs/cqrs';
+import { UnitOfWork } from '@nestposts/cqsrs';
 import { inRequestContext } from '@nestposts/database';
+
+import type { Ingestion } from '../outbound/transport-metadata';
+import { ingestionOf } from '../outbound/transport-metadata';
+import { EventLog } from '../persistence/event-log/event-log';
 import { MessageInbox } from '../persistence/message-inbox';
 import { RequestContextCodec } from '../request-context';
-import { type Ingestion, ingestionOf } from '../outbound/transport-metadata';
 import { ingesting } from '../tracing';
 import { TransportIdentity } from '../transport-identity';
-import { UnitOfWork } from '@nestposts/cqsrs';
-import { EventLog } from '../persistence/event-log/event-log';
 
 /**
  * **The inbound half: an event that arrived becomes an event of this process, exactly once.**
@@ -90,7 +93,10 @@ export class EventIngestion {
        * and the Lambda freeze is back.
        */
       const context = this.context.decode(message);
-      await UnitOfWork.run(() => this.ingestOnce(event, message, context), context);
+      await UnitOfWork.run(
+        () => this.ingestOnce(event, message, context),
+        context,
+      );
     } catch (failure) {
       this.logger.error(
         `inbox ← failed to ingest ${event?.constructor?.name ?? typeof event}; it will be REJECTED`,
@@ -122,7 +128,13 @@ export class EventIngestion {
   ): Promise<void> {
     await inRequestContext(this.em, async () => {
       const ingested = await this.em.transactional(async () => {
-        if (!(await this.inbox.register(message.identifier, message.messageType, message.origin))) {
+        if (
+          !(await this.inbox.register(
+            message.identifier,
+            message.messageType,
+            message.origin,
+          ))
+        ) {
           this.logger.log(
             `inbox ← ${message.messageType} (${message.identifier}) dropped: already ingested`,
           );

@@ -1,7 +1,9 @@
 import { EventType } from '@nestposts/platform/domain/shared/event-type';
+
+import type { EnvelopeMetadata } from '../outbound/event-envelope';
+import type { InngestEventMessage } from '../outbound/serializers/inngest-event-envelope.serializer';
 import { InngestEventEnvelopeDeserializer } from '../inbound/deserializers/inngest-event-envelope.deserializer';
 import {
-  type EnvelopeMetadata,
   EventEnvelope,
   TRANSPORT_IDENTIFIER,
   TRANSPORT_MESSAGE_TYPE,
@@ -10,13 +12,16 @@ import {
 } from '../outbound/event-envelope';
 import {
   CORRELATION_SESSION,
-  type InngestEventMessage,
   InngestEventEnvelopeSerializer,
 } from '../outbound/serializers/inngest-event-envelope.serializer';
 import { CORRELATION_ID } from '../request-context';
 import { InngestClientProxy } from './inngest-client.proxy';
 import { InngestRecordBuilder } from './inngest-record.builder';
-import { MAX_TRIGGERS, inngestFunctionId, inngestTriggers } from './inngest-triggers';
+import {
+  inngestFunctionId,
+  inngestTriggers,
+  MAX_TRIGGERS,
+} from './inngest-triggers';
 
 const ROUTING_KEY = 'posts.PostCreated.p-1';
 
@@ -41,7 +46,10 @@ const metadata: EnvelopeMetadata = {
   'x-tenant': 'acme',
 };
 
-const publish = (data: object, envelopeMetadata: EnvelopeMetadata = metadata): InngestEventMessage =>
+const publish = (
+  data: object,
+  envelopeMetadata: EnvelopeMetadata = metadata,
+): InngestEventMessage =>
   new InngestEventEnvelopeSerializer().serialize({
     pattern: ROUTING_KEY,
     data: new EventEnvelope(data, envelopeMetadata),
@@ -62,11 +70,19 @@ const proxyOn = (inngest: FakeInngest) =>
     serializer: new InngestEventEnvelopeSerializer(),
   });
 
-const emit = async (inngest: FakeInngest, data: unknown): Promise<Record<string, unknown>> => {
+const emit = async (
+  inngest: FakeInngest,
+  data: unknown,
+): Promise<Record<string, unknown>> => {
   const proxy = proxyOn(inngest);
-  await (proxy as unknown as {
-    dispatchEvent: (packet: { pattern: string; data: unknown }) => Promise<void>;
-  }).dispatchEvent({ pattern: ROUTING_KEY, data });
+  await (
+    proxy as unknown as {
+      dispatchEvent: (packet: {
+        pattern: string;
+        data: unknown;
+      }) => Promise<void>;
+    }
+  ).dispatchEvent({ pattern: ROUTING_KEY, data });
   return inngest.sent[0]!;
 };
 
@@ -85,7 +101,9 @@ describe('the Inngest wire', () => {
     });
 
     it('groups the whole request under one session, from the correlation id', () => {
-      expect(publish({ postId: 'p-1' }).meta?.sessions).toEqual({ [CORRELATION_SESSION]: 'corr-1' });
+      expect(publish({ postId: 'p-1' }).meta?.sessions).toEqual({
+        [CORRELATION_SESSION]: 'corr-1',
+      });
     });
 
     it('leaves the sessions out when there is no correlation to group by', () => {
@@ -105,14 +123,23 @@ describe('the Inngest wire', () => {
       ) as { pattern: string; data: EventEnvelope<Record<string, unknown>> };
 
       expect(incoming.pattern).toBe('posts.#');
-      expect(incoming.data.data).toMatchObject({ postId: 'p-1', title: 'Nest' });
-      expect(incoming.data.metadata).toMatchObject({ 'x-tenant': 'acme', [CORRELATION_ID]: 'corr-1' });
+      expect(incoming.data.data).toMatchObject({
+        postId: 'p-1',
+        title: 'Nest',
+      });
+      expect(incoming.data.metadata).toMatchObject({
+        'x-tenant': 'acme',
+        [CORRELATION_ID]: 'corr-1',
+      });
     });
   });
 
   describe('a record, which is how a caller says more', () => {
     it('sends no id when nothing asked for one: every send is a fresh run', async () => {
-      const sent = await emit(new FakeInngest(), new EventEnvelope({ postId: 'p-1' }, metadata));
+      const sent = await emit(
+        new FakeInngest(),
+        new EventEnvelope({ postId: 'p-1' }, metadata),
+      );
 
       expect(sent.id).toBeUndefined();
     });
@@ -153,7 +180,10 @@ describe('the Inngest wire', () => {
       );
 
       expect(sent.meta).toEqual({
-        sessions: { [CORRELATION_SESSION]: 'corr-1', conversation_id: 'conv-1' },
+        sessions: {
+          [CORRELATION_SESSION]: 'corr-1',
+          conversation_id: 'conv-1',
+        },
       });
     });
 
@@ -173,16 +203,23 @@ describe('the Inngest wire', () => {
 
       const triggers = inngestTriggers(`${SPEC_NAMESPACE}.#`);
 
-      expect(triggers).toEqual([`${SPEC_NAMESPACE}.Born`, `${SPEC_NAMESPACE}.Completed`]);
+      expect(triggers).toEqual([
+        `${SPEC_NAMESPACE}.Born`,
+        `${SPEC_NAMESPACE}.Completed`,
+      ]);
       expect(triggers.length).toBeLessThanOrEqual(MAX_TRIGGERS);
     });
 
     it('drops the aggregate segment of a single type, which is the wildcard a queue would match', () => {
-      expect(inngestTriggers('posts.PostCreated.*')).toEqual(['posts.PostCreated']);
+      expect(inngestTriggers('posts.PostCreated.*')).toEqual([
+        'posts.PostCreated',
+      ]);
     });
 
     it('leaves a literal name alone', () => {
-      expect(inngestTriggers('posts.PostCreated')).toEqual(['posts.PostCreated']);
+      expect(inngestTriggers('posts.PostCreated')).toEqual([
+        'posts.PostCreated',
+      ]);
     });
 
     it('answers nothing for a namespace nobody registered, which is what makes the warning possible', () => {
@@ -191,7 +228,9 @@ describe('the Inngest wire', () => {
 
     it('derives a function id a URL can carry', () => {
       expect(inngestFunctionId('posts.#')).toBe('posts');
-      expect(inngestFunctionId('posts.PostCreated.*')).toBe('posts-postcreated');
+      expect(inngestFunctionId('posts.PostCreated.*')).toBe(
+        'posts-postcreated',
+      );
     });
   });
 });

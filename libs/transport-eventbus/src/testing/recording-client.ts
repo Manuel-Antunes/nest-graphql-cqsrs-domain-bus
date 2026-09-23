@@ -1,9 +1,10 @@
-import {
-  ClientProxy,
-  type ProducerSerializer,
-  type ReadPacket,
-  type WritePacket,
+import type {
+  ProducerSerializer,
+  ReadPacket,
+  WritePacket,
 } from '@nestjs/microservices';
+import { ClientProxy } from '@nestjs/microservices';
+
 import { MemoryEventEnvelopeSerializer } from '../outbound/serializers/memory-event-envelope.serializer';
 
 /** One message as it left: the pattern it went out under, and what went with it. */
@@ -31,7 +32,9 @@ export class RecordingClient extends ClientProxy {
    */
   constructor(options: { serializer?: ProducerSerializer } = {}) {
     super();
-    this.initializeSerializer({ serializer: options.serializer ?? new MemoryEventEnvelopeSerializer() });
+    this.initializeSerializer({
+      serializer: options.serializer ?? new MemoryEventEnvelopeSerializer(),
+    });
   }
 
   async connect(): Promise<void> {
@@ -46,14 +49,24 @@ export class RecordingClient extends ClientProxy {
     return this.sent as T;
   }
 
-  protected publish(_packet: ReadPacket, callback: (packet: WritePacket) => void): () => void {
-    callback({ err: new Error('RecordingClient records events; it does not answer a send()') });
+  protected publish(
+    _packet: ReadPacket,
+    callback: (packet: WritePacket) => void,
+  ): () => void {
+    callback({
+      err: new Error(
+        'RecordingClient records events; it does not answer a send()',
+      ),
+    });
     return () => undefined;
   }
 
   protected async dispatchEvent<T = unknown>(packet: ReadPacket): Promise<T> {
     const serialized = (await this.serializer.serialize(packet)) as ReadPacket;
-    this.sent.push({ pattern: String(serialized.pattern ?? packet.pattern), data: serialized.data });
+    this.sent.push({
+      pattern: String(serialized.pattern ?? packet.pattern),
+      data: serialized.data,
+    });
     return undefined as T;
   }
 

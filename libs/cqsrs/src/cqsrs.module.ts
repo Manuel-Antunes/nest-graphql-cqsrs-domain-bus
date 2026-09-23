@@ -1,13 +1,18 @@
-import {
-  type DynamicModule,
-  type InjectionToken,
-  Module,
-  type OnApplicationBootstrap,
-  type Provider,
+import type {
+  DynamicModule,
+  InjectionToken,
+  OnApplicationBootstrap,
+  Provider,
 } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { CqrsModule, EventPublisher } from '@nestjs/cqrs';
+
+import type {
+  CqsrsModuleAsyncOptions,
+  CqsrsModuleOptions,
+  CqsrsModuleOptionsFactory,
+} from './interfaces/index';
 import { CQSRS_MODULE_OPTIONS } from './constants';
-import type { CqsrsModuleAsyncOptions, CqsrsModuleOptions, CqsrsModuleOptionsFactory } from './interfaces/index';
 import { SubscriptionExplorerService } from './services/subscription-explorer.service';
 import { SubscriptionBus } from './subscription-bus';
 import { UnitOfWorkCommands } from './unit-of-work-commands';
@@ -86,11 +91,7 @@ export class AggregatePublisherModule {
  * `SubscriptionBus` without the CQRS buses.
  */
 @Module({
-  providers: [
-    SubscriptionBus,
-    SubscriptionExplorerService,
-    UnitOfWorkCommands,
-  ],
+  providers: [SubscriptionBus, SubscriptionExplorerService, UnitOfWorkCommands],
   exports: [SubscriptionBus],
 })
 export class CqsrsModule implements OnApplicationBootstrap {
@@ -100,9 +101,7 @@ export class CqsrsModule implements OnApplicationBootstrap {
       module: CqsrsModule,
       global: true,
       imports: [...publisher, CqrsModule.forRoot(options)],
-      providers: [
-        { provide: CQSRS_MODULE_OPTIONS, useValue: options ?? {} },
-      ],
+      providers: [{ provide: CQSRS_MODULE_OPTIONS, useValue: options ?? {} }],
       exports: [...publisher, CqrsModule],
     };
   }
@@ -131,7 +130,10 @@ export class CqsrsModule implements OnApplicationBootstrap {
     const optionsModule: DynamicModule = {
       module: CqsrsOptionsModule,
       imports: options.imports ?? [],
-      providers: [...this.createAsyncProviders(options), ...(options.extraProviders ?? [])],
+      providers: [
+        ...this.createAsyncProviders(options),
+        ...(options.extraProviders ?? []),
+      ],
       exports: [CQSRS_MODULE_OPTIONS],
     };
     return {
@@ -150,19 +152,28 @@ export class CqsrsModule implements OnApplicationBootstrap {
     };
   }
 
-  private static createAsyncProviders(options: CqsrsModuleAsyncOptions): Provider[] {
+  private static createAsyncProviders(
+    options: CqsrsModuleAsyncOptions,
+  ): Provider[] {
     if (options.useValue) {
       return [{ provide: CQSRS_MODULE_OPTIONS, useValue: options.useValue }];
     }
     if (options.useFactory) {
-      return [{ provide: CQSRS_MODULE_OPTIONS, useFactory: options.useFactory, inject: options.inject ?? [] }];
+      return [
+        {
+          provide: CQSRS_MODULE_OPTIONS,
+          useFactory: options.useFactory,
+          inject: options.inject ?? [],
+        },
+      ];
     }
     if (options.useClass) {
       return [
         { provide: options.useClass, useClass: options.useClass },
         {
           provide: CQSRS_MODULE_OPTIONS,
-          useFactory: (factory: CqsrsModuleOptionsFactory) => factory.createCqsrsOptions(),
+          useFactory: (factory: CqsrsModuleOptionsFactory) =>
+            factory.createCqsrsOptions(),
           inject: [options.useClass],
         },
       ];
@@ -171,12 +182,15 @@ export class CqsrsModule implements OnApplicationBootstrap {
       return [
         {
           provide: CQSRS_MODULE_OPTIONS,
-          useFactory: (factory: CqsrsModuleOptionsFactory) => factory.createCqsrsOptions(),
+          useFactory: (factory: CqsrsModuleOptionsFactory) =>
+            factory.createCqsrsOptions(),
           inject: [options.useExisting],
         },
       ];
     }
-    throw new Error('Invalid CqsrsModuleAsyncOptions configuration. Provide useValue, useFactory, useClass, or useExisting.');
+    throw new Error(
+      'Invalid CqsrsModuleAsyncOptions configuration. Provide useValue, useFactory, useClass, or useExisting.',
+    );
   }
 
   constructor(
@@ -189,6 +203,9 @@ export class CqsrsModule implements OnApplicationBootstrap {
   }
 }
 
-const aggregatePublisherModule = (publisher?: InjectionToken): DynamicModule[] =>
-  publisher && publisher !== EventPublisher ? [AggregatePublisherModule.bind(publisher)] : [];
-
+const aggregatePublisherModule = (
+  publisher?: InjectionToken,
+): DynamicModule[] =>
+  publisher && publisher !== EventPublisher
+    ? [AggregatePublisherModule.bind(publisher)]
+    : [];

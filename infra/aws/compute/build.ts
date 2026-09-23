@@ -15,7 +15,11 @@
  * nothing moved; a fingerprint would be thirty lines that are wrong the first time somebody adds a
  * directory to the workspace.
  */
-const APPLICATIONS = ['@nestposts/posts-api', '@nestposts/tagging', '@nestposts/migrator'];
+const APPLICATIONS = [
+  '@nestposts/posts-api',
+  '@nestposts/tagging',
+  '@nestposts/migrator',
+];
 
 /**
  * **The three applications the functions point at, and not the whole workspace.**

@@ -1,11 +1,12 @@
 import {
   BaseEntity as OrmBaseEntity,
-  ReferenceKind,
-  Utils,
   ref,
+  ReferenceKind,
   rel,
-} from "@mikro-orm/core";
-import { WithTimestamps } from "./timestamps/timestamps";
+  Utils,
+} from '@mikro-orm/core';
+
+import { WithTimestamps } from './timestamps/timestamps';
 
 export interface EntityIdentity {
   equals(other: unknown): boolean;
@@ -34,7 +35,7 @@ const TO_MANY: ReadonlyArray<ReferenceKind> = [
 
 function mappedProperties(entity: object): ReadonlyMap<string, MappedProperty> {
   const props = (entity as MappedEntity).__meta?.props ?? [];
-  return new Map(props.map(prop => [prop.name, prop]));
+  return new Map(props.map((prop) => [prop.name, prop]));
 }
 
 function asRelation(prop: MappedProperty, value: unknown): unknown {
@@ -79,6 +80,8 @@ export abstract class BaseEntity<
   }
 
   private sameKindAs(other: BaseEntity): boolean {
-    return this instanceof other.constructor || other instanceof this.constructor;
+    return (
+      this instanceof other.constructor || other instanceof this.constructor
+    );
   }
 }

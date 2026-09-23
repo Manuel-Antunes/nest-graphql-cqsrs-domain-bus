@@ -1,4 +1,6 @@
-import { map, type Observable } from 'rxjs';
+import type { Observable } from 'rxjs';
+import { map } from 'rxjs';
+
 import type { Subscription } from '../classes/subscription';
 import type { ISubscriptionBus } from '../interfaces/subscription-bus.interface';
 import { observableToAsyncIterable } from './observable-to-async-iterable';

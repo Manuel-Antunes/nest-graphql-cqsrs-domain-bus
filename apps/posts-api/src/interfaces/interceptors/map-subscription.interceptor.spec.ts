@@ -1,6 +1,7 @@
 import type { Mapper, ModelIdentifier } from '@automapper/core';
 import type { CallHandler, ExecutionContext } from '@nestjs/common';
 import { lastValueFrom, of } from 'rxjs';
+
 import { MapSubscriptionInterceptor } from './map-subscription.interceptor';
 
 describe('MapSubscriptionInterceptor', () => {
@@ -95,7 +96,10 @@ describe('MapSubscriptionInterceptor', () => {
         next: () => new Promise<IteratorResult<Event>>(() => {}),
         return: () => {
           closed = true;
-          return Promise.resolve({ value: undefined, done: true } as IteratorResult<Event>);
+          return Promise.resolve({
+            value: undefined,
+            done: true,
+          } as IteratorResult<Event>);
         },
         [Symbol.asyncIterator]() {
           return this;

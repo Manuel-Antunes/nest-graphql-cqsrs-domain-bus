@@ -1,11 +1,13 @@
 import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { Test, type TestingModule } from '@nestjs/testing';
+import type { TestingModule } from '@nestjs/testing';
 import { ModulesContainer } from '@nestjs/core';
+import { Test } from '@nestjs/testing';
+import { TestSchemaModule } from '@nestposts/database/testing';
 import { registeredEventTypes } from '@nestposts/platform/domain/shared/event-type';
 import { POSTS_NAMESPACE } from '@nestposts/posts/domain/post/event/posts.namespace';
 import { OutboxRouting } from '@nestposts/transport-eventbus';
-import { TestSchemaModule } from '@nestposts/database/testing';
+
 import { AppModule } from '../src/app.module';
 
 const SOURCE = join(process.cwd(), 'src');
@@ -35,7 +37,9 @@ describe('the wiring that fails silently', () => {
   let module: TestingModule;
 
   beforeAll(async () => {
-    module = await Test.createTestingModule({ imports: [AppModule, TestSchemaModule.forRoot()] }).compile();
+    module = await Test.createTestingModule({
+      imports: [AppModule, TestSchemaModule.forRoot()],
+    }).compile();
     await module.init();
   });
 
@@ -53,7 +57,9 @@ describe('the wiring that fails silently', () => {
         const listens =
           Reflect.getMetadata('__eventsHandler__', candidate) !== undefined ||
           Object.getOwnPropertyNames(candidate.prototype ?? {}).some(
-            (member) => Reflect.getMetadata('__saga__', candidate.prototype, member) !== undefined,
+            (member) =>
+              Reflect.getMetadata('__saga__', candidate.prototype, member) !==
+              undefined,
           );
         if (listens) {
           declared.push(candidate.name);

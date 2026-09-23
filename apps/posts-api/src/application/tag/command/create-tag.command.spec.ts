@@ -1,7 +1,5 @@
-import { CommandBus } from '@nestjs/cqrs';
 import type { TestingModule } from '@nestjs/testing';
-import { createCqrsTestingModule, freshEm, RecordingEvents, inRequestContext } from '../../../../test/support/cqrs-testing-module';
-import { givenATag } from '../../../../test/support/post-fixtures';
+import { CommandBus } from '@nestjs/cqrs';
 import { PostId } from '@nestposts/posts/domain/post/vo/post-id';
 import { TagCreatedEvent } from '@nestposts/posts/domain/tag/event/tag-created.event';
 import { InvalidTagException } from '@nestposts/posts/domain/tag/exception/invalid-tag.exception';
@@ -9,6 +7,14 @@ import { TagAlreadyExistsException } from '@nestposts/posts/domain/tag/exception
 import { Tag } from '@nestposts/posts/domain/tag/tag.entity';
 import { TagId } from '@nestposts/posts/domain/tag/vo/tag-id';
 import { TagName } from '@nestposts/posts/domain/tag/vo/tag-name';
+
+import {
+  createCqrsTestingModule,
+  freshEm,
+  inRequestContext,
+  RecordingEvents,
+} from '../../../../test/support/cqrs-testing-module';
+import { givenATag } from '../../../../test/support/post-fixtures';
 import { PostRequest } from '../../shared/post-request';
 import { CreateTagCommand } from './create-tag.command';
 
@@ -18,7 +24,9 @@ describe('CreateTagCommand.Handler', () => {
   let events: RecordingEvents;
 
   const execute = (command: CreateTagCommand.CreateTag) =>
-    inRequestContext(module, () => commands.execute(command, new PostRequest(PostId.generate())));
+    inRequestContext(module, () =>
+      commands.execute(command, new PostRequest(PostId.generate())),
+    );
 
   beforeEach(async () => {
     module = await createCqrsTestingModule([CreateTagCommand.Handler]);
@@ -31,15 +39,24 @@ describe('CreateTagCommand.Handler', () => {
   it('publishes TagCreated, saves the tag and returns the id', async () => {
     const id = TagId.generate();
 
-    const result = await execute(new CreateTagCommand.CreateTag(id, ' Untagged '));
+    const result = await execute(
+      new CreateTagCommand.CreateTag(id, ' Untagged '),
+    );
 
     expect(result.equals(id)).toBe(true);
-    expect(events.events).toEqual([new TagCreatedEvent(id.value, 'Untagged', expect.any(Date))]);
-    expect(await freshEm(module).findOneOrFail(Tag, { id })).toMatchObject({ id, name: TagName.parse('Untagged') });
+    expect(events.events).toEqual([
+      new TagCreatedEvent(id.value, 'Untagged', expect.any(Date)),
+    ]);
+    expect(await freshEm(module).findOneOrFail(Tag, { id })).toMatchObject({
+      id,
+      name: TagName.parse('Untagged'),
+    });
   });
 
   it('rejects a blank name without saving anything', async () => {
-    await expect(execute(new CreateTagCommand.CreateTag(TagId.generate(), '  '))).rejects.toThrow(InvalidTagException);
+    await expect(
+      execute(new CreateTagCommand.CreateTag(TagId.generate(), '  ')),
+    ).rejects.toThrow(InvalidTagException);
 
     expect(events.events).toEqual([]);
     expect(await freshEm(module).count(Tag)).toBe(0);
@@ -48,7 +65,9 @@ describe('CreateTagCommand.Handler', () => {
   it('rejects an id that already exists', async () => {
     const existing = await givenATag(module, 'dev');
 
-    await expect(execute(new CreateTagCommand.CreateTag(existing.id, 'outra'))).rejects.toThrow(TagAlreadyExistsException);
+    await expect(
+      execute(new CreateTagCommand.CreateTag(existing.id, 'outra')),
+    ).rejects.toThrow(TagAlreadyExistsException);
     expect(events.events).toEqual([]);
   });
 });

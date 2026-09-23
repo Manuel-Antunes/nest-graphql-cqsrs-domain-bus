@@ -1,4 +1,5 @@
 import type { Observable } from 'rxjs';
+
 import type { Subscription } from '../classes/subscription';
 import type { ISubscription } from './subscription.interface';
 

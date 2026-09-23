@@ -1,5 +1,6 @@
-import { defineEntity, type EntitySchema, p, UnderscoreNamingStrategy } from '@nestposts/database';
+import type { EntitySchema } from '@nestposts/database';
 import type { BetterAuthOptions } from 'better-auth';
+import { defineEntity, p, UnderscoreNamingStrategy } from '@nestposts/database';
 import { getAuthTables } from 'better-auth/db';
 
 interface AuthField {
@@ -18,7 +19,8 @@ interface AuthField {
  * about is mapped by hand instead and named in `except`, so it is mapped exactly once.
  */
 export class BetterAuthSchema {
-  private static readonly LONG_TEXT = /token|secret|key|statement|jwks|value|uri|uris|claims|metadata/i;
+  private static readonly LONG_TEXT =
+    /token|secret|key|statement|jwks|value|uri|uris|claims|metadata/i;
 
   private static readonly ID_LENGTH = 64;
 
@@ -33,10 +35,15 @@ export class BetterAuthSchema {
    * `Organization`, which is what lets a hand-mapped class be found by it.
    */
   static entityNameOf(model: string): string {
-    return BetterAuthSchema.naming.getEntityName(BetterAuthSchema.tableNameOf(model));
+    return BetterAuthSchema.naming.getEntityName(
+      BetterAuthSchema.tableNameOf(model),
+    );
   }
 
-  static define(options: BetterAuthOptions, except: readonly string[] = []): EntitySchema[] {
+  static define(
+    options: BetterAuthOptions,
+    except: readonly string[] = [],
+  ): EntitySchema[] {
     const tables = getAuthTables(options);
     const skipped = new Set(except);
 
@@ -49,10 +56,12 @@ export class BetterAuthSchema {
           properties: {
             id: p.string().primary().length(BetterAuthSchema.ID_LENGTH),
             ...Object.fromEntries(
-              Object.entries(table.fields as Record<string, AuthField>).map(([name, field]) => [
-                name,
-                BetterAuthSchema.toProperty(name, field),
-              ]),
+              Object.entries(table.fields as Record<string, AuthField>).map(
+                ([name, field]) => [
+                  name,
+                  BetterAuthSchema.toProperty(name, field),
+                ],
+              ),
             ),
           },
         }),
@@ -80,7 +89,10 @@ export class BetterAuthSchema {
       }
     })();
 
-    const named = field.fieldName && field.fieldName !== name ? base.fieldName(field.fieldName) : base;
+    const named =
+      field.fieldName && field.fieldName !== name
+        ? base.fieldName(field.fieldName)
+        : base;
     const withNullability = field.required === false ? named.nullable() : named;
     return field.unique ? withNullability.unique() : withNullability;
   }

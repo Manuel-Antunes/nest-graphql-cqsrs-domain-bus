@@ -1,11 +1,17 @@
 import 'reflect-metadata';
 
-import { type ValidationArguments, type ValidatorConstraintInterface, Validate, ValidatorConstraint } from 'class-validator';
+import type {
+  ValidationArguments,
+  ValidatorConstraintInterface,
+} from 'class-validator';
 import { Expose, Transform } from 'class-transformer';
+import { Validate, ValidatorConstraint } from 'class-validator';
 import { z } from 'zod';
 
-import { type DECORATOR_REGISTRY_TYPE, DECORATOR_REGISTRY as GLOBAL_DECORATOR_REGISTRY } from '../schemas/registries/decorators.registry';
-import { type EMBEDDED_REGISTRY_TYPE, EMBEDDED_REGISTRY } from '../schemas/registries/embedded.registry';
+import type { DECORATOR_REGISTRY_TYPE } from '../schemas/registries/decorators.registry';
+import type { EMBEDDED_REGISTRY_TYPE } from '../schemas/registries/embedded.registry';
+import { DECORATOR_REGISTRY as GLOBAL_DECORATOR_REGISTRY } from '../schemas/registries/decorators.registry';
+import { EMBEDDED_REGISTRY } from '../schemas/registries/embedded.registry';
 
 /**
  * Marks on the prototype that a class is a scalar value object. A symbol rather than an `instanceof`,
@@ -110,7 +116,9 @@ export interface ScalarValueObject<Out> {
   assertValid(): this;
 }
 
-type AnyScalarConstructor = abstract new (...args: any[]) => ScalarValueObject<any>;
+type AnyScalarConstructor = abstract new (
+  ...args: any[]
+) => ScalarValueObject<any>;
 
 /** What a scalar value object class accepts constructing from. */
 export type ScalarInput<Out, In> = In | ScalarValueObject<Out>;
@@ -149,7 +157,10 @@ export interface ScalarValueObjectStatic<
   strict: boolean;
 
   /** Constructs with validation: returns the instance or throws `ZodError`. */
-  parse<T extends AnyScalarConstructor>(this: T, value: unknown): InstanceType<T>;
+  parse<T extends AnyScalarConstructor>(
+    this: T,
+    value: unknown,
+  ): InstanceType<T>;
   /** Constructs with validation, without throwing. */
   safeParse<T extends AnyScalarConstructor>(
     this: T,
@@ -158,7 +169,10 @@ export interface ScalarValueObjectStatic<
   /** Wraps an **already validated** value, without going through the schema again. */
   wrap<T extends AnyScalarConstructor>(this: T, parsed: Out): InstanceType<T>;
   /** Type guard: is `value` an instance of this class (or of a subclass)? */
-  is<T extends AnyScalarConstructor>(this: T, value: unknown): value is InstanceType<T>;
+  is<T extends AnyScalarConstructor>(
+    this: T,
+    value: unknown,
+  ): value is InstanceType<T>;
 
   /**
    * A base **with tighter rules** — the typed way to specialize a value object.
@@ -220,7 +234,9 @@ function sameRawValue(a: unknown, b: unknown): boolean {
     return a.getTime() === b.getTime();
   }
   if (Array.isArray(a) && Array.isArray(b)) {
-    return a.length === b.length && a.every((item, i) => sameRawValue(item, b[i]));
+    return (
+      a.length === b.length && a.every((item, i) => sameRawValue(item, b[i]))
+    );
   }
   if (typeof a === 'number' && typeof b === 'number') {
     return a === b || (Number.isNaN(a) && Number.isNaN(b));
@@ -249,7 +265,9 @@ function registryDecorators(
   const decorators: Array<PropertyDecorator | ClassDecorator> = [];
   const own = registry.get(schema);
   if (own && Array.isArray(own.decorators)) {
-    decorators.push(...(own.decorators as Array<PropertyDecorator | ClassDecorator>));
+    decorators.push(
+      ...(own.decorators as Array<PropertyDecorator | ClassDecorator>),
+    );
   }
   if (registry !== GLOBAL_DECORATOR_REGISTRY) {
     const global = GLOBAL_DECORATOR_REGISTRY.get(schema);
@@ -456,7 +474,10 @@ export function ValidatedScalar<Schema extends z.ZodType<any, any>>(
     }
 
     /** The cache is non-enumerable: it must not leak into `instanceToPlain` nor into `JSON`. */
-    private cacheIssues(forValue: unknown, error: z.ZodError | undefined): void {
+    private cacheIssues(
+      forValue: unknown,
+      error: z.ZodError | undefined,
+    ): void {
       Object.defineProperty(this, ISSUE_CACHE, {
         value: { for: forValue, error },
         enumerable: false,
@@ -537,9 +558,12 @@ export function ValidatedScalar<Schema extends z.ZodType<any, any>>(
       embeddedRegistry.add(fieldSchema, { kind: 'scalar', target: VO });
 
       if (decorators.length > 0) {
-        (fieldOptions?.DECORATOR_REGISTRY ?? DECORATOR_REGISTRY).add(fieldSchema, {
-          decorators,
-        });
+        (fieldOptions?.DECORATOR_REGISTRY ?? DECORATOR_REGISTRY).add(
+          fieldSchema,
+          {
+            decorators,
+          },
+        );
       } else {
         FIELD_SCHEMA_CACHE.set(this, fieldSchema);
       }

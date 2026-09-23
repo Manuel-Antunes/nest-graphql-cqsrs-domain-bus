@@ -1,17 +1,28 @@
-import { closeTestDatabase, tableIn, testDatabase } from '@nestposts/database/testing';
 import { MikroORM, ref } from '@mikro-orm/core';
-import { Post } from '@nestposts/posts/domain/post/post.entity';
-import { PostId } from '@nestposts/posts/domain/post/vo/post-id';
-import { User } from '@nestposts/users/domain/user/user.entity';
+import {
+  closeTestDatabase,
+  tableIn,
+  testDatabase,
+} from '@nestposts/database/testing';
 import { delegateRef } from '@nestposts/platform/domain/shared/delegation/delegate';
-import { AUTHOR_ROLE, Author, Authorship } from '@nestposts/users/domain/user/author.entity';
-import { UserId } from '@nestposts/users/domain/user/vo/user-id';
-import { PostEntitySchema } from '@nestposts/posts/infrastructure/persistence/entities/post-orm.entity';
+import { SoftDeletion } from '@nestposts/platform/domain/shared/soft-delete/soft-delete';
 import { ACTIVE_FILTER } from '@nestposts/platform/infrastructure/persistence/soft-delete/soft-delete-orm.entity';
 import { SoftDeleteSubscriber } from '@nestposts/platform/infrastructure/persistence/soft-delete/soft-delete.subscriber';
+import { Post } from '@nestposts/posts/domain/post/post.entity';
+import { PostId } from '@nestposts/posts/domain/post/vo/post-id';
+import { PostEntitySchema } from '@nestposts/posts/infrastructure/persistence/entities/post-orm.entity';
 import { TagSchema } from '@nestposts/posts/infrastructure/persistence/entities/tag-orm.entity';
-import { AuthorshipEntitySchema, UserEntitySchema } from '@nestposts/users/infrastructure/persistence/entities/user-orm.entity';
-import { SoftDeletion } from '@nestposts/platform/domain/shared/soft-delete/soft-delete';
+import {
+  Author,
+  AUTHOR_ROLE,
+  Authorship,
+} from '@nestposts/users/domain/user/author.entity';
+import { User } from '@nestposts/users/domain/user/user.entity';
+import { UserId } from '@nestposts/users/domain/user/vo/user-id';
+import {
+  AuthorshipEntitySchema,
+  UserEntitySchema,
+} from '@nestposts/users/infrastructure/persistence/entities/user-orm.entity';
 
 describe('o filtro de ativos', () => {
   const T0 = new Date('2026-09-08T12:00:00.000Z');
@@ -20,9 +31,14 @@ describe('o filtro de ativos', () => {
 
   beforeAll(async () => {
     orm = await testDatabase({
-        entities: [PostEntitySchema, TagSchema, UserEntitySchema, AuthorshipEntitySchema],
-        subscribers: [new SoftDeleteSubscriber()],
-      });
+      entities: [
+        PostEntitySchema,
+        TagSchema,
+        UserEntitySchema,
+        AuthorshipEntitySchema,
+      ],
+      subscribers: [new SoftDeleteSubscriber()],
+    });
   });
 
   afterAll(() => closeTestDatabase(orm));
@@ -80,7 +96,9 @@ describe('o filtro de ativos', () => {
     const [row] = await orm.em
       .fork()
       .getConnection()
-      .execute(`select deleted_at from ${tableIn(orm, 'posts')} where id = ?`, [id.value]);
+      .execute(`select deleted_at from ${tableIn(orm, 'posts')} where id = ?`, [
+        id.value,
+      ]);
     expect(row.deleted_at).toBeTruthy();
   });
 
@@ -94,7 +112,9 @@ describe('o filtro de ativos', () => {
     await em.flush();
 
     expect(await orm.em.fork().findOne(Post, { id })).toBeNull();
-    const withDeleted = await orm.em.fork().findOne(Post, { id }, { filters: { [ACTIVE_FILTER]: false } });
+    const withDeleted = await orm.em
+      .fork()
+      .findOne(Post, { id }, { filters: { [ACTIVE_FILTER]: false } });
     expect(withDeleted?.isDeleted()).toBe(true);
     expect(withDeleted?.deletedAt).toEqual(now);
   });
@@ -109,7 +129,11 @@ describe('o filtro de ativos', () => {
     await deleting.flush();
 
     const restoring = orm.em.fork();
-    const deleted = await restoring.findOneOrFail(Post, { id }, { filters: { [ACTIVE_FILTER]: false } });
+    const deleted = await restoring.findOneOrFail(
+      Post,
+      { id },
+      { filters: { [ACTIVE_FILTER]: false } },
+    );
     deleted.restore(new Date());
     await restoring.flush();
 
@@ -129,7 +153,9 @@ describe('o filtro de ativos', () => {
     const [row] = await orm.em
       .fork()
       .getConnection()
-      .execute(`select deleted_at from ${tableIn(orm, 'posts')} where id = ?`, [id.value]);
+      .execute(`select deleted_at from ${tableIn(orm, 'posts')} where id = ?`, [
+        id.value,
+      ]);
     expect(row.deleted_at).toBeNull();
   });
 });

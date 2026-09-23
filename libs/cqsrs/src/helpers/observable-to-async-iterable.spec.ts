@@ -1,4 +1,5 @@
 import { Subject, throwError } from 'rxjs';
+
 import { observableToAsyncIterable } from './observable-to-async-iterable';
 
 describe('observableToAsyncIterable', () => {
@@ -56,7 +57,9 @@ describe('observableToAsyncIterable', () => {
   });
 
   it('propagates the error of the observable to the consumer', async () => {
-    const iterator = observableToAsyncIterable(throwError(() => new Error('boom')));
+    const iterator = observableToAsyncIterable(
+      throwError(() => new Error('boom')),
+    );
 
     await expect(iterator.next()).rejects.toThrow('boom');
   });
@@ -87,7 +90,9 @@ describe('observableToAsyncIterable', () => {
     const iterator = observableToAsyncIterable(source);
     expect(source.observed).toBe(true);
 
-    await expect(iterator.throw?.(new Error('abortado'))).rejects.toThrow('abortado');
+    await expect(iterator.throw?.(new Error('abortado'))).rejects.toThrow(
+      'abortado',
+    );
 
     expect(source.observed).toBe(false);
     expect(await iterator.next()).toEqual({ value: undefined, done: true });
@@ -98,7 +103,9 @@ describe('observableToAsyncIterable', () => {
     const iterator = observableToAsyncIterable(source);
     const pending = iterator.next();
 
-    await expect(iterator.throw?.(new Error('abortado'))).rejects.toThrow('abortado');
+    await expect(iterator.throw?.(new Error('abortado'))).rejects.toThrow(
+      'abortado',
+    );
 
     expect(await pending).toEqual({ value: undefined, done: true });
   });

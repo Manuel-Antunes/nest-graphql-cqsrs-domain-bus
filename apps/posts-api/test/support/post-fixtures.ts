@@ -1,19 +1,35 @@
 import type { TestingModule } from '@nestjs/testing';
+import { delegateRef } from '@nestposts/platform/domain/shared/delegation/delegate';
 import { Post } from '@nestposts/posts/domain/post/post.entity';
 import { PostId } from '@nestposts/posts/domain/post/vo/post-id';
-import { DEFAULT_TAG_ID, DEFAULT_TAG_NAME, Tag } from '@nestposts/posts/domain/tag/tag.entity';
+import {
+  DEFAULT_TAG_ID,
+  DEFAULT_TAG_NAME,
+  Tag,
+} from '@nestposts/posts/domain/tag/tag.entity';
 import { TagId } from '@nestposts/posts/domain/tag/vo/tag-id';
-import { delegateRef } from '@nestposts/platform/domain/shared/delegation/delegate';
-import { AUTHOR_ROLE, Author, Authorship } from '@nestposts/users/domain/user/author.entity';
+import {
+  Author,
+  AUTHOR_ROLE,
+  Authorship,
+} from '@nestposts/users/domain/user/author.entity';
 import { User } from '@nestposts/users/domain/user/user.entity';
 import { UserId } from '@nestposts/users/domain/user/vo/user-id';
+
 import { freshEm } from './cqrs-testing-module';
 
 export const T0 = new Date('2026-09-08T12:00:00.000Z');
 
 export async function givenAPost(
   module: TestingModule,
-  overrides: { id?: PostId; title?: string; content?: string; author?: Author; createdAt?: Date; tags?: Tag[] } = {},
+  overrides: {
+    id?: PostId;
+    title?: string;
+    content?: string;
+    author?: Author;
+    createdAt?: Date;
+    tags?: Tag[];
+  } = {},
 ): Promise<Post> {
   const em = freshEm(module);
   const at = overrides.createdAt ?? T0;
@@ -21,7 +37,10 @@ export async function givenAPost(
   const authorship = await em.findOneOrFail(Authorship, { user: author.id });
   const post = Post.create(
     overrides.id ?? PostId.generate(),
-    { title: overrides.title ?? 'Nest + GraphQL', content: overrides.content ?? 'oi' },
+    {
+      title: overrides.title ?? 'Nest + GraphQL',
+      content: overrides.content ?? 'oi',
+    },
     delegateRef(Author, authorship),
     author.name,
     at,
@@ -56,7 +75,11 @@ export async function givenAUser(
   return user;
 }
 
-function givenAUserWith(email: string, name: string, roles: readonly string[]): User {
+function givenAUserWith(
+  email: string,
+  name: string,
+  roles: readonly string[],
+): User {
   const user = User.register(UserId.generate(), { email, name }, roles, T0);
   user.uncommit();
   return user;
@@ -66,7 +89,11 @@ export async function givenTheDefaultTag(module: TestingModule): Promise<Tag> {
   return givenATag(module, DEFAULT_TAG_NAME, TagId.parse(DEFAULT_TAG_ID));
 }
 
-export async function givenATag(module: TestingModule, name = 'Untagged', id: TagId = TagId.generate()): Promise<Tag> {
+export async function givenATag(
+  module: TestingModule,
+  name = 'Untagged',
+  id: TagId = TagId.generate(),
+): Promise<Tag> {
   const tag = Tag.create(id, name, T0);
   tag.uncommit();
   await freshEm(module).persist(tag).flush();

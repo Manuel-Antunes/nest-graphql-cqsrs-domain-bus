@@ -3,5 +3,8 @@ import { Migration20260922172518_unify_event_log } from './Migration202609221725
 
 export const taggingMigrations = [
   { name: 'Migration20260921214757_init', class: Migration20260921214757_init },
-  { name: 'Migration20260922172518_unify_event_log', class: Migration20260922172518_unify_event_log },
+  {
+    name: 'Migration20260922172518_unify_event_log',
+    class: Migration20260922172518_unify_event_log,
+  },
 ];

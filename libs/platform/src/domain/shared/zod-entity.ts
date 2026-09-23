@@ -8,7 +8,9 @@ export function ZodEntity<T extends BaseEntity, Schema extends ZodType>(
   klass: Type<T>,
   schema: Schema,
   invalid: (error: ZodError) => Error = (error) =>
-    new ValidationError(`Validation failed: ${error.message}`, { cause: error }),
+    new ValidationError(`Validation failed: ${error.message}`, {
+      cause: error,
+    }),
 ) {
   const originalValidate = klass.prototype.validate;
   klass.prototype.validate = function (this: T): void {

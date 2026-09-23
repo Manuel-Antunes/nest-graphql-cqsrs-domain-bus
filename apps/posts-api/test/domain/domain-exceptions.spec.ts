@@ -1,11 +1,10 @@
-import { z } from 'zod';
+import { AlreadyDeletedException } from '@nestposts/platform/domain/shared/soft-delete/already-deleted.exception';
+import { NotDeletedException } from '@nestposts/platform/domain/shared/soft-delete/not-deleted.exception';
+import { InvalidPostException } from '@nestposts/posts/domain/post/exception/invalid-post.exception';
 import { PostAlreadyExistsException } from '@nestposts/posts/domain/post/exception/post-already-exists.exception';
 import { PostNotFoundException } from '@nestposts/posts/domain/post/exception/post-not-found.exception';
 import { PostNotWrittenByException } from '@nestposts/posts/domain/post/exception/post-not-written-by.exception';
-import { InvalidPostException } from '@nestposts/posts/domain/post/exception/invalid-post.exception';
 import { PostId } from '@nestposts/posts/domain/post/vo/post-id';
-import { AlreadyDeletedException } from '@nestposts/platform/domain/shared/soft-delete/already-deleted.exception';
-import { NotDeletedException } from '@nestposts/platform/domain/shared/soft-delete/not-deleted.exception';
 import { InvalidTagException } from '@nestposts/posts/domain/tag/exception/invalid-tag.exception';
 import { TagAlreadyExistsException } from '@nestposts/posts/domain/tag/exception/tag-already-exists.exception';
 import { TagNotFoundException } from '@nestposts/posts/domain/tag/exception/tag-not-found.exception';
@@ -13,6 +12,7 @@ import { TagId } from '@nestposts/posts/domain/tag/vo/tag-id';
 import { InvalidUserException } from '@nestposts/users/domain/user/exception/invalid-user.exception';
 import { NotAnAuthorException } from '@nestposts/users/domain/user/exception/not-an-author.exception';
 import { UserId } from '@nestposts/users/domain/user/vo/user-id';
+import { z } from 'zod';
 
 describe('exceções do domínio', () => {
   const postId = PostId.parse('0c1ee4d8-9b0d-4a8a-9d5f-2b1a5e7c3f10');
@@ -41,15 +41,21 @@ describe('exceções do domínio', () => {
       const error = new PostNotWrittenByException(postId, userId);
 
       expect(error.name).toBe('PostNotWrittenByException');
-      expect(error.message).toBe(`post ${postId.value} não foi escrito por ${userId.value}`);
+      expect(error.message).toBe(
+        `post ${postId.value} não foi escrito por ${userId.value}`,
+      );
       expect(error.postId).toBe(postId);
       expect(error.userId).toBe(userId);
     });
 
     it('InvalidPost nomeia a invariante e guarda o ZodError como causa', () => {
-      const result = z.object({ title: z.string().min(1, 'title não pode ser vazio') }).safeParse({ title: '' });
+      const result = z
+        .object({ title: z.string().min(1, 'title não pode ser vazio') })
+        .safeParse({ title: '' });
 
-      const error = new InvalidPostException('post inválido', { cause: result.error });
+      const error = new InvalidPostException('post inválido', {
+        cause: result.error,
+      });
 
       expect(error).toBeInstanceOf(InvalidPostException);
       expect(error.name).toBe('InvalidPostException');
@@ -60,16 +66,27 @@ describe('exceções do domínio', () => {
 
   describe('Tag', () => {
     it('TagNotFound e TagAlreadyExists nomeiam o id', () => {
-      expect(new TagNotFoundException(tagId).message).toBe(`tag ${tagId.value} não existe`);
+      expect(new TagNotFoundException(tagId).message).toBe(
+        `tag ${tagId.value} não existe`,
+      );
       expect(new TagNotFoundException(tagId).tagId).toBe(tagId);
-      expect(new TagAlreadyExistsException(tagId).message).toBe(`tag ${tagId.value} já existe`);
-      expect(new TagAlreadyExistsException(tagId).name).toBe('TagAlreadyExistsException');
+      expect(new TagAlreadyExistsException(tagId).message).toBe(
+        `tag ${tagId.value} já existe`,
+      );
+      expect(new TagAlreadyExistsException(tagId).name).toBe(
+        'TagAlreadyExistsException',
+      );
     });
 
     it('InvalidTag guarda as issues na causa', () => {
-      const result = z.string().min(1, 'nome da tag não pode ser vazio').safeParse('');
+      const result = z
+        .string()
+        .min(1, 'nome da tag não pode ser vazio')
+        .safeParse('');
 
-      const error = new InvalidTagException('nome de tag inválido', { cause: result.error });
+      const error = new InvalidTagException('nome de tag inválido', {
+        cause: result.error,
+      });
 
       expect(error.message).toBe('nome de tag inválido');
       expect(error.cause).toBe(result.error);
@@ -81,23 +98,31 @@ describe('exceções do domínio', () => {
       const error = new NotAnAuthorException(userId);
 
       expect(error.name).toBe('NotAnAuthorException');
-      expect(error.message).toBe(`user ${userId.value} não é autor: não escreve posts`);
+      expect(error.message).toBe(
+        `user ${userId.value} não é autor: não escreve posts`,
+      );
       expect(error.userId).toBe(userId);
     });
 
     it('NotAnAuthor sem id não diz qual dos dois casos foi', () => {
       const error = new NotAnAuthorException();
 
-      expect(error.message).toBe('o autor informado não existe ou não pode escrever');
+      expect(error.message).toBe(
+        'o autor informado não existe ou não pode escrever',
+      );
       expect(error.message).not.toContain(userId.value);
       expect(error.userId).toBeUndefined();
     });
 
     it('InvalidUser aceita mensagem direta e, quando há, a causa que a originou', () => {
-      const result = z.object({ email: z.email('email inválido') }).safeParse({ email: 'x' });
+      const result = z
+        .object({ email: z.email('email inválido') })
+        .safeParse({ email: 'x' });
 
       const doDominio = new InvalidUserException('promoção impossível');
-      const doParse = new InvalidUserException('user inválido', { cause: result.error });
+      const doParse = new InvalidUserException('user inválido', {
+        cause: result.error,
+      });
 
       expect(doDominio.message).toBe('promoção impossível');
       expect(doDominio.name).toBe('InvalidUserException');

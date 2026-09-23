@@ -1,21 +1,33 @@
 import type { TestingModule } from '@nestjs/testing';
-import { createCqrsTestingModule, freshEm, inRequestContext } from '../../../../test/support/cqrs-testing-module';
-import { givenAPost, givenTheDefaultTag } from '../../../../test/support/post-fixtures';
 import { PostCreatedEvent } from '@nestposts/posts/domain/post/event/post-created.event';
 import { Post } from '@nestposts/posts/domain/post/post.entity';
 import { PostId } from '@nestposts/posts/domain/post/vo/post-id';
-import { DEFAULT_TAG_ID, DEFAULT_TAG_NAME, Tag } from '@nestposts/posts/domain/tag/tag.entity';
+import {
+  DEFAULT_TAG_ID,
+  DEFAULT_TAG_NAME,
+  Tag,
+} from '@nestposts/posts/domain/tag/tag.entity';
 import { TagId } from '@nestposts/posts/domain/tag/vo/tag-id';
-import { UserId } from '@nestposts/users/domain/user/vo/user-id';
 import {
   EventEnvelope,
+  markIngested,
   TRANSPORT_IDENTIFIER,
   TRANSPORT_MESSAGE_TYPE,
   TRANSPORT_ORIGIN,
   TRANSPORT_TAGS,
   TRANSPORT_TIMESTAMP,
-  markIngested,
 } from '@nestposts/transport-eventbus';
+import { UserId } from '@nestposts/users/domain/user/vo/user-id';
+
+import {
+  createCqrsTestingModule,
+  freshEm,
+  inRequestContext,
+} from '../../../../test/support/cqrs-testing-module';
+import {
+  givenAPost,
+  givenTheDefaultTag,
+} from '../../../../test/support/post-fixtures';
 import { ProjectPostCompletion } from './project-post-completion.projection';
 
 describe('ProjectPostCompletion', () => {
@@ -24,7 +36,9 @@ describe('ProjectPostCompletion', () => {
 
   const completionOf = (
     post: { id: PostId; author: { id: { value: string } } },
-    tags: { tagId: string; name: string }[] = [{ tagId: DEFAULT_TAG_ID, name: DEFAULT_TAG_NAME }],
+    tags: { tagId: string; name: string }[] = [
+      { tagId: DEFAULT_TAG_ID, name: DEFAULT_TAG_NAME },
+    ],
   ) =>
     new PostCreatedEvent(
       post.id.value,
@@ -51,7 +65,13 @@ describe('ProjectPostCompletion', () => {
   };
 
   const reload = (postId: PostId) =>
-    inRequestContext(module, () => freshEm(module).findOneOrFail(Post, { id: postId }, { populate: ['tags'] }));
+    inRequestContext(module, () =>
+      freshEm(module).findOneOrFail(
+        Post,
+        { id: postId },
+        { populate: ['tags'] },
+      ),
+    );
 
   beforeEach(async () => {
     module = await createCqrsTestingModule([ProjectPostCompletion]);
@@ -97,12 +117,18 @@ describe('ProjectPostCompletion', () => {
     const unknown = TagId.generate();
 
     await projection.handle(
-      fromAnotherService(completionOf(post, [{ tagId: unknown.value, name: 'decidida lá' }])),
+      fromAnotherService(
+        completionOf(post, [{ tagId: unknown.value, name: 'decidida lá' }]),
+      ),
     );
 
-    const tag = await inRequestContext(module, () => freshEm(module).findOneOrFail(Tag, { id: unknown }));
+    const tag = await inRequestContext(module, () =>
+      freshEm(module).findOneOrFail(Tag, { id: unknown }),
+    );
     expect(tag.name.value).toBe('decidida lá');
-    expect((await reload(post.id)).tags.getIdentifiers().map(String)).toEqual([unknown.value]);
+    expect((await reload(post.id)).tags.getIdentifiers().map(String)).toEqual([
+      unknown.value,
+    ]);
   });
 
   it('says so and moves on when the post is not here at all', async () => {
@@ -111,7 +137,15 @@ describe('ProjectPostCompletion', () => {
     await expect(
       projection.handle(
         fromAnotherService(
-          new PostCreatedEvent(absent.value, 't', 'c', UserId.generate().value, [], 2, new Date()),
+          new PostCreatedEvent(
+            absent.value,
+            't',
+            'c',
+            UserId.generate().value,
+            [],
+            2,
+            new Date(),
+          ),
         ),
       ),
     ).resolves.toBeUndefined();

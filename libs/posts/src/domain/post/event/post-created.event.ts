@@ -1,8 +1,9 @@
-import { AutoMap } from '@automapper/classes';
 import type { DomainEvent } from '@nestposts/platform/domain/shared/domain-event';
+import { AutoMap } from '@automapper/classes';
 import { EventType } from '@nestposts/platform/domain/shared/event-type';
-import { POSTS_NAMESPACE } from './posts.namespace';
+
 import type { AssignedTag } from './assigned-tag';
+import { POSTS_NAMESPACE } from './posts.namespace';
 
 @EventType({ namespace: POSTS_NAMESPACE, version: '2.0.0', tags: ['postId'] })
 export class PostCreatedEvent implements DomainEvent {

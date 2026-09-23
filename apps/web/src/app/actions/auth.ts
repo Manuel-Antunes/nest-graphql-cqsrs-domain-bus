@@ -2,8 +2,8 @@
 
 import { z } from 'zod';
 
-import { WebAuth } from '@/lib/auth/server';
 import type { Session } from '@/lib/auth/session';
+import { WebAuth } from '@/lib/auth/server';
 
 export interface SignInState {
   status: 'idle' | 'error' | 'ok';
@@ -29,14 +29,19 @@ function failureOf(error: unknown, email: string): SignInState {
   return {
     status: 'error',
     code: failure.body?.code ?? 'InvalidCredentials',
-    message: failure.body?.message ?? failure.message ?? 'Credenciais inválidas.',
+    message:
+      failure.body?.message ?? failure.message ?? 'Credenciais inválidas.',
     email,
   };
 }
 
 async function authenticate(
   formData: FormData,
-  sign: (input: { email: string; password: string; name: string }) => Promise<unknown>,
+  sign: (input: {
+    email: string;
+    password: string;
+    name: string;
+  }) => Promise<unknown>,
 ): Promise<SignInState> {
   const parsed = credentials.safeParse({
     email: String(formData.get('email') ?? '').trim(),
@@ -66,14 +71,20 @@ async function authenticate(
   return { status: 'ok', next: String(formData.get('next') ?? '/feed') };
 }
 
-export async function signIn(_previous: SignInState, formData: FormData): Promise<SignInState> {
+export async function signIn(
+  _previous: SignInState,
+  formData: FormData,
+): Promise<SignInState> {
   const auth = await WebAuth.auth();
   return authenticate(formData, ({ email, password }) =>
     auth.signInWithPassword({ email, password }),
   );
 }
 
-export async function signUp(_previous: SignInState, formData: FormData): Promise<SignInState> {
+export async function signUp(
+  _previous: SignInState,
+  formData: FormData,
+): Promise<SignInState> {
   const auth = await WebAuth.auth();
   return authenticate(formData, ({ email, password, name }) =>
     auth.signUpWithPassword({ email, password, name }),

@@ -1,4 +1,5 @@
 import { trace } from '@opentelemetry/api';
+
 import { flushTelemetry, startTelemetry } from './telemetry';
 
 describe('telemetry', () => {
@@ -10,7 +11,9 @@ describe('telemetry', () => {
   afterEach(() => vi.unstubAllEnvs());
 
   it('stays off when nothing says where to send the spans', async () => {
-    await expect(startTelemetry({ serviceName: 'spec' })()).resolves.toBeUndefined();
+    await expect(
+      startTelemetry({ serviceName: 'spec' })(),
+    ).resolves.toBeUndefined();
   });
 
   it('stays off when it is disabled outright', async () => {

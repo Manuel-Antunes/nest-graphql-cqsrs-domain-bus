@@ -1,6 +1,13 @@
-import { namespaceIn, qualifiedNameIn } from '@nestposts/platform/domain/shared/event-type';
+import {
+  namespaceIn,
+  qualifiedNameIn,
+} from '@nestposts/platform/domain/shared/event-type';
+
 import type { EnvelopeMetadata } from '../outbound/event-envelope';
-import { TRANSPORT_MESSAGE_TYPE, TRANSPORT_ORIGIN } from '../outbound/event-envelope';
+import {
+  TRANSPORT_MESSAGE_TYPE,
+  TRANSPORT_ORIGIN,
+} from '../outbound/event-envelope';
 
 /**
  * **The routing facts, lifted out of the envelope so a subscription can select on them.**
@@ -87,7 +94,9 @@ export const routingAttributesOf = (
   if (origin) {
     attributes[AWS_ORIGIN_ATTRIBUTE] = origin;
   }
-  return Object.fromEntries(Object.entries(attributes).filter(([, value]) => value !== ''));
+  return Object.fromEntries(
+    Object.entries(attributes).filter(([, value]) => value !== ''),
+  );
 };
 
 /**
@@ -110,8 +119,14 @@ export const asMessageAttributes = (
 ): Record<string, AwsMessageAttribute> =>
   Object.fromEntries(
     Object.entries(attributes)
-      .filter(([, value]) => value !== undefined && value !== null && String(value) !== '')
-      .map(([key, value]) => [key, { DataType: 'String', StringValue: String(value) }]),
+      .filter(
+        ([, value]) =>
+          value !== undefined && value !== null && String(value) !== '',
+      )
+      .map(([key, value]) => [
+        key,
+        { DataType: 'String', StringValue: String(value) },
+      ]),
   );
 
 /** The attributes of a delivered record, flattened back to the map the envelope is made of. */

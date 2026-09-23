@@ -1,20 +1,26 @@
 import type { INestApplication } from '@nestjs/common';
+import type { IEvent } from '@nestjs/cqrs';
+import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { MikroORM } from '@mikro-orm/core';
-import { EventBus, type IEvent } from '@nestjs/cqrs';
-import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
+import { EventBus } from '@nestjs/cqrs';
+import { FastifyAdapter } from '@nestjs/platform-fastify';
 import { Test } from '@nestjs/testing';
-import { TestSchemaModule } from '@nestposts/database/testing';
-import { TaggingStandIn } from './support/tagging-stand-in.saga';
-import { DefaultTagSeeder } from '@nestposts/migrator/seeders/default-tag.seeder';
-import { AppModule } from '../src/app.module';
-import { PostRequest } from '../src/application/shared/post-request';
 import { SubscriptionBus } from '@nestposts/cqsrs';
+import { TestSchemaModule } from '@nestposts/database/testing';
+import { DefaultTagSeeder } from '@nestposts/migrator/seeders/default-tag.seeder';
+import {
+  AUTHOR_ROLE,
+  Authorship,
+} from '@nestposts/users/domain/user/author.entity';
 import { IdentityProvider } from '@nestposts/users/domain/user/identity.provider';
-import { AUTHOR_ROLE, Authorship } from '@nestposts/users/domain/user/author.entity';
 import { User } from '@nestposts/users/domain/user/user.entity';
 import { CredentialId } from '@nestposts/users/domain/user/vo/credential-id';
 import { Email } from '@nestposts/users/domain/user/vo/email';
+
+import { AppModule } from '../src/app.module';
+import { PostRequest } from '../src/application/shared/post-request';
 import { GraphqlClient, until } from './support/graphql-client';
+import { TaggingStandIn } from './support/tagging-stand-in.saga';
 
 describe('posts (e2e)', () => {
   let app: INestApplication;
@@ -30,7 +36,8 @@ describe('posts (e2e)', () => {
 
   const requestOf = (event: IEvent) => PostRequest.of(event as object);
 
-  const POST_FIELDS = 'id title content author { id name email } createdAt updatedAt version tags(first: 5) { edges { cursor node { id name } } pageInfo { hasNextPage } totalCount }';
+  const POST_FIELDS =
+    'id title content author { id name email } createdAt updatedAt version tags(first: 5) { edges { cursor node { id name } } pageInfo { hasNextPage } totalCount }';
   const createPost = async (title: string, content = 'oi') => {
     const result = await client.execute(
       `mutation($input: CreatePostInput!) { createPost(input: $input) { ${POST_FIELDS} } }`,
@@ -41,7 +48,9 @@ describe('posts (e2e)', () => {
   };
   const isComplete = (id: string) =>
     published.some(
-      (event) => event.constructor.name === 'PostCreatedEvent' && (event as { postId?: string }).postId === id,
+      (event) =>
+        event.constructor.name === 'PostCreatedEvent' &&
+        (event as { postId?: string }).postId === id,
     );
   const createCompletePost = async (title: string, content = 'oi') => {
     const post = await createPost(title, content);
@@ -60,8 +69,15 @@ describe('posts (e2e)', () => {
     };
     return Object.assign(collector, { release });
   };
-  const updatePost = (input: { id: string; title?: string | null; content?: string | null }) =>
-    client.execute(`mutation($input: UpdatePostInput!) { updatePost(input: $input) { ${POST_FIELDS} } }`, { input });
+  const updatePost = (input: {
+    id: string;
+    title?: string | null;
+    content?: string | null;
+  }) =>
+    client.execute(
+      `mutation($input: UpdatePostInput!) { updatePost(input: $input) { ${POST_FIELDS} } }`,
+      { input },
+    );
   const subscribeUpdates = async (postId?: string) => {
     const before = subscribers();
     const collector = client.subscribe<{ onPostUpdated: any }>(
@@ -81,7 +97,9 @@ describe('posts (e2e)', () => {
       imports: [AppModule, TestSchemaModule.forRoot()],
       providers: [TaggingStandIn],
     }).compile();
-    app = module.createNestApplication<NestFastifyApplication>(new FastifyAdapter());
+    app = module.createNestApplication<NestFastifyApplication>(
+      new FastifyAdapter(),
+    );
     await app.listen(0, '127.0.0.1');
     await app.get(MikroORM).seeder.seed(DefaultTagSeeder);
     client = await GraphqlClient.for(app);
@@ -91,7 +109,9 @@ describe('posts (e2e)', () => {
     await identities.grantRole(CredentialId.parse(credentialId), AUTHOR_ROLE);
     eventBus = app.get(EventBus);
     eventBus.subscribe((event) => published.push(event));
-    app.get(SubscriptionBus).subscriptions$.subscribe((subscription) => asked.push(subscription));
+    app
+      .get(SubscriptionBus)
+      .subscriptions$.subscribe((subscription) => asked.push(subscription));
   });
 
   afterAll(async () => {
@@ -107,7 +127,9 @@ describe('posts (e2e)', () => {
     it('conceder o papel pela porta promove o mesmo perfil, sem abrir outro', async () => {
       const em = app.get(MikroORM).em.fork();
 
-      const author = await em.findOneOrFail(User, { email: Email.parse('manuel@example.com') });
+      const author = await em.findOneOrFail(User, {
+        email: Email.parse('manuel@example.com'),
+      });
 
       expect(author.hasRole(AUTHOR_ROLE)).toBe(true);
       expect(await em.findOne(Authorship, { user: author.id })).not.toBeNull();
@@ -115,7 +137,9 @@ describe('posts (e2e)', () => {
     });
 
     it('a identidade que a porta devolve é a mesma que a sessão carrega', async () => {
-      const identity = await identities.findById(CredentialId.parse(credentialId));
+      const identity = await identities.findById(
+        CredentialId.parse(credentialId),
+      );
 
       expect(identity).not.toBeNull();
       expect(identity!.email.value).toBe('manuel@example.com');
@@ -141,7 +165,9 @@ describe('posts (e2e)', () => {
       const created = await subscribeCreated();
 
       const post = await createPost('com tag padrão');
-      const event = await created.waitForMatch((received) => received.onPostCreated?.id === post.id);
+      const event = await created.waitForMatch(
+        (received) => received.onPostCreated?.id === post.id,
+      );
 
       expect(event.onPostCreated).toMatchObject({
         id: post.id,
@@ -149,8 +175,13 @@ describe('posts (e2e)', () => {
         version: 2,
         tags: { edges: [{ node: { name: 'Untagged' } }], totalCount: 1 },
       });
-      const { data } = await client.execute(`{ post(id: "${post.id}") { ${POST_FIELDS} } }`);
-      expect(data!.post).toMatchObject({ version: 2, tags: { edges: [{ node: { name: 'Untagged' } }] } });
+      const { data } = await client.execute(
+        `{ post(id: "${post.id}") { ${POST_FIELDS} } }`,
+      );
+      expect(data!.post).toMatchObject({
+        version: 2,
+        tags: { edges: [{ node: { name: 'Untagged' } }] },
+      });
       await created.release();
     });
 
@@ -159,7 +190,9 @@ describe('posts (e2e)', () => {
 
       const post = await createCompletePost('uma request só');
 
-      const chain = published.slice(from).filter((event) => requestOf(event)?.postId.equals(post.id));
+      const chain = published
+        .slice(from)
+        .filter((event) => requestOf(event)?.postId.equals(post.id));
       expect(chain.map((event) => event.constructor.name)).toEqual([
         'PostPreCreatedEvent',
         'PostCreatedEvent',
@@ -172,9 +205,14 @@ describe('posts (e2e)', () => {
         { title: '   ', content: 'c' },
         { title: 'x'.repeat(201), content: 'c' },
       ]) {
-        const result = await client.execute(`mutation($input: CreatePostInput!) { createPost(input: $input) { id } }`, { input });
+        const result = await client.execute(
+          `mutation($input: CreatePostInput!) { createPost(input: $input) { id } }`,
+          { input },
+        );
         expect(result.data).toBeNull();
-        expect(result.errors?.[0].extensions).toEqual({ code: 'BAD_USER_INPUT' });
+        expect(result.errors?.[0].extensions).toEqual({
+          code: 'BAD_USER_INPUT',
+        });
       }
     });
   });
@@ -184,23 +222,48 @@ describe('posts (e2e)', () => {
       const post = await createCompletePost('para editar');
       const updates = await subscribeUpdates();
 
-      const { data, errors } = await updatePost({ id: post.id, title: 'editado' });
+      const { data, errors } = await updatePost({
+        id: post.id,
+        title: 'editado',
+      });
 
       expect(errors).toBeUndefined();
-      expect(data!.updatePost).toMatchObject({ id: post.id, title: 'editado', content: 'oi', version: 3 });
+      expect(data!.updatePost).toMatchObject({
+        id: post.id,
+        title: 'editado',
+        content: 'oi',
+        version: 3,
+      });
       const [event] = await updates.waitFor(1);
-      expect(event.onPostUpdated).toMatchObject({ title: 'editado', version: 3, tags: { totalCount: 1 } });
+      expect(event.onPostUpdated).toMatchObject({
+        title: 'editado',
+        version: 3,
+        tags: { totalCount: 1 },
+      });
       await updates.release();
     });
 
     it.each([
-      ['a post that does not exist', { id: '00000000-0000-0000-0000-000000000000', title: 'x' }, 'NOT_FOUND', /não existe/],
-      ['a malformed id', { id: 'nao-existe', title: 'x' }, 'BAD_USER_INPUT', /Invalid UUID/],
+      [
+        'a post that does not exist',
+        { id: '00000000-0000-0000-0000-000000000000', title: 'x' },
+        'NOT_FOUND',
+        /não existe/,
+      ],
+      [
+        'a malformed id',
+        { id: 'nao-existe', title: 'x' },
+        'BAD_USER_INPUT',
+        /Invalid UUID/,
+      ],
     ])('rejects %s', async (_, input, code, message) => {
       const result = await updatePost(input);
 
       expect(result.data).toBeNull();
-      expect(result.errors?.[0]).toMatchObject({ message: expect.stringMatching(message), extensions: { code } });
+      expect(result.errors?.[0]).toMatchObject({
+        message: expect.stringMatching(message),
+        extensions: { code },
+      });
     });
 
     it('rejects an update without changes and a blank title', async () => {
@@ -209,8 +272,14 @@ describe('posts (e2e)', () => {
       const noChanges = await updatePost({ id: post.id });
       const blank = await updatePost({ id: post.id, title: '   ' });
 
-      expect(noChanges.errors?.[0]).toMatchObject({ message: expect.stringMatching(/sem mudanças/), extensions: { code: 'BAD_USER_INPUT' } });
-      expect(blank.errors?.[0]).toMatchObject({ message: expect.stringMatching(/title não pode ser vazio/), extensions: { code: 'BAD_USER_INPUT' } });
+      expect(noChanges.errors?.[0]).toMatchObject({
+        message: expect.stringMatching(/sem mudanças/),
+        extensions: { code: 'BAD_USER_INPUT' },
+      });
+      expect(blank.errors?.[0]).toMatchObject({
+        message: expect.stringMatching(/title não pode ser vazio/),
+        extensions: { code: 'BAD_USER_INPUT' },
+      });
     });
   });
 
@@ -227,9 +296,15 @@ describe('posts (e2e)', () => {
       await updatePost({ id: a.id, content: 'A conteúdo' });
 
       const seenByAll = await all.waitFor(3);
-      expect(seenByAll.map((e) => e.onPostUpdated.title)).toEqual(['A editado', 'B', 'A editado']);
+      expect(seenByAll.map((e) => e.onPostUpdated.title)).toEqual([
+        'A editado',
+        'B',
+        'A editado',
+      ]);
       const seenByA = await onlyA.waitFor(2);
-      expect(seenByA.map((e) => [e.onPostUpdated.id, e.onPostUpdated.content])).toEqual([
+      expect(
+        seenByA.map((e) => [e.onPostUpdated.id, e.onPostUpdated.content]),
+      ).toEqual([
         [a.id, 'oi'],
         [a.id, 'A conteúdo'],
       ]);
@@ -247,10 +322,14 @@ describe('posts (e2e)', () => {
       const askedBefore = asked.length;
       const query = `subscription($postId: ID) { onPostUpdated(postId: $postId) { ${POST_FIELDS} } }`;
 
-      const first = client.subscribe<{ onPostUpdated: any }>(query, { postId: post.id });
+      const first = client.subscribe<{ onPostUpdated: any }>(query, {
+        postId: post.id,
+      });
       await until(() => asked.length === askedBefore + 1);
       expect(subscribers()).toBe(before + 1);
-      const second = client.subscribe<{ onPostUpdated: any }>(query, { postId: post.id });
+      const second = client.subscribe<{ onPostUpdated: any }>(query, {
+        postId: post.id,
+      });
       await until(() => asked.length === askedBefore + 2);
 
       expect(subscribers()).toBe(before + 1);
@@ -270,7 +349,9 @@ describe('posts (e2e)', () => {
 
     it('unsubscribing removes the subscriber from the EventBus right away, filter or not', async () => {
       const before = subscribers();
-      const filtered = await subscribeUpdates('00000000-0000-0000-0000-000000000000');
+      const filtered = await subscribeUpdates(
+        '00000000-0000-0000-0000-000000000000',
+      );
       const global = await subscribeUpdates();
       expect(subscribers()).toBe(before + 2);
 
@@ -283,7 +364,9 @@ describe('posts (e2e)', () => {
 
   describe('queries', () => {
     it('post(id) is null for an unknown id', async () => {
-      const { data } = await client.execute(`{ post(id: "00000000-0000-0000-0000-000000000000") { id } }`);
+      const { data } = await client.execute(
+        `{ post(id: "00000000-0000-0000-0000-000000000000") { id } }`,
+      );
       expect(data).toEqual({ post: null });
     });
 
@@ -292,15 +375,22 @@ describe('posts (e2e)', () => {
         `{ posts(first: 1) { edges { cursor node { id } } pageInfo { hasNextPage hasPreviousPage endCursor } totalCount } }`,
       );
       expect(page1!.posts.edges).toHaveLength(1);
-      expect(page1!.posts.pageInfo).toMatchObject({ hasNextPage: true, hasPreviousPage: false });
+      expect(page1!.posts.pageInfo).toMatchObject({
+        hasNextPage: true,
+        hasPreviousPage: false,
+      });
       expect(page1!.posts.totalCount).toBeGreaterThan(1);
-      expect(page1!.posts.edges[0].cursor).toBe(page1!.posts.pageInfo.endCursor);
+      expect(page1!.posts.edges[0].cursor).toBe(
+        page1!.posts.pageInfo.endCursor,
+      );
 
       const { data: page2 } = await client.execute(
         `query($after: String) { posts(first: 1, after: $after) { edges { node { id } } pageInfo { hasPreviousPage } } }`,
         { after: page1!.posts.pageInfo.endCursor },
       );
-      expect(page2!.posts.edges[0].node.id).not.toBe(page1!.posts.edges[0].node.id);
+      expect(page2!.posts.edges[0].node.id).not.toBe(
+        page1!.posts.edges[0].node.id,
+      );
       expect(page2!.posts.pageInfo.hasPreviousPage).toBe(true);
     });
 
@@ -352,7 +442,9 @@ describe('posts (e2e)', () => {
       const { data } = await client.execute(`{ me { id } }`);
 
       const em = app.get(MikroORM).em.fork();
-      const active = await em.findOneOrFail(User, { email: Email.parse('manuel@example.com') });
+      const active = await em.findOneOrFail(User, {
+        email: Email.parse('manuel@example.com'),
+      });
       expect(data!.me.id).toBe(active.id.value);
     });
 
@@ -390,9 +482,16 @@ describe('posts (e2e)', () => {
 
       expect(errors).toBeUndefined();
       const page = data!.me.posts;
-      expect(page.edges[0].node).toMatchObject({ id: recente.id, title: 'o mais recente de todos', author: { name: 'manuel' } });
+      expect(page.edges[0].node).toMatchObject({
+        id: recente.id,
+        title: 'o mais recente de todos',
+        author: { name: 'manuel' },
+      });
       expect(page.edges).toHaveLength(2);
-      expect(page.pageInfo).toMatchObject({ hasNextPage: true, hasPreviousPage: false });
+      expect(page.pageInfo).toMatchObject({
+        hasNextPage: true,
+        hasPreviousPage: false,
+      });
       expect(page.totalCount).toBeGreaterThan(2);
       expect(page.edges[1].cursor).toBe(page.pageInfo.endCursor);
     });
@@ -407,7 +506,9 @@ describe('posts (e2e)', () => {
         { after: first!.me.posts.pageInfo.endCursor },
       );
 
-      expect(second!.me.posts.edges[0].node.id).not.toBe(first!.me.posts.edges[0].node.id);
+      expect(second!.me.posts.edges[0].node.id).not.toBe(
+        first!.me.posts.edges[0].node.id,
+      );
       expect(second!.me.posts.pageInfo.hasPreviousPage).toBe(true);
     });
 
@@ -426,7 +527,9 @@ describe('posts (e2e)', () => {
     });
 
     it('pedir Author.posts em quem não é autor é um erro de schema, não uma lista vazia', async () => {
-      const { errors } = await readerClient.execute(`{ me { ... on User { posts(first: 1) { totalCount } } } }`);
+      const { errors } = await readerClient.execute(
+        `{ me { ... on User { posts(first: 1) { totalCount } } } }`,
+      );
 
       expect(errors?.[0].message).toMatch(/posts/);
     });
@@ -476,11 +579,17 @@ describe('posts (e2e)', () => {
       const created = await subscribeCreated();
 
       const post = await createPost('autor pela subscription');
-      const event = await created.waitForMatch((received) => received.onPostCreated?.id === post.id);
+      const event = await created.waitForMatch(
+        (received) => received.onPostCreated?.id === post.id,
+      );
 
       expect(event.onPostCreated).toMatchObject({
         id: post.id,
-        author: { id: expect.any(String), name: 'manuel', email: 'manuel@example.com' },
+        author: {
+          id: expect.any(String),
+          name: 'manuel',
+          email: 'manuel@example.com',
+        },
       });
       await created.release();
     });
@@ -499,7 +608,6 @@ describe('posts (e2e)', () => {
     });
   });
 
-
   describe('federation', () => {
     const ENTITIES = `
       query Entities($representations: [_Any!]!) {
@@ -516,20 +624,27 @@ describe('posts (e2e)', () => {
     type Representation = { __typename: string; id: string };
     type Entity = Record<string, unknown> | null;
 
-    const ref = (typename: string, id: string): Representation => ({ __typename: typename, id });
+    const ref = (typename: string, id: string): Representation => ({
+      __typename: typename,
+      id,
+    });
 
     const resolvedBy = async (
       by: GraphqlClient,
       representations: Representation[],
     ): Promise<Entity[]> => {
-      const { data, errors } = await by.execute<{ _entities: Entity[] }>(ENTITIES, {
-        representations,
-      });
+      const { data, errors } = await by.execute<{ _entities: Entity[] }>(
+        ENTITIES,
+        {
+          representations,
+        },
+      );
       expect(errors, JSON.stringify(errors)).toBeUndefined();
       return data!._entities;
     };
 
-    const resolve = (...representations: Representation[]) => resolvedBy(client, representations);
+    const resolve = (...representations: Representation[]) =>
+      resolvedBy(client, representations);
 
     const completedPost = async (title: string) => {
       const created = await createCompletePost(title);
@@ -541,9 +656,9 @@ describe('posts (e2e)', () => {
     };
 
     const sdl = async (): Promise<string> => {
-      const { data, errors } = await client.execute<{ _service: { sdl: string } }>(
-        '{ _service { sdl } }',
-      );
+      const { data, errors } = await client.execute<{
+        _service: { sdl: string };
+      }>('{ _service { sdl } }');
       expect(errors, JSON.stringify(errors)).toBeUndefined();
       return data!._service.sdl;
     };
@@ -577,7 +692,9 @@ describe('posts (e2e)', () => {
 
       expect(schema).toContain('type Post @key(fields: "id")');
       expect(schema).toContain('type Tag @key(fields: "id")');
-      expect(schema).toContain('type Author implements IUser @key(fields: "id")');
+      expect(schema).toContain(
+        'type Author implements IUser @key(fields: "id")',
+      );
       expect(schema).toContain('type User implements IUser @key(fields: "id")');
       expect(schema).toContain('interface IUser @key(fields: "id")');
       expect(schema).toContain('type PageInfo @shareable');
@@ -588,14 +705,22 @@ describe('posts (e2e)', () => {
 
       const [entity] = await resolve(ref('Post', post.id));
 
-      expect(entity).toMatchObject({ __typename: 'Post', id: post.id, title: 'Federated', version: 2 });
+      expect(entity).toMatchObject({
+        __typename: 'Post',
+        id: post.id,
+        title: 'Federated',
+        version: 2,
+      });
     });
 
     it('the answer comes back in the order the representations were sent', async () => {
       const first = await createCompletePost('First federated');
       const second = await createCompletePost('Second federated');
 
-      const entities = await resolve(ref('Post', second.id), ref('Post', first.id));
+      const entities = await resolve(
+        ref('Post', second.id),
+        ref('Post', first.id),
+      );
 
       expect(entities.map((entity) => entity!.title)).toEqual([
         'Second federated',
@@ -606,7 +731,11 @@ describe('posts (e2e)', () => {
     it('an entity that does not exist is null in its own position', async () => {
       const post = await createCompletePost('It exists');
 
-      const entities = await resolve(ref('Post', MISSING), ref('Post', post.id), ref('Post', MISSING));
+      const entities = await resolve(
+        ref('Post', MISSING),
+        ref('Post', post.id),
+        ref('Post', MISSING),
+      );
 
       expect(entities).toHaveLength(3);
       expect(entities[0]).toBeNull();
@@ -624,7 +753,11 @@ describe('posts (e2e)', () => {
         ref('Author', post.author.id),
       );
 
-      expect(entities.map((entity) => entity!.__typename)).toEqual(['Tag', 'Post', 'Author']);
+      expect(entities.map((entity) => entity!.__typename)).toEqual([
+        'Tag',
+        'Post',
+        'Author',
+      ]);
       expect(entities[0]).toMatchObject({ name: 'Untagged' });
       expect(entities[2]).toMatchObject({ email: 'manuel@example.com' });
     });
@@ -641,8 +774,14 @@ describe('posts (e2e)', () => {
 
       expect(entities[0]).toBeNull();
       expect(entities[1]).toBeNull();
-      expect(entities[2]).toMatchObject({ __typename: 'User', email: 'reader@example.com' });
-      expect(entities[3]).toMatchObject({ __typename: 'Author', email: 'manuel@example.com' });
+      expect(entities[2]).toMatchObject({
+        __typename: 'User',
+        email: 'reader@example.com',
+      });
+      expect(entities[3]).toMatchObject({
+        __typename: 'Author',
+        email: 'manuel@example.com',
+      });
     });
 
     it('the router calls without a session, and the subgraph answers', async () => {
@@ -659,5 +798,4 @@ describe('posts (e2e)', () => {
       await anonymous.dispose();
     });
   });
-
 });

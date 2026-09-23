@@ -1,17 +1,21 @@
-import { closeTestDatabase, testDatabase } from '@nestposts/database/testing';
 import { MikroORM, ref } from '@mikro-orm/core';
+import { closeTestDatabase, testDatabase } from '@nestposts/database/testing';
+import { delegateRef } from '@nestposts/platform/domain/shared/delegation/delegate';
+import { Post } from '@nestposts/posts/domain/post/post.entity';
+import { PostId } from '@nestposts/posts/domain/post/vo/post-id';
 import { PostEntitySchema } from '@nestposts/posts/infrastructure/persistence/entities/post-orm.entity';
 import { TagSchema } from '@nestposts/posts/infrastructure/persistence/entities/tag-orm.entity';
+import {
+  Author,
+  AUTHOR_ROLE,
+  Authorship,
+} from '@nestposts/users/domain/user/author.entity';
+import { User } from '@nestposts/users/domain/user/user.entity';
+import { UserId } from '@nestposts/users/domain/user/vo/user-id';
 import {
   AuthorshipEntitySchema,
   UserEntitySchema,
 } from '@nestposts/users/infrastructure/persistence/entities/user-orm.entity';
-import { Post } from '@nestposts/posts/domain/post/post.entity';
-import { PostId } from '@nestposts/posts/domain/post/vo/post-id';
-import { delegateRef } from '@nestposts/platform/domain/shared/delegation/delegate';
-import { AUTHOR_ROLE, Author, Authorship } from '@nestposts/users/domain/user/author.entity';
-import { User } from '@nestposts/users/domain/user/user.entity';
-import { UserId } from '@nestposts/users/domain/user/vo/user-id';
 
 describe('Author: the user, cast over its authorship', () => {
   let orm: MikroORM;
@@ -19,8 +23,13 @@ describe('Author: the user, cast over its authorship', () => {
 
   beforeAll(async () => {
     orm = await testDatabase({
-        entities: [PostEntitySchema, TagSchema, UserEntitySchema, AuthorshipEntitySchema],
-      });
+      entities: [
+        PostEntitySchema,
+        TagSchema,
+        UserEntitySchema,
+        AuthorshipEntitySchema,
+      ],
+    });
   });
 
   afterAll(() => closeTestDatabase(orm));
@@ -42,7 +51,9 @@ describe('Author: the user, cast over its authorship', () => {
     return user.id;
   };
 
-  const givenAnAuthorWith = async (titles: readonly string[]): Promise<UserId> => {
+  const givenAnAuthorWith = async (
+    titles: readonly string[],
+  ): Promise<UserId> => {
     const id = await givenAUser([AUTHOR_ROLE]);
     const em = orm.em.fork();
     const authorship = await em.findOneOrFail(Authorship, { user: id });
@@ -62,7 +73,10 @@ describe('Author: the user, cast over its authorship', () => {
   };
 
   const loadAuthor = async (id: UserId): Promise<Author> =>
-    delegateRef(Author, await orm.em.fork().findOneOrFail(Authorship, { user: id })).delegated();
+    delegateRef(
+      Author,
+      await orm.em.fork().findOneOrFail(Authorship, { user: id }),
+    ).delegated();
 
   it('casting keeps the very same object: the user gained a capability, not an identity', async () => {
     const id = await givenAUser([AUTHOR_ROLE]);
@@ -86,17 +100,14 @@ describe('Author: the user, cast over its authorship', () => {
     const user = await em.findOneOrFail(User, { id });
     const plain = await orm.em.fork().findOneOrFail(User, { id });
 
-    const author = Author.cast(user, await em.findOneOrFail(Authorship, { user: id }));
+    const author = Author.cast(
+      user,
+      await em.findOneOrFail(Authorship, { user: id }),
+    );
 
     expect(author.equals(plain)).toBe(true);
     expect(plain.equals(author)).toBe(true);
   });
-
-
-
-
-
-
 
   it('an unloaded reference loads the whole chain and lands on the Author', async () => {
     const id = await givenAnAuthorWith(['um post']);
@@ -113,7 +124,9 @@ describe('Author: the user, cast over its authorship', () => {
 
   it('a reference to an authorship that is not there resolves to null', async () => {
     const em = orm.em.fork();
-    const post = await em.findOneOrFail(Post, { author: await givenAnAuthorWith(['outro']) });
+    const post = await em.findOneOrFail(Post, {
+      author: await givenAnAuthorWith(['outro']),
+    });
     const dangling = delegateRef(Author, UserId.generate());
 
     expect(await dangling.loadDelegated()).toBeNull();

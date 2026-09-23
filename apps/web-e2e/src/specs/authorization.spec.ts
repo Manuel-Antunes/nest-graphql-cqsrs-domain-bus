@@ -31,20 +31,30 @@ const WhoAmI = graphql(`
  * regra que `@Roles([AUTHOR_ROLE])` aplica na mutation, vista de fora.
  */
 test.describe('autorização', () => {
-  test('anônimo não escreve, e a página diz por onde entrar', async ({ page }) => {
+  test('anônimo não escreve, e a página diz por onde entrar', async ({
+    page,
+  }) => {
     await page.goto('/posts/new');
 
     await expect(page.getByText('Entre para escrever')).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Ir para o login' })).toBeVisible();
+    await expect(
+      page.getByRole('link', { name: 'Ir para o login' }),
+    ).toBeVisible();
     await expect(page.getByLabel('Título')).toHaveCount(0);
   });
 
-  test('autenticado sem o papel author não escreve', async ({ page, accounts, signIn }) => {
+  test('autenticado sem o papel author não escreve', async ({
+    page,
+    accounts,
+    signIn,
+  }) => {
     await signIn(accounts.reader);
 
     await page.goto('/posts/new');
 
-    await expect(page.getByText('Esta conta não tem a role author')).toBeVisible();
+    await expect(
+      page.getByText('Esta conta não tem a role author'),
+    ).toBeVisible();
     await expect(page.getByLabel('Título')).toHaveCount(0);
   });
 
@@ -67,7 +77,9 @@ test.describe('autorização', () => {
     const refused = await executeGraphql(ReaderCreatePost);
 
     expect(refused.data?.createPost ?? null).toBeNull();
-    expect(JSON.stringify(refused.errors)).toMatch(/FORBIDDEN|UNAUTHENTICATED|not an author|autor/i);
+    expect(JSON.stringify(refused.errors)).toMatch(
+      /FORBIDDEN|UNAUTHENTICATED|not an author|autor/i,
+    );
   });
 
   test('e a leitura é anônima de propósito: o feed responde sem sessão', async ({
@@ -85,7 +97,8 @@ test.describe('autorização', () => {
     signIn,
     executeGraphql,
   }) => {
-    const typeOfMe = async () => (await executeGraphql(WhoAmI)).data!.me.__typename;
+    const typeOfMe = async () =>
+      (await executeGraphql(WhoAmI)).data!.me.__typename;
 
     await signIn(accounts.reader);
     expect(await typeOfMe()).toBe('User');

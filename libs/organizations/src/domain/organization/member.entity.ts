@@ -1,11 +1,16 @@
-import { BaseEntity, type Ref } from '@mikro-orm/core';
-import type { CredentialId } from '@nestposts/users/domain/user/vo/credential-id';
+import type { Ref } from '@mikro-orm/core';
 import type { AuthUser } from '@nestposts/auth/domain/auth/auth-user.entity';
+import type { CredentialId } from '@nestposts/users/domain/user/vo/credential-id';
+import { BaseEntity } from '@mikro-orm/core';
+
 import type { Organization } from './organization.entity';
-import { ORGANIZATION_ADMIN_ROLE, OWNER_ROLE } from './schemas/member-role.schema';
+import type { OrganizationId } from './vo/organization-id';
+import {
+  ORGANIZATION_ADMIN_ROLE,
+  OWNER_ROLE,
+} from './schemas/member-role.schema';
 import { MemberId } from './vo/member-id';
 import { MemberRole } from './vo/member-role';
-import type { OrganizationId } from './vo/organization-id';
 
 export class Member extends BaseEntity {
   id!: MemberId;

@@ -1,5 +1,6 @@
 import type { InjectionToken, Provider, Type } from '@nestjs/common';
 import type { CqrsModuleOptions } from '@nestjs/cqrs';
+
 import type { ISubscriptionPublisher } from './subscription-publisher.interface';
 
 /**
@@ -30,7 +31,6 @@ export interface CqsrsModuleOptions extends CqrsModuleOptions {
    * @default DefaultSubscriptionPubSub (in memory, the bus's own `Subject`)
    */
   subscriptionPublisher?: ISubscriptionPublisher;
-
 }
 
 /** Whoever knows how to build the CQSRS options — the target of `useClass` / `useExisting` in `forRootAsync`. */
@@ -48,7 +48,9 @@ export interface CqsrsModuleAsyncOptions {
   imports?: any[];
   useExisting?: Type<CqsrsModuleOptionsFactory>;
   useClass?: Type<CqsrsModuleOptionsFactory>;
-  useFactory?: (...args: any[]) => Promise<CqsrsModuleOptions> | CqsrsModuleOptions;
+  useFactory?: (
+    ...args: any[]
+  ) => Promise<CqsrsModuleOptions> | CqsrsModuleOptions;
   useValue?: CqsrsModuleOptions;
   /** What to inject into `useFactory`. */
   inject?: any[];
@@ -60,5 +62,4 @@ export interface CqsrsModuleAsyncOptions {
    * module has to know it while it is being built, which is before any factory runs.
    */
   aggregatePublisher?: InjectionToken;
-
 }

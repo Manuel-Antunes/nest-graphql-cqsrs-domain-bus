@@ -18,7 +18,11 @@
 export function subscriptionKey(criteria: unknown): string {
   const serialized = JSON.stringify(criteria, (_key, value) =>
     value !== null && typeof value === 'object' && !Array.isArray(value)
-      ? Object.fromEntries(Object.entries(value as object).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
+      ? Object.fromEntries(
+          Object.entries(value as object).sort(([a], [b]) =>
+            a < b ? -1 : a > b ? 1 : 0,
+          ),
+        )
       : value,
   );
   return serialized ?? 'void';

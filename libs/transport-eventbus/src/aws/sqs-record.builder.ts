@@ -60,7 +60,10 @@ export class SqsRecordBuilder<TData = unknown> {
   setMessageAttributes(attributes: Record<string, AwsMessageAttribute>): this {
     this.options = {
       ...this.options,
-      messageAttributes: { ...(this.options.messageAttributes ?? {}), ...attributes },
+      messageAttributes: {
+        ...(this.options.messageAttributes ?? {}),
+        ...attributes,
+      },
     };
     return this;
   }
@@ -78,6 +81,10 @@ export class SqsRecordBuilder<TData = unknown> {
   }
 
   build(): SqsRecord<TData> {
-    return { data: this.data, options: this.options, [SQS_RECORD]: true } as SqsRecord<TData>;
+    return {
+      data: this.data,
+      options: this.options,
+      [SQS_RECORD]: true,
+    } as SqsRecord<TData>;
   }
 }

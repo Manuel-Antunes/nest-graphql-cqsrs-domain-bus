@@ -1,8 +1,12 @@
+import type { DomainEvent } from '@nestposts/platform/domain/shared/domain-event';
 import { Controller } from '@nestjs/common';
 import { EventPattern } from '@nestjs/microservices';
-import type { DomainEvent } from '@nestposts/platform/domain/shared/domain-event';
 import { POSTS_NAMESPACE } from '@nestposts/posts/domain/post/event/posts.namespace';
-import { EventAddress, EventIngestion, TransportEvent } from '@nestposts/transport-eventbus';
+import {
+  EventAddress,
+  EventIngestion,
+  TransportEvent,
+} from '@nestposts/transport-eventbus';
 
 /** One queue, one binding, one entry: everything the `posts` namespace states. */
 export const POST_EVENTS_PATTERN = EventAddress.everyEventOf(POSTS_NAMESPACE);

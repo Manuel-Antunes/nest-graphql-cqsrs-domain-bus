@@ -1,4 +1,6 @@
-import { RmqRecordBuilder, type ReadPacket } from '@nestjs/microservices';
+import type { ReadPacket } from '@nestjs/microservices';
+import { RmqRecordBuilder } from '@nestjs/microservices';
+
 import type { EventEnvelope } from '../event-envelope';
 import { EventEnvelopeSerializer } from './event-envelope.serializer';
 
@@ -28,6 +30,10 @@ export class RmqEventEnvelopeSerializer extends EventEnvelopeSerializer {
       .setOptions({ headers: { ...envelope.metadata } })
       .build();
 
-    return { pattern: packet.pattern, data: record.data, options: record.options };
+    return {
+      pattern: packet.pattern,
+      data: record.data,
+      options: record.options,
+    };
   }
 }

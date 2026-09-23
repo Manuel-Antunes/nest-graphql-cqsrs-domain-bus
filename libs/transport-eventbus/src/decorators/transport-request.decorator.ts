@@ -1,4 +1,5 @@
 import { Payload } from '@nestjs/microservices';
+
 import { TransportRequestPipe } from '../inbound/transport-request.pipe';
 
 /**
@@ -28,4 +29,5 @@ import { TransportRequestPipe } from '../inbound/transport-request.pipe';
  * the same context and publishes the event **with** it, so the handlers, the sagas and the commands a
  * saga dispatches are already in that request. This is for the controller that dispatches itself.
  */
-export const TransportRequest = (): ParameterDecorator => Payload(TransportRequestPipe);
+export const TransportRequest = (): ParameterDecorator =>
+  Payload(TransportRequestPipe);

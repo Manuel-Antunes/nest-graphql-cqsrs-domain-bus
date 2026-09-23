@@ -1,5 +1,6 @@
-import { Logger } from '@nestjs/common';
 import type { Context as LambdaContext, SQSEvent } from 'aws-lambda';
+import { Logger } from '@nestjs/common';
+
 import type { SqsConsumer } from './sqs.strategy';
 
 /**
@@ -57,7 +58,8 @@ export const processSqsEvent = async (
       return;
     }
     const record = event.Records[index];
-    const stack = result.err instanceof Error ? result.err.stack : String(result.err);
+    const stack =
+      result.err instanceof Error ? result.err.stack : String(result.err);
 
     if (!record?.messageId) {
       logger.error(

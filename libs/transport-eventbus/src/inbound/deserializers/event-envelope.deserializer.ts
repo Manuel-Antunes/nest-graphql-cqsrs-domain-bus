@@ -1,4 +1,8 @@
-import type { ConsumerDeserializer, IncomingEvent } from '@nestjs/microservices';
+import type {
+  ConsumerDeserializer,
+  IncomingEvent,
+} from '@nestjs/microservices';
+
 import type { EventEnvelope } from '../../outbound/event-envelope';
 
 /** What a transport's deserializer has to find in a delivery: the envelope, and what it arrived as. */
@@ -31,7 +35,10 @@ export interface IncomingEnvelope {
  * wildcards keep matching as the transporter intends.
  */
 export abstract class EventEnvelopeDeserializer implements ConsumerDeserializer {
-  deserialize(value: unknown, options?: Record<string, unknown>): IncomingEvent {
+  deserialize(
+    value: unknown,
+    options?: Record<string, unknown>,
+  ): IncomingEvent {
     const { pattern, envelope } = this.deserializeEnvelope(value, options);
     return { pattern, data: envelope.decoded() };
   }
@@ -40,5 +47,8 @@ export abstract class EventEnvelopeDeserializer implements ConsumerDeserializer 
    * @param value what the transporter delivered: the body, already parsed when the transporter parses it
    * @param options what it delivered beside the body — on RabbitMQ the AMQP properties, headers included
    */
-  abstract deserializeEnvelope(value: unknown, options?: Record<string, unknown>): IncomingEnvelope;
+  abstract deserializeEnvelope(
+    value: unknown,
+    options?: Record<string, unknown>,
+  ): IncomingEnvelope;
 }

@@ -27,7 +27,9 @@ export function valueObjectType<Instance>(
       if (value == null) {
         return value;
       }
-      return value instanceof (valueObject as any) ? value : valueObject.wrap(value);
+      return value instanceof (valueObject as any)
+        ? value
+        : valueObject.wrap(value);
     }
 
     override compareAsType(): string {

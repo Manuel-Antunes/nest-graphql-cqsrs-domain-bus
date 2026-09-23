@@ -1,15 +1,16 @@
+import type { ArgumentsHost, ExceptionFilter } from '@nestjs/common';
 import { MapMemberError } from '@automapper/core';
-import { type ArgumentsHost, Catch, type ExceptionFilter } from '@nestjs/common';
-import { GraphQLError } from 'graphql';
-import { z, ZodError } from 'zod';
+import { Catch } from '@nestjs/common';
+import { AlreadyDeletedException } from '@nestposts/platform/domain/shared/soft-delete/already-deleted.exception';
+import { NotDeletedException } from '@nestposts/platform/domain/shared/soft-delete/not-deleted.exception';
 import { InvalidPostException } from '@nestposts/posts/domain/post/exception/invalid-post.exception';
 import { PostAlreadyExistsException } from '@nestposts/posts/domain/post/exception/post-already-exists.exception';
 import { PostNotFoundException } from '@nestposts/posts/domain/post/exception/post-not-found.exception';
-import { AlreadyDeletedException } from '@nestposts/platform/domain/shared/soft-delete/already-deleted.exception';
-import { NotDeletedException } from '@nestposts/platform/domain/shared/soft-delete/not-deleted.exception';
 import { InvalidTagException } from '@nestposts/posts/domain/tag/exception/invalid-tag.exception';
 import { TagAlreadyExistsException } from '@nestposts/posts/domain/tag/exception/tag-already-exists.exception';
 import { TagNotFoundException } from '@nestposts/posts/domain/tag/exception/tag-not-found.exception';
+import { GraphQLError } from 'graphql';
+import { z, ZodError } from 'zod';
 
 @Catch(
   InvalidPostException,
@@ -32,16 +33,23 @@ export class DomainExceptionFilter implements ExceptionFilter {
   }
 
   private static unwrap(exception: Error): Error {
-    return exception instanceof MapMemberError && exception.originalError instanceof Error
+    return exception instanceof MapMemberError &&
+      exception.originalError instanceof Error
       ? DomainExceptionFilter.unwrap(exception.originalError)
       : exception;
   }
 
   private static codeOf(exception: Error): string {
-    if (exception instanceof PostNotFoundException || exception instanceof TagNotFoundException) {
+    if (
+      exception instanceof PostNotFoundException ||
+      exception instanceof TagNotFoundException
+    ) {
       return 'NOT_FOUND';
     }
-    if (exception instanceof PostAlreadyExistsException || exception instanceof TagAlreadyExistsException) {
+    if (
+      exception instanceof PostAlreadyExistsException ||
+      exception instanceof TagAlreadyExistsException
+    ) {
       return 'CONFLICT';
     }
     if (exception instanceof MapMemberError) {

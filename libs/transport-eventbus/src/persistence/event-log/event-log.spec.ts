@@ -1,9 +1,10 @@
 import { MikroORM } from '@mikro-orm/core';
-import { closeTestDatabase, testDatabase } from '@nestposts/database/testing';
 import { inRequestContext } from '@nestposts/database';
+import { closeTestDatabase, testDatabase } from '@nestposts/database/testing';
 import { EventType } from '@nestposts/platform/domain/shared/event-type';
+
 import { MikroOrmEventLog } from './event-log';
-import { LoggedEvent, eventLogEntities } from './event-log.entity';
+import { eventLogEntities, LoggedEvent } from './event-log.entity';
 
 @EventType({ namespace: 'log', tags: ['postId'] })
 class PostCreatedEvent {
@@ -30,7 +31,8 @@ describe('the event log', () => {
   let orm: MikroORM;
   let log: MikroOrmEventLog;
 
-  const at = <T>(work: () => Promise<T>): Promise<T> => inRequestContext(orm.em, work);
+  const at = <T>(work: () => Promise<T>): Promise<T> =>
+    inRequestContext(orm.em, work);
 
   beforeAll(async () => {
     orm = await testDatabase({ entities: [...eventLogEntities] });
@@ -46,7 +48,10 @@ describe('the event log', () => {
   describe('as an aggregate history', () => {
     it('files an event under the aggregate its tag names, and replays it in order', async () => {
       await at(() =>
-        log.append([new PostCreatedEvent('p-1', 'Nest'), new PostUpdatedEvent('p-1', 'Nest 2')]),
+        log.append([
+          new PostCreatedEvent('p-1', 'Nest'),
+          new PostUpdatedEvent('p-1', 'Nest 2'),
+        ]),
       );
 
       const history = await at(() => log.readStream('p-1'));
@@ -83,11 +88,12 @@ describe('the event log', () => {
 
       const records = await at(() => log.readAfter('0', 10));
 
-      expect(records.map((record) => (record.event as PostCreatedEvent).postId)).toEqual([
-        'p-1',
-        'p-2',
-      ]);
-      expect(Number(records[1].position)).toBeGreaterThan(Number(records[0].position));
+      expect(
+        records.map((record) => (record.event as PostCreatedEvent).postId),
+      ).toEqual(['p-1', 'p-2']);
+      expect(Number(records[1].position)).toBeGreaterThan(
+        Number(records[0].position),
+      );
     });
 
     it('answers 0 for an empty log, which is where a first subscriber starts', async () => {

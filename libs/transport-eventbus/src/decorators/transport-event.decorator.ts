@@ -1,5 +1,6 @@
 import type { PipeTransform, Type } from '@nestjs/common';
 import { Payload } from '@nestjs/microservices';
+
 import { TransportEventPipe } from '../inbound/transport-event.pipe';
 
 /**

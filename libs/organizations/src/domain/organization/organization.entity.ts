@@ -1,4 +1,5 @@
 import { BaseEntity } from '@mikro-orm/core';
+
 import { OrganizationId } from './vo/organization-id';
 import { OrganizationName } from './vo/organization-name';
 import { OrganizationSlug } from './vo/organization-slug';

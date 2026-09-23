@@ -1,12 +1,13 @@
+import type { CredentialId } from '@nestposts/users/domain/user/vo/credential-id';
 import { EntityManager } from '@mikro-orm/core';
 import { Injectable } from '@nestjs/common';
 import { inRequestContext } from '@nestposts/database';
-import type { CredentialId } from '@nestposts/users/domain/user/vo/credential-id';
+
+import type { OrganizationId } from '../../../domain/organization/vo/organization-id';
+import type { OrganizationSlug } from '../../../domain/organization/vo/organization-slug';
 import { Member } from '../../../domain/organization/member.entity';
 import { Organization } from '../../../domain/organization/organization.entity';
 import { OrganizationRepository } from '../../../domain/organization/organization.repository';
-import type { OrganizationId } from '../../../domain/organization/vo/organization-id';
-import type { OrganizationSlug } from '../../../domain/organization/vo/organization-slug';
 
 @Injectable()
 export class MikroOrmOrganizationRepository extends OrganizationRepository {
@@ -15,11 +16,15 @@ export class MikroOrmOrganizationRepository extends OrganizationRepository {
   }
 
   findById(organizationId: OrganizationId): Promise<Organization | null> {
-    return inRequestContext(this.em, () => this.em.findOne(Organization, { id: organizationId }));
+    return inRequestContext(this.em, () =>
+      this.em.findOne(Organization, { id: organizationId }),
+    );
   }
 
   findBySlug(slug: OrganizationSlug): Promise<Organization | null> {
-    return inRequestContext(this.em, () => this.em.findOne(Organization, { slug }));
+    return inRequestContext(this.em, () =>
+      this.em.findOne(Organization, { slug }),
+    );
   }
 
   findAllOf(credentialId: CredentialId): Promise<Organization[]> {
@@ -29,7 +34,9 @@ export class MikroOrmOrganizationRepository extends OrganizationRepository {
         { user: credentialId },
         { populate: ['organization'], orderBy: { createdAt: 'asc' } },
       );
-      return memberships.map((membership) => membership.organization.getEntity());
+      return memberships.map((membership) =>
+        membership.organization.getEntity(),
+      );
     });
   }
 }

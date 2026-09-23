@@ -1,14 +1,14 @@
-import { inRequestContext } from '@nestposts/database';
-import { type AnyMikroORM, closeTestDatabase, testDatabase } from '@nestposts/database/testing';
+import type { AnyMikroORM } from '@nestposts/database/testing';
 import { AuthUser } from '@nestposts/auth/domain/auth/auth-user.entity';
 import { AuthConfiguration } from '@nestposts/auth/infrastructure/better-auth/config';
 import { BetterAuthInstance } from '@nestposts/auth/infrastructure/better-auth/init-auth';
-import {
-  BetterAuthPlugins,
-} from '@nestposts/auth/infrastructure/better-auth/plugins/registry';
+import { BetterAuthPlugins } from '@nestposts/auth/infrastructure/better-auth/plugins/registry';
 import { BETTER_AUTH_CONFIG } from '@nestposts/auth/infrastructure/better-auth/tokens';
+import { inRequestContext } from '@nestposts/database';
+import { closeTestDatabase, testDatabase } from '@nestposts/database/testing';
 import { CredentialId } from '@nestposts/users/domain/user/vo/credential-id';
 import { mikroOrmAdapter } from 'better-auth-mikro-orm';
+
 import { InvitationNotifier } from '../../domain/organization/invitation.notifier';
 import { Member } from '../../domain/organization/member.entity';
 import { Organization } from '../../domain/organization/organization.entity';
@@ -24,14 +24,18 @@ describe('better-auth writing through the organization entities', () => {
 
   const NOW = new Date('2026-09-21T12:00:00.000Z');
 
-  const inContext = <T>(work: () => Promise<T>): Promise<T> => inRequestContext(orm.em, work);
+  const inContext = <T>(work: () => Promise<T>): Promise<T> =>
+    inRequestContext(orm.em, work);
 
   const found = <T extends object>(
     entity: { new (): T },
     where: object,
     populate?: string[],
   ): Promise<T> =>
-    inContext(() => orm.em.fork().findOneOrFail(entity, where, { populate }) as Promise<T>);
+    inContext(
+      () =>
+        orm.em.fork().findOneOrFail(entity, where, { populate }) as Promise<T>,
+    );
 
   /**
    * Slugs this spec has created. Their tenant schemas are made by the trigger on `organization`,
@@ -40,30 +44,45 @@ describe('better-auth writing through the organization entities', () => {
    */
   const tenantSchemas: string[] = [];
 
-  const created = async (model: string, data: Record<string, unknown>): Promise<string> => {
+  const created = async (
+    model: string,
+    data: Record<string, unknown>,
+  ): Promise<string> => {
     const row = await inContext(() =>
-      adapter.create<Record<string, unknown>, { id: string }>({ model, data, forceAllowId: true }),
+      adapter.create<Record<string, unknown>, { id: string }>({
+        model,
+        data,
+        forceAllowId: true,
+      }),
     );
     return row.id;
   };
 
   beforeAll(async () => {
-    orm = await testDatabase({ entities: OrganizationEntities.withAuth() }, 'org');
+    orm = await testDatabase(
+      { entities: OrganizationEntities.withAuth() },
+      'org',
+    );
     const config = AuthConfiguration.fromEnvironment();
     adapter = mikroOrmAdapter(orm)(
       BetterAuthInstance.optionsFor(
         config,
-        BetterAuthPlugins.build(BetterAuthPlugins.providersWith(organizationAuthPluginProviders), [
-          [BETTER_AUTH_CONFIG, config],
-          [InvitationNotifier, silentInvitationNotifier],
-        ]),
+        BetterAuthPlugins.build(
+          BetterAuthPlugins.providersWith(organizationAuthPluginProviders),
+          [
+            [BETTER_AUTH_CONFIG, config],
+            [InvitationNotifier, silentInvitationNotifier],
+          ],
+        ),
       ),
     );
   });
 
   afterAll(async () => {
     for (const slug of tenantSchemas) {
-      await orm.em.getConnection().execute(`drop schema if exists "tenant_${slug}" cascade`);
+      await orm.em
+        .getConnection()
+        .execute(`drop schema if exists "tenant_${slug}" cascade`);
     }
     await closeTestDatabase(orm);
   });
@@ -83,15 +102,21 @@ describe('better-auth writing through the organization entities', () => {
     return created('organization', { id, name: 'Acme', slug, createdAt: NOW });
   };
 
-  const givenAMembership = (id: string, organizationId: string, userId: string, role: string) =>
-    created('member', { id, organizationId, userId, role, createdAt: NOW });
+  const givenAMembership = (
+    id: string,
+    organizationId: string,
+    userId: string,
+    role: string,
+  ) => created('member', { id, organizationId, userId, role, createdAt: NOW });
 
   it('finds our classes by the model names better-auth derives', () => {
     const metadata = orm.getMetadata();
 
     expect(metadata.getByClassName('Organization').class).toBe(Organization);
     expect(metadata.getByClassName('Member').class).toBe(Member);
-    expect(metadata.getByClassName('Organization').tableName).toBe('organization');
+    expect(metadata.getByClassName('Organization').tableName).toBe(
+      'organization',
+    );
   });
 
   it("the session grows the organization column, because the plugin is part of this module's schema", () => {
@@ -103,7 +128,9 @@ describe('better-auth writing through the organization entities', () => {
   it('a row better-auth wrote comes back as the domain entity, value objects included', async () => {
     await givenAnOrganization('org_1', 'acme');
 
-    const organization = await found(Organization, { id: OrganizationId.parse('org_1') });
+    const organization = await found(Organization, {
+      id: OrganizationId.parse('org_1'),
+    });
 
     expect(organization.id).toBeInstanceOf(OrganizationId);
     expect(organization.slug).toBeInstanceOf(OrganizationSlug);
@@ -115,7 +142,10 @@ describe('better-auth writing through the organization entities', () => {
     await givenAnOrganization('org_2', 'globex');
     await givenAMembership('member_2', 'org_2', 'cred_2', 'owner');
 
-    const member = await found(Member, { id: 'member_2' }, ['organization', 'user']);
+    const member = await found(Member, { id: 'member_2' }, [
+      'organization',
+      'user',
+    ]);
 
     expect(member.belongsTo(OrganizationId.parse('org_2'))).toBe(true);
     expect(member.identifies(CredentialId.parse('cred_2'))).toBe(true);

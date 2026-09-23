@@ -1,8 +1,12 @@
 type Mutation {
-  """Despacha CreatePostCommand e devolve o Post já gravado"""
+  """
+  Despacha CreatePostCommand e devolve o Post já gravado
+  """
   createPost(input: CreatePostInput!): Post!
 
-  """Despacha UpdatePostCommand e devolve o Post já gravado"""
+  """
+  Despacha UpdatePostCommand e devolve o Post já gravado
+  """
   updatePost(input: UpdatePostInput!): Post!
 }
 
@@ -14,9 +18,13 @@ input CreatePostInput {
 input UpdatePostInput {
   id: ID!
 
-  """null = manter o título atual"""
+  """
+  null = manter o título atual
+  """
   title: String
 
-  """null = manter o conteúdo atual"""
+  """
+  null = manter o conteúdo atual
+  """
   content: String
 }

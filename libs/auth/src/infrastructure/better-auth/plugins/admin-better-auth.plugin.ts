@@ -1,5 +1,6 @@
 import type { FactoryProvider } from '@nestjs/common';
 import { admin } from 'better-auth/plugins';
+
 import { systemAccessControl, systemRoles } from '../access';
 import { ADMIN_BETTER_AUTH_PLUGIN } from './tokens';
 

@@ -1,8 +1,10 @@
-import { type Cursor } from '@mikro-orm/core';
-import { type IQueryHandler, Query, QueryHandler } from '@nestjs/cqrs';
+import type { IQueryHandler } from '@nestjs/cqrs';
 import type { Post } from '@nestposts/posts/domain/post/post.entity';
-import { PostRepository } from '@nestposts/posts/domain/post/post.repository';
 import type { UserId } from '@nestposts/users/domain/user/vo/user-id';
+import { type Cursor } from '@mikro-orm/core';
+import { Query, QueryHandler } from '@nestjs/cqrs';
+import { PostRepository } from '@nestposts/posts/domain/post/post.repository';
+
 import { FindAllPostsQuery } from './find-all-posts.query';
 
 export namespace FindPostsByAuthorQuery {
@@ -27,7 +29,10 @@ export namespace FindPostsByAuthorQuery {
     constructor(private readonly posts: PostRepository) {}
 
     async execute(query: FindPostsByAuthor): Promise<Cursor<Post>> {
-      return this.posts.findByAuthor(query.authorId, { first: query.first, after: query.after });
+      return this.posts.findByAuthor(query.authorId, {
+        first: query.first,
+        after: query.after,
+      });
     }
   }
 }

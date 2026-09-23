@@ -1,20 +1,25 @@
-import { closeTestDatabase, testDatabase } from '@nestposts/database/testing';
-import { MikroORM } from '@mikro-orm/core';
 import type { QueryBus } from '@nestjs/cqrs';
-import { FindAuthorQuery } from '../../application/user/query/find-author.query';
-import { User } from '@nestposts/users/domain/user/user.entity';
-import { AUTHOR_ROLE, Author, Authorship } from '@nestposts/users/domain/user/author.entity';
-import { NotAnAuthorException } from '@nestposts/users/domain/user/exception/not-an-author.exception';
+import { MikroORM } from '@mikro-orm/core';
+import { closeTestDatabase, testDatabase } from '@nestposts/database/testing';
 import { PostId } from '@nestposts/posts/domain/post/vo/post-id';
-import { UserId } from '@nestposts/users/domain/user/vo/user-id';
-import { AuthorView } from '../../dto/graphql/user.view';
-import { PostView } from '../../dto/graphql/post.view';
 import { PostEntitySchema } from '@nestposts/posts/infrastructure/persistence/entities/post-orm.entity';
 import { TagSchema } from '@nestposts/posts/infrastructure/persistence/entities/tag-orm.entity';
+import {
+  Author,
+  AUTHOR_ROLE,
+  Authorship,
+} from '@nestposts/users/domain/user/author.entity';
+import { NotAnAuthorException } from '@nestposts/users/domain/user/exception/not-an-author.exception';
+import { User } from '@nestposts/users/domain/user/user.entity';
+import { UserId } from '@nestposts/users/domain/user/vo/user-id';
 import {
   AuthorshipEntitySchema,
   UserEntitySchema,
 } from '@nestposts/users/infrastructure/persistence/entities/user-orm.entity';
+
+import { FindAuthorQuery } from '../../application/user/query/find-author.query';
+import { PostView } from '../../dto/graphql/post.view';
+import { AuthorView } from '../../dto/graphql/user.view';
 import { PostAuthorResolver } from './post-author.resolver';
 
 describe('PostAuthorResolver', () => {
@@ -22,8 +27,13 @@ describe('PostAuthorResolver', () => {
 
   beforeAll(async () => {
     orm = await testDatabase({
-        entities: [PostEntitySchema, TagSchema, UserEntitySchema, AuthorshipEntitySchema],
-      });
+      entities: [
+        PostEntitySchema,
+        TagSchema,
+        UserEntitySchema,
+        AuthorshipEntitySchema,
+      ],
+    });
   });
 
   afterAll(() => closeTestDatabase(orm));
@@ -32,7 +42,12 @@ describe('PostAuthorResolver', () => {
   const now = new Date('2026-09-08T12:00:00.000Z');
 
   const anAuthor = (): Author => {
-    const user = User.register(authorId, { email: 'manuel@example.com', name: 'manuel' }, [AUTHOR_ROLE], now);
+    const user = User.register(
+      authorId,
+      { email: 'manuel@example.com', name: 'manuel' },
+      [AUTHOR_ROLE],
+      now,
+    );
     return Author.cast(user, Authorship.of(user));
   };
 
@@ -66,7 +81,9 @@ describe('PostAuthorResolver', () => {
 
     expect(dispatched).toHaveLength(1);
     expect(dispatched[0]).toBeInstanceOf(FindAuthorQuery.FindAuthor);
-    expect((dispatched[0] as FindAuthorQuery.FindAuthor).authorId.equals(authorId)).toBe(true);
+    expect(
+      (dispatched[0] as FindAuthorQuery.FindAuthor).authorId.equals(authorId),
+    ).toBe(true);
   });
 
   it('devolve o autor que o handler achou, sem tocá-lo', async () => {
@@ -81,7 +98,9 @@ describe('PostAuthorResolver', () => {
   it('um autor que não está mais lá é um erro, e não um null', async () => {
     const { resolver } = resolverOn(null);
 
-    await expect(resolver.author(aPostView())).rejects.toThrow(NotAnAuthorException);
+    await expect(resolver.author(aPostView())).rejects.toThrow(
+      NotAnAuthorException,
+    );
   });
 
   it('o erro nomeia o autor que faltou', async () => {

@@ -1,4 +1,10 @@
-import { TENANT_SCHEMA_PREFIX, defineEntity, p, valueObjectType } from '@nestposts/database';
+import {
+  defineEntity,
+  p,
+  TENANT_SCHEMA_PREFIX,
+  valueObjectType,
+} from '@nestposts/database';
+
 import { Organization } from '../../../domain/organization/organization.entity';
 import { ORGANIZATION_ID_MAX_LENGTH } from '../../../domain/organization/schemas/organization-id.schema';
 import { ORGANIZATION_NAME_MAX_LENGTH } from '../../../domain/organization/schemas/organization-name.schema';

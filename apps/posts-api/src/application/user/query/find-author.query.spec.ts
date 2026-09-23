@@ -1,10 +1,19 @@
-import { MikroORM } from '@mikro-orm/core';
 import type { TestingModule } from '@nestjs/testing';
-import { createCqrsTestingModule, inRequestContext } from '../../../../test/support/cqrs-testing-module';
-import { givenAnAuthor, givenAPost, givenAUser, T0 } from '../../../../test/support/post-fixtures';
-import { FindAllPostsQuery } from '../../post/query/find-all-posts.query';
+import { MikroORM } from '@mikro-orm/core';
 import { Author } from '@nestposts/users/domain/user/author.entity';
 import { UserId } from '@nestposts/users/domain/user/vo/user-id';
+
+import {
+  createCqrsTestingModule,
+  inRequestContext,
+} from '../../../../test/support/cqrs-testing-module';
+import {
+  givenAnAuthor,
+  givenAPost,
+  givenAUser,
+  T0,
+} from '../../../../test/support/post-fixtures';
+import { FindAllPostsQuery } from '../../post/query/find-all-posts.query';
 import { FindAuthorQuery } from './find-author.query';
 
 describe('FindAuthorQuery.Handler', () => {
@@ -14,7 +23,9 @@ describe('FindAuthorQuery.Handler', () => {
 
   const countingSelects = () => {
     const selects: string[] = [];
-    const connection = orm.em.getConnection() as unknown as { execute: (...args: unknown[]) => unknown };
+    const connection = orm.em.getConnection() as unknown as {
+      execute: (...args: unknown[]) => unknown;
+    };
     const original = connection.execute.bind(connection);
     connection.execute = (...args: unknown[]) => {
       if (typeof args[0] === 'string' && /^\s*select/i.test(args[0])) {
@@ -26,7 +37,10 @@ describe('FindAuthorQuery.Handler', () => {
   };
 
   beforeEach(async () => {
-    module = await createCqrsTestingModule([FindAuthorQuery.Handler, FindAllPostsQuery.Handler]);
+    module = await createCqrsTestingModule([
+      FindAuthorQuery.Handler,
+      FindAllPostsQuery.Handler,
+    ]);
     handler = module.get(FindAuthorQuery.Handler);
     orm = module.get(MikroORM);
   });
@@ -60,9 +74,20 @@ describe('FindAuthorQuery.Handler', () => {
   });
 
   it('resolver o autor de uma página de posts custa ZERO consultas', async () => {
-    const [umaPessoa, outraPessoa] = [await givenAnAuthor(module), await givenAnAuthor(module)];
-    for (const [index, author] of [umaPessoa, outraPessoa, umaPessoa].entries()) {
-      await givenAPost(module, { title: `p${index}`, author, createdAt: new Date(T0.getTime() + index * 1000) });
+    const [umaPessoa, outraPessoa] = [
+      await givenAnAuthor(module),
+      await givenAnAuthor(module),
+    ];
+    for (const [index, author] of [
+      umaPessoa,
+      outraPessoa,
+      umaPessoa,
+    ].entries()) {
+      await givenAPost(module, {
+        title: `p${index}`,
+        author,
+        createdAt: new Date(T0.getTime() + index * 1000),
+      });
     }
     const naoLido = await givenAnAuthor(module);
 
@@ -73,7 +98,9 @@ describe('FindAuthorQuery.Handler', () => {
       const counter = countingSelects();
 
       for (const post of page.items) {
-        expect(await handler.execute(new FindAuthorQuery.FindAuthor(post.author.id))).toBeInstanceOf(Author);
+        expect(
+          await handler.execute(new FindAuthorQuery.FindAuthor(post.author.id)),
+        ).toBeInstanceOf(Author);
       }
 
       expect(page.items).toHaveLength(3);
@@ -88,7 +115,9 @@ describe('FindAuthorQuery.Handler', () => {
   it('funciona fora de qualquer contexto de requisição — o caminho do WebSocket', async () => {
     const author = await givenAnAuthor(module);
 
-    const found = await handler.execute(new FindAuthorQuery.FindAuthor(author.id));
+    const found = await handler.execute(
+      new FindAuthorQuery.FindAuthor(author.id),
+    );
 
     expect(found).toBeInstanceOf(Author);
     expect(found!.id.equals(author.id)).toBe(true);

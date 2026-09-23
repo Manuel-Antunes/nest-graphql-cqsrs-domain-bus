@@ -21,14 +21,20 @@ describe('a unit of work', () => {
       trace.push('work');
     });
 
-    expect(trace).toEqual(['work', 'prepareCommit', 'commit', 'afterCommit', 'cleanup']);
+    expect(trace).toEqual([
+      'work',
+      'prepareCommit',
+      'commit',
+      'afterCommit',
+      'cleanup',
+    ]);
   });
 
   it('answers what the work answered', async () => {
     await expect(UnitOfWork.run(async () => 'done')).resolves.toBe('done');
   });
 
-  it('does not commit work that failed: the events are discarded and the failure is the caller\'s', async () => {
+  it("does not commit work that failed: the events are discarded and the failure is the caller's", async () => {
     await expect(
       UnitOfWork.run(async () => {
         UnitOfWork.current()?.on('commit', record('commit'));

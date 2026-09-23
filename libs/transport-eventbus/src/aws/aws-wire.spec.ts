@@ -1,6 +1,7 @@
+import type { EnvelopeMetadata } from '../outbound/event-envelope';
+import type { AwsEnvelopeMessage } from './aws-message';
 import { SqsEventEnvelopeDeserializer } from '../inbound/deserializers/sqs-event-envelope.deserializer';
 import {
-  type EnvelopeMetadata,
   EventEnvelope,
   TRANSPORT_IDENTIFIER,
   TRANSPORT_MESSAGE_TYPE,
@@ -15,7 +16,6 @@ import {
   AWS_ORIGIN_ATTRIBUTE,
   AWS_QUALIFIED_NAME_ATTRIBUTE,
   AWS_ROUTING_KEY_ATTRIBUTE,
-  type AwsEnvelopeMessage,
 } from './aws-message';
 
 const ROUTING_KEY = 'posts.PostCreated.p-1';
@@ -29,7 +29,10 @@ const metadata: EnvelopeMetadata = {
   'x-tenant': 'acme',
 };
 
-const publish = (data: object, envelopeMetadata: EnvelopeMetadata = metadata): AwsEnvelopeMessage =>
+const publish = (
+  data: object,
+  envelopeMetadata: EnvelopeMetadata = metadata,
+): AwsEnvelopeMessage =>
   new AwsEventEnvelopeSerializer().serialize({
     pattern: ROUTING_KEY,
     data: new EventEnvelope(data, envelopeMetadata),
@@ -54,9 +57,15 @@ describe('the AWS wire', () => {
     });
 
     it('stays under the ten attributes AWS allows, however much the envelope carries', () => {
-      const crowded = { ...metadata, traceparent: '00-a-b-01', 'post-request-post-id': 'p-1' };
+      const crowded = {
+        ...metadata,
+        'traceparent': '00-a-b-01',
+        'post-request-post-id': 'p-1',
+      };
 
-      expect(Object.keys(publish({}, crowded).attributes).length).toBeLessThanOrEqual(10);
+      expect(
+        Object.keys(publish({}, crowded).attributes).length,
+      ).toBeLessThanOrEqual(10);
     });
 
     it('keeps the whole metadata in the body, where there is room for it', () => {

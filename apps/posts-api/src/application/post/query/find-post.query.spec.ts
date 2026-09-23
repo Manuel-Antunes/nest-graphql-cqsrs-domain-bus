@@ -1,13 +1,14 @@
-import { QueryBus } from '@nestjs/cqrs';
 import type { TestingModule } from '@nestjs/testing';
+import { QueryBus } from '@nestjs/cqrs';
+import { Post } from '@nestposts/posts/domain/post/post.entity';
+import { PostId } from '@nestposts/posts/domain/post/vo/post-id';
+
 import {
   createCqrsTestingModule,
   freshEm,
   inRequestContext,
 } from '../../../../test/support/cqrs-testing-module';
 import { givenAPost, givenATag } from '../../../../test/support/post-fixtures';
-import { Post } from '@nestposts/posts/domain/post/post.entity';
-import { PostId } from '@nestposts/posts/domain/post/vo/post-id';
 import { FindPostQuery } from './find-post.query';
 
 describe('FindPostQuery.Handler', () => {
@@ -15,7 +16,9 @@ describe('FindPostQuery.Handler', () => {
   let queries: QueryBus;
 
   const execute = (postId: PostId) =>
-    inRequestContext(module, () => queries.execute(new FindPostQuery.FindPost(postId)));
+    inRequestContext(module, () =>
+      queries.execute(new FindPostQuery.FindPost(postId)),
+    );
 
   beforeEach(async () => {
     module = await createCqrsTestingModule([FindPostQuery.Handler]);
@@ -41,7 +44,9 @@ describe('FindPostQuery.Handler', () => {
     const found = await execute(post.id);
 
     expect(found!.tags.isInitialized()).toBe(true);
-    expect(found!.tags.getItems().map((each) => each.name.value)).toEqual(['dev']);
+    expect(found!.tags.getItems().map((each) => each.name.value)).toEqual([
+      'dev',
+    ]);
     expect(found!.author.delegated().name.value).toBe('manuel');
   });
 

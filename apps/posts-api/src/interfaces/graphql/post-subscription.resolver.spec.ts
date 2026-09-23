@@ -1,11 +1,12 @@
-import { Subject } from 'rxjs';
-import { OnPostCreatedSubscription } from '../../application/post/subscription/on-post-created.subscription';
-import { OnPostUpdatedSubscription } from '../../application/post/subscription/on-post-updated.subscription';
 import type { SubscriptionBus } from '@nestposts/cqsrs';
 import { PostCreatedEvent } from '@nestposts/posts/domain/post/event/post-created.event';
 import { PostUpdatedEvent } from '@nestposts/posts/domain/post/event/post-updated.event';
 import { PostId } from '@nestposts/posts/domain/post/vo/post-id';
 import { UserId } from '@nestposts/users/domain/user/vo/user-id';
+import { Subject } from 'rxjs';
+
+import { OnPostCreatedSubscription } from '../../application/post/subscription/on-post-created.subscription';
+import { OnPostUpdatedSubscription } from '../../application/post/subscription/on-post-updated.subscription';
 import { PostSubscriptionResolver } from './post-subscription.resolver';
 
 describe('PostSubscriptionResolver', () => {
@@ -25,9 +26,28 @@ describe('PostSubscriptionResolver', () => {
     return { resolver: new PostSubscriptionResolver(bus), asked, source };
   };
 
-  const created = () => new PostCreatedEvent(postId.value, 'completo', 'oi', authorId.value, [], 2, now);
+  const created = () =>
+    new PostCreatedEvent(
+      postId.value,
+      'completo',
+      'oi',
+      authorId.value,
+      [],
+      2,
+      now,
+    );
   const updated = (version = 2) =>
-    new PostUpdatedEvent(postId.value, 'editado', 'novo', authorId.value, 'manuel', [], version, now, now);
+    new PostUpdatedEvent(
+      postId.value,
+      'editado',
+      'novo',
+      authorId.value,
+      'manuel',
+      [],
+      version,
+      now,
+      now,
+    );
 
   describe('onPostCreated', () => {
     it('pede ao bus a subscription sem critério, e não espera nada', () => {
@@ -59,7 +79,9 @@ describe('PostSubscriptionResolver', () => {
       resolver.onPostUpdated(postId.value);
 
       expect(asked[0]).toBeInstanceOf(OnPostUpdatedSubscription.OnPostUpdated);
-      expect((asked[0] as OnPostUpdatedSubscription.OnPostUpdated).criteria).toEqual({ postId: postId.value });
+      expect(
+        (asked[0] as OnPostUpdatedSubscription.OnPostUpdated).criteria,
+      ).toEqual({ postId: postId.value });
     });
 
     it('sem postId, o critério é o de todos os posts', () => {
@@ -68,8 +90,12 @@ describe('PostSubscriptionResolver', () => {
       resolver.onPostUpdated();
       resolver.onPostUpdated(null);
 
-      expect((asked[0] as OnPostUpdatedSubscription.OnPostUpdated).criteria).toEqual({ postId: undefined });
-      expect((asked[1] as OnPostUpdatedSubscription.OnPostUpdated).criteria).toEqual({ postId: null });
+      expect(
+        (asked[0] as OnPostUpdatedSubscription.OnPostUpdated).criteria,
+      ).toEqual({ postId: undefined });
+      expect(
+        (asked[1] as OnPostUpdatedSubscription.OnPostUpdated).criteria,
+      ).toEqual({ postId: null });
     });
 
     it('entrega o PostUpdated que passou pelo bus', async () => {
@@ -91,7 +117,17 @@ describe('PostSubscriptionResolver', () => {
       const first = stream[Symbol.asyncIterator]().next();
 
       source.next(
-        new PostUpdatedEvent(outroPost.value, 't', 'c', authorId.value, 'manuel', [], 2, now, now),
+        new PostUpdatedEvent(
+          outroPost.value,
+          't',
+          'c',
+          authorId.value,
+          'manuel',
+          [],
+          2,
+          now,
+          now,
+        ),
       );
       const { value } = await first;
 

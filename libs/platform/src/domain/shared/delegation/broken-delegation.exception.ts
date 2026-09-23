@@ -1,9 +1,9 @@
-import type { Type } from "@nestjs/common";
+import type { Type } from '@nestjs/common';
 
 export class BrokenDelegationException extends Error {
   constructor(message: string) {
     super(message);
-    this.name = "BrokenDelegationException";
+    this.name = 'BrokenDelegationException';
   }
 
   static missingMember(

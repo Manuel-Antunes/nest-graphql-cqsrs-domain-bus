@@ -1,8 +1,8 @@
 import 'reflect-metadata';
 
+import { inspect } from 'node:util';
 import { instanceToPlain, plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
-import { inspect } from 'node:util';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
@@ -26,7 +26,12 @@ const PostTitleSchema = z
   .max(200, 'title excede 200 caracteres')
   .brand<'PostTitle'>();
 
-const EmailSchema = z.string().trim().toLowerCase().pipe(z.email('email inválido')).brand<'Email'>();
+const EmailSchema = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .pipe(z.email('email inválido'))
+  .brand<'Email'>();
 
 class PostTitle extends ValidatedScalar(PostTitleSchema) {
   isQuestion(): boolean {
@@ -71,7 +76,9 @@ describe('ValidatedDto.Scalar', () => {
     });
 
     it('lança no construtor quando a classe é strict', () => {
-      class StrictTitle extends ValidatedScalar(PostTitleSchema, { strict: true }) {}
+      class StrictTitle extends ValidatedScalar(PostTitleSchema, {
+        strict: true,
+      }) {}
 
       expect(() => new StrictTitle('')).toThrow(z.ZodError);
       expect(() => new StrictTitle('ok')).not.toThrow();
@@ -112,12 +119,16 @@ describe('ValidatedDto.Scalar', () => {
     });
 
     it('serializa datas como ISO no toString e mantém o Date no valor', () => {
-      class OccurredAt extends ValidatedScalar(z.coerce.date().brand<'OccurredAt'>()) {}
+      class OccurredAt extends ValidatedScalar(
+        z.coerce.date().brand<'OccurredAt'>(),
+      ) {}
       const occurredAt = new OccurredAt('2024-01-15T10:30:00.000Z');
 
       expect(occurredAt.value).toBeInstanceOf(Date);
       expect(occurredAt.toString()).toBe('2024-01-15T10:30:00.000Z');
-      expect(JSON.stringify({ occurredAt })).toBe('{"occurredAt":"2024-01-15T10:30:00.000Z"}');
+      expect(JSON.stringify({ occurredAt })).toBe(
+        '{"occurredAt":"2024-01-15T10:30:00.000Z"}',
+      );
       expect(Number(occurredAt)).toBe(Date.parse('2024-01-15T10:30:00.000Z'));
     });
 
@@ -155,10 +166,14 @@ describe('ValidatedDto.Scalar', () => {
     });
 
     it('compara datas pelo instante', () => {
-      class OccurredAt extends ValidatedScalar(z.coerce.date().brand<'OccurredAt'>()) {}
+      class OccurredAt extends ValidatedScalar(
+        z.coerce.date().brand<'OccurredAt'>(),
+      ) {}
 
       expect(
-        new OccurredAt('2024-01-15T10:30:00Z').equals(new OccurredAt('2024-01-15T10:30:00Z')),
+        new OccurredAt('2024-01-15T10:30:00Z').equals(
+          new OccurredAt('2024-01-15T10:30:00Z'),
+        ),
       ).toBe(true);
     });
   });
@@ -171,7 +186,9 @@ describe('ValidatedDto.Scalar', () => {
       expect(valid.isValid()).toBe(true);
       expect(valid.validationError()).toBeUndefined();
       expect(invalid.isValid()).toBe(false);
-      expect(invalid.validationError()?.issues[0].message).toBe('title não pode ser vazio');
+      expect(invalid.validationError()?.issues[0].message).toBe(
+        'title não pode ser vazio',
+      );
     });
 
     it('assertValid devolve this ou lança ZodError', () => {
@@ -196,7 +213,9 @@ describe('ValidatedDto.Scalar', () => {
 
       expect(errors).toHaveLength(1);
       expect(errors[0].property).toBe('value');
-      expect(Object.values(errors[0].constraints ?? {})).toContain('title não pode ser vazio');
+      expect(Object.values(errors[0].constraints ?? {})).toContain(
+        'title não pode ser vazio',
+      );
     });
 
     it('não acusa erro num value object válido', async () => {
@@ -246,7 +265,9 @@ describe('ValidatedDto.Scalar', () => {
     });
 
     it('parse não aplica um transform duas vezes', () => {
-      class Exclaimed extends ValidatedScalar(z.string().transform((v) => `${v}!`)) {}
+      class Exclaimed extends ValidatedScalar(
+        z.string().transform((v) => `${v}!`),
+      ) {}
 
       const parsed = Exclaimed.parse('oi');
 
@@ -285,7 +306,9 @@ describe('ValidatedDto.Scalar', () => {
     });
 
     it('narrow aperta as regras mantendo o tipo da classe de origem', async () => {
-      class ShortTitle extends PostTitle.narrow((title) => title.max(5, 'title curto demais')) {}
+      class ShortTitle extends PostTitle.narrow((title) =>
+        title.max(5, 'title curto demais'),
+      ) {}
 
       const ok = new ShortTitle('Olá');
       const tooLong = new ShortTitle('Um título bem grande');
@@ -303,12 +326,17 @@ describe('ValidatedDto.Scalar', () => {
 
       expect(parsed).toBeInstanceOf(ShortTitle);
       expect(parsed).toBeInstanceOf(PostTitle);
-      expect(() => ShortTitle.parse('Um título bem grande')).toThrow(z.ZodError);
+      expect(() => ShortTitle.parse('Um título bem grande')).toThrow(
+        z.ZodError,
+      );
     });
 
     it('sobrescrever static schema na mão também vale, remarcando a brand', async () => {
       class ExclaimedTitle extends PostTitle {
-        static override schema = PostTitleSchema.endsWith('!', 'precisa terminar com !').brand<'PostTitle'>();
+        static override schema = PostTitleSchema.endsWith(
+          '!',
+          'precisa terminar com !',
+        ).brand<'PostTitle'>();
       }
 
       const ok = new ExclaimedTitle('Olá!');
@@ -367,7 +395,9 @@ describe('ValidatedDto.Scalar', () => {
       @InheritValidatedMetadata()
       class Decorated extends ValidatedScalar(schema) {}
 
-      expect(Reflect.getMetadata(metadataKey, Decorated.prototype, 'value')).toBe('sim');
+      expect(
+        Reflect.getMetadata(metadataKey, Decorated.prototype, 'value'),
+      ).toBe('sim');
     });
 
     it('um registry isolado soma ao global, sem aplicar o mesmo decorator duas vezes', () => {
@@ -388,10 +418,20 @@ describe('ValidatedDto.Scalar', () => {
       schema.register(isolado, { decorators: [nosDois] });
 
       @InheritValidatedMetadata()
-      class DoisRegistries extends ValidatedScalar(schema, { DECORATOR_REGISTRY: isolado }) {}
+      class DoisRegistries extends ValidatedScalar(schema, {
+        DECORATOR_REGISTRY: isolado,
+      }) {}
 
-      expect(Reflect.getMetadata('marca:nos-dois', DoisRegistries.prototype, 'value')).toBe(true);
-      expect(Reflect.getMetadata('marca:global', DoisRegistries.prototype, 'value')).toBe(true);
+      expect(
+        Reflect.getMetadata(
+          'marca:nos-dois',
+          DoisRegistries.prototype,
+          'value',
+        ),
+      ).toBe(true);
+      expect(
+        Reflect.getMetadata('marca:global', DoisRegistries.prototype, 'value'),
+      ).toBe(true);
       expect(aplicados.filter((nome) => nome === 'nos-dois')).toHaveLength(
         aplicados.filter((nome) => nome === 'global').length,
       );
@@ -399,11 +439,19 @@ describe('ValidatedDto.Scalar', () => {
 
     it('marca o design:type do value conforme o schema', () => {
       class Score extends ValidatedScalar(z.number().brand<'Score'>()) {}
-      class OccurredAt extends ValidatedScalar(z.coerce.date().brand<'OccurredAt'>()) {}
+      class OccurredAt extends ValidatedScalar(
+        z.coerce.date().brand<'OccurredAt'>(),
+      ) {}
 
-      expect(Reflect.getMetadata('design:type', PostTitle.prototype, 'value')).toBe(String);
-      expect(Reflect.getMetadata('design:type', Score.prototype, 'value')).toBe(Number);
-      expect(Reflect.getMetadata('design:type', OccurredAt.prototype, 'value')).toBe(Date);
+      expect(
+        Reflect.getMetadata('design:type', PostTitle.prototype, 'value'),
+      ).toBe(String);
+      expect(Reflect.getMetadata('design:type', Score.prototype, 'value')).toBe(
+        Number,
+      );
+      expect(
+        Reflect.getMetadata('design:type', OccurredAt.prototype, 'value'),
+      ).toBe(Date);
     });
   });
 
@@ -479,19 +527,29 @@ describe('ValidatedDto.Scalar', () => {
     class Pontuacao extends ValidatedScalar(z.number().brand<'Pontuacao'>()) {}
     class Vencimento extends ValidatedScalar(z.date().brand<'Vencimento'>()) {}
     class Ativo extends ValidatedScalar(z.boolean().brand<'Ativo'>()) {}
-    class Etiquetas extends ValidatedScalar(z.array(z.string()).brand<'Etiquetas'>()) {}
+    class Etiquetas extends ValidatedScalar(
+      z.array(z.string()).brand<'Etiquetas'>(),
+    ) {}
     class Serie extends ValidatedScalar(z.bigint().brand<'Serie'>()) {}
 
     it('números comparam por valor, e dois NaN são o mesmo valor', () => {
       expect(new Pontuacao(10).equals(new Pontuacao(10))).toBe(true);
       expect(new Pontuacao(10).equals(new Pontuacao(11))).toBe(false);
-      expect(new Pontuacao(Number.NaN).equals(new Pontuacao(Number.NaN))).toBe(true);
+      expect(new Pontuacao(Number.NaN).equals(new Pontuacao(Number.NaN))).toBe(
+        true,
+      );
     });
 
     it('arrays comparam item a item, e a ordem conta', () => {
-      expect(new Etiquetas(['a', 'b']).equals(new Etiquetas(['a', 'b']))).toBe(true);
-      expect(new Etiquetas(['a', 'b']).equals(new Etiquetas(['b', 'a']))).toBe(false);
-      expect(new Etiquetas(['a']).equals(new Etiquetas(['a', 'b']))).toBe(false);
+      expect(new Etiquetas(['a', 'b']).equals(new Etiquetas(['a', 'b']))).toBe(
+        true,
+      );
+      expect(new Etiquetas(['a', 'b']).equals(new Etiquetas(['b', 'a']))).toBe(
+        false,
+      );
+      expect(new Etiquetas(['a']).equals(new Etiquetas(['a', 'b']))).toBe(
+        false,
+      );
     });
 
     it('datas imprimem em ISO e coagem para epoch quando o contexto é numérico', () => {
@@ -501,7 +559,9 @@ describe('ValidatedDto.Scalar', () => {
       expect(String(vencimento)).toBe('2026-09-08T12:00:00.000Z');
       expect(`${vencimento}`).toBe('2026-09-08T12:00:00.000Z');
       expect(+vencimento).toBe(at.getTime());
-      expect(vencimento.equals(new Vencimento(new Date(at.getTime())))).toBe(true);
+      expect(vencimento.equals(new Vencimento(new Date(at.getTime())))).toBe(
+        true,
+      );
     });
 
     it('toString protege a data inválida, mas a coerção implícita propaga o RangeError', () => {
@@ -528,9 +588,15 @@ describe('ValidatedDto.Scalar', () => {
       class Nulo extends ValidatedScalar(z.number().nullable() as any) {}
       class ComPadrao extends ValidatedScalar(z.number().default(0) as any) {}
 
-      expect(Reflect.getMetadata('design:type', Talvez.prototype, 'value')).toBe(Number);
-      expect(Reflect.getMetadata('design:type', Nulo.prototype, 'value')).toBe(Number);
-      expect(Reflect.getMetadata('design:type', ComPadrao.prototype, 'value')).toBe(Number);
+      expect(
+        Reflect.getMetadata('design:type', Talvez.prototype, 'value'),
+      ).toBe(Number);
+      expect(Reflect.getMetadata('design:type', Nulo.prototype, 'value')).toBe(
+        Number,
+      );
+      expect(
+        Reflect.getMetadata('design:type', ComPadrao.prototype, 'value'),
+      ).toBe(Number);
     });
   });
 
@@ -557,11 +623,25 @@ describe('ValidatedDto.Scalar', () => {
     it('a mensagem padrão do validador cobre o caso em que não há falha a relatar', () => {
       const validator = new ZodScalarValidator();
       const args = (value: unknown, schema: z.ZodType) =>
-        ({ value, constraints: [schema], object: {}, property: 'value', targetName: 'X' }) as any;
+        ({
+          value,
+          constraints: [schema],
+          object: {},
+          property: 'value',
+          targetName: 'X',
+        }) as any;
 
-      expect(validator.defaultMessage(args('ok', z.string().min(1)))).toBe('Validation failed');
-      expect(validator.defaultMessage(args('', z.string().min(1, 'vazio não vale')))).toBe('vazio não vale');
-      expect(validator.defaultMessage(args('', z.string().min(1).describe('Título')))).toBe('Título is invalid');
+      expect(validator.defaultMessage(args('ok', z.string().min(1)))).toBe(
+        'Validation failed',
+      );
+      expect(
+        validator.defaultMessage(args('', z.string().min(1, 'vazio não vale'))),
+      ).toBe('vazio não vale');
+      expect(
+        validator.defaultMessage(
+          args('', z.string().min(1).describe('Título')),
+        ),
+      ).toBe('Título is invalid');
     });
   });
 });

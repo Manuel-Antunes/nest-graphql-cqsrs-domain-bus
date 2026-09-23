@@ -1,6 +1,7 @@
-import { TagId } from '@nestposts/posts/domain/tag/vo/tag-id';
 import { PostId } from '@nestposts/posts/domain/post/vo/post-id';
+import { TagId } from '@nestposts/posts/domain/tag/vo/tag-id';
 import { UserId } from '@nestposts/users/domain/user/vo/user-id';
+
 import { PostView } from '../../dto/graphql/post.view';
 import { TagView } from '../../dto/graphql/tag.view';
 import { PostTagsResolver } from './post-tags.resolver';
@@ -21,7 +22,8 @@ describe('PostTagsResolver', () => {
     });
 
   const post = viewWith(['a', 'b', 'c', 'd', 'e']);
-  const names = (page: { items: TagView[] }) => page.items.map((tag) => tag.name.value);
+  const names = (page: { items: TagView[] }) =>
+    page.items.map((tag) => tag.name.value);
 
   it('corta a página e sinaliza que há mais', () => {
     const page = resolver.tags(post, 2);
@@ -62,14 +64,23 @@ describe('PostTagsResolver', () => {
     const page = resolver.tags(viewWith([]));
 
     expect(page.items).toEqual([]);
-    expect(page).toMatchObject({ hasNextPage: false, hasPrevPage: false, startCursor: null, endCursor: null });
+    expect(page).toMatchObject({
+      hasNextPage: false,
+      hasPrevPage: false,
+      startCursor: null,
+      endCursor: null,
+    });
   });
 
   it('cada item leva o cursor da sua posição absoluta', () => {
     const first = resolver.tags(post, 3);
     const second = resolver.tags(post, 3, first.endCursor);
 
-    expect(second.from(second.items[0])).not.toEqual(first.from(first.items[0]));
-    expect(names(resolver.tags(post, 1, second.from(second.items[0])))).toEqual(['e']);
+    expect(second.from(second.items[0])).not.toEqual(
+      first.from(first.items[0]),
+    );
+    expect(names(resolver.tags(post, 1, second.from(second.items[0])))).toEqual(
+      ['e'],
+    );
   });
 });

@@ -1,7 +1,8 @@
-import { type IQueryHandler, Query, QueryHandler } from '@nestjs/cqrs';
+import type { IQueryHandler } from '@nestjs/cqrs';
 import type { Tag } from '@nestposts/posts/domain/tag/tag.entity';
-import { TagRepository } from '@nestposts/posts/domain/tag/tag.repository';
 import type { TagId } from '@nestposts/posts/domain/tag/vo/tag-id';
+import { Query, QueryHandler } from '@nestjs/cqrs';
+import { TagRepository } from '@nestposts/posts/domain/tag/tag.repository';
 
 export namespace FindTagQuery {
   export class FindTag extends Query<Tag | null> {

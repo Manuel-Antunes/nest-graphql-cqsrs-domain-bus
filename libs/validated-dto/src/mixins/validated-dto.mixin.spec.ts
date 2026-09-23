@@ -15,7 +15,11 @@ import {
   createDecoratorRegistry,
   DECORATOR_REGISTRY,
 } from '../schemas/registries/decorators.registry';
-import { InheritValidatedMetadata, ValidatedDto, ZodFieldValidator } from './validated-dto.mixin';
+import {
+  InheritValidatedMetadata,
+  ValidatedDto,
+  ZodFieldValidator,
+} from './validated-dto.mixin';
 
 describe('ValidatedDto Mixin', () => {
   describe('ZodFieldValidator', () => {
@@ -2569,10 +2573,10 @@ describe('ValidatedDto Mixin', () => {
       });
 
       const BaseDto = ValidatedDto(schema);
-      
+
       @InheritValidatedMetadata()
       class TestDto extends BaseDto {}
-      
+
       const instance = new TestDto({ name: 'John', age: 30 });
 
       expect(instance.name).toBe('John');
@@ -2603,10 +2607,10 @@ describe('ValidatedDto Mixin', () => {
       });
 
       const BaseDto = ValidatedDto(schema);
-      
+
       @InheritValidatedMetadata()
       class TestDto extends BaseDto {}
-      
+
       const instance = new TestDto({ name: 'John' });
 
       expect(instance.name).toBe('John');
@@ -2640,10 +2644,10 @@ describe('ValidatedDto Mixin', () => {
       });
 
       const BaseDto = ValidatedDto(schema);
-      
+
       @InheritValidatedMetadata()
       class TestDto extends BaseDto {}
-      
+
       const instance = new TestDto({ name: 'John' });
 
       expect(instance.name).toBe('John');
@@ -2740,10 +2744,10 @@ describe('ValidatedDto Mixin', () => {
       });
 
       const BaseDto = ValidatedDto(schema);
-      
+
       @InheritValidatedMetadata()
       class TestDto extends BaseDto {}
-      
+
       const instance1 = new TestDto({ name: 'John', nickname: 'Johnny' });
       const instance2 = new TestDto({ name: 'Jane' });
 
@@ -2782,10 +2786,10 @@ describe('ValidatedDto Mixin', () => {
       });
 
       const BaseDto = ValidatedDto(schema);
-      
+
       @InheritValidatedMetadata()
       class TestDto extends BaseDto {}
-      
+
       const instance = new TestDto({ name: 'John', middleName: null });
 
       expect(instance.middleName).toBeNull();
@@ -2822,10 +2826,10 @@ describe('ValidatedDto Mixin', () => {
       });
 
       const BaseDto = ValidatedDto(schema);
-      
+
       @InheritValidatedMetadata()
       class TestDto extends BaseDto {}
-      
+
       const instance = new TestDto({ name: 'John' });
 
       expect(instance.role).toBe('user');
@@ -2862,10 +2866,10 @@ describe('ValidatedDto Mixin', () => {
       });
 
       const BaseDto = ValidatedDto(schema);
-      
+
       @InheritValidatedMetadata()
       class TestDto extends BaseDto {}
-      
+
       const instance = new TestDto({ name: 'John', tags: ['tag1', 'tag2'] });
 
       expect(instance.tags).toEqual(['tag1', 'tag2']);
@@ -2902,10 +2906,10 @@ describe('ValidatedDto Mixin', () => {
       });
 
       const BaseDto = ValidatedDto(schema);
-      
+
       @InheritValidatedMetadata()
       class TestDto extends BaseDto {}
-      
+
       const instance = new TestDto({ name: 'John', email: 'JOHN@EXAMPLE.COM' });
 
       expect(instance.email.toLowerCase()).toBe('john@example.com');
@@ -2954,10 +2958,10 @@ describe('ValidatedDto Mixin', () => {
       const unionSchema = z.union([schema1, schema2]);
 
       const BaseDto = ValidatedDto(unionSchema);
-      
+
       @InheritValidatedMetadata()
       class TestDto extends BaseDto {}
-      
+
       const instance = new TestDto({ type: 'a', value: 'test' });
 
       expect(instance.type).toBe('a');
@@ -3010,10 +3014,10 @@ describe('ValidatedDto Mixin', () => {
       ]);
 
       const BaseDto = ValidatedDto(discriminatedUnion);
-      
+
       @InheritValidatedMetadata()
       class TestDto extends BaseDto {}
-      
+
       const instance = new TestDto({ kind: 'circle', radius: 5 });
 
       expect(instance.kind).toBe('circle');
@@ -3040,10 +3044,10 @@ describe('ValidatedDto Mixin', () => {
       });
 
       const BaseDto = ValidatedDto(schema);
-      
+
       @InheritValidatedMetadata()
       class TestDto extends BaseDto {}
-      
+
       const instance = new TestDto({ name: 'John', age: 30 });
 
       expect(instance.name).toBe('John');
@@ -3061,10 +3065,10 @@ describe('ValidatedDto Mixin', () => {
       });
 
       const BaseDto = ValidatedDto(schema);
-      
+
       @InheritValidatedMetadata()
       class TestDto extends BaseDto {}
-      
+
       const instance = new TestDto({ name: 'John' });
 
       expect(instance.name).toBe('John');
@@ -3105,10 +3109,10 @@ describe('ValidatedDto Mixin', () => {
       });
 
       const BaseDto = ValidatedDto(schema);
-      
+
       @InheritValidatedMetadata()
       class TestDto extends BaseDto {}
-      
+
       const instance = new TestDto({
         name: 'John',
         address: {
@@ -3219,7 +3223,7 @@ describe('ValidatedDto Mixin', () => {
       class TestDtoA extends ValidatedDto(shape, {
         DECORATOR_REGISTRY: registryA,
       }) {}
-      
+
       @InheritValidatedMetadata()
       class TestDtoB extends ValidatedDto(shape, {
         DECORATOR_REGISTRY: registryB,
@@ -3268,7 +3272,7 @@ describe('ValidatedDto Mixin', () => {
       class PersonDto extends ValidatedDto(personSchema, {
         DECORATOR_REGISTRY: isolatedRegistry,
       }) {}
-      
+
       const instance = new PersonDto({
         name: 'John',
         address: { street: '123 Main St', city: 'NYC' },
@@ -3312,10 +3316,10 @@ describe('ValidatedDto Mixin', () => {
       const BaseDto = ValidatedDto(schema, {
         DECORATOR_REGISTRY: isolatedRegistry,
       });
-      
+
       @InheritValidatedMetadata()
       class UnionDto extends BaseDto {}
-      
+
       const instance = new UnionDto({ common: 'test', typeA: 'value' });
 
       const metadata = Reflect.getMetadata(
@@ -3357,10 +3361,10 @@ describe('ValidatedDto Mixin', () => {
       const BaseDto = ValidatedDto(schema, {
         DECORATOR_REGISTRY: isolatedRegistry,
       });
-      
+
       @InheritValidatedMetadata()
       class DiscUnionDto extends BaseDto {}
-      
+
       const instance = new DiscUnionDto({
         type: 'a',
         shared: 'test',
@@ -3413,19 +3417,19 @@ describe('ValidatedDto Mixin', () => {
       });
 
       const BaseGlobalDto = ValidatedDto(globalSchema);
-      
+
       @InheritValidatedMetadata()
       class GlobalDto extends BaseGlobalDto {}
-      
+
       const globalInstance = new GlobalDto({ field: 'test' });
 
       const BaseIsolatedDto = ValidatedDto(isolatedSchema, {
         DECORATOR_REGISTRY: isolatedRegistry,
       });
-      
+
       @InheritValidatedMetadata()
       class IsolatedDto extends BaseIsolatedDto {}
-      
+
       const isolatedInstance = new IsolatedDto({ field: 'test' });
 
       expect(Reflect.getMetadata(globalKey, GlobalDto.prototype, 'field')).toBe(
@@ -3484,10 +3488,10 @@ describe('ValidatedDto Mixin', () => {
       const BaseDto = ValidatedDto(schema, {
         DECORATOR_REGISTRY: isolatedRegistry,
       });
-      
+
       @InheritValidatedMetadata()
       class ComposedDto extends BaseDto {}
-      
+
       const instance = new ComposedDto({ field: 'test' });
 
       expect(
@@ -3528,10 +3532,10 @@ describe('ValidatedDto Mixin', () => {
       const BaseDto = ValidatedDto(isolatedSchema, {
         DECORATOR_REGISTRY: isolatedRegistry,
       });
-      
+
       @InheritValidatedMetadata()
       class ComposedDto extends BaseDto {}
-      
+
       const instance = new ComposedDto({ field: 'test' });
 
       expect(callCount).toBe(1);
@@ -3585,10 +3589,10 @@ describe('ValidatedDto Mixin', () => {
       const BaseDto = ValidatedDto(schema, {
         DECORATOR_REGISTRY: isolatedRegistry,
       });
-      
+
       @InheritValidatedMetadata()
       class ComposedDto extends BaseDto {}
-      
+
       const instance = new ComposedDto({ field: 'test' });
 
       expect(Reflect.getMetadata(key1, ComposedDto.prototype, 'field')).toBe(
@@ -3639,10 +3643,10 @@ describe('ValidatedDto Mixin', () => {
       const BaseDto = ValidatedDto(schema, {
         DECORATOR_REGISTRY: isolatedRegistry,
       });
-      
+
       @InheritValidatedMetadata()
       class ComposedDto extends BaseDto {}
-      
+
       const instance = new ComposedDto({ field: 'test' });
 
       expect(Reflect.getMetadata(globalClassKey, ComposedDto)).toBe(
@@ -3677,10 +3681,10 @@ describe('ValidatedDto Mixin', () => {
       const BaseDto = ValidatedDto(sharedSchema, {
         DECORATOR_REGISTRY: isolatedRegistry,
       });
-      
+
       @InheritValidatedMetadata()
       class ComposedDto extends BaseDto {}
-      
+
       const instance = new ComposedDto({ field: 'test' });
 
       expect(
@@ -3733,7 +3737,7 @@ describe('ValidatedDto Mixin', () => {
       const BaseDto = ValidatedDto(schema, {
         DECORATOR_REGISTRY: isolatedRegistry,
       });
-      
+
       @InheritValidatedMetadata()
       class UnionDto extends BaseDto {}
 
@@ -3765,7 +3769,7 @@ describe('ValidatedDto Mixin', () => {
       });
 
       const BaseDto = ValidatedDto(schema);
-      
+
       @InheritValidatedMetadata()
       class UnionClass extends BaseDto {}
 
@@ -3792,7 +3796,7 @@ describe('ValidatedDto Mixin', () => {
       });
 
       const BaseDto = ValidatedDto(schema);
-      
+
       @InheritValidatedMetadata()
       class UnionClass extends BaseDto {}
 
@@ -3818,7 +3822,7 @@ describe('ValidatedDto Mixin', () => {
       });
 
       const BaseDto = ValidatedDto(schema);
-      
+
       @InheritValidatedMetadata()
       class UnionClass extends BaseDto {}
 

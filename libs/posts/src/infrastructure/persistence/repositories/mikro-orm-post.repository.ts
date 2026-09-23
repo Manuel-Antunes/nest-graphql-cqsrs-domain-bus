@@ -1,11 +1,14 @@
-import { type Cursor, EntityManager } from '@mikro-orm/core';
-import { Injectable } from '@nestjs/common';
-import { Post } from '../../../domain/post/post.entity';
-import { type PostPage, PostRepository } from '../../../domain/post/post.repository';
-import type { PostId } from '../../../domain/post/vo/post-id';
+import type { Cursor } from '@mikro-orm/core';
 import type { UserId } from '@nestposts/users/domain/user/vo/user-id';
+import { EntityManager } from '@mikro-orm/core';
+import { Injectable } from '@nestjs/common';
 import { inRequestContext } from '@nestposts/database';
 import { ACTIVE_FILTER } from '@nestposts/platform/infrastructure/persistence/soft-delete/soft-delete-orm.entity';
+
+import type { PostPage } from '../../../domain/post/post.repository';
+import type { PostId } from '../../../domain/post/vo/post-id';
+import { Post } from '../../../domain/post/post.entity';
+import { PostRepository } from '../../../domain/post/post.repository';
 
 @Injectable()
 export class MikroOrmPostRepository extends PostRepository {
@@ -18,7 +21,11 @@ export class MikroOrmPostRepository extends PostRepository {
   }
 
   findById(postId: PostId): Promise<Post | null> {
-    return this.em.findOne(Post, { id: postId }, { populate: ['tags', 'author'] });
+    return this.em.findOne(
+      Post,
+      { id: postId },
+      { populate: ['tags', 'author'] },
+    );
   }
 
   async restore(postId: PostId): Promise<void> {

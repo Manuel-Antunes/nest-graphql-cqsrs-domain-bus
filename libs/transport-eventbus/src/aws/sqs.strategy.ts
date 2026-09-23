@@ -1,25 +1,30 @@
-import {
-  DeleteMessageBatchCommand,
-  type Message,
-  ReceiveMessageCommand,
-  SQSClient,
-  type SQSClientConfig,
-} from '@aws-sdk/client-sqs';
-import { Logger } from '@nestjs/common';
-import {
-  type ConsumerDeserializer,
-  type ConsumerSerializer,
-  type CustomTransportStrategy,
-  type MessageHandler,
-  Server,
-  type TransportId,
+import type { Message, SQSClientConfig } from '@aws-sdk/client-sqs';
+import type {
+  ConsumerDeserializer,
+  ConsumerSerializer,
+  CustomTransportStrategy,
+  MessageHandler,
+  TransportId,
 } from '@nestjs/microservices';
 import type { Context as LambdaContext, SQSEvent, SQSRecord } from 'aws-lambda';
+import {
+  DeleteMessageBatchCommand,
+  ReceiveMessageCommand,
+  SQSClient,
+} from '@aws-sdk/client-sqs';
+import { Logger } from '@nestjs/common';
+import { Server } from '@nestjs/microservices';
+
+import type { SqsEvents } from './sqs.events';
 import { topicMatches } from '../in-memory/topic-pattern';
-import { awsClientConfig, queueArnFromUrl, queueNameOf } from './aws-client.config';
+import {
+  awsClientConfig,
+  queueArnFromUrl,
+  queueNameOf,
+} from './aws-client.config';
 import { fromRecordAttributes } from './aws-message';
 import { SqsContext } from './sqs.context';
-import { type SqsEvents, SqsEventsMap, SqsStatus } from './sqs.events';
+import { SqsEventsMap, SqsStatus } from './sqs.events';
 
 /** How many messages one `ReceiveMessage` may bring back, and SQS's own ceiling. */
 const MAX_BATCH = 10;
@@ -112,14 +117,22 @@ export interface SqsConsumer {
  * That is the whole of it: this strategy has no opinion about what a particular failure means, and
  * a service that wants one puts it in its own handler, where the failure is understood.
  */
-export class SqsStrategy extends Server<SqsEvents, SqsStatus> implements CustomTransportStrategy {
-  override transportId: TransportId = Symbol.for('nestposts.transport-eventbus.sqs');
+export class SqsStrategy
+  extends Server<SqsEvents, SqsStatus>
+  implements CustomTransportStrategy
+{
+  override transportId: TransportId = Symbol.for(
+    'nestposts.transport-eventbus.sqs',
+  );
 
   protected override readonly logger = new Logger(SqsStrategy.name);
 
   private readonly client: SQSClient;
   private readonly ownsClient: boolean;
-  private readonly listeners: { event: keyof SqsEvents; callback: SqsEvents[keyof SqsEvents] }[] = [];
+  private readonly listeners: {
+    event: keyof SqsEvents;
+    callback: SqsEvents[keyof SqsEvents];
+  }[] = [];
   private readonly polling = new AbortController();
 
   private wildcards?: Map<string, MessageHandler>;
@@ -129,12 +142,16 @@ export class SqsStrategy extends Server<SqsEvents, SqsStatus> implements CustomT
   constructor(protected readonly options: SqsStrategyOptions) {
     super();
     this.ownsClient = !options.client;
-    this.client = options.client ?? new SQSClient({ ...awsClientConfig(), ...options.clientConfig });
+    this.client =
+      options.client ??
+      new SQSClient({ ...awsClientConfig(), ...options.clientConfig });
     this.initializeSerializer(options);
     this.initializeDeserializer(options);
   }
 
-  async listen(callback: (...optionalParams: unknown[]) => void): Promise<void> {
+  async listen(
+    callback: (...optionalParams: unknown[]) => void,
+  ): Promise<void> {
     this._status$.next(SqsStatus.CONNECTED);
     this.emitEvent(SqsEventsMap.LISTENING);
 
@@ -171,12 +188,17 @@ export class SqsStrategy extends Server<SqsEvents, SqsStatus> implements CustomT
    * them at once is ten connections from one invocation — the parallel mode is there for a consumer
    * whose work is IO against something that likes concurrency, and it is a choice, not the default.
    */
-  async processEvent(event: SQSEvent, lambdaContext?: LambdaContext): Promise<SqsProcessResult[]> {
+  async processEvent(
+    event: SQSEvent,
+    lambdaContext?: LambdaContext,
+  ): Promise<SqsProcessResult[]> {
     const records = event.Records ?? [];
     this.logger.debug(`${records.length} record(s) received`);
 
     if (this.options.concurrency === 'parallel') {
-      return Promise.all(records.map((record) => this.handleRecord(record, lambdaContext)));
+      return Promise.all(
+        records.map((record) => this.handleRecord(record, lambdaContext)),
+      );
     }
 
     const results: SqsProcessResult[] = [];
@@ -191,9 +213,15 @@ export class SqsStrategy extends Server<SqsEvents, SqsStatus> implements CustomT
    * message attributes beside the parsed body, because a message published by something other than
    * this library has its description there and nowhere else.
    */
-  async processRecord(record: SQSRecord, lambdaContext?: LambdaContext): Promise<unknown> {
+  async processRecord(
+    record: SQSRecord,
+    lambdaContext?: LambdaContext,
+  ): Promise<unknown> {
     const attributes = fromRecordAttributes(record.messageAttributes);
-    const message = await this.deserializer.deserialize(bodyOf(record), { attributes, record });
+    const message = await this.deserializer.deserialize(bodyOf(record), {
+      attributes,
+      record,
+    });
 
     if (!message.pattern) {
       throw new Error(
@@ -202,32 +230,52 @@ export class SqsStrategy extends Server<SqsEvents, SqsStatus> implements CustomT
       );
     }
 
-    const context = new SqsContext([record, message.pattern, lambdaContext, attributes]);
+    const context = new SqsContext([
+      record,
+      message.pattern,
+      lambdaContext,
+      attributes,
+    ]);
     return this.handleMessage(message.pattern, message.data, context);
   }
 
   /** The handler, run through the hooks Nest wraps every transport's dispatch in. */
-  async handleMessage(pattern: string, data: unknown, context: SqsContext): Promise<unknown> {
+  async handleMessage(
+    pattern: string,
+    data: unknown,
+    context: SqsContext,
+  ): Promise<unknown> {
     const handler = this.getHandlerByPattern(pattern);
     if (!handler) {
-      this.logger.warn(`no handler for '${pattern}' — the message is acknowledged and dropped`);
+      this.logger.warn(
+        `no handler for '${pattern}' — the message is acknowledged and dropped`,
+      );
       return undefined;
     }
 
-    return this.onProcessingStartHook(this.transportId as TransportId, context, async () => {
-      const response$ = this.transformToObservable(await handler(data, context));
+    return this.onProcessingStartHook(
+      this.transportId as TransportId,
+      context,
+      async () => {
+        const response$ = this.transformToObservable(
+          await handler(data, context),
+        );
 
-      return new Promise((resolve, reject) => {
-        this.send(response$, (packet) => {
-          this.onProcessingEndHook?.(this.transportId as TransportId, context);
-          if (packet.err) {
-            reject(packet.err);
-          } else {
-            resolve(this.serializer.serialize(packet.response));
-          }
+        return new Promise((resolve, reject) => {
+          this.send(response$, (packet) => {
+            this.onProcessingEndHook?.(
+              this.transportId as TransportId,
+              context,
+            );
+            if (packet.err) {
+              reject(packet.err);
+            } else {
+              resolve(this.serializer.serialize(packet.response));
+            }
+          });
         });
-      });
-    });
+      },
+    );
   }
 
   /**
@@ -290,7 +338,9 @@ export class SqsStrategy extends Server<SqsEvents, SqsStatus> implements CustomT
         continue;
       }
 
-      const records = messages.map((message) => recordOf(message, eventSourceARN));
+      const records = messages.map((message) =>
+        recordOf(message, eventSourceARN),
+      );
       const results = await this.processEvent({ Records: records });
       await this.deleteSucceeded(queueUrl, records, results);
     }
@@ -301,7 +351,10 @@ export class SqsStrategy extends Server<SqsEvents, SqsStatus> implements CustomT
       const received = await this.client.send(
         new ReceiveMessageCommand({
           QueueUrl: queueUrl,
-          MaxNumberOfMessages: Math.min(this.options.maxNumberOfMessages ?? MAX_BATCH, MAX_BATCH),
+          MaxNumberOfMessages: Math.min(
+            this.options.maxNumberOfMessages ?? MAX_BATCH,
+            MAX_BATCH,
+          ),
           WaitTimeSeconds: this.options.waitTimeSeconds ?? DEFAULT_WAIT_SECONDS,
           VisibilityTimeout: this.options.visibilityTimeoutSeconds,
           MessageAttributeNames: ['All'],
@@ -329,9 +382,15 @@ export class SqsStrategy extends Server<SqsEvents, SqsStatus> implements CustomT
     results: SqsProcessResult[],
   ): Promise<void> {
     const entries = records
-      .map((record, index) => ({ record, failed: Boolean(results[index]?.err) }))
+      .map((record, index) => ({
+        record,
+        failed: Boolean(results[index]?.err),
+      }))
       .filter(({ failed }) => !failed)
-      .map(({ record }, index) => ({ Id: String(index), ReceiptHandle: record.receiptHandle }));
+      .map(({ record }, index) => ({
+        Id: String(index),
+        ReceiptHandle: record.receiptHandle,
+      }));
 
     if (entries.length === 0) {
       return;
@@ -364,17 +423,23 @@ export class SqsStrategy extends Server<SqsEvents, SqsStatus> implements CustomT
   }
 
   private emitEvent(event: keyof SqsEvents, ...args: unknown[]): void {
-    for (const listener of this.listeners.filter((candidate) => candidate.event === event)) {
+    for (const listener of this.listeners.filter(
+      (candidate) => candidate.event === event,
+    )) {
       (listener.callback as (...params: unknown[]) => void)(...args);
     }
   }
 }
 
-const queueUrlsOf = (queueUrl: string | readonly string[] | undefined): string[] => {
+const queueUrlsOf = (
+  queueUrl: string | readonly string[] | undefined,
+): string[] => {
   if (!queueUrl) {
     return [];
   }
-  return (typeof queueUrl === 'string' ? [queueUrl] : [...queueUrl]).filter(Boolean);
+  return (typeof queueUrl === 'string' ? [queueUrl] : [...queueUrl]).filter(
+    Boolean,
+  );
 };
 
 const bodyOf = (record: SQSRecord): unknown => {
@@ -418,7 +483,9 @@ const toError = (failure: unknown): Error => {
     return failure;
   }
   const message =
-    typeof failure === 'string' ? failure : ((safeStringify(failure) ?? String(failure)) as string);
+    typeof failure === 'string'
+      ? failure
+      : ((safeStringify(failure) ?? String(failure)) as string);
   return new Error(message, { cause: failure });
 };
 
@@ -430,4 +497,5 @@ const safeStringify = (value: unknown): string | undefined => {
   }
 };
 
-const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+const sleep = (ms: number): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, ms));

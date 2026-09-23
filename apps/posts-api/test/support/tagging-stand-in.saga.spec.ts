@@ -1,18 +1,22 @@
 import type { TestingModule } from '@nestjs/testing';
-import { firstValueFrom, of, toArray } from 'rxjs';
-import { createCqrsTestingModule, inRequestContext } from './cqrs-testing-module';
 import { PostPreCreatedEvent } from '@nestposts/posts/domain/post/event/post-pre-created.event';
 import { PostId } from '@nestposts/posts/domain/post/vo/post-id';
 import { DEFAULT_TAG_ID } from '@nestposts/posts/domain/tag/tag.entity';
 import { TagId } from '@nestposts/posts/domain/tag/vo/tag-id';
 import {
   EventEnvelope,
+  markIngested,
   TRANSPORT_IDENTIFIER,
   TRANSPORT_MESSAGE_TYPE,
-  markIngested,
 } from '@nestposts/transport-eventbus';
-import { PostRequest } from '../../src/application/shared/post-request';
+import { firstValueFrom, of, toArray } from 'rxjs';
+
 import { CompletePostCommand } from '../../src/application/post/command/complete-post.command';
+import { PostRequest } from '../../src/application/shared/post-request';
+import {
+  createCqrsTestingModule,
+  inRequestContext,
+} from './cqrs-testing-module';
 import { TaggingStandIn } from './tagging-stand-in.saga';
 
 describe('TaggingStandIn', () => {
@@ -20,7 +24,14 @@ describe('TaggingStandIn', () => {
   let saga: TaggingStandIn;
 
   const preCreated = (postId = PostId.generate()) =>
-    new PostPreCreatedEvent(postId.value, 'Nest + GraphQL', 'oi', 'u1', 'manuel', new Date());
+    new PostPreCreatedEvent(
+      postId.value,
+      'Nest + GraphQL',
+      'oi',
+      'u1',
+      'manuel',
+      new Date(),
+    );
 
   const preCreatedIn = (request: PostRequest) => {
     const event = preCreated(request.postId);
@@ -46,7 +57,10 @@ describe('TaggingStandIn', () => {
     const commands = await commandsFor(event);
 
     expect(commands).toEqual([
-      new CompletePostCommand.CompletePost(PostId.parse(event.postId), TagId.parse(DEFAULT_TAG_ID)),
+      new CompletePostCommand.CompletePost(
+        PostId.parse(event.postId),
+        TagId.parse(DEFAULT_TAG_ID),
+      ),
     ]);
   });
 
@@ -71,10 +85,11 @@ describe('TaggingStandIn', () => {
 
     const commands = await commandsFor(first, second);
 
-    expect(commands.map((command) => (command as CompletePostCommand.CompletePost).postId.value)).toEqual([
-      first.postId,
-      second.postId,
-    ]);
+    expect(
+      commands.map(
+        (command) => (command as CompletePostCommand.CompletePost).postId.value,
+      ),
+    ).toEqual([first.postId, second.postId]);
   });
 
   it('does not decide for a post another service pre-created: that decision is already on the wire', async () => {

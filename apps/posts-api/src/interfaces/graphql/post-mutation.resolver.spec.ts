@@ -1,27 +1,33 @@
-import { closeTestDatabase, testDatabase } from '@nestposts/database/testing';
-import { createMapper, type Mapper } from '@automapper/core';
-import { MikroORM } from '@mikro-orm/core';
+import type { Mapper } from '@automapper/core';
 import type { CommandBus, QueryBus } from '@nestjs/cqrs';
-import { CreatePostCommand } from '../../application/post/command/create-post.command';
-import { UpdatePostCommand } from '../../application/post/command/update-post.command';
-import { FindPostQuery } from '../../application/post/query/find-post.query';
-import { PostRequest } from '../../application/shared/post-request';
-import { PostNotFoundException } from '@nestposts/posts/domain/post/exception/post-not-found.exception';
 import type { Post } from '@nestposts/posts/domain/post/post.entity';
-import { PostId } from '@nestposts/posts/domain/post/vo/post-id';
-import { AUTHOR_ROLE, Author, Authorship } from '@nestposts/users/domain/user/author.entity';
-import { User } from '@nestposts/users/domain/user/user.entity';
-import { UserId } from '@nestposts/users/domain/user/vo/user-id';
-import type { CreatePostInput } from '../../dto/graphql/create-post.input';
+import { createMapper } from '@automapper/core';
+import { MikroORM } from '@mikro-orm/core';
 import { ROOT_TENANT } from '@nestposts/database';
-import { PostProfile } from '../mapper/post.profile';
-import { validatedDtoClasses } from '../mapper/validated-dto.strategy';
+import { closeTestDatabase, testDatabase } from '@nestposts/database/testing';
+import { PostNotFoundException } from '@nestposts/posts/domain/post/exception/post-not-found.exception';
+import { PostId } from '@nestposts/posts/domain/post/vo/post-id';
 import { PostEntitySchema } from '@nestposts/posts/infrastructure/persistence/entities/post-orm.entity';
 import { TagSchema } from '@nestposts/posts/infrastructure/persistence/entities/tag-orm.entity';
+import {
+  Author,
+  AUTHOR_ROLE,
+  Authorship,
+} from '@nestposts/users/domain/user/author.entity';
+import { User } from '@nestposts/users/domain/user/user.entity';
+import { UserId } from '@nestposts/users/domain/user/vo/user-id';
 import {
   AuthorshipEntitySchema,
   UserEntitySchema,
 } from '@nestposts/users/infrastructure/persistence/entities/user-orm.entity';
+
+import type { CreatePostInput } from '../../dto/graphql/create-post.input';
+import { CreatePostCommand } from '../../application/post/command/create-post.command';
+import { UpdatePostCommand } from '../../application/post/command/update-post.command';
+import { FindPostQuery } from '../../application/post/query/find-post.query';
+import { PostRequest } from '../../application/shared/post-request';
+import { PostProfile } from '../mapper/post.profile';
+import { validatedDtoClasses } from '../mapper/validated-dto.strategy';
 import { PostMutationResolver } from './post-mutation.resolver';
 
 describe('PostMutationResolver', () => {
@@ -35,8 +41,13 @@ describe('PostMutationResolver', () => {
 
   beforeAll(async () => {
     orm = await testDatabase({
-        entities: [PostEntitySchema, TagSchema, UserEntitySchema, AuthorshipEntitySchema],
-      });
+      entities: [
+        PostEntitySchema,
+        TagSchema,
+        UserEntitySchema,
+        AuthorshipEntitySchema,
+      ],
+    });
   });
 
   afterAll(() => closeTestDatabase(orm));
@@ -50,14 +61,24 @@ describe('PostMutationResolver', () => {
   afterEach(() => mapper.dispose());
 
   const anAuthor = (): Author => {
-    const user = User.register(authorId, { email: 'manuel@example.com', name: 'manuel' }, [AUTHOR_ROLE], now);
+    const user = User.register(
+      authorId,
+      { email: 'manuel@example.com', name: 'manuel' },
+      [AUTHOR_ROLE],
+      now,
+    );
     return Author.cast(user, Authorship.of(user));
   };
 
   const anInput = (overrides: Record<string, unknown> = {}) =>
-    ({ title: '  Nest + GraphQL  ', content: 'oi', ...overrides }) as unknown as CreatePostInput;
+    ({
+      title: '  Nest + GraphQL  ',
+      content: 'oi',
+      ...overrides,
+    }) as unknown as CreatePostInput;
 
-  const anUpdateCommand = () => new UpdatePostCommand.UpdatePost(postId, 'editado');
+  const anUpdateCommand = () =>
+    new UpdatePostCommand.UpdatePost(postId, 'editado');
 
   const fixture = (found: Post | null = {} as Post) => {
     const commands: Array<{ command: any; context: unknown }> = [];
@@ -98,7 +119,10 @@ describe('PostMutationResolver', () => {
 
     it('ignora um autor forjado no corpo da requisição', async () => {
       const { resolver, commands } = fixture();
-      const forjado = anInput({ authorId: UserId.generate().value, authorName: 'outra pessoa' });
+      const forjado = anInput({
+        authorId: UserId.generate().value,
+        authorName: 'outra pessoa',
+      });
 
       await resolver.createPost(forjado, anAuthor(), ROOT_TENANT);
 
@@ -141,7 +165,11 @@ describe('PostMutationResolver', () => {
     it('devolve o post já gravado, lido de volta pelo QueryBus', async () => {
       const { resolver, queries, found } = fixture();
 
-      const post = await resolver.createPost(anInput(), anAuthor(), ROOT_TENANT);
+      const post = await resolver.createPost(
+        anInput(),
+        anAuthor(),
+        ROOT_TENANT,
+      );
 
       expect(queries).toHaveLength(1);
       expect(queries[0]).toBeInstanceOf(FindPostQuery.FindPost);
@@ -151,7 +179,9 @@ describe('PostMutationResolver', () => {
     it('se o post gravado não é encontrado, isso é erro e não null', async () => {
       const { resolver } = fixture(null);
 
-      await expect(resolver.createPost(anInput(), anAuthor(), ROOT_TENANT)).rejects.toThrow(PostNotFoundException);
+      await expect(
+        resolver.createPost(anInput(), anAuthor(), ROOT_TENANT),
+      ).rejects.toThrow(PostNotFoundException);
     });
   });
 
@@ -170,24 +200,32 @@ describe('PostMutationResolver', () => {
 
       await resolver.updatePost(anUpdateCommand(), anAuthor(), ROOT_TENANT);
 
-      expect((commands[0].context as PostRequest).postId.equals(postId)).toBe(true);
+      expect((commands[0].context as PostRequest).postId.equals(postId)).toBe(
+        true,
+      );
     });
 
     it('devolve o post relido depois da escrita', async () => {
       const { resolver, queries, found } = fixture();
 
-      const post = await resolver.updatePost(anUpdateCommand(), anAuthor(), ROOT_TENANT);
+      const post = await resolver.updatePost(
+        anUpdateCommand(),
+        anAuthor(),
+        ROOT_TENANT,
+      );
 
-      expect((queries[0] as FindPostQuery.FindPost).postId.equals(postId)).toBe(true);
+      expect((queries[0] as FindPostQuery.FindPost).postId.equals(postId)).toBe(
+        true,
+      );
       expect(post).toBe(found);
     });
 
     it('se o post não existe mais, isso é erro e não null', async () => {
       const { resolver } = fixture(null);
 
-      await expect(resolver.updatePost(anUpdateCommand(), anAuthor(), ROOT_TENANT)).rejects.toThrow(
-        PostNotFoundException,
-      );
+      await expect(
+        resolver.updatePost(anUpdateCommand(), anAuthor(), ROOT_TENANT),
+      ).rejects.toThrow(PostNotFoundException);
     });
   });
 });

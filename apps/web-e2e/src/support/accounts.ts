@@ -35,17 +35,22 @@ export class Registrar {
   async register(): Promise<Accounts> {
     const author = await this.signUp('autor@example.com', 'Autora');
     await this.store.promoteToAuthor(author.credentialId);
-    return { author, reader: await this.signUp('leitor@example.com', 'Leitor') };
+    return {
+      author,
+      reader: await this.signUp('leitor@example.com', 'Leitor'),
+    };
   }
 
   private async signUp(email: string, name: string): Promise<Account> {
     const response = await fetch(`${this.webUrl}/api/auth/sign-up/email`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', origin: this.webUrl },
+      headers: { 'content-type': 'application/json', 'origin': this.webUrl },
       body: JSON.stringify({ email, name, password: Registrar.PASSWORD }),
     });
     if (!response.ok) {
-      throw new Error(`sign-up de ${email} falhou (${response.status}): ${await response.text()}`);
+      throw new Error(
+        `sign-up de ${email} falhou (${response.status}): ${await response.text()}`,
+      );
     }
     const { user } = (await response.json()) as { user: { id: string } };
     return { email, name, password: Registrar.PASSWORD, credentialId: user.id };

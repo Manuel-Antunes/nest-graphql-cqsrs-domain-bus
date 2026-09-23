@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+
 import { Tenant } from './tenant';
 
 /**
@@ -26,7 +27,10 @@ export const TENANT_SCHEMA_PREFIX = 'tenant';
 @Injectable()
 export abstract class TenantSchemas {
   /** The schema a tenant's rows live in, under {@link TENANT_SCHEMA_PREFIX}. */
-  static nameFor(tenantId: string, prefix: string = TENANT_SCHEMA_PREFIX): string {
+  static nameFor(
+    tenantId: string,
+    prefix: string = TENANT_SCHEMA_PREFIX,
+  ): string {
     return `${prefix}_${tenantId}`;
   }
 
@@ -51,6 +55,8 @@ export class SchemaPerTenant extends TenantSchemas {
   }
 
   schemaFor(tenantId: string): string | undefined {
-    return Tenant.isRoot(tenantId) ? undefined : TenantSchemas.nameFor(tenantId, this.prefix);
+    return Tenant.isRoot(tenantId)
+      ? undefined
+      : TenantSchemas.nameFor(tenantId, this.prefix);
   }
 }

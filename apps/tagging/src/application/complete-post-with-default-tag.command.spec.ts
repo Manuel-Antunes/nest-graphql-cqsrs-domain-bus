@@ -1,22 +1,31 @@
+import type { IEvent } from '@nestjs/cqrs';
+import type { TestingModule } from '@nestjs/testing';
 import { MikroORM } from '@mikro-orm/core';
 import { MikroOrmModule } from '@mikro-orm/nestjs';
-import { CommandBus, EventBus, type IEvent } from '@nestjs/cqrs';
-import { Test, type TestingModule } from '@nestjs/testing';
+import { CommandBus, EventBus } from '@nestjs/cqrs';
+import { Test } from '@nestjs/testing';
 import { CqsrsModule } from '@nestposts/cqsrs';
 import { inRequestContext } from '@nestposts/database';
 import { PostCreatedEvent } from '@nestposts/posts/domain/post/event/post-created.event';
 import { PostPreCreatedEvent } from '@nestposts/posts/domain/post/event/post-pre-created.event';
 import { PostNotFoundException } from '@nestposts/posts/domain/post/exception/post-not-found.exception';
-import { PostId } from '@nestposts/posts/domain/post/vo/post-id';
-import { DEFAULT_TAG_ID, DEFAULT_TAG_NAME } from '@nestposts/posts/domain/tag/tag.entity';
-import { UserId } from '@nestposts/users/domain/user/vo/user-id';
 import { Post } from '@nestposts/posts/domain/post/post.entity';
+import { PostId } from '@nestposts/posts/domain/post/vo/post-id';
 import {
-  EventSourcedRepository,
+  DEFAULT_TAG_ID,
+  DEFAULT_TAG_NAME,
+} from '@nestposts/posts/domain/tag/tag.entity';
+import {
   EventLog,
+  EventSourcedRepository,
   TRANSPORT_EVENT_BUS_PUBLISHER,
 } from '@nestposts/transport-eventbus';
-import { persistenceTesting, transportTesting } from '../../test/support/transport-testing.module';
+import { UserId } from '@nestposts/users/domain/user/vo/user-id';
+
+import {
+  persistenceTesting,
+  transportTesting,
+} from '../../test/support/transport-testing.module';
 import { mikroOrmConfig } from '../infrastructure/persistence/mikro-orm.config';
 import { CompletePostWithDefaultTagCommand } from './complete-post-with-default-tag.command';
 
@@ -32,7 +41,14 @@ describe('CompletePostWithDefaultTagCommand.Handler', () => {
   const now = new Date('2026-09-08T12:00:00.000Z');
 
   const preCreated = (id = postId) =>
-    new PostPreCreatedEvent(id.value, 'Nest + GraphQL', 'oi', authorId.value, 'manuel', now);
+    new PostPreCreatedEvent(
+      id.value,
+      'Nest + GraphQL',
+      'oi',
+      authorId.value,
+      'manuel',
+      now,
+    );
   const alreadyComplete = (id = postId) =>
     new PostCreatedEvent(
       id.value,
@@ -49,13 +65,17 @@ describe('CompletePostWithDefaultTagCommand.Handler', () => {
 
   const complete = (id = postId) =>
     inContext(() =>
-      commands.execute(new CompletePostWithDefaultTagCommand.CompletePostWithDefaultTag(id)),
+      commands.execute(
+        new CompletePostWithDefaultTagCommand.CompletePostWithDefaultTag(id),
+      ),
     );
 
   beforeEach(async () => {
     module = await Test.createTestingModule({
       imports: [
-        CqsrsModule.forRoot({ aggregatePublisher: TRANSPORT_EVENT_BUS_PUBLISHER }),
+        CqsrsModule.forRoot({
+          aggregatePublisher: TRANSPORT_EVENT_BUS_PUBLISHER,
+        }),
         ...persistenceTesting(),
         transportTesting(),
       ],
@@ -109,7 +129,9 @@ describe('CompletePostWithDefaultTagCommand.Handler', () => {
   });
 
   it('drops a decision the stream already carries: the aggregate is the last guard', async () => {
-    await inContext(() => log.append([preCreated(), alreadyComplete()], postId.value));
+    await inContext(() =>
+      log.append([preCreated(), alreadyComplete()], postId.value),
+    );
 
     await expect(complete()).resolves.toBeUndefined();
 
@@ -118,6 +140,8 @@ describe('CompletePostWithDefaultTagCommand.Handler', () => {
   });
 
   it('refuses a post it has never heard of', async () => {
-    await expect(complete(PostId.generate())).rejects.toThrow(PostNotFoundException);
+    await expect(complete(PostId.generate())).rejects.toThrow(
+      PostNotFoundException,
+    );
   });
 });

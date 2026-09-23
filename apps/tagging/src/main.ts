@@ -1,10 +1,12 @@
 import './telemetry';
 
+import type { MicroserviceOptions } from '@nestjs/microservices';
+import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import type { MicroserviceOptions } from '@nestjs/microservices';
-import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
+import { FastifyAdapter } from '@nestjs/platform-fastify';
 import { Logger as PinoLogger } from 'nestjs-pino';
+
 import { AppModule } from './app.module';
 import {
   inboundDestination,
@@ -27,12 +29,18 @@ async function bootstrap() {
   const logger = new Logger('bootstrap');
 
   if (transportMode() === 'inngest') {
-    const app = await NestFactory.create<NestFastifyApplication>(AppModule, new FastifyAdapter(), {
-      bufferLogs: true,
-    });
+    const app = await NestFactory.create<NestFastifyApplication>(
+      AppModule,
+      new FastifyAdapter(),
+      {
+        bufferLogs: true,
+      },
+    );
     app.useLogger(app.get(PinoLogger));
 
-    app.connectMicroservice(inboundTransport(app.getHttpAdapter()), { inheritAppConfig: true });
+    app.connectMicroservice(inboundTransport(app.getHttpAdapter()), {
+      inheritAppConfig: true,
+    });
     await app.startAllMicroservices();
 
     const port = Number(process.env.TAGGING_PORT ?? process.env.PORT ?? 3001);
@@ -44,14 +52,19 @@ async function bootstrap() {
     return;
   }
 
-  const app = await NestFactory.createMicroservice<MicroserviceOptions>(AppModule, {
-    ...inboundTransport(),
-    bufferLogs: true,
-  });
+  const app = await NestFactory.createMicroservice<MicroserviceOptions>(
+    AppModule,
+    {
+      ...inboundTransport(),
+      bufferLogs: true,
+    },
+  );
   app.useLogger(app.get(PinoLogger));
 
   await app.listen();
-  logger.log(`tagging is listening on ${inboundDestination()} (${transportMode()})`);
+  logger.log(
+    `tagging is listening on ${inboundDestination()} (${transportMode()})`,
+  );
 }
 
 void bootstrap();

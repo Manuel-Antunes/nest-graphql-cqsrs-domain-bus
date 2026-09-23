@@ -1,29 +1,40 @@
-import { type DynamicModule, Module, type Provider } from '@nestjs/common';
+import type { DynamicModule, Provider } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { DiscoveryModule } from '@nestjs/core';
 import { EventBus } from '@nestjs/cqrs';
 import { DatabaseModule } from '@nestposts/database';
-import { TRANSPORT_EVENT_BUS_PUBLISHER, TRANSPORT_EVENT_BUS_SERVICE } from './constants';
-import { EventIngestion } from './inbound/event-ingestion';
-import { IncomingRequest } from './inbound/incoming-request';
-import { TransportRequestPipe } from './inbound/transport-request.pipe';
-import { EventEnvelopeFactory } from './outbound/event-envelope.factory';
-import { OutboxRouting } from './outbound/outbox-routing';
-import { EventSourcedRepository } from './persistence/event-log/event-sourced.repository';
-import { EventLog } from './persistence/event-log/event-log';
-import { EventSourcedEventBus } from './subscriptions/event-sourced-event-bus';
-import { eventLogEntities } from './persistence/event-log/event-log.entity';
-import { eventLogProviders } from './persistence/event-log/event-log.providers';
-import { MessageInbox } from './persistence/message-inbox';
-import { transportEntities } from './persistence/message-inbox.entity';
-import { CorrelatedRequestContext, RequestContextCodec } from './request-context';
-import { eventIngestionProviders, transportEventBusProviders } from './transport-event-bus.providers';
-import { TransportIdentity } from './transport-identity';
+
 import type {
   DeclaredIdentity,
   TransportEventBusIdentity,
   TransportEventBusModuleAsyncOptions,
   TransportEventBusModuleOptions,
 } from './transport-event-bus.options';
+import {
+  TRANSPORT_EVENT_BUS_PUBLISHER,
+  TRANSPORT_EVENT_BUS_SERVICE,
+} from './constants';
+import { EventIngestion } from './inbound/event-ingestion';
+import { IncomingRequest } from './inbound/incoming-request';
+import { TransportRequestPipe } from './inbound/transport-request.pipe';
+import { EventEnvelopeFactory } from './outbound/event-envelope.factory';
+import { OutboxRouting } from './outbound/outbox-routing';
+import { EventLog } from './persistence/event-log/event-log';
+import { eventLogEntities } from './persistence/event-log/event-log.entity';
+import { eventLogProviders } from './persistence/event-log/event-log.providers';
+import { EventSourcedRepository } from './persistence/event-log/event-sourced.repository';
+import { MessageInbox } from './persistence/message-inbox';
+import { transportEntities } from './persistence/message-inbox.entity';
+import {
+  CorrelatedRequestContext,
+  RequestContextCodec,
+} from './request-context';
+import { EventSourcedEventBus } from './subscriptions/event-sourced-event-bus';
+import {
+  eventIngestionProviders,
+  transportEventBusProviders,
+} from './transport-event-bus.providers';
+import { TransportIdentity } from './transport-identity';
 
 /**
  * **The transport, started in one call.**
@@ -75,27 +86,41 @@ export class TransportEventBusModule {
     return {
       module: TransportEventBusModule,
       global: true,
-      imports: [DiscoveryModule, ...tables(options), ...(options.imports ?? [])],
+      imports: [
+        DiscoveryModule,
+        ...tables(options),
+        ...(options.imports ?? []),
+      ],
       providers: [
         ...mechanism(options),
-        { provide: TransportIdentity, useValue: identityOf(options.identity, options.publishes) },
+        {
+          provide: TransportIdentity,
+          useValue: identityOf(options.identity, options.publishes),
+        },
       ],
       exports: [...exported(options), ...(options.exports ?? [])],
     };
   }
 
   /** The same, with the identity resolved at runtime. See {@link TransportEventBusModuleAsyncOptions}. */
-  static forRootAsync(options: TransportEventBusModuleAsyncOptions): DynamicModule {
+  static forRootAsync(
+    options: TransportEventBusModuleAsyncOptions,
+  ): DynamicModule {
     return {
       module: TransportEventBusModule,
       global: true,
-      imports: [DiscoveryModule, ...tables(options), ...(options.imports ?? [])],
+      imports: [
+        DiscoveryModule,
+        ...tables(options),
+        ...(options.imports ?? []),
+      ],
       providers: [
         ...mechanism(options),
         {
           provide: TransportIdentity,
           inject: options.inject ?? [],
-          useFactory: async (...args: unknown[]) => identityFrom(await options.useFactory(...args)),
+          useFactory: async (...args: unknown[]) =>
+            identityFrom(await options.useFactory(...args)),
         },
       ],
       exports: [...exported(options), ...(options.exports ?? [])],
@@ -129,11 +154,19 @@ const mechanism = (options: Composed): Provider[] => {
 
   return [
     ...transportEventBusProviders,
-    { provide: RequestContextCodec, useClass: options.requestContext ?? CorrelatedRequestContext },
+    {
+      provide: RequestContextCodec,
+      useClass: options.requestContext ?? CorrelatedRequestContext,
+    },
     ...(logged(options) ? eventLogProviders : []),
-    ...(options.eventStore ?? []).map((aggregate) => EventSourcedRepository.of(aggregate)),
+    ...(options.eventStore ?? []).map((aggregate) =>
+      EventSourcedRepository.of(aggregate),
+    ),
     ...(options.inbox
-      ? [...eventIngestionProviders, { provide: MessageInbox, useClass: options.inbox }]
+      ? [
+          ...eventIngestionProviders,
+          { provide: MessageInbox, useClass: options.inbox },
+        ]
       : []),
     ...(options.subscriptions ? [EventSourcedEventBus] : []),
     ...(options.publishers ?? []),
@@ -141,7 +174,9 @@ const mechanism = (options: Composed): Provider[] => {
   ];
 };
 
-const exported = (options: Composed): NonNullable<TransportEventBusModuleOptions['exports']> => [
+const exported = (
+  options: Composed,
+): NonNullable<TransportEventBusModuleOptions['exports']> => [
   TRANSPORT_EVENT_BUS_SERVICE,
   TRANSPORT_EVENT_BUS_PUBLISHER,
   EventEnvelopeFactory,
@@ -155,13 +190,19 @@ const exported = (options: Composed): NonNullable<TransportEventBusModuleOptions
   ...(options.subscriptions ? [EventSourcedEventBus] : []),
 ];
 
-const identityOf = (declared: DeclaredIdentity, publishes?: boolean): TransportIdentity =>
-  typeof declared === 'string' ? TransportIdentity.named(declared, { publishes }) : declared;
+const identityOf = (
+  declared: DeclaredIdentity,
+  publishes?: boolean,
+): TransportIdentity =>
+  typeof declared === 'string'
+    ? TransportIdentity.named(declared, { publishes })
+    : declared;
 
-const identityFrom = (answer: TransportEventBusIdentity | DeclaredIdentity): TransportIdentity =>
+const identityFrom = (
+  answer: TransportEventBusIdentity | DeclaredIdentity,
+): TransportIdentity =>
   typeof answer === 'string' || answer instanceof TransportIdentity
     ? identityOf(answer)
     : identityOf(answer.identity, answer.publishes);
 
-const refuseAmbiguity = (options: Composed): void => {
-};
+const refuseAmbiguity = (options: Composed): void => {};

@@ -1,13 +1,13 @@
-import { MikroORM } from '@mikro-orm/core';
-import {
-  type BeforeApplicationShutdown,
-  type DynamicModule,
-  Inject,
-  Injectable,
-  Module,
-  type OnModuleInit,
+import type {
+  BeforeApplicationShutdown,
+  DynamicModule,
+  OnModuleInit,
 } from '@nestjs/common';
-import { dropTestSchema, ensureTestSchema, type AnyMikroORM } from './test-database';
+import { MikroORM } from '@mikro-orm/core';
+import { Inject, Injectable, Module } from '@nestjs/common';
+
+import type { AnyMikroORM } from './test-database';
+import { dropTestSchema, ensureTestSchema } from './test-database';
 
 @Injectable()
 class TestSchemaLifecycle implements OnModuleInit, BeforeApplicationShutdown {

@@ -5,5 +5,7 @@ export function inRequestContext<T>(
   work: () => Promise<T>,
 ): Promise<T> {
   const root = (source as MikroORM).em ?? (source as EntityManager);
-  return RequestContext.getEntityManager() ? work() : RequestContext.create(root, work);
+  return RequestContext.getEntityManager()
+    ? work()
+    : RequestContext.create(root, work);
 }

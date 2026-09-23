@@ -8,7 +8,13 @@
  * route points at a function's URL, and `web/` last because it is the only thing that wants all
  * three.
  */
-import { migrator, postsInbox, seeder, streaming, taggingWorker } from './compute';
+import {
+  migrator,
+  postsInbox,
+  seeder,
+  streaming,
+  taggingWorker,
+} from './compute';
 import { database } from './data';
 import { router } from './edge';
 import { completed, postEvents, taggingEvents } from './messaging';

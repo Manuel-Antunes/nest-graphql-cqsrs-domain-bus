@@ -1,3 +1,4 @@
+import type { ICommandHandler } from '@nestjs/cqrs';
 import { Controller, Inject, Injectable, Scope } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
 import {
@@ -6,15 +7,15 @@ import {
   CommandBus,
   CommandHandler,
   CqrsModule,
-  type ICommandHandler,
 } from '@nestjs/cqrs';
 import { EventPattern } from '@nestjs/microservices';
 import { EventType } from '@nestposts/platform/domain/shared/event-type';
+
 import { TransportEvent } from '../decorators/transport-event.decorator';
 import { TransportRequest } from '../decorators/transport-request.decorator';
 import { MemoryClient } from '../in-memory/memory-client';
-import { EventEnvelopeFactory } from '../outbound/event-envelope.factory';
 import { EventAddress } from '../outbound/event-address';
+import { EventEnvelopeFactory } from '../outbound/event-envelope.factory';
 import { MemoryEventEnvelopeSerializer } from '../outbound/serializers/memory-event-envelope.serializer';
 import {
   CorrelatedRequestContext,
@@ -80,7 +81,9 @@ class NoteTheOrderHandler implements ICommandHandler<NoteTheOrder> {
   ) {}
 
   async execute(): Promise<void> {
-    this.arrivals.correlations.push((this.request as TransportRequestContext)?.correlationId);
+    this.arrivals.correlations.push(
+      (this.request as TransportRequestContext)?.correlationId,
+    );
   }
 }
 
@@ -92,12 +95,14 @@ class ShopEventsController {
   ) {}
 
   @EventPattern<string>(EventAddress.everyEventOf(SHOP))
-  shop(@TransportEvent() event: object, @TransportRequest() request?: AsyncContext): Promise<void> {
+  shop(
+    @TransportEvent() event: object,
+    @TransportRequest() request?: AsyncContext,
+  ): Promise<void> {
     this.arrivals.arrivals.push(new Arrival(event, request));
     return this.commandBus.execute(new NoteTheOrder('o-1'), request);
   }
 }
-
 
 describe('one entry per namespace, through @TransportEvent() and @TransportRequest()', () => {
   let consuming: Awaited<ReturnType<typeof startInProcessService>>;
@@ -111,13 +116,24 @@ describe('one entry per namespace, through @TransportEvent() and @TransportReque
     }
     const address = EventAddress.of(event);
     return lastValue(
-      publishing.emit(`${address.qualifiedName}.${address.orderingKey}`, envelopes.of(event, address)),
+      publishing.emit(
+        `${address.qualifiedName}.${address.orderingKey}`,
+        envelopes.of(event, address),
+      ),
     );
   };
 
-  const lastValue = (stream: { subscribe: (observer: { complete: () => void; error: (failure: unknown) => void }) => void }) =>
+  const lastValue = (stream: {
+    subscribe: (observer: {
+      complete: () => void;
+      error: (failure: unknown) => void;
+    }) => void;
+  }) =>
     new Promise<void>((resolve, reject) =>
-      stream.subscribe({ complete: () => resolve(), error: (failure) => reject(failure) }),
+      stream.subscribe({
+        complete: () => resolve(),
+        error: (failure) => reject(failure),
+      }),
     );
 
   beforeAll(async () => {
@@ -132,7 +148,10 @@ describe('one entry per namespace, through @TransportEvent() and @TransportReque
         NoteTheOrderHandler,
       ],
     });
-    envelopes = new EventEnvelopeFactory(TransportIdentity.named('shop'), new CorrelatedRequestContext());
+    envelopes = new EventEnvelopeFactory(
+      TransportIdentity.named('shop'),
+      new CorrelatedRequestContext(),
+    );
     publishing = new MemoryClient({
       servers: [consuming.server],
       serializer: new MemoryEventEnvelopeSerializer(),
@@ -152,15 +171,20 @@ describe('one entry per namespace, through @TransportEvent() and @TransportReque
   });
 
   it('answers with the concrete class, whichever event of the namespace arrived', async () => {
-    await publish(new OrderPlacedEvent('o-1', 42, new Date('2026-09-08T12:00:00.000Z')));
-    await publish(new OrderShippedEvent('o-1', new Date('2026-09-08T13:00:00.000Z')));
+    await publish(
+      new OrderPlacedEvent('o-1', 42, new Date('2026-09-08T12:00:00.000Z')),
+    );
+    await publish(
+      new OrderShippedEvent('o-1', new Date('2026-09-08T13:00:00.000Z')),
+    );
 
-    expect(arrivals.arrivals.map((arrival) => arrival.event.constructor)).toEqual([
-      OrderPlacedEvent,
-      OrderShippedEvent,
-    ]);
+    expect(
+      arrivals.arrivals.map((arrival) => arrival.event.constructor),
+    ).toEqual([OrderPlacedEvent, OrderShippedEvent]);
     expect((arrivals.arrivals[0].event as OrderPlacedEvent).total).toBe(42);
-    expect((arrivals.arrivals[0].event as OrderPlacedEvent).occurredAt).toBeInstanceOf(Date);
+    expect(
+      (arrivals.arrivals[0].event as OrderPlacedEvent).occurredAt,
+    ).toBeInstanceOf(Date);
   });
 
   it('does not carry an event of another namespace into this entry', async () => {
@@ -176,7 +200,9 @@ describe('one entry per namespace, through @TransportEvent() and @TransportReque
 
     const [arrival] = arrivals.arrivals;
     expect(arrival.request).toBeInstanceOf(TransportRequestContext);
-    expect((arrival.request as TransportRequestContext).correlationId).toBe('c-1');
+    expect((arrival.request as TransportRequestContext).correlationId).toBe(
+      'c-1',
+    );
   });
 
   it('runs the command it dispatches in that same request', async () => {

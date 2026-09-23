@@ -1,14 +1,19 @@
-import { BetterAuthEntities } from '@nestposts/auth/infrastructure/persistence/auth-entities';
 import type { EntitySchema } from '@nestposts/database';
+import { BetterAuthEntities } from '@nestposts/auth/infrastructure/persistence/auth-entities';
+
 import { InvitationNotifier } from '../../domain/organization/invitation.notifier';
-import { silentInvitationNotifier } from '../notifier/logging-invitation.notifier';
 import { organizationAuthPluginProviders } from '../better-auth/organization-better-auth.plugin';
+import { silentInvitationNotifier } from '../notifier/logging-invitation.notifier';
 import { InvitationEntitySchema } from './entities/invitation-orm.entity';
 import { MemberEntitySchema } from './entities/member-orm.entity';
 import { OrganizationEntitySchema } from './entities/organization-orm.entity';
 
 /** The Better Auth models this module maps by hand, so `@nestposts/auth` does not generate them. */
-export const ORGANIZATION_MODELS = ['organization', 'member', 'invitation'] as const;
+export const ORGANIZATION_MODELS = [
+  'organization',
+  'member',
+  'invitation',
+] as const;
 
 /** The three tables this module owns, mapped onto its own domain classes. */
 export const organizationEntities = [
@@ -18,9 +23,10 @@ export const organizationEntities = [
 ];
 
 /** What a plugin provider of this module injects, for building it outside the container. */
-export const organizationPluginDependencies: readonly (readonly [unknown, unknown])[] = [
-  [InvitationNotifier, silentInvitationNotifier],
-];
+export const organizationPluginDependencies: readonly (readonly [
+  unknown,
+  unknown,
+])[] = [[InvitationNotifier, silentInvitationNotifier]];
 
 /**
  * **Every table authentication owns in a system that has organizations** — Better Auth's, generated
@@ -54,4 +60,3 @@ export class OrganizationEntities {
     return OrganizationEntities.composed;
   }
 }
-

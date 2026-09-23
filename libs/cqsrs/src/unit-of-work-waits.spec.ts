@@ -1,17 +1,18 @@
+import type { ICommandHandler, IEvent, IEventHandler } from '@nestjs/cqrs';
+import type { TestingModule } from '@nestjs/testing';
+import type { Observable } from 'rxjs';
 import { Injectable } from '@nestjs/common';
 import {
   CommandBus,
   CommandHandler,
   EventBus,
   EventsHandler,
-  type ICommandHandler,
-  type IEvent,
-  type IEventHandler,
-  Saga,
   ofType,
+  Saga,
 } from '@nestjs/cqrs';
-import { Test, type TestingModule } from '@nestjs/testing';
-import { type Observable, map } from 'rxjs';
+import { Test } from '@nestjs/testing';
+import { map } from 'rxjs';
+
 import { CqsrsModule } from './cqsrs.module';
 
 class Start {}

@@ -37,6 +37,8 @@ export class AuthUser extends BaseEntity {
     if (!this.banned) {
       return false;
     }
-    return this.banExpires === null || this.banExpires.getTime() > now.getTime();
+    return (
+      this.banExpires === null || this.banExpires.getTime() > now.getTime()
+    );
   }
 }

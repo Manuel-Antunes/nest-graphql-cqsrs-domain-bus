@@ -1,5 +1,7 @@
+import type { EventBus } from '@nestjs/cqrs';
 import { Injectable } from '@nestjs/common';
-import { type EventBus, EventPublisher } from '@nestjs/cqrs';
+import { EventPublisher } from '@nestjs/cqrs';
+
 import { TransportEventBusService } from './transport-event-bus.service';
 
 /**

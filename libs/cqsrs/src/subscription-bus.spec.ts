@@ -1,11 +1,13 @@
-import { EventBus, ofType } from '@nestjs/cqrs';
-import { Test, type TestingModule } from '@nestjs/testing';
+import type { TestingModule } from '@nestjs/testing';
 import type { Observable } from 'rxjs';
+import { EventBus, ofType } from '@nestjs/cqrs';
+import { Test } from '@nestjs/testing';
+
+import type { ISubscriptionHandler } from './interfaces/index';
 import { Subscription } from './classes/subscription';
 import { CqsrsModule } from './cqsrs.module';
 import { SubscriptionHandler } from './decorators/subscription-handler.decorator';
 import { SubscriptionHandlerNotFoundException } from './exceptions/index';
-import type { ISubscriptionHandler } from './interfaces/index';
 import { SubscriptionBus } from './subscription-bus';
 
 class CounterEvent {
@@ -15,7 +17,10 @@ class CounterEvent {
   ) {}
 }
 
-class OnCounterSubscription extends Subscription<CounterEvent, { topic?: string | null }> {
+class OnCounterSubscription extends Subscription<
+  CounterEvent,
+  { topic?: string | null }
+> {
   override match(event: CounterEvent): boolean {
     return !this.criteria.topic || event.topic === this.criteria.topic;
   }
@@ -48,7 +53,8 @@ describe('SubscriptionBus', () => {
     active.push(subscription);
     return { received, stop: () => subscription.unsubscribe() };
   };
-  const values = ({ received }: { received: CounterEvent[] }) => received.map((event) => event.value);
+  const values = ({ received }: { received: CounterEvent[] }) =>
+    received.map((event) => event.value);
 
   beforeAll(async () => {
     module = await Test.createTestingModule({
@@ -60,7 +66,9 @@ describe('SubscriptionBus', () => {
     eventBus = module.get(EventBus);
   });
 
-  afterEach(() => active.splice(0).forEach((subscription) => subscription.unsubscribe()));
+  afterEach(() =>
+    active.splice(0).forEach((subscription) => subscription.unsubscribe()),
+  );
   afterAll(async () => module.close());
 
   it('routes the message to its @SubscriptionHandler and streams what the handler wired up', () => {
@@ -73,7 +81,9 @@ describe('SubscriptionBus', () => {
   });
 
   it('applies the filter of the message itself, so each subscriber only sees its own criteria', () => {
-    const onlyA = collect(bus.subscribe(new OnCounterSubscription({ topic: 'a' })));
+    const onlyA = collect(
+      bus.subscribe(new OnCounterSubscription({ topic: 'a' })),
+    );
     const all = collect(bus.subscribe(new OnCounterSubscription({})));
 
     eventBus.publish(new CounterEvent('a', 1));
@@ -87,7 +97,9 @@ describe('SubscriptionBus', () => {
     const before = upstream();
     const opened = OnCounterSubscriptionHandler.opened;
     const first = bus.subscribe(new OnCounterSubscription({ topic: 'shared' }));
-    const second = bus.subscribe(new OnCounterSubscription({ topic: 'shared' }));
+    const second = bus.subscribe(
+      new OnCounterSubscription({ topic: 'shared' }),
+    );
     expect(second).toBe(first);
 
     const a = collect(first);
@@ -112,12 +124,16 @@ describe('SubscriptionBus', () => {
   });
 
   it('treats an absent criterion and an undefined one as the same request', () => {
-    expect(bus.subscribe(new OnCounterSubscription({}))).toBe(bus.subscribe(new OnCounterSubscription({ topic: undefined })));
+    expect(bus.subscribe(new OnCounterSubscription({}))).toBe(
+      bus.subscribe(new OnCounterSubscription({ topic: undefined })),
+    );
   });
 
   it('closes the upstream when the last subscriber leaves, and opens it again on demand', () => {
     const before = upstream();
-    const stream = bus.subscribe(new OnCounterSubscription({ topic: 'lifecycle' }));
+    const stream = bus.subscribe(
+      new OnCounterSubscription({ topic: 'lifecycle' }),
+    );
     const a = collect(stream);
     const b = collect(stream);
     expect(upstream()).toBe(before + 1);
@@ -132,17 +148,23 @@ describe('SubscriptionBus', () => {
     eventBus.publish(new CounterEvent('lifecycle', 9));
 
     expect(values(again)).toEqual([9]);
-    expect(bus.subscribe(new OnCounterSubscription({ topic: 'lifecycle' }))).toBe(stream);
+    expect(
+      bus.subscribe(new OnCounterSubscription({ topic: 'lifecycle' })),
+    ).toBe(stream);
     expect(upstream()).toBe(before + 1);
   });
 
   it('throws when no @SubscriptionHandler handles the message', () => {
-    expect(() => bus.subscribe(new UnhandledSubscription())).toThrow(SubscriptionHandlerNotFoundException);
+    expect(() => bus.subscribe(new UnhandledSubscription())).toThrow(
+      SubscriptionHandlerNotFoundException,
+    );
   });
 
   it('announces every subscribe on subscriptions$, reused stream or not', () => {
     const asked: unknown[] = [];
-    const watching = bus.subscriptions$.subscribe((subscription) => asked.push(subscription));
+    const watching = bus.subscriptions$.subscribe((subscription) =>
+      asked.push(subscription),
+    );
     const first = new OnCounterSubscription({ topic: 'announced' });
     const second = new OnCounterSubscription({ topic: 'announced' });
 

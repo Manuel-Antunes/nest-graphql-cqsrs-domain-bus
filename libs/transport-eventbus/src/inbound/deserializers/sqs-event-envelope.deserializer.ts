@@ -1,12 +1,18 @@
-import { AWS_ROUTING_KEY_ATTRIBUTE, type AwsMessageBody } from '../../aws/aws-message';
-import { type EnvelopeMetadata, EventEnvelope } from '../../outbound/event-envelope';
-import { EventEnvelopeDeserializer, type IncomingEnvelope } from './event-envelope.deserializer';
+import type { AwsMessageBody } from '../../aws/aws-message';
+import type { EnvelopeMetadata } from '../../outbound/event-envelope';
+import type { IncomingEnvelope } from './event-envelope.deserializer';
+import { AWS_ROUTING_KEY_ATTRIBUTE } from '../../aws/aws-message';
+import { EventEnvelope } from '../../outbound/event-envelope';
+import { EventEnvelopeDeserializer } from './event-envelope.deserializer';
 
 /** What SNS delivers when a subscription does **not** have raw message delivery turned on. */
 interface SnsNotification {
   readonly Type: string;
   readonly Message: string;
-  readonly MessageAttributes?: Record<string, { Type?: string; Value?: string }>;
+  readonly MessageAttributes?: Record<
+    string,
+    { Type?: string; Value?: string }
+  >;
 }
 
 /**
@@ -31,16 +37,23 @@ interface SnsNotification {
  * are then the only description of it there is.
  */
 export class SqsEventEnvelopeDeserializer extends EventEnvelopeDeserializer {
-  deserializeEnvelope(value: unknown, options?: Record<string, unknown>): IncomingEnvelope {
+  deserializeEnvelope(
+    value: unknown,
+    options?: Record<string, unknown>,
+  ): IncomingEnvelope {
     const notification = asNotification(value);
     const attributes = notification
       ? fromNotificationAttributes(notification.MessageAttributes)
       : ((options?.['attributes'] as EnvelopeMetadata | undefined) ?? {});
-    const body = (notification ? parse(notification.Message) : value) as Partial<AwsMessageBody>;
+    const body = (
+      notification ? parse(notification.Message) : value
+    ) as Partial<AwsMessageBody>;
 
     const metadata = body?.metadata ?? attributes;
     const pattern =
-      body?.pattern ?? metadata[AWS_ROUTING_KEY_ATTRIBUTE] ?? attributes[AWS_ROUTING_KEY_ATTRIBUTE];
+      body?.pattern ??
+      metadata[AWS_ROUTING_KEY_ATTRIBUTE] ??
+      attributes[AWS_ROUTING_KEY_ATTRIBUTE];
 
     return {
       pattern: String(pattern ?? options?.['channel'] ?? ''),
@@ -51,7 +64,8 @@ export class SqsEventEnvelopeDeserializer extends EventEnvelopeDeserializer {
 
 const asNotification = (value: unknown): SnsNotification | undefined => {
   const candidate = value as Partial<SnsNotification> | undefined;
-  return candidate?.Type === 'Notification' && typeof candidate.Message === 'string'
+  return candidate?.Type === 'Notification' &&
+    typeof candidate.Message === 'string'
     ? (candidate as SnsNotification)
     : undefined;
 };

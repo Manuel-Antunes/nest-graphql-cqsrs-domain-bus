@@ -31,7 +31,10 @@ export abstract class TransportIdentity {
   readonly publishes: boolean = true;
 
   /** The identity of a service that publishes under that name. */
-  static named(applicationName: string, options: { publishes?: boolean } = {}): TransportIdentity {
+  static named(
+    applicationName: string,
+    options: { publishes?: boolean } = {},
+  ): TransportIdentity {
     return new DeclaredIdentity(applicationName, options.publishes ?? true);
   }
 

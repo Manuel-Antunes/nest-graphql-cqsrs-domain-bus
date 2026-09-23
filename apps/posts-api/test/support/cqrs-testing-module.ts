@@ -1,21 +1,29 @@
-import { EntityManager, MikroORM, RequestContext } from "@mikro-orm/core";
-import { MikroOrmModule } from "@mikro-orm/nestjs";
-import type { Provider } from "@nestjs/common";
-import { EventBus, type IEvent } from "@nestjs/cqrs";
-import { Test, type TestingModule } from "@nestjs/testing";
-import { CqsrsModule } from "@nestposts/cqsrs";
-import { TRANSPORT_EVENT_BUS_PUBLISHER } from "@nestposts/transport-eventbus";
-import { persistenceTesting, transportTesting } from "./transport-testing.module";
-import { PostsInfrastructureModule } from "@nestposts/posts/infrastructure/posts-infrastructure.module";
-import { UsersInfrastructureModule } from "@nestposts/users/infrastructure/users-infrastructure.module";
-import { mikroOrmConfig } from "../../src/infrastructure/persistence/mikro-orm.config";
+import type { Provider } from '@nestjs/common';
+import type { IEvent } from '@nestjs/cqrs';
+import type { TestingModule } from '@nestjs/testing';
+import { EntityManager, MikroORM, RequestContext } from '@mikro-orm/core';
+import { MikroOrmModule } from '@mikro-orm/nestjs';
+import { EventBus } from '@nestjs/cqrs';
+import { Test } from '@nestjs/testing';
+import { CqsrsModule } from '@nestposts/cqsrs';
+import { PostsInfrastructureModule } from '@nestposts/posts/infrastructure/posts-infrastructure.module';
+import { TRANSPORT_EVENT_BUS_PUBLISHER } from '@nestposts/transport-eventbus';
+import { UsersInfrastructureModule } from '@nestposts/users/infrastructure/users-infrastructure.module';
+
+import { mikroOrmConfig } from '../../src/infrastructure/persistence/mikro-orm.config';
+import {
+  persistenceTesting,
+  transportTesting,
+} from './transport-testing.module';
 
 export async function createCqrsTestingModule(
   providers: Provider[],
 ): Promise<TestingModule> {
   const module = await Test.createTestingModule({
     imports: [
-      CqsrsModule.forRoot({ aggregatePublisher: TRANSPORT_EVENT_BUS_PUBLISHER }),
+      CqsrsModule.forRoot({
+        aggregatePublisher: TRANSPORT_EVENT_BUS_PUBLISHER,
+      }),
       ...persistenceTesting(),
       transportTesting(),
       PostsInfrastructureModule,
@@ -43,9 +51,9 @@ export class RecordingEvents {
   private readonly waiters: Array<() => void> = [];
 
   constructor(module: TestingModule) {
-    module.get(EventBus).subscribe(event => {
+    module.get(EventBus).subscribe((event) => {
       this.events.push(event);
-      this.waiters.splice(0).forEach(wake => wake());
+      this.waiters.splice(0).forEach((wake) => wake());
     });
   }
 
@@ -58,10 +66,10 @@ export class RecordingEvents {
     while (this.events.length < count) {
       if (Date.now() > deadline) {
         throw new Error(
-          `esperava ${count} eventos, gravei ${this.events.length}: ${this.events.map(e => e.constructor.name)}`,
+          `esperava ${count} eventos, gravei ${this.events.length}: ${this.events.map((e) => e.constructor.name)}`,
         );
       }
-      await new Promise<void>(resolve => {
+      await new Promise<void>((resolve) => {
         this.waiters.push(resolve);
         setTimeout(resolve, 20);
       });

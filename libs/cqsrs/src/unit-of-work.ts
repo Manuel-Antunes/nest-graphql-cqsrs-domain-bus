@@ -131,7 +131,11 @@ export class UnitOfWork {
    * keeps a command dispatched without a context from starting a unit of its own.
    */
   covers(request?: object): boolean {
-    return request === undefined || this.request === undefined || this.request === request;
+    return (
+      request === undefined ||
+      this.request === undefined ||
+      this.request === request
+    );
   }
 
   get staging(): boolean {
@@ -175,7 +179,11 @@ export class UnitOfWork {
   async commit(): Promise<void> {
     await this.settle();
 
-    for (let round = 0; this.listeners.get('prepareCommit')?.length; round += 1) {
+    for (
+      let round = 0;
+      this.listeners.get('prepareCommit')?.length;
+      round += 1
+    ) {
       if (round >= UnitOfWork.MAX_COMMIT_ROUNDS) {
         throw new Error(
           `a unit of work was still staging work after ${UnitOfWork.MAX_COMMIT_ROUNDS} prepare ` +

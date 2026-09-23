@@ -1,8 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
-import {
-  type InvitationNotice,
-  InvitationNotifier,
-} from '../../domain/organization/invitation.notifier';
+
+import type { InvitationNotice } from '../../domain/organization/invitation.notifier';
+import { InvitationNotifier } from '../../domain/organization/invitation.notifier';
 
 @Injectable()
 export class LoggingInvitationNotifier extends InvitationNotifier {

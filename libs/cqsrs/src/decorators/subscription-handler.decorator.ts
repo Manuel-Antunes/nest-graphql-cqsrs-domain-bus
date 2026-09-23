@@ -1,8 +1,14 @@
-import { Injectable, type InjectableOptions } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
+import type { InjectableOptions } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
+
 import 'reflect-metadata';
+
 import type { ISubscription } from '../interfaces/subscription.interface';
-import { SUBSCRIPTION_HANDLER_METADATA, SUBSCRIPTION_METADATA } from './constants';
+import {
+  SUBSCRIPTION_HANDLER_METADATA,
+  SUBSCRIPTION_METADATA,
+} from './constants';
 
 /**
  * Marks the class as a subscription's handler — the `@QueryHandler` of subscriptions, with the same
@@ -19,10 +25,19 @@ import { SUBSCRIPTION_HANDLER_METADATA, SUBSCRIPTION_METADATA } from './constant
  * @param subscription The subscription *class* handled by this handler.
  * @param options Options forwarded to `@Injectable` (scope, for instance).
  */
-export const SubscriptionHandler = (subscription: ISubscription, options?: InjectableOptions): ClassDecorator => {
+export const SubscriptionHandler = (
+  subscription: ISubscription,
+  options?: InjectableOptions,
+): ClassDecorator => {
   return (target) => {
-    if (!Reflect.hasOwnMetadata(SUBSCRIPTION_METADATA, subscription as object)) {
-      Reflect.defineMetadata(SUBSCRIPTION_METADATA, { id: randomUUID() }, subscription as object);
+    if (
+      !Reflect.hasOwnMetadata(SUBSCRIPTION_METADATA, subscription as object)
+    ) {
+      Reflect.defineMetadata(
+        SUBSCRIPTION_METADATA,
+        { id: randomUUID() },
+        subscription as object,
+      );
     }
     Reflect.defineMetadata(SUBSCRIPTION_HANDLER_METADATA, subscription, target);
     if (options) {

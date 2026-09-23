@@ -1,6 +1,8 @@
-import { Reference, type Ref, ref, rel } from "@mikro-orm/core";
-import type { Type } from "@nestjs/common";
-import { BrokenDelegationException } from "./broken-delegation.exception";
+import type { Ref } from '@mikro-orm/core';
+import type { Type } from '@nestjs/common';
+import { ref, Reference, rel } from '@mikro-orm/core';
+
+import { BrokenDelegationException } from './broken-delegation.exception';
 
 declare const DELEGATED_TO: unique symbol;
 
@@ -63,12 +65,15 @@ export interface DelegatingType<
 const delegations = new Map<Type<object>, Delegation<any>>();
 
 export function delegationOf(delegate: unknown): Delegation<any> | undefined {
-  return typeof delegate === "function"
+  return typeof delegate === 'function'
     ? delegations.get(delegate as Type<object>)
     : undefined;
 }
 
-function memberOf(delegate: Type<object>, key: PropertyKey): PropertyDescriptor {
+function memberOf(
+  delegate: Type<object>,
+  key: PropertyKey,
+): PropertyDescriptor {
   for (
     let target: object | null = delegate.prototype;
     target;
@@ -133,11 +138,11 @@ export function Delegate<
       return built;
     }
     const delegating = class extends (base as Type<any>) {};
-    Object.defineProperty(delegating, "name", {
+    Object.defineProperty(delegating, 'name', {
       value: base === subject ? name : `${base.name}${name}`,
       configurable: true,
     });
-    Object.defineProperty(delegating.prototype, "constructor", {
+    Object.defineProperty(delegating.prototype, 'constructor', {
       value: subject,
       enumerable: false,
       writable: true,
@@ -147,7 +152,11 @@ export function Delegate<
       Object.defineProperty(
         delegating.prototype,
         key,
-        forwarder(memberOf(to, key as PropertyKey), property, key as PropertyKey),
+        forwarder(
+          memberOf(to, key as PropertyKey),
+          property,
+          key as PropertyKey,
+        ),
       );
     }
     classes.set(base, delegating);
@@ -167,7 +176,7 @@ export function Delegate<
     subject: from,
     over,
     attach,
-    resolve: delegate =>
+    resolve: (delegate) =>
       cast(Reference.unwrapReference((delegate as any)[from]), delegate),
   };
 
@@ -205,6 +214,8 @@ export function delegateRef<
     return source as never;
   }
   return (
-    source instanceof delegate ? ref(source) : ref(rel(delegate, source as never))
+    source instanceof delegate
+      ? ref(source)
+      : ref(rel(delegate, source as never))
   ) as never;
 }

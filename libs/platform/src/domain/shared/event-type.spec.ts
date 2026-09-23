@@ -1,14 +1,17 @@
 import {
   DEFAULT_EVENT_VERSION,
-  EventType,
   eventTagsOf,
+  EventType,
   eventTypeFor,
   eventTypeOf,
   namespaceIn,
   qualifiedNameIn,
   requireEventTypeOf,
 } from './event-type';
-import { EventTypeConflictException, EventTypeMissingException } from './event-type.exception';
+import {
+  EventTypeConflictException,
+  EventTypeMissingException,
+} from './event-type.exception';
 
 describe('@EventType', () => {
   @EventType({ namespace: 'catalog', tags: ['thingId'] })
@@ -19,7 +22,12 @@ describe('@EventType', () => {
     ) {}
   }
 
-  @EventType({ namespace: 'catalog', name: 'ThingRenamed', version: '2.1.0', tags: ['thingId'] })
+  @EventType({
+    namespace: 'catalog',
+    name: 'ThingRenamed',
+    version: '2.1.0',
+    tags: ['thingId'],
+  })
   class RenamedEvent {
     constructor(readonly thingId: { value: string }) {}
   }
@@ -49,7 +57,9 @@ describe('@EventType', () => {
   });
 
   it('resolves a class back from the message type, and from the qualified name alone', () => {
-    expect(eventTypeFor('catalog.ThingRenamed#2.1.0')?.eventClass).toBe(RenamedEvent);
+    expect(eventTypeFor('catalog.ThingRenamed#2.1.0')?.eventClass).toBe(
+      RenamedEvent,
+    );
     expect(eventTypeFor('catalog.ThingRenamed')?.eventClass).toBe(RenamedEvent);
   });
 
@@ -68,8 +78,12 @@ describe('@EventType', () => {
   it('names the class in the error when the metadata is missing', () => {
     class Undeclared {}
 
-    expect(() => requireEventTypeOf(new Undeclared())).toThrow(EventTypeMissingException);
-    expect(() => requireEventTypeOf(new Undeclared())).toThrow(/Undeclared has no @EventType/);
+    expect(() => requireEventTypeOf(new Undeclared())).toThrow(
+      EventTypeMissingException,
+    );
+    expect(() => requireEventTypeOf(new Undeclared())).toThrow(
+      /Undeclared has no @EventType/,
+    );
   });
 
   describe('tags', () => {
@@ -112,16 +126,17 @@ describe('@EventType', () => {
         ) {}
       }
 
-      expect(eventTagsOf(new TwiceTaggedEvent('z', 'a')).map((tag) => tag.key)).toEqual([
-        'alpha',
-        'zeta',
-      ]);
+      expect(
+        eventTagsOf(new TwiceTaggedEvent('z', 'a')).map((tag) => tag.key),
+      ).toEqual(['alpha', 'zeta']);
     });
   });
 
   describe('reading a message type apart', () => {
     it('splits the qualified name off the version', () => {
-      expect(qualifiedNameIn('posts.PostCreated#1.0.0')).toBe('posts.PostCreated');
+      expect(qualifiedNameIn('posts.PostCreated#1.0.0')).toBe(
+        'posts.PostCreated',
+      );
       expect(qualifiedNameIn('posts.PostCreated')).toBe('posts.PostCreated');
     });
 

@@ -1,8 +1,15 @@
-import { Logger } from '@nestjs/common';
-import { ClientProxy, type ProducerSerializer, type ReadPacket, type WritePacket } from '@nestjs/microservices';
+import type {
+  ProducerSerializer,
+  ReadPacket,
+  WritePacket,
+} from '@nestjs/microservices';
 import type { Inngest } from 'inngest';
+import { Logger } from '@nestjs/common';
+import { ClientProxy } from '@nestjs/microservices';
+
 import type { InngestEventMessage } from '../outbound/serializers/inngest-event-envelope.serializer';
-import { type InngestRecordOptions, MAX_SESSIONS, isInngestRecord } from './inngest-record.builder';
+import type { InngestRecordOptions } from './inngest-record.builder';
+import { isInngestRecord, MAX_SESSIONS } from './inngest-record.builder';
 
 export interface InngestClientProxyOptions {
   /** The Inngest client this destination sends through — one per application, built by the caller. */
@@ -60,7 +67,10 @@ export class InngestClientProxy extends ClientProxy {
     return this.client as T;
   }
 
-  protected publish(packet: ReadPacket, callback: (packet: WritePacket) => void): () => void {
+  protected publish(
+    packet: ReadPacket,
+    callback: (packet: WritePacket) => void,
+  ): () => void {
     callback({
       err: new Error(
         `an event triggers a function, it does not answer: nobody replies to send() on ` +
@@ -77,7 +87,10 @@ export class InngestClientProxy extends ClientProxy {
       record ? { ...packet, data: record.data } : packet,
     )) as InngestEventMessage;
 
-    const sessions = { ...(message.meta?.sessions ?? {}), ...(options.sessions ?? {}) };
+    const sessions = {
+      ...(message.meta?.sessions ?? {}),
+      ...(options.sessions ?? {}),
+    };
     if (Object.keys(sessions).length > MAX_SESSIONS) {
       throw new Error(
         `Inngest takes at most ${MAX_SESSIONS} sessions on one event; ${message.name} would carry ` +
@@ -88,12 +101,20 @@ export class InngestClientProxy extends ClientProxy {
     await this.client.send({
       name: message.name,
       data: message.data,
-      user: { ...message.user, ...(options.metadata ?? {}), ...(options.user ?? {}) },
+      user: {
+        ...message.user,
+        ...(options.metadata ?? {}),
+        ...(options.user ?? {}),
+      },
       ...(Object.keys(sessions).length > 0 ? { meta: { sessions } } : {}),
-      ...(options.idempotencyKey ? { id: `${message.name}:${options.idempotencyKey}` } : {}),
+      ...(options.idempotencyKey
+        ? { id: `${message.name}:${options.idempotencyKey}` }
+        : {}),
       ...(options.ts === undefined
         ? {}
-        : { ts: options.ts instanceof Date ? options.ts.getTime() : options.ts }),
+        : {
+            ts: options.ts instanceof Date ? options.ts.getTime() : options.ts,
+          }),
     } as Parameters<Inngest.Any['send']>[0]);
 
     this.logger.debug(`${message.name} → inngest`);

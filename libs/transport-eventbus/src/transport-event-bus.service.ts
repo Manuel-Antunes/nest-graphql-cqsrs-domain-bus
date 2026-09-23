@@ -1,18 +1,19 @@
-import { Injectable, Logger, type OnModuleDestroy, Optional } from '@nestjs/common';
+import type { OnModuleDestroy } from '@nestjs/common';
 import type { InstanceWrapper } from '@nestjs/core/injector/instance-wrapper';
-import {
-  AsyncContext,
-  EventBus,
-  type IEvent,
-  type IEventBus,
-  type IEventHandler,
-  type IEventPublisher,
+import type {
+  IEvent,
+  IEventBus,
+  IEventHandler,
+  IEventPublisher,
 } from '@nestjs/cqrs';
+import { Injectable, Logger, Optional } from '@nestjs/common';
+import { AsyncContext, EventBus } from '@nestjs/cqrs';
+import { UnitOfWork } from '@nestposts/cqsrs';
 import { lastValueFrom, merge } from 'rxjs';
+
 import { isExcludedLocally } from './decorators/exclude-def.decorator';
 import { EventForwarder } from './outbound/event-forwarder';
 import { EventLog } from './persistence/event-log/event-log';
-import { UnitOfWork } from '@nestposts/cqsrs';
 
 /**
  * **The integration point: an `IEventBus` that publishes locally and through the transports.**
@@ -87,7 +88,10 @@ export class TransportEventBusService implements IEventBus, OnModuleDestroy {
     dispatcherOrAsyncContext?: unknown,
     asyncContext?: AsyncContext,
   ): Promise<void> {
-    const [dispatcherContext, context] = normalize(dispatcherOrAsyncContext, asyncContext);
+    const [dispatcherContext, context] = normalize(
+      dispatcherOrAsyncContext,
+      asyncContext,
+    );
     /**
      * **Copied, and that copy is load-bearing.** `AggregateRoot.commit()` hands `publishAll` its
      * INTERNAL array and then calls `uncommit()`, which empties it. Publishing straight away never
@@ -100,7 +104,9 @@ export class TransportEventBusService implements IEventBus, OnModuleDestroy {
     const unit = UnitOfWork.current();
     if (unit?.staging) {
       unit.on('prepareCommit', () => this.record(staged));
-      unit.on('commit', () => this.dispatch(staged, dispatcherContext, context));
+      unit.on('commit', () =>
+        this.dispatch(staged, dispatcherContext, context),
+      );
       return Promise.resolve();
     }
 
@@ -117,7 +123,9 @@ export class TransportEventBusService implements IEventBus, OnModuleDestroy {
     if (!this.log) {
       return this.dispatch(staged, dispatcherContext, context);
     }
-    return this.record(staged).then(() => this.dispatch(staged, dispatcherContext, context));
+    return this.record(staged).then(() =>
+      this.dispatch(staged, dispatcherContext, context),
+    );
   }
 
   /**
@@ -130,7 +138,9 @@ export class TransportEventBusService implements IEventBus, OnModuleDestroy {
     dispatcherContext: unknown,
     context?: AsyncContext,
   ): Promise<void> {
-    const outbound = events.map((event) => this.forwarder.forward(event as object));
+    const outbound = events.map((event) =>
+      this.forwarder.forward(event as object),
+    );
 
     for (const event of events) {
       if (!isExcludedLocally(event as object)) {
@@ -138,20 +148,22 @@ export class TransportEventBusService implements IEventBus, OnModuleDestroy {
       }
     }
 
-    return lastValueFrom(merge(...outbound), { defaultValue: undefined }).catch((failure: Error) => {
-      /*
-       * The log IS the change, and it exists for a measured reason: a rejection here reaches whoever
-       * called `publish`, and the one caller that cannot do anything with it is `aggregate.commit()`,
-       * which nobody awaits. Without this line the only sign would be an unhandled rejection with no
-       * event in it.
-       */
-      this.logger.error(
-        `${events.map((event) => (event as object).constructor.name).join(', ')} was not ` +
-          `published to the transport: ${failure.message}`,
-        failure.stack,
-      );
-      throw failure;
-    });
+    return lastValueFrom(merge(...outbound), { defaultValue: undefined }).catch(
+      (failure: Error) => {
+        /*
+         * The log IS the change, and it exists for a measured reason: a rejection here reaches whoever
+         * called `publish`, and the one caller that cannot do anything with it is `aggregate.commit()`,
+         * which nobody awaits. Without this line the only sign would be an unhandled rejection with no
+         * event in it.
+         */
+        this.logger.error(
+          `${events.map((event) => (event as object).constructor.name).join(', ')} was not ` +
+            `published to the transport: ${failure.message}`,
+          failure.stack,
+        );
+        throw failure;
+      },
+    );
   }
 
   /**

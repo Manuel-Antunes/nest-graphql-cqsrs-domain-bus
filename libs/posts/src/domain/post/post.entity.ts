@@ -1,33 +1,31 @@
-import { AutoMap } from "@automapper/classes";
-import { Collection, rel } from "@mikro-orm/core";
-import { AggregateRoot } from "@nestposts/platform/domain/shared/aggregate-root";
-import { type DelegatedRef, delegateRef } from "@nestposts/platform/domain/shared/delegation/delegate";
-import { BaseEntity } from "@nestposts/platform/domain/shared/base-entity";
-import { WithSoftDelete } from "@nestposts/platform/domain/shared/soft-delete/soft-delete";
-import { Tag } from "../tag/tag.entity";
-import { TagId } from "../tag/vo/tag-id";
-import { Author, Authorship } from "@nestposts/users/domain/user/author.entity";
-import { type User } from "@nestposts/users/domain/user/user.entity";
-import { UserId } from "@nestposts/users/domain/user/vo/user-id";
-import type { UserName } from "@nestposts/users/domain/user/vo/user-name";
-import { PostCreatedEvent } from "./event/post-created.event";
-import { PostDeletedEvent } from "./event/post-deleted.event";
-import { PostPreCreatedEvent } from "./event/post-pre-created.event";
-import { PostRestoredEvent } from "./event/post-restored.event";
-import { PostUpdatedEvent } from "./event/post-updated.event";
-import type { AssignedTag } from "./event/assigned-tag";
-import { InvalidPostException } from "./exception/invalid-post.exception";
-import { PostNotWrittenByException } from "./exception/post-not-written-by.exception";
-import {
-  type NewPost,
-  NewPostSchema,
-  type PostChanges,
-  PostChangesSchema,
-} from "./schemas/new-post.schema";
-import { PostContent } from "./vo/post-content";
-import { PostId } from "./vo/post-id";
-import { PostTitle } from "./vo/post-title";
-import { IPost } from "./schemas/post.schema";
+import type { DelegatedRef } from '@nestposts/platform/domain/shared/delegation/delegate';
+import type { UserName } from '@nestposts/users/domain/user/vo/user-name';
+import { AutoMap } from '@automapper/classes';
+import { Collection, rel } from '@mikro-orm/core';
+import { AggregateRoot } from '@nestposts/platform/domain/shared/aggregate-root';
+import { BaseEntity } from '@nestposts/platform/domain/shared/base-entity';
+import { delegateRef } from '@nestposts/platform/domain/shared/delegation/delegate';
+import { WithSoftDelete } from '@nestposts/platform/domain/shared/soft-delete/soft-delete';
+import { Author, Authorship } from '@nestposts/users/domain/user/author.entity';
+import { type User } from '@nestposts/users/domain/user/user.entity';
+import { UserId } from '@nestposts/users/domain/user/vo/user-id';
+
+import type { AssignedTag } from './event/assigned-tag';
+import type { NewPost, PostChanges } from './schemas/new-post.schema';
+import { Tag } from '../tag/tag.entity';
+import { TagId } from '../tag/vo/tag-id';
+import { PostCreatedEvent } from './event/post-created.event';
+import { PostDeletedEvent } from './event/post-deleted.event';
+import { PostPreCreatedEvent } from './event/post-pre-created.event';
+import { PostRestoredEvent } from './event/post-restored.event';
+import { PostUpdatedEvent } from './event/post-updated.event';
+import { InvalidPostException } from './exception/invalid-post.exception';
+import { PostNotWrittenByException } from './exception/post-not-written-by.exception';
+import { NewPostSchema, PostChangesSchema } from './schemas/new-post.schema';
+import { IPost } from './schemas/post.schema';
+import { PostContent } from './vo/post-content';
+import { PostId } from './vo/post-id';
+import { PostTitle } from './vo/post-title';
 
 export type PostEvent =
   | PostPreCreatedEvent
@@ -82,7 +80,7 @@ export class Post
   ): Post {
     const parsed = NewPostSchema.safeParse(input);
     if (!parsed.success) {
-      throw new InvalidPostException("post inválido", { cause: parsed.error });
+      throw new InvalidPostException('post inválido', { cause: parsed.error });
     }
     const post = new Post();
     post.author = author;
@@ -104,11 +102,13 @@ export class Post
       throw new InvalidPostException(`post ${this.id.value} já está completo`);
     }
     if (firstTags.length === 0) {
-      throw new InvalidPostException("completar um post exige ao menos uma tag");
+      throw new InvalidPostException(
+        'completar um post exige ao menos uma tag',
+      );
     }
     const resulting = [...this.loadedTags()];
     for (const tag of firstTags) {
-      if (!resulting.some(present => present.id.equals(tag.id))) {
+      if (!resulting.some((present) => present.id.equals(tag.id))) {
         resulting.push(tag);
       }
     }
@@ -119,7 +119,7 @@ export class Post
         this.title.value,
         this.content.value,
         this.author.id.value,
-        resulting.map(tag => ({ tagId: tag.id.value, name: tag.name.value })),
+        resulting.map((tag) => ({ tagId: tag.id.value, name: tag.name.value })),
         this.version + 1,
         now,
       ),
@@ -134,7 +134,7 @@ export class Post
   update(changes: PostChanges, now: Date): this {
     const parsed = PostChangesSchema.safeParse(changes);
     if (!parsed.success) {
-      throw new InvalidPostException("update inválido", {
+      throw new InvalidPostException('update inválido', {
         cause: parsed.error,
       });
     }
@@ -142,7 +142,7 @@ export class Post
     const content = parsed.data.content ?? this.content;
     if (title.equals(this.title) && content.equals(this.content)) {
       throw new InvalidPostException(
-        "update sem mudanças: informe um title e/ou content diferente do atual",
+        'update sem mudanças: informe um title e/ou content diferente do atual',
       );
     }
     return this.raiseUpdate(title, content, this.loadedTags(), now);
@@ -192,7 +192,7 @@ export class Post
         content.value,
         this.author.id.value,
         this.authorName(),
-        tags.map(tag => ({ tagId: tag.id.value, name: tag.name.value })),
+        tags.map((tag) => ({ tagId: tag.id.value, name: tag.name.value })),
         this.version + 1,
         this.createdAt,
         now,
@@ -206,7 +206,7 @@ export class Post
   }
 
   hasTag(tagId: TagId | string): boolean {
-    return this.tags.getIdentifiers().some(id => id.equals(tagId));
+    return this.tags.getIdentifiers().some((id) => id.equals(tagId));
   }
 
   hasNoTags(): boolean {
@@ -246,10 +246,12 @@ export class Post
 
   private setTags(tags: readonly AssignedTag[]): void {
     const atHand = new Map(
-      this.tags.getItems(false).map(tag => [tag.id.value as string, tag]),
+      this.tags.getItems(false).map((tag) => [tag.id.value as string, tag]),
     );
     this.tags.set(
-      tags.map(({ tagId }) => atHand.get(tagId) ?? rel(Tag, TagId.parse(tagId))),
+      tags.map(
+        ({ tagId }) => atHand.get(tagId) ?? rel(Tag, TagId.parse(tagId)),
+      ),
     );
   }
 

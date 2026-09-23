@@ -2,14 +2,21 @@ import type { ModuleRef } from '@nestjs/core';
 import type { InstanceWrapper } from '@nestjs/core/injector/instance-wrapper';
 import { AsyncContext } from '@nestjs/cqrs';
 import { Observable, of, Subject } from 'rxjs';
+
+import type {
+  ISubscriptionHandler,
+  ISubscriptionPublisher,
+} from './interfaces/index';
 import { Subscription } from './classes/subscription';
-import { SUBSCRIPTION_HANDLER_METADATA, SUBSCRIPTION_METADATA } from './decorators/constants';
+import {
+  SUBSCRIPTION_HANDLER_METADATA,
+  SUBSCRIPTION_METADATA,
+} from './decorators/constants';
 import { SubscriptionHandler } from './decorators/subscription-handler.decorator';
 import {
   InvalidSubscriptionHandlerException,
   SubscriptionHandlerNotFoundException,
 } from './exceptions/index';
-import type { ISubscriptionHandler, ISubscriptionPublisher } from './interfaces/index';
 import { SubscriptionBus } from './subscription-bus';
 
 describe('SubscriptionBus: registro e ligação', () => {
@@ -32,7 +39,10 @@ describe('SubscriptionBus: registro e ligação', () => {
     ({
       registerRequestByContextId: vi.fn(),
       resolve: vi.fn(),
-    }) as unknown as ModuleRef & { registerRequestByContextId: any; resolve: any };
+    }) as unknown as ModuleRef & {
+      registerRequestByContextId: any;
+      resolve: any;
+    };
 
   const staticWrapper = (metatype: any, instance: unknown) =>
     ({
@@ -61,9 +71,9 @@ describe('SubscriptionBus: registro e ligação', () => {
       const bus = new SubscriptionBus(moduleRefStub());
       class NotAHandler {}
 
-      expect(() => bus.register([staticWrapper(NotAHandler, new NotAHandler())])).toThrow(
-        InvalidSubscriptionHandlerException,
-      );
+      expect(() =>
+        bus.register([staticWrapper(NotAHandler, new NotAHandler())]),
+      ).toThrow(InvalidSubscriptionHandlerException);
     });
 
     it('recusa uma classe anotada que não tem subscribe', () => {
@@ -78,7 +88,9 @@ describe('SubscriptionBus: registro e ligação', () => {
 
     it('registrar dois handlers para a mesma subscription avisa e fica com o último', () => {
       const bus = new SubscriptionBus(moduleRefStub());
-      const warn = vi.spyOn((bus as any).logger, 'warn').mockImplementation(() => undefined);
+      const warn = vi
+        .spyOn((bus as any).logger, 'warn')
+        .mockImplementation(() => undefined);
       class Segundo implements ISubscriptionHandler<OnCounter> {
         subscribe(): Observable<CounterEvent> {
           return of(new CounterEvent(99));
@@ -92,7 +104,9 @@ describe('SubscriptionBus: registro e ligação', () => {
       expect(warn).toHaveBeenCalledOnce();
       expect(warn.mock.calls[0][0]).toMatch(/already registered/);
       const received: number[] = [];
-      bus.subscribe<CounterEvent>(new OnCounter({})).subscribe((event) => received.push(event.value));
+      bus
+        .subscribe<CounterEvent>(new OnCounter({}))
+        .subscribe((event) => received.push(event.value));
       expect(received).toEqual([99]);
 
       warn.mockRestore();
@@ -123,14 +137,18 @@ describe('SubscriptionBus: registro e ligação', () => {
     it('uma subscription sem metadata nenhuma é recusada pelo nome da classe', () => {
       const bus = new SubscriptionBus(moduleRefStub());
 
-      expect(() => bus.subscribe(new Unhandled())).toThrow(SubscriptionHandlerNotFoundException);
+      expect(() => bus.subscribe(new Unhandled())).toThrow(
+        SubscriptionHandlerNotFoundException,
+      );
       expect(() => bus.subscribe(new Unhandled())).toThrow(/Unhandled/);
     });
 
     it('uma subscription com id mas sem handler registrado é recusada pelo nome', () => {
       const bus = new SubscriptionBus(moduleRefStub());
 
-      expect(() => bus.subscribe(new OnCounter({}))).toThrow(SubscriptionHandlerNotFoundException);
+      expect(() => bus.subscribe(new OnCounter({}))).toThrow(
+        SubscriptionHandlerNotFoundException,
+      );
       expect(() => bus.subscribe(new OnCounter({}))).toThrow(/OnCounter/);
     });
   });
@@ -145,18 +163,26 @@ describe('SubscriptionBus: registro e ligação', () => {
       bus.register([scopedWrapper(OnCounterHandler)]);
 
       const received: number[] = [];
-      bus.subscribe<CounterEvent>(new OnCounter({ topic: 'a' })).subscribe((event) => received.push(event.value));
+      bus
+        .subscribe<CounterEvent>(new OnCounter({ topic: 'a' }))
+        .subscribe((event) => received.push(event.value));
       await Promise.resolve();
       source.next(new CounterEvent(3));
 
       expect(moduleRef.registerRequestByContextId).toHaveBeenCalledOnce();
-      expect(moduleRef.resolve).toHaveBeenCalledWith(OnCounterHandler, expect.anything(), { strict: false });
+      expect(moduleRef.resolve).toHaveBeenCalledWith(
+        OnCounterHandler,
+        expect.anything(),
+        { strict: false },
+      );
       expect(received).toEqual([3]);
     });
 
     it('quando quem assina traz um AsyncContext, é ele que vale', async () => {
       const moduleRef = moduleRefStub();
-      moduleRef.resolve.mockResolvedValue({ subscribe: () => of(new CounterEvent(1)) });
+      moduleRef.resolve.mockResolvedValue({
+        subscribe: () => of(new CounterEvent(1)),
+      });
       const bus = new SubscriptionBus(moduleRef);
       bus.register([scopedWrapper(OnCounterHandler)]);
       const context = new AsyncContext();
@@ -164,8 +190,15 @@ describe('SubscriptionBus: registro e ligação', () => {
       bus.subscribe(new OnCounter({ topic: 'b' }), context).subscribe();
       await Promise.resolve();
 
-      expect(moduleRef.registerRequestByContextId).toHaveBeenCalledWith(context, context.id);
-      expect(moduleRef.resolve).toHaveBeenCalledWith(OnCounterHandler, context.id, { strict: false });
+      expect(moduleRef.registerRequestByContextId).toHaveBeenCalledWith(
+        context,
+        context.id,
+      );
+      expect(moduleRef.resolve).toHaveBeenCalledWith(
+        OnCounterHandler,
+        context.id,
+        { strict: false },
+      );
     });
   });
 
@@ -186,7 +219,9 @@ describe('SubscriptionBus: registro e ligação', () => {
       const bus = new SubscriptionBus(moduleRefStub());
       bus.register([staticWrapper(OnCounterHandler, new OnCounterHandler())]);
       const published: unknown[] = [];
-      const custom: ISubscriptionPublisher<any> = { publish: (subscription) => published.push(subscription) };
+      const custom: ISubscriptionPublisher<any> = {
+        publish: (subscription) => published.push(subscription),
+      };
 
       bus.publisher = custom;
       const pedido = new OnCounter({ topic: 'y' });
@@ -198,8 +233,12 @@ describe('SubscriptionBus: registro e ligação', () => {
 
     it('as opções do módulo podem instalar o publisher desde o começo', () => {
       const published: unknown[] = [];
-      const custom: ISubscriptionPublisher<any> = { publish: (subscription) => published.push(subscription) };
-      const bus = new SubscriptionBus(moduleRefStub(), { subscriptionPublisher: custom });
+      const custom: ISubscriptionPublisher<any> = {
+        publish: (subscription) => published.push(subscription),
+      };
+      const bus = new SubscriptionBus(moduleRefStub(), {
+        subscriptionPublisher: custom,
+      });
       bus.register([staticWrapper(OnCounterHandler, new OnCounterHandler())]);
 
       bus.subscribe(new OnCounter({ topic: 'z' }));
@@ -213,7 +252,11 @@ describe('SubscriptionBus: registro e ligação', () => {
     class BareMessage {
       constructor(readonly criteria: { topic?: string } = {}) {}
     }
-    Reflect.defineMetadata(SUBSCRIPTION_METADATA, { id: 'bare-message-id' }, BareMessage);
+    Reflect.defineMetadata(
+      SUBSCRIPTION_METADATA,
+      { id: 'bare-message-id' },
+      BareMessage,
+    );
 
     const busWithBareHandler = () => {
       const bus = new SubscriptionBus(moduleRefStub());
@@ -223,7 +266,11 @@ describe('SubscriptionBus: registro e ligação', () => {
           return source.asObservable();
         }
       }
-      Reflect.defineMetadata(SUBSCRIPTION_HANDLER_METADATA, BareMessage, BareHandler);
+      Reflect.defineMetadata(
+        SUBSCRIPTION_HANDLER_METADATA,
+        BareMessage,
+        BareHandler,
+      );
       bus.register([staticWrapper(BareHandler, new BareHandler())]);
       return { bus, source };
     };
@@ -232,7 +279,9 @@ describe('SubscriptionBus: registro e ligação', () => {
       const { bus, source } = busWithBareHandler();
       const received: number[] = [];
 
-      bus.subscribe<CounterEvent>(new BareMessage() as any).subscribe((event) => received.push(event.value));
+      bus
+        .subscribe<CounterEvent>(new BareMessage() as any)
+        .subscribe((event) => received.push(event.value));
       source.next(new CounterEvent(1));
       source.next(new CounterEvent(2));
 

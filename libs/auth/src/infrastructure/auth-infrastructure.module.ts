@@ -1,8 +1,11 @@
+import type { DynamicModule } from '@nestjs/common';
 import { MikroORM, RequestContext } from '@mikro-orm/core';
-import { type DynamicModule, Module } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { AuthModule as NestBetterAuthModule } from '@thallesp/nestjs-better-auth';
-import { BetterAuthModule, type BetterAuthModuleOptions } from './better-auth/better-auth.module';
+
+import type { BetterAuthModuleOptions } from './better-auth/better-auth.module';
 import type { BetterAuth } from './better-auth/init-auth';
+import { BetterAuthModule } from './better-auth/better-auth.module';
 import { BETTER_AUTH } from './better-auth/tokens';
 
 /**
@@ -27,8 +30,11 @@ export class AuthInfrastructureModule {
           inject: [BETTER_AUTH, MikroORM],
           useFactory: (auth: BetterAuth, orm: MikroORM) => ({
             auth,
-            middleware: (_request: unknown, _response: unknown, next: () => void) =>
-              RequestContext.create(orm.em, next),
+            middleware: (
+              _request: unknown,
+              _response: unknown,
+              next: () => void,
+            ) => RequestContext.create(orm.em, next),
           }),
         }),
       ],

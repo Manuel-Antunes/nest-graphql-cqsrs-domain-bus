@@ -3,6 +3,7 @@ import { CREDENTIAL_ID_MAX_LENGTH } from '@nestposts/users/domain/user/schemas/c
 import { CredentialId } from '@nestposts/users/domain/user/vo/credential-id';
 import { Email } from '@nestposts/users/domain/user/vo/email';
 import { UserName } from '@nestposts/users/domain/user/vo/user-name';
+
 import { AuthUser } from '../../../domain/auth/auth-user.entity';
 
 export const CredentialIdType = valueObjectType(CredentialId, {

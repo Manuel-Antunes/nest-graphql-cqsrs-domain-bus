@@ -1,24 +1,25 @@
 import type { Mapper } from '@automapper/core';
+import type { PostId } from '@nestposts/posts/domain/post/vo/post-id';
+import type { Author } from '@nestposts/users/domain/user/author.entity';
 import { InjectMapper, MapInterceptor, MapPipe } from '@automapper/nestjs';
+import { UseFilters, UseInterceptors } from '@nestjs/common';
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import { Args, Mutation, Resolver } from '@nestjs/graphql';
-import { Roles } from '@thallesp/nestjs-better-auth';
-import { UseFilters, UseInterceptors } from '@nestjs/common';
-import { CurrentTenant } from '../decorators/current-tenant.decorator';
-import { CurrentAuthor } from '../decorators/current-user.decorator';
-import { MikroOrmExceptionFilter } from '../filters/mikro-orm-exception.filter';
+import { PostNotFoundException } from '@nestposts/posts/domain/post/exception/post-not-found.exception';
+import { Post } from '@nestposts/posts/domain/post/post.entity';
 import { AUTHOR_ROLE } from '@nestposts/users/domain/user/author.entity';
-import { type Author } from '@nestposts/users/domain/user/author.entity';
+import { Roles } from '@thallesp/nestjs-better-auth';
+
 import { CreatePostCommand } from '../../application/post/command/create-post.command';
 import { UpdatePostCommand } from '../../application/post/command/update-post.command';
 import { FindPostQuery } from '../../application/post/query/find-post.query';
 import { PostRequest } from '../../application/shared/post-request';
-import { Post } from '@nestposts/posts/domain/post/post.entity';
-import { PostNotFoundException } from '@nestposts/posts/domain/post/exception/post-not-found.exception';
-import type { PostId } from '@nestposts/posts/domain/post/vo/post-id';
 import { CreatePostInput } from '../../dto/graphql/create-post.input';
 import { PostView } from '../../dto/graphql/post.view';
 import { UpdatePostInput } from '../../dto/graphql/update-post.input';
+import { CurrentTenant } from '../decorators/current-tenant.decorator';
+import { CurrentAuthor } from '../decorators/current-user.decorator';
+import { MikroOrmExceptionFilter } from '../filters/mikro-orm-exception.filter';
 
 @Resolver('Post')
 @UseFilters(MikroOrmExceptionFilter)
@@ -59,12 +60,17 @@ export class PostMutationResolver {
     @CurrentAuthor() _author: Author,
     @CurrentTenant() tenantId: string,
   ): Promise<Post> {
-    await this.commandBus.execute(command, new PostRequest(command.postId, tenantId));
+    await this.commandBus.execute(
+      command,
+      new PostRequest(command.postId, tenantId),
+    );
     return this.savedPost(command.postId);
   }
 
   private async savedPost(postId: PostId): Promise<Post> {
-    const post = await this.queryBus.execute(new FindPostQuery.FindPost(postId));
+    const post = await this.queryBus.execute(
+      new FindPostQuery.FindPost(postId),
+    );
     if (!post) {
       throw new PostNotFoundException(postId);
     }

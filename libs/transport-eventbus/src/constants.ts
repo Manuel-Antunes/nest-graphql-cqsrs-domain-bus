@@ -21,7 +21,11 @@ export const TRANSPORT_EVENT_BUS_PATTERN =
 export const TRANSPORT_EVENT_BUS_SERVICE = Symbol('TransportEventBusService');
 
 /** The `EventPublisher` that binds an aggregate to the bus above. */
-export const TRANSPORT_EVENT_BUS_PUBLISHER = Symbol('TransportEventBusPublisher');
+export const TRANSPORT_EVENT_BUS_PUBLISHER = Symbol(
+  'TransportEventBusPublisher',
+);
 
 /** Metadata key. Upstream keeps this as a field on a substituted class — see `NOTICE.md`. */
-export const EXCLUDE_DEF_METADATA = Symbol.for('nestposts.transport-eventbus.exclude-def');
+export const EXCLUDE_DEF_METADATA = Symbol.for(
+  'nestposts.transport-eventbus.exclude-def',
+);

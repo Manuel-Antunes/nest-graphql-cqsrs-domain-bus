@@ -44,4 +44,7 @@ export const inngestTriggers = (pattern: string): string[] => {
 
 /** A function id Inngest accepts, derived from the pattern it was bound for. */
 export const inngestFunctionId = (pattern: string): string =>
-  pattern.replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-+|-+$/g, '').toLowerCase();
+  pattern
+    .replace(/[^a-zA-Z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .toLowerCase();

@@ -1,8 +1,9 @@
 import type { QueryBus } from '@nestjs/cqrs';
-import { FindAllPostsQuery } from '../../application/post/query/find-all-posts.query';
-import { FindPostQuery } from '../../application/post/query/find-post.query';
 import type { Post } from '@nestposts/posts/domain/post/post.entity';
 import { PostId } from '@nestposts/posts/domain/post/vo/post-id';
+
+import { FindAllPostsQuery } from '../../application/post/query/find-all-posts.query';
+import { FindPostQuery } from '../../application/post/query/find-post.query';
 import { PostQueryResolver } from './post-query.resolver';
 
 describe('PostQueryResolver', () => {
@@ -29,7 +30,9 @@ describe('PostQueryResolver', () => {
 
       expect(dispatched).toHaveLength(1);
       expect(dispatched[0]).toBeInstanceOf(FindPostQuery.FindPost);
-      expect((dispatched[0] as FindPostQuery.FindPost).postId.equals(id)).toBe(true);
+      expect((dispatched[0] as FindPostQuery.FindPost).postId.equals(id)).toBe(
+        true,
+      );
     });
 
     it('devolve o agregado que o handler achou, sem tocá-lo', async () => {
@@ -65,7 +68,10 @@ describe('PostQueryResolver', () => {
       await resolver.posts();
 
       expect(dispatched[0]).toBeInstanceOf(FindAllPostsQuery.FindAllPosts);
-      expect(dispatched[0]).toMatchObject({ first: 2, after: 'cursor-anterior' });
+      expect(dispatched[0]).toMatchObject({
+        first: 2,
+        after: 'cursor-anterior',
+      });
       expect(dispatched[1]).toMatchObject({ first: 20, after: undefined });
     });
 

@@ -15,7 +15,8 @@ pg.types.setTypeParser(pg.types.builtins.INT8, Number);
  * first imported, and a `const` here would freeze the default from before there was a stack.
  */
 export const postgresUrl = (): string =>
-  process.env.POSTGRES_URL ?? 'postgresql://nestposts:nestposts@localhost:5432/nestposts';
+  process.env.POSTGRES_URL ??
+  'postgresql://nestposts:nestposts@localhost:5432/nestposts';
 
 /** `?` is what the statements here are written with; Postgres calls it `$1`. */
 const positional = (sql: string): string => {
@@ -33,7 +34,10 @@ const positional = (sql: string): string => {
 export class ServiceDatabase {
   constructor(readonly schema: string) {}
 
-  async query<T = Record<string, unknown>>(sql: string, ...parameters: unknown[]): Promise<T[]> {
+  async query<T = Record<string, unknown>>(
+    sql: string,
+    ...parameters: unknown[]
+  ): Promise<T[]> {
     const client = new Client({ connectionString: postgresUrl() });
     await client.connect();
     try {
@@ -74,7 +78,9 @@ export class ServiceDatabase {
       `${type}%`,
     );
     if (!row) {
-      throw new Error(`nenhum ${type} no stream de ${aggregateId} em ${this.schema}`);
+      throw new Error(
+        `nenhum ${type} no stream de ${aggregateId} em ${this.schema}`,
+      );
     }
     return row;
   }
@@ -94,11 +100,13 @@ export class ServiceDatabase {
     return row?.total ?? 0;
   }
 
-  async post(id: string): Promise<{ version: number; published_at: Date | null } | undefined> {
-    const [row] = await this.query<{ version: number; published_at: Date | null }>(
-      'select version, published_at from posts where id = ?',
-      id,
-    );
+  async post(
+    id: string,
+  ): Promise<{ version: number; published_at: Date | null } | undefined> {
+    const [row] = await this.query<{
+      version: number;
+      published_at: Date | null;
+    }>('select version, published_at from posts where id = ?', id);
     return row;
   }
 
@@ -119,7 +127,11 @@ export class ServiceDatabase {
    * profile is promoted by the application itself on the next request.
    */
   promoteToAuthor(credentialId: string): Promise<void> {
-    return this.execute('update auth_user set role = ? where id = ?', 'author', credentialId);
+    return this.execute(
+      'update auth_user set role = ? where id = ?',
+      'author',
+      credentialId,
+    );
   }
 }
 

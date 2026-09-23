@@ -1,11 +1,19 @@
+import type { Provider } from '@nestjs/common';
+import type { IEventHandler } from '@nestjs/cqrs';
+import type { TestingModule } from '@nestjs/testing';
 import { MikroORM } from '@mikro-orm/core';
-import { dropTestSchema, ensureTestSchema, testDatabaseConfig } from '@nestposts/database/testing';
 import { MikroOrmModule } from '@mikro-orm/nestjs';
-import { Injectable, type Provider } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { DiscoveryModule } from '@nestjs/core';
-import { AsyncContext, CqrsModule, EventsHandler, type IEventHandler } from '@nestjs/cqrs';
-import { Test, type TestingModule } from '@nestjs/testing';
+import { AsyncContext, CqrsModule, EventsHandler } from '@nestjs/cqrs';
+import { Test } from '@nestjs/testing';
+import {
+  dropTestSchema,
+  ensureTestSchema,
+  testDatabaseConfig,
+} from '@nestposts/database/testing';
 import { EventType } from '@nestposts/platform/domain/shared/event-type';
+
 import {
   EventEnvelope,
   TRANSPORT_IDENTIFIER,
@@ -14,16 +22,27 @@ import {
   TRANSPORT_TAGS,
   TRANSPORT_TIMESTAMP,
 } from '../outbound/event-envelope';
-import { MessageInbox, MikroOrmMessageInbox } from '../persistence/message-inbox';
-import { transportEntities } from '../persistence/message-inbox.entity';
-import { CORRELATION_ID, CorrelatedRequestContext, RequestContextCodec, TransportRequestContext } from '../request-context';
-import { eventIngestionProviders, transportEventBusProviders } from '../transport-event-bus.providers';
-import { TransportIdentity } from '../transport-identity';
 import { MemoryEventEnvelopeSerializer } from '../outbound/serializers/memory-event-envelope.serializer';
+import { EventLog } from '../persistence/event-log/event-log';
+import {
+  MessageInbox,
+  MikroOrmMessageInbox,
+} from '../persistence/message-inbox';
+import { transportEntities } from '../persistence/message-inbox.entity';
+import {
+  CorrelatedRequestContext,
+  CORRELATION_ID,
+  RequestContextCodec,
+  TransportRequestContext,
+} from '../request-context';
+import {
+  eventIngestionProviders,
+  transportEventBusProviders,
+} from '../transport-event-bus.providers';
+import { TransportIdentity } from '../transport-identity';
 import { MemoryEventEnvelopeDeserializer } from './deserializers/memory-event-envelope.deserializer';
 import { EventIngestion } from './event-ingestion';
 import { TransportEventPipe } from './transport-event.pipe';
-import { EventLog } from '../persistence/event-log/event-log';
 
 @EventType({ namespace: 'posts', tags: ['postId'] })
 class PostCreatedEvent {
@@ -49,7 +68,6 @@ class PostCreatedHandler implements IEventHandler<PostCreatedEvent> {
   }
 }
 
-
 const serializer = new MemoryEventEnvelopeSerializer();
 const deserializer = new MemoryEventEnvelopeDeserializer();
 const pipe = new TransportEventPipe();
@@ -72,13 +90,20 @@ const arrivingFrom = (
     },
   );
   const wire = JSON.parse(
-    JSON.stringify(serializer.serialize({ pattern: 'posts.PostCreated.p-1', data: envelope })),
+    JSON.stringify(
+      serializer.serialize({
+        pattern: 'posts.PostCreated.p-1',
+        data: envelope,
+      }),
+    ),
   ) as unknown;
 
   return pipe.transform(deserializer.deserialize(wire).data);
 };
 
-const moduleWith = async (overrides: Provider[] = []): Promise<TestingModule> => {
+const moduleWith = async (
+  overrides: Provider[] = [],
+): Promise<TestingModule> => {
   const module = await Test.createTestingModule({
     imports: [
       CqrsModule.forRoot(),
@@ -93,7 +118,10 @@ const moduleWith = async (overrides: Provider[] = []): Promise<TestingModule> =>
     providers: [
       ...transportEventBusProviders,
       ...eventIngestionProviders,
-      { provide: TransportIdentity, useValue: TransportIdentity.silent('posts-api') },
+      {
+        provide: TransportIdentity,
+        useValue: TransportIdentity.silent('posts-api'),
+      },
       { provide: RequestContextCodec, useClass: CorrelatedRequestContext },
       { provide: MessageInbox, useClass: MikroOrmMessageInbox },
       Received,
@@ -171,12 +199,17 @@ describe('EventIngestion', () => {
   });
 
   it('restores the request that crossed, so the handler runs in it', async () => {
-    await ingestion.ingest(arrivingFrom('tagging', 'evt-with-request', { [CORRELATION_ID]: 'c-1' }));
+    await ingestion.ingest(
+      arrivingFrom('tagging', 'evt-with-request', { [CORRELATION_ID]: 'c-1' }),
+    );
     await settle();
 
     const context = received.contexts[0];
     expect(context).toBeInstanceOf(TransportRequestContext);
-    expect(context).toMatchObject({ correlationId: 'c-1', causationId: 'evt-with-request' });
+    expect(context).toMatchObject({
+      correlationId: 'c-1',
+      causationId: 'evt-with-request',
+    });
   });
 
   it('publishes with no context when no request crossed', async () => {
@@ -187,16 +220,21 @@ describe('EventIngestion', () => {
   });
 
   it('accepts an undeclared message type instead of rejecting it forever', async () => {
-    const unknown = arrivingFrom('tagging', 'evt-unknown', {}, 'billing.InvoiceIssued#1.0.0');
+    const unknown = arrivingFrom(
+      'tagging',
+      'evt-unknown',
+      {},
+      'billing.InvoiceIssued#1.0.0',
+    );
 
     await expect(ingestion.ingest(unknown)).resolves.toBeUndefined();
     await expect(module.get(MessageInbox).received()).resolves.toHaveLength(1);
   });
 
   it('refuses an event that did not come through @TransportEvent(): there is nothing to remember', async () => {
-    await expect(ingestion.ingest(new PostCreatedEvent('p-9', new Date()))).rejects.toThrow(
-      /did not come through @TransportEvent\(\)/,
-    );
+    await expect(
+      ingestion.ingest(new PostCreatedEvent('p-9', new Date())),
+    ).rejects.toThrow(/did not come through @TransportEvent\(\)/);
   });
 
   describe('the event log', () => {
@@ -222,11 +260,15 @@ describe('EventIngestion', () => {
     }
 
     it('is appended inside the transaction, before anything reacts', async () => {
-      const custom = await moduleWith([{ provide: EventLog, useClass: RecordingLog }]);
+      const custom = await moduleWith([
+        { provide: EventLog, useClass: RecordingLog },
+      ]);
       RecordingLog.appended.length = 0;
 
       try {
-        await custom.get(EventIngestion).ingest(arrivingFrom('tagging', 'evt-log'));
+        await custom
+          .get(EventIngestion)
+          .ingest(arrivingFrom('tagging', 'evt-log'));
         await settle();
 
         expect(RecordingLog.appended).toHaveLength(1);

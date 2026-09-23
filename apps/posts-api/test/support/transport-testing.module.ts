@@ -1,11 +1,12 @@
 import { type DynamicModule } from '@nestjs/common';
 import { DatabaseModule } from '@nestposts/database';
-import { TestSchemaModule, testSchema } from '@nestposts/database/testing';
+import { testSchema, TestSchemaModule } from '@nestposts/database/testing';
 import {
   MikroOrmMessageInbox,
   TransportEventBusModule,
   TransportIdentity,
 } from '@nestposts/transport-eventbus';
+
 import { PostRequestContextCodec } from '../../src/application/shared/post-request-context.codec';
 import { mikroOrmConfig } from '../../src/infrastructure/persistence/mikro-orm.config';
 

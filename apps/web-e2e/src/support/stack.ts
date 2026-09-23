@@ -1,10 +1,11 @@
 import { appendFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { ContainerStack, FreePort, type Endpoints } from './containers';
+import type { Endpoints } from './containers';
+import { ContainerStack, FreePort } from './containers';
 import { ServiceDatabase } from './database';
 import { WORKSPACE_ROOT } from './docker';
-import { HttpHealth, Service, nextApplication } from './service';
+import { HttpHealth, nextApplication, Service } from './service';
 import { e2eTransport } from './transport';
 
 export const POSTS_SCHEMA = process.env.POSTS_SCHEMA ?? 'posts';
@@ -14,7 +15,8 @@ export const WEB_PORT = Number(process.env.WEB_PORT ?? 4300);
 
 export const WEB_URL = process.env.WEB_URL ?? `http://localhost:${WEB_PORT}`;
 
-export const AUTH_SECRET = process.env.AUTH_SECRET ?? 'nestposts-web-e2e-secret';
+export const AUTH_SECRET =
+  process.env.AUTH_SECRET ?? 'nestposts-web-e2e-secret';
 
 /**
  * **The whole system, provisioned once**: a browser's worth of it.
@@ -33,7 +35,8 @@ export const AUTH_SECRET = process.env.AUTH_SECRET ?? 'nestposts-web-e2e-secret'
  * would log in and be refused one hop later.
  */
 export class Stack {
-  readonly logDirectory = process.env.E2E_LOGS ?? join(WORKSPACE_ROOT, 'apps/web-e2e/target/logs');
+  readonly logDirectory =
+    process.env.E2E_LOGS ?? join(WORKSPACE_ROOT, 'apps/web-e2e/target/logs');
 
   readonly postsStore = new ServiceDatabase(POSTS_SCHEMA);
   readonly taggingStore = new ServiceDatabase(TAGGING_SCHEMA);
@@ -50,7 +53,8 @@ export class Stack {
       authSecret: AUTH_SECRET,
       postsSchema: POSTS_SCHEMA,
       taggingSchema: TAGGING_SCHEMA,
-      logs: (line) => appendFileSync(join(this.logDirectory, 'containers.log'), line),
+      logs: (line) =>
+        appendFileSync(join(this.logDirectory, 'containers.log'), line),
     });
 
     this.publish(endpoints);
@@ -110,7 +114,9 @@ export class Stack {
 
   private async isWebUp(): Promise<boolean> {
     try {
-      return (await fetch(`${WEB_URL}/login`, { redirect: 'manual' })).status < 500;
+      return (
+        (await fetch(`${WEB_URL}/login`, { redirect: 'manual' })).status < 500
+      );
     } catch {
       return false;
     }

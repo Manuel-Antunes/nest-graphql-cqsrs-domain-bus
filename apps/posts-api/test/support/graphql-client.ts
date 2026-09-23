@@ -1,6 +1,7 @@
 import type { INestApplication } from '@nestjs/common';
 import type { ExecutionResult } from 'graphql';
-import { type Client, createClient } from 'graphql-sse';
+import type { Client } from 'graphql-sse';
+import { createClient } from 'graphql-sse';
 
 export class GraphqlClient {
   private readonly sse: Client;
@@ -24,14 +25,20 @@ export class GraphqlClient {
     return new GraphqlClient(`${origin}/graphql`, origin);
   }
 
-  async signUp(email: string, name: string, password = 'senha-super-secreta'): Promise<string> {
+  async signUp(
+    email: string,
+    name: string,
+    password = 'senha-super-secreta',
+  ): Promise<string> {
     const response = await fetch(`${this.origin}/api/auth/sign-up/email`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ email, name, password }),
     });
     if (!response.ok) {
-      throw new Error(`sign-up falhou (${response.status}): ${await response.text()}`);
+      throw new Error(
+        `sign-up falhou (${response.status}): ${await response.text()}`,
+      );
     }
     this.cookie = (response.headers.getSetCookie?.() ?? [])
       .map((c) => c.split(';')[0])
@@ -44,16 +51,25 @@ export class GraphqlClient {
     this.cookie = '';
   }
 
-  async execute<T = Record<string, any>>(query: string, variables?: Record<string, unknown>): Promise<ExecutionResult<T>> {
+  async execute<T = Record<string, any>>(
+    query: string,
+    variables?: Record<string, unknown>,
+  ): Promise<ExecutionResult<T>> {
     const response = await fetch(this.url, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', ...(this.cookie ? { cookie: this.cookie } : {}) },
+      headers: {
+        'content-type': 'application/json',
+        ...(this.cookie ? { cookie: this.cookie } : {}),
+      },
       body: JSON.stringify({ query, variables }),
     });
     return (await response.json()) as ExecutionResult<T>;
   }
 
-  subscribe<T = Record<string, any>>(query: string, variables?: Record<string, unknown>): SubscriptionCollector<T> {
+  subscribe<T = Record<string, any>>(
+    query: string,
+    variables?: Record<string, unknown>,
+  ): SubscriptionCollector<T> {
     return new SubscriptionCollector<T>(this.sse, query, variables);
   }
 
@@ -89,7 +105,10 @@ export class SubscriptionCollector<T> {
    * is eventual: another case's completion can land on this stream first. Asking for the one that
    * matches is what makes the assertion about the post the test created.
    */
-  async waitForMatch(matches: (event: T) => boolean, timeoutMs = 5000): Promise<T> {
+  async waitForMatch(
+    matches: (event: T) => boolean,
+    timeoutMs = 5000,
+  ): Promise<T> {
     const deadline = Date.now() + timeoutMs;
     for (;;) {
       const found = this.received.find(matches);
@@ -97,7 +116,9 @@ export class SubscriptionCollector<T> {
         return found;
       }
       if (Date.now() > deadline) {
-        throw new Error(`nenhum evento correspondeu em ${timeoutMs}ms: ${JSON.stringify(this.received)}`);
+        throw new Error(
+          `nenhum evento correspondeu em ${timeoutMs}ms: ${JSON.stringify(this.received)}`,
+        );
       }
       await new Promise<void>((resolve) => {
         this.waiters.push(resolve);
@@ -110,7 +131,9 @@ export class SubscriptionCollector<T> {
     const deadline = Date.now() + timeoutMs;
     while (this.received.length < count) {
       if (Date.now() > deadline) {
-        throw new Error(`esperava ${count} eventos, recebi ${this.received.length}: ${JSON.stringify(this.received)}`);
+        throw new Error(
+          `esperava ${count} eventos, recebi ${this.received.length}: ${JSON.stringify(this.received)}`,
+        );
       }
       await new Promise<void>((resolve) => {
         this.waiters.push(resolve);
@@ -121,7 +144,10 @@ export class SubscriptionCollector<T> {
   }
 }
 
-export async function until(condition: () => boolean, timeoutMs = 5000): Promise<void> {
+export async function until(
+  condition: () => boolean,
+  timeoutMs = 5000,
+): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (!condition()) {
     if (Date.now() > deadline) {

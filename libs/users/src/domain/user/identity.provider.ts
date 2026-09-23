@@ -1,5 +1,5 @@
-import type { Email } from './vo/email';
 import type { CredentialId } from './vo/credential-id';
+import type { Email } from './vo/email';
 import type { UserName } from './vo/user-name';
 
 export interface Identity {
@@ -12,5 +12,8 @@ export interface Identity {
 export abstract class IdentityProvider {
   abstract findById(credentialId: CredentialId): Promise<Identity | null>;
 
-  abstract grantRole(credentialId: CredentialId, role: string): Promise<Identity>;
+  abstract grantRole(
+    credentialId: CredentialId,
+    role: string,
+  ): Promise<Identity>;
 }

@@ -1,6 +1,7 @@
 import type { Context as LambdaContext, SQSEvent, SQSRecord } from 'aws-lambda';
-import { processSqsEvent } from './process-sqs-event';
+
 import type { SqsProcessResult } from './sqs.strategy';
+import { processSqsEvent } from './process-sqs-event';
 
 const record = (messageId: string): SQSRecord => ({
   messageId,
@@ -31,7 +32,11 @@ describe('processSqsEvent', () => {
       { response: 'c' },
     ]);
 
-    const response = await processSqsEvent(app, delivery('1', '2', '3'), lambdaContext);
+    const response = await processSqsEvent(
+      app,
+      delivery('1', '2', '3'),
+      lambdaContext,
+    );
 
     expect(processEvent).toHaveBeenCalledOnce();
     expect(processEvent.mock.calls[0][0].Records).toHaveLength(3);
@@ -45,7 +50,11 @@ describe('processSqsEvent', () => {
       { response: 'ok' },
     ]);
 
-    const response = await processSqsEvent(app, delivery('1', '2', '3'), lambdaContext);
+    const response = await processSqsEvent(
+      app,
+      delivery('1', '2', '3'),
+      lambdaContext,
+    );
 
     expect(response.batchItemFailures).toEqual([{ itemIdentifier: '2' }]);
   });
@@ -53,15 +62,24 @@ describe('processSqsEvent', () => {
   it('does not throw when a record fails, which would fail the whole batch', async () => {
     const { app } = applicationReturning([{ err: new Error('boom') }]);
 
-    await expect(processSqsEvent(app, delivery('1'), lambdaContext)).resolves.toEqual({
+    await expect(
+      processSqsEvent(app, delivery('1'), lambdaContext),
+    ).resolves.toEqual({
       batchItemFailures: [{ itemIdentifier: '1' }],
     });
   });
 
   it('reports every failure of an all-failing batch', async () => {
-    const { app } = applicationReturning([{ err: new Error('a') }, { err: new Error('b') }]);
+    const { app } = applicationReturning([
+      { err: new Error('a') },
+      { err: new Error('b') },
+    ]);
 
-    const response = await processSqsEvent(app, delivery('1', '2'), lambdaContext);
+    const response = await processSqsEvent(
+      app,
+      delivery('1', '2'),
+      lambdaContext,
+    );
 
     expect(response.batchItemFailures).toEqual([
       { itemIdentifier: '1' },

@@ -1,5 +1,7 @@
+import type { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { MikroORM } from '@mikro-orm/postgresql';
-import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
+import { PostgreSqlContainer } from '@testcontainers/postgresql';
+
 import { DEFAULT_POSTGRES_URL, postgresUrl } from '../config/database.config';
 
 export const POSTGRES_IMAGE = 'postgres:18-alpine';
@@ -17,7 +19,9 @@ class TestPostgres {
     }
 
     const { database, username, password } = this.credentials();
-    const container: StartedPostgreSqlContainer = await new PostgreSqlContainer(POSTGRES_IMAGE)
+    const container: StartedPostgreSqlContainer = await new PostgreSqlContainer(
+      POSTGRES_IMAGE,
+    )
       .withDatabase(database)
       .withUsername(username)
       .withPassword(password)
@@ -34,7 +38,12 @@ class TestPostgres {
   private static async answers(clientUrl: string): Promise<boolean> {
     let orm: MikroORM | undefined;
     try {
-      orm = await MikroORM.init({ clientUrl, schema: 'public', entities: [], discovery: { warnWhenNoEntities: false } });
+      orm = await MikroORM.init({
+        clientUrl,
+        schema: 'public',
+        entities: [],
+        discovery: { warnWhenNoEntities: false },
+      });
       await orm.em.getConnection().execute('select 1');
       return true;
     } catch {
@@ -67,7 +76,8 @@ class TestPostgres {
  * never started, and every spec failed with `password authentication failed`, which reads like a
  * credentials bug and is a port conflict.
  */
-export const startPostgres = (): Promise<PostgresForTests> => TestPostgres.start();
+export const startPostgres = (): Promise<PostgresForTests> =>
+  TestPostgres.start();
 
 export default async function setup(): Promise<() => Promise<void>> {
   const postgres = await startPostgres();

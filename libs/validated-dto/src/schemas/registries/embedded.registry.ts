@@ -37,7 +37,8 @@ export function createEmbeddedRegistry(): EMBEDDED_REGISTRY_TYPE {
  * It lives in a Zod registry (rather than a loose `WeakMap`) for the same reason as
  * `DECORATOR_REGISTRY`: it is the mechanism Zod 4 offers for hanging metadata off a schema.
  */
-export const EMBEDDED_REGISTRY: EMBEDDED_REGISTRY_TYPE = createEmbeddedRegistry();
+export const EMBEDDED_REGISTRY: EMBEDDED_REGISTRY_TYPE =
+  createEmbeddedRegistry();
 
 /** Reads a schema's binding, tolerating `undefined` and schemas from another origin. */
 export function getEmbedded(

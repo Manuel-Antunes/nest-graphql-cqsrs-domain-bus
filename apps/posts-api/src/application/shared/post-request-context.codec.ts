@@ -1,9 +1,15 @@
-import { Injectable } from '@nestjs/common';
 import type { AsyncContext } from '@nestjs/cqrs';
+import type { Ingestion } from '@nestposts/transport-eventbus';
+import { Injectable } from '@nestjs/common';
 import { Tenant } from '@nestposts/database';
 import { PostId } from '@nestposts/posts/domain/post/vo/post-id';
-import { CorrelatedRequestContext, type Ingestion } from '@nestposts/transport-eventbus';
-import { POST_ID_ATTRIBUTE, PostRequest, TENANT_ATTRIBUTE } from './post-request';
+import { CorrelatedRequestContext } from '@nestposts/transport-eventbus';
+
+import {
+  POST_ID_ATTRIBUTE,
+  PostRequest,
+  TENANT_ATTRIBUTE,
+} from './post-request';
 
 @Injectable()
 export class PostRequestContextCodec extends CorrelatedRequestContext {

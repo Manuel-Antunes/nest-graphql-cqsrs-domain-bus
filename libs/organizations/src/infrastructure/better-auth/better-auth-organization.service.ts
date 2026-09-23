@@ -1,19 +1,18 @@
+import type { BetterAuthWith } from '@nestposts/auth/infrastructure/better-auth/init-auth';
 import { Inject, Injectable, Scope } from '@nestjs/common';
 import { AuthService } from '@nestposts/auth/domain/auth/auth.service';
-import type { BetterAuthWith } from '@nestposts/auth/infrastructure/better-auth/init-auth';
 import { BETTER_AUTH } from '@nestposts/auth/infrastructure/better-auth/tokens';
+
+import type { Member } from '../../domain/organization/member.entity';
+import type { Organization } from '../../domain/organization/organization.entity';
+import type { OrganizationPermissionRequest } from '../../domain/organization/organization.service';
+import type { OrganizationAuthPlugins } from './organization-better-auth.plugin';
 import { ActiveMemberNotFoundException } from '../../domain/organization/exception/active-member-not-found.exception';
 import { OrganizationNotSelectedException } from '../../domain/organization/exception/organization-not-selected.exception';
-import type { Member } from '../../domain/organization/member.entity';
 import { MemberRepository } from '../../domain/organization/member.repository';
-import type { Organization } from '../../domain/organization/organization.entity';
 import { OrganizationRepository } from '../../domain/organization/organization.repository';
-import {
-  type OrganizationPermissionRequest,
-  OrganizationService,
-} from '../../domain/organization/organization.service';
+import { OrganizationService } from '../../domain/organization/organization.service';
 import { OrganizationId } from '../../domain/organization/vo/organization-id';
-import type { OrganizationAuthPlugins } from './organization-better-auth.plugin';
 
 /**
  * The instance as THIS module knows it: the core plugins plus the organization one, which is the
@@ -40,7 +39,9 @@ export class BetterAuthOrganizationService extends OrganizationService {
 
   async activeOrganizationId(): Promise<OrganizationId | null> {
     const session = await this.auth.requireSession();
-    return session.activeOrganizationId ? OrganizationId.parse(session.activeOrganizationId) : null;
+    return session.activeOrganizationId
+      ? OrganizationId.parse(session.activeOrganizationId)
+      : null;
   }
 
   async activeOrganization(): Promise<Organization | null> {
@@ -48,12 +49,16 @@ export class BetterAuthOrganizationService extends OrganizationService {
     return active ? this.organizationRepository.findById(active) : null;
   }
 
-  async setActiveOrganization(organizationId: OrganizationId | null): Promise<Organization | null> {
+  async setActiveOrganization(
+    organizationId: OrganizationId | null,
+  ): Promise<Organization | null> {
     await this.betterAuth.api.setActiveOrganization({
       body: { organizationId: organizationId ? organizationId.value : null },
       headers: this.auth.headers,
     });
-    return organizationId ? this.organizationRepository.findById(organizationId) : null;
+    return organizationId
+      ? this.organizationRepository.findById(organizationId)
+      : null;
   }
 
   async activeMember(): Promise<Member | null> {
@@ -79,9 +84,15 @@ export class BetterAuthOrganizationService extends OrganizationService {
       throw new OrganizationNotSelectedException();
     }
     const organizationId = OrganizationId.parse(session.activeOrganizationId);
-    const member = await this.memberRepository.findIn(organizationId, session.user.credentialId);
+    const member = await this.memberRepository.findIn(
+      organizationId,
+      session.user.credentialId,
+    );
     if (!member) {
-      throw new ActiveMemberNotFoundException(session.user.credentialId, organizationId);
+      throw new ActiveMemberNotFoundException(
+        session.user.credentialId,
+        organizationId,
+      );
     }
     return member;
   }

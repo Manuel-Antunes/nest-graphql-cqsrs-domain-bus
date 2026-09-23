@@ -2,13 +2,9 @@
   "compilerOptions": {
     "module": "commonjs",
     "moduleResolution": "bundler",
-    "customConditions": [
-      "@nestposts/source"
-    ],
+    "customConditions": ["@nestposts/source"],
     "target": "es2023",
-    "lib": [
-      "es2023"
-    ],
+    "lib": ["es2023"],
     "useDefineForClassFields": false,
     "composite": true,
     "declaration": true,
@@ -25,8 +21,6 @@
     "strictPropertyInitialization": false,
     "noImplicitOverride": true,
     "forceConsistentCasingInFileNames": true,
-    "types": [
-      "node"
-    ]
+    "types": ["node"]
   }
 }

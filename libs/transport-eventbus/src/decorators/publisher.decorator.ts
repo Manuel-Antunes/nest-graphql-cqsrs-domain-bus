@@ -49,15 +49,24 @@ export const EVERY_NAMESPACE = '*';
  * class that still wants upstream's behaviour keeps it: if it implements `publish`, the bus calls it
  * instead.
  */
-export const Publisher = DiscoveryService.createDecorator<PublishedNamespaces>();
+export const Publisher =
+  DiscoveryService.createDecorator<PublishedNamespaces>();
 
 /** The namespaces a destination declared, or `undefined` when it declared none. */
-export const publisherNamespacesOf = (publisher: object): readonly string[] | undefined => {
-  const target = typeof publisher === 'function' ? publisher : publisher.constructor;
-  const declared = Reflect.getMetadata(Publisher.KEY, target) as PublishedNamespaces | undefined;
+export const publisherNamespacesOf = (
+  publisher: object,
+): readonly string[] | undefined => {
+  const target =
+    typeof publisher === 'function' ? publisher : publisher.constructor;
+  const declared = Reflect.getMetadata(Publisher.KEY, target) as
+    PublishedNamespaces | undefined;
   return declared === undefined ? undefined : namespacesIn(declared);
 };
 
 /** The declaration as a list, whichever of the two shapes it was written in. */
-export const namespacesIn = (declared: PublishedNamespaces): readonly string[] =>
-  typeof declared === 'string' ? [declared] : [...(declared as readonly string[])];
+export const namespacesIn = (
+  declared: PublishedNamespaces,
+): readonly string[] =>
+  typeof declared === 'string'
+    ? [declared]
+    : [...(declared as readonly string[])];

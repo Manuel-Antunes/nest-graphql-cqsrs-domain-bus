@@ -1,12 +1,14 @@
-import { defineEntity, p } from '@nestposts/database';
+import { defineEntity, p, valueObjectType } from '@nestposts/database';
+
+import { TAG_NAME_MAX_LENGTH } from '../../../domain/tag/schemas/tag-name.schema';
 import { Tag } from '../../../domain/tag/tag.entity';
 import { TagId } from '../../../domain/tag/vo/tag-id';
-import { TAG_NAME_MAX_LENGTH } from '../../../domain/tag/schemas/tag-name.schema';
 import { TagName } from '../../../domain/tag/vo/tag-name';
-import { valueObjectType } from '@nestposts/database';
 
 const TagIdType = valueObjectType(TagId, { columnType: 'varchar(36)' });
-const TagNameType = valueObjectType(TagName, { columnType: `varchar(${TAG_NAME_MAX_LENGTH})` });
+const TagNameType = valueObjectType(TagName, {
+  columnType: `varchar(${TAG_NAME_MAX_LENGTH})`,
+});
 
 export const TagSchema = defineEntity({
   class: Tag,

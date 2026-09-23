@@ -1,11 +1,12 @@
 import { Module } from '@nestjs/common';
-import { PostsInfrastructureModule } from '@nestposts/posts/infrastructure/posts-infrastructure.module';
 import { OrganizationsInfrastructureModule } from '@nestposts/organizations/infrastructure/organizations-infrastructure.module';
+import { PostsInfrastructureModule } from '@nestposts/posts/infrastructure/posts-infrastructure.module';
 import { UsersInfrastructureModule } from '@nestposts/users/infrastructure/users-infrastructure.module';
+
 import { AssignTagToPostCommand } from './post/command/assign-tag-to-post.command';
+import { CompletePostCommand } from './post/command/complete-post.command';
 import { CreatePostCommand } from './post/command/create-post.command';
 import { UpdatePostCommand } from './post/command/update-post.command';
-import { CompletePostCommand } from './post/command/complete-post.command';
 import { ProjectPostCompletion } from './post/projection/project-post-completion.projection';
 import { FindAllPostsQuery } from './post/query/find-all-posts.query';
 import { FindPostQuery } from './post/query/find-post.query';
@@ -19,7 +20,11 @@ import { FindUserQuery } from './user/query/find-user.query';
 import { UserProvisioning } from './user/user-provisioning.service';
 
 @Module({
-  imports: [PostsInfrastructureModule, UsersInfrastructureModule, OrganizationsInfrastructureModule],
+  imports: [
+    PostsInfrastructureModule,
+    UsersInfrastructureModule,
+    OrganizationsInfrastructureModule,
+  ],
   providers: [
     CreatePostCommand.Handler,
     UpdatePostCommand.Handler,

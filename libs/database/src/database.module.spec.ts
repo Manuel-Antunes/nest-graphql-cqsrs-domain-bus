@@ -1,8 +1,10 @@
-import { EntityManager, MikroORM, defineEntity, p } from '@mikro-orm/core';
+import type { TestingModule } from '@nestjs/testing';
+import { defineEntity, EntityManager, MikroORM, p } from '@mikro-orm/core';
 import { Module } from '@nestjs/common';
-import { Test, type TestingModule } from '@nestjs/testing';
+import { Test } from '@nestjs/testing';
+
 import { DatabaseModule } from './database.module';
-import { TestSchemaModule, testDatabaseConfig } from './testing/index';
+import { testDatabaseConfig, TestSchemaModule } from './testing/index';
 
 class Ledger {
   id!: string;
@@ -33,7 +35,10 @@ class ReceiptModule {}
 
 const connection = (entities: unknown[] = []) =>
   DatabaseModule.forRoot(
-    testDatabaseConfig({ entities: entities as never[], allowGlobalContext: true }, 'database_module'),
+    testDatabaseConfig(
+      { entities: entities as never[], allowGlobalContext: true },
+      'database_module',
+    ),
   );
 
 describe('DatabaseModule', () => {
@@ -42,7 +47,9 @@ describe('DatabaseModule', () => {
   afterEach(async () => module?.close());
 
   const bootstrap = async (imports: any[]) => {
-    module = await Test.createTestingModule({ imports: [...imports, TestSchemaModule.forRoot()] }).compile();
+    module = await Test.createTestingModule({
+      imports: [...imports, TestSchemaModule.forRoot()],
+    }).compile();
     await module.init();
     return module;
   };
@@ -58,11 +65,14 @@ describe('DatabaseModule', () => {
     const app = await bootstrap([connection(), LedgerModule, ReceiptModule]);
     const em = app.get(EntityManager).fork();
 
-    await expect(write(app, 'l-1')).resolves.toMatchObject({ id: 'l-1', amount: 1 });
+    await expect(write(app, 'l-1')).resolves.toMatchObject({
+      id: 'l-1',
+      amount: 1,
+    });
     await expect(em.find(Receipt, {})).resolves.toEqual([]);
   });
 
-  it('answers the same for a SECOND application, which Nest\'s own registry does not', async () => {
+  it("answers the same for a SECOND application, which Nest's own registry does not", async () => {
     await (await bootstrap([connection(), LedgerModule])).close();
 
     const app = await bootstrap([connection(), LedgerModule]);

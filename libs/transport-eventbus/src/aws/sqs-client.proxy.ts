@@ -1,15 +1,19 @@
-import { SendMessageCommand, SQSClient, type SQSClientConfig } from '@aws-sdk/client-sqs';
-import { Logger } from '@nestjs/common';
-import {
-  ClientProxy,
-  type ProducerSerializer,
-  type ReadPacket,
-  type WritePacket,
+import type { SQSClientConfig } from '@aws-sdk/client-sqs';
+import type {
+  ProducerSerializer,
+  ReadPacket,
+  WritePacket,
 } from '@nestjs/microservices';
+import { SendMessageCommand, SQSClient } from '@aws-sdk/client-sqs';
+import { Logger } from '@nestjs/common';
+import { ClientProxy } from '@nestjs/microservices';
+
+import type { AwsEnvelopeMessage } from './aws-message';
+import type { SqsRecordOptions } from './sqs-record.builder';
 import { TRANSPORT_IDENTIFIER } from '../outbound/event-envelope';
 import { awsClientConfig, queueNameOf } from './aws-client.config';
-import { type AwsEnvelopeMessage, asMessageAttributes, orderingKeyIn } from './aws-message';
-import { type SqsRecordOptions, isSqsRecord } from './sqs-record.builder';
+import { asMessageAttributes, orderingKeyIn } from './aws-message';
+import { isSqsRecord } from './sqs-record.builder';
 
 /** SQS's own limit on how long a single message may be held back. */
 const MAX_DELAY_SECONDS = 900;
@@ -52,7 +56,9 @@ export class SqsClientProxy extends ClientProxy {
     }
     this.fifo = this.queueUrl.endsWith('.fifo');
     this.ownsClient = !options.client;
-    this.client = options.client ?? new SQSClient({ ...awsClientConfig(), ...options.clientConfig });
+    this.client =
+      options.client ??
+      new SQSClient({ ...awsClientConfig(), ...options.clientConfig });
     this.initializeSerializer(options);
   }
 
@@ -70,7 +76,10 @@ export class SqsClientProxy extends ClientProxy {
     return this.client as T;
   }
 
-  protected publish(packet: ReadPacket, callback: (packet: WritePacket) => void): () => void {
+  protected publish(
+    packet: ReadPacket,
+    callback: (packet: WritePacket) => void,
+  ): () => void {
     callback({
       err: new Error(
         `a queue carries messages, not calls: nobody answers send() on ${String(packet.pattern)}. ` +
@@ -98,9 +107,11 @@ export class SqsClientProxy extends ClientProxy {
         DelaySeconds: this.delayOf(options),
         ...(this.fifo
           ? {
-              MessageGroupId: options.messageGroupId ?? orderingKeyIn(message.pattern),
+              MessageGroupId:
+                options.messageGroupId ?? orderingKeyIn(message.pattern),
               MessageDeduplicationId:
-                options.messageDeduplicationId ?? message.body.metadata[TRANSPORT_IDENTIFIER],
+                options.messageDeduplicationId ??
+                message.body.metadata[TRANSPORT_IDENTIFIER],
             }
           : {}),
       }),
@@ -143,5 +154,8 @@ const attributeStrings = (
   attributes: SqsRecordOptions['messageAttributes'],
 ): Record<string, string> =>
   Object.fromEntries(
-    Object.entries(attributes ?? {}).map(([key, attribute]) => [key, attribute.StringValue]),
+    Object.entries(attributes ?? {}).map(([key, attribute]) => [
+      key,
+      attribute.StringValue,
+    ]),
   );

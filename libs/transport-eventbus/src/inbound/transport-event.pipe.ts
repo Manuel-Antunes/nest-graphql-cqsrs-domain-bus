@@ -1,4 +1,6 @@
-import { Injectable, type PipeTransform } from '@nestjs/common';
+import type { PipeTransform } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
+
 import { envelopeFrom, reconstruct } from './event-reconstruction';
 
 /**

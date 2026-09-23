@@ -1,6 +1,7 @@
+import type { IEventHandler } from '@nestjs/cqrs';
 import { EntityManager } from '@mikro-orm/core';
 import { Injectable, Logger } from '@nestjs/common';
-import { EventsHandler, type IEventHandler } from '@nestjs/cqrs';
+import { EventsHandler } from '@nestjs/cqrs';
 import { inRequestContext } from '@nestposts/database';
 import { PostCreatedEvent } from '@nestposts/posts/domain/post/event/post-created.event';
 import { PostRepository } from '@nestposts/posts/domain/post/post.repository';
@@ -41,7 +42,9 @@ export class ProjectPostCompletion implements IEventHandler<PostCreatedEvent> {
       await this.ensureTagsExist(event);
       post.loadFromHistory([event]);
       await this.posts.save(post);
-      this.logger.debug(`post ${event.postId} projected as complete at version ${event.version}`);
+      this.logger.debug(
+        `post ${event.postId} projected as complete at version ${event.version}`,
+      );
     });
   }
 
@@ -54,7 +57,9 @@ export class ProjectPostCompletion implements IEventHandler<PostCreatedEvent> {
       const tag = Tag.create(tagId, assigned.name, event.occurredAt);
       tag.uncommit();
       await this.tags.save(tag);
-      this.logger.log(`tag ${assigned.name} (${assigned.tagId}) recorded from the decision that came in`);
+      this.logger.log(
+        `tag ${assigned.name} (${assigned.tagId}) recorded from the decision that came in`,
+      );
     }
   }
 }

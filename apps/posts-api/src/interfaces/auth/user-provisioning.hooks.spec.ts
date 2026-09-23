@@ -1,7 +1,8 @@
-import { MikroORM } from '@mikro-orm/core';
-import type { UserProvisioning } from '../../application/user/user-provisioning.service';
 import type { User } from '@nestposts/users/domain/user/user.entity';
+import { MikroORM } from '@mikro-orm/core';
 import { CredentialId } from '@nestposts/users/domain/user/vo/credential-id';
+
+import type { UserProvisioning } from '../../application/user/user-provisioning.service';
 import { UserProvisioningHooks } from './user-provisioning.hooks';
 
 describe('UserProvisioningHooks', () => {
@@ -42,15 +43,21 @@ describe('UserProvisioningHooks', () => {
 
   it('uma falha ao provisionar não derruba o que o provedor estava fazendo', async () => {
     fail = new Error('banco fora do ar');
-    const error = vi.spyOn((hooks as any).logger, 'error').mockImplementation(() => undefined);
+    const error = vi
+      .spyOn((hooks as any).logger, 'error')
+      .mockImplementation(() => undefined);
 
-    await expect(hooks.onCredentialCreated({ id: 'cred-3' })).resolves.toBeUndefined();
+    await expect(
+      hooks.onCredentialCreated({ id: 'cred-3' }),
+    ).resolves.toBeUndefined();
     expect(error).toHaveBeenCalled();
     error.mockRestore();
   });
 
   it('um id de credencial inválido é recusado na borda', async () => {
-    const warn = vi.spyOn((hooks as any).logger, 'warn').mockImplementation(() => undefined);
+    const warn = vi
+      .spyOn((hooks as any).logger, 'warn')
+      .mockImplementation(() => undefined);
 
     await hooks.onCredentialCreated({ id: '  ' });
 

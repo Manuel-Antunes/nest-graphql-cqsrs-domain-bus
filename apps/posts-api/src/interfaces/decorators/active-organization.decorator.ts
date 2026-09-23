@@ -1,5 +1,6 @@
 import type { PipeTransform, Type } from '@nestjs/common';
 import { Session } from '@thallesp/nestjs-better-auth';
+
 import { ActiveMemberPipe } from '../pipes/active-member.pipe';
 import { ActiveOrganizationIdPipe } from '../pipes/active-organization-id.pipe';
 import { ActiveOrganizationPipe } from '../pipes/active-organization.pipe';
@@ -14,8 +15,9 @@ type ExtraPipes = (Type<PipeTransform> | PipeTransform)[];
  * produces is only what triggers the pipe. Keeping `@Session()` is deliberate: it is what makes the
  * global guard's refusal come first, before any of this runs.
  */
-export const ActiveOrganizationId = (...pipes: ExtraPipes): ParameterDecorator =>
-  Session(ActiveOrganizationIdPipe, ...pipes);
+export const ActiveOrganizationId = (
+  ...pipes: ExtraPipes
+): ParameterDecorator => Session(ActiveOrganizationIdPipe, ...pipes);
 
 export const ActiveOrganization = (...pipes: ExtraPipes): ParameterDecorator =>
   Session(ActiveOrganizationPipe, ...pipes);

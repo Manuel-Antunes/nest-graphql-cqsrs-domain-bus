@@ -1,32 +1,36 @@
+import type { InProcessService } from '@nestposts/transport-eventbus/testing';
 import { MikroORM } from '@mikro-orm/core';
 import { Test } from '@nestjs/testing';
 import { inRequestContext } from '@nestposts/database';
 import { PostCreatedEvent } from '@nestposts/posts/domain/post/event/post-created.event';
 import { PostPreCreatedEvent } from '@nestposts/posts/domain/post/event/post-pre-created.event';
+import { Post } from '@nestposts/posts/domain/post/post.entity';
 import { PostId } from '@nestposts/posts/domain/post/vo/post-id';
-import { DEFAULT_TAG_ID, DEFAULT_TAG_NAME } from '@nestposts/posts/domain/tag/tag.entity';
 import {
+  DEFAULT_TAG_ID,
+  DEFAULT_TAG_NAME,
+} from '@nestposts/posts/domain/tag/tag.entity';
+import {
+  envelopeFrom,
   EventEnvelope,
   EventSourcedRepository,
   MemoryClient,
   MemoryEventEnvelopeSerializer,
   MessageInbox,
+  reconstruct,
   TRANSPORT_IDENTIFIER,
   TRANSPORT_MESSAGE_TYPE,
   TRANSPORT_ORIGIN,
   TRANSPORT_TAGS,
   TRANSPORT_TIMESTAMP,
-  envelopeFrom,
-  reconstruct,
 } from '@nestposts/transport-eventbus';
 import {
-  type InProcessService,
   RecordingClient,
   startInProcessService,
 } from '@nestposts/transport-eventbus/testing';
 import { UserId } from '@nestposts/users/domain/user/vo/user-id';
 import { lastValueFrom } from 'rxjs';
-import { Post } from '@nestposts/posts/domain/post/post.entity';
+
 import { AppModule } from '../src/app.module';
 import { POST_EVENTS_CLIENT } from '../src/infrastructure/transport/transport.config';
 import { until } from './support/until';
@@ -65,13 +69,17 @@ describe('the tagging service', () => {
     );
 
   const deliver = (postId: PostId, envelope: EventEnvelope<object>) =>
-    lastValueFrom(postsApi.emit(`posts.PostPreCreated.${postId.value}`, envelope));
+    lastValueFrom(
+      postsApi.emit(`posts.PostPreCreated.${postId.value}`, envelope),
+    );
 
   const inContext = <T>(work: () => Promise<T>): Promise<T> =>
     inRequestContext(tagging.app.get(MikroORM).em, work);
 
   const completions = () =>
-    outbound.sent.filter(({ pattern }) => pattern.startsWith('posts.PostCreated.'));
+    outbound.sent.filter(({ pattern }) =>
+      pattern.startsWith('posts.PostCreated.'),
+    );
 
   const envelopeOf = (index = 0) => envelopeFrom(completions()[index].data);
 
@@ -178,12 +186,18 @@ describe('the tagging service', () => {
     await deliver(postId, preCreatedFrom(postId));
     await until(() => completions().length === 1);
 
-    expect(outbound.patterns().filter((key) => key.startsWith('posts.PostPreCreated.'))).toEqual([]);
+    expect(
+      outbound
+        .patterns()
+        .filter((key) => key.startsWith('posts.PostPreCreated.')),
+    ).toEqual([]);
   });
 
   it('drops its own echo instead of deciding twice about it', async () => {
     const postId = PostId.generate();
-    const echo = preCreatedFrom(postId, `evt-${postId.value}`, { [TRANSPORT_ORIGIN]: 'tagging' });
+    const echo = preCreatedFrom(postId, `evt-${postId.value}`, {
+      [TRANSPORT_ORIGIN]: 'tagging',
+    });
 
     await deliver(postId, echo);
     await new Promise((resolve) => setTimeout(resolve, 200));
@@ -197,7 +211,9 @@ describe('the tagging service', () => {
 
     await deliver(
       postId,
-      preCreatedFrom(postId, `evt-${postId.value}`, { 'cqrs-transport-correlation-id': 'c-1' }),
+      preCreatedFrom(postId, `evt-${postId.value}`, {
+        'cqrs-transport-correlation-id': 'c-1',
+      }),
     );
     await until(() => completions().length === 1);
 

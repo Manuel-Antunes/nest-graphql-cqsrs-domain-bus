@@ -1,11 +1,12 @@
-import { instanceToPlain, plainToInstance } from 'class-transformer';
-import { GraphQLID, GraphQLString } from 'graphql';
 import { PostContent } from '@nestposts/posts/domain/post/vo/post-content';
 import { PostId } from '@nestposts/posts/domain/post/vo/post-id';
 import { PostTitle } from '@nestposts/posts/domain/post/vo/post-title';
 import { TagId } from '@nestposts/posts/domain/tag/vo/tag-id';
 import { TagName } from '@nestposts/posts/domain/tag/vo/tag-name';
 import { UserId } from '@nestposts/users/domain/user/vo/user-id';
+import { instanceToPlain, plainToInstance } from 'class-transformer';
+import { GraphQLID, GraphQLString } from 'graphql';
+
 import { PageInfo } from './connection';
 import { CreatePostInput } from './create-post.input';
 import { PostView } from './post.view';
@@ -74,7 +75,9 @@ describe('DTOs do protocolo', () => {
     });
 
     it('volta de um objeto cru pelo class-transformer', () => {
-      const plain = instanceToPlain(viewOf(), { excludeExtraneousValues: true });
+      const plain = instanceToPlain(viewOf(), {
+        excludeExtraneousValues: true,
+      });
 
       const view = plainToInstance(PostView, plain);
 
@@ -141,7 +144,11 @@ describe('DTOs do protocolo', () => {
     });
 
     it('preserva o null explícito', () => {
-      const input = new UpdatePostInput({ id, title: null, content: 'novo' } as any);
+      const input = new UpdatePostInput({
+        id,
+        title: null,
+        content: 'novo',
+      } as any);
 
       expect(input.title).toBeNull();
       expect(input.content).toBeInstanceOf(PostContent);
@@ -163,7 +170,9 @@ describe('DTOs do protocolo', () => {
         endCursor: null,
       });
 
-      expect(instanceToPlain(pageInfo, { excludeExtraneousValues: true })).toEqual({
+      expect(
+        instanceToPlain(pageInfo, { excludeExtraneousValues: true }),
+      ).toEqual({
         hasNextPage: true,
         hasPreviousPage: false,
         startCursor: 'MQ==',

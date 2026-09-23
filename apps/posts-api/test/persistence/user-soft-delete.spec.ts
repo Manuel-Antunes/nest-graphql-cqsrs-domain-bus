@@ -1,13 +1,23 @@
-import { closeTestDatabase, tableIn, testDatabase } from '@nestposts/database/testing';
 import { MikroORM } from '@mikro-orm/core';
-import { User } from '@nestposts/users/domain/user/user.entity';
-import { AUTHOR_ROLE, Authorship } from '@nestposts/users/domain/user/author.entity';
-import { PostEntitySchema } from '@nestposts/posts/infrastructure/persistence/entities/post-orm.entity';
+import {
+  closeTestDatabase,
+  tableIn,
+  testDatabase,
+} from '@nestposts/database/testing';
 import { ACTIVE_FILTER } from '@nestposts/platform/infrastructure/persistence/soft-delete/soft-delete-orm.entity';
 import { SoftDeleteSubscriber } from '@nestposts/platform/infrastructure/persistence/soft-delete/soft-delete.subscriber';
+import { PostEntitySchema } from '@nestposts/posts/infrastructure/persistence/entities/post-orm.entity';
 import { TagSchema } from '@nestposts/posts/infrastructure/persistence/entities/tag-orm.entity';
-import { AuthorshipEntitySchema, UserEntitySchema } from '@nestposts/users/infrastructure/persistence/entities/user-orm.entity';
+import {
+  AUTHOR_ROLE,
+  Authorship,
+} from '@nestposts/users/domain/user/author.entity';
+import { User } from '@nestposts/users/domain/user/user.entity';
 import { UserId } from '@nestposts/users/domain/user/vo/user-id';
+import {
+  AuthorshipEntitySchema,
+  UserEntitySchema,
+} from '@nestposts/users/infrastructure/persistence/entities/user-orm.entity';
 import { MikroOrmUserRepository } from '@nestposts/users/infrastructure/persistence/repositories/mikro-orm-user.repository';
 
 describe('soft delete do User, contra o banco', () => {
@@ -20,12 +30,22 @@ describe('soft delete do User, contra o banco', () => {
 
   beforeEach(async () => {
     orm = await testDatabase({
-        entities: [PostEntitySchema, TagSchema, UserEntitySchema, AuthorshipEntitySchema],
-        subscribers: [new SoftDeleteSubscriber()],
-      });
+      entities: [
+        PostEntitySchema,
+        TagSchema,
+        UserEntitySchema,
+        AuthorshipEntitySchema,
+      ],
+      subscribers: [new SoftDeleteSubscriber()],
+    });
 
     const em = orm.em.fork();
-    const author = User.register(UserId.generate(), { email: EMAIL, name: 'Autor' }, [AUTHOR_ROLE], NOW);
+    const author = User.register(
+      UserId.generate(),
+      { email: EMAIL, name: 'Autor' },
+      [AUTHOR_ROLE],
+      NOW,
+    );
     author.uncommit();
     await em.persist(author).persist(Authorship.of(author)).flush();
     authorId = author.id;
@@ -38,7 +58,9 @@ describe('soft delete do User, contra o banco', () => {
     const [row] = await orm.em
       .fork()
       .getConnection()
-      .execute(`select count(*) as total from ${tableIn(orm, table)} where ${where}`);
+      .execute(
+        `select count(*) as total from ${tableIn(orm, table)} where ${where}`,
+      );
     return Number(row.total);
   };
 
@@ -55,7 +77,12 @@ describe('soft delete do User, contra o banco', () => {
 
       expect(await users.findById(authorId)).toBeNull();
       expect(await users.findByEmail(EMAIL as never)).toBeNull();
-      expect(await rawCount('users', `id = '${authorId.value}' and deleted_at is not null`)).toBe(1);
+      expect(
+        await rawCount(
+          'users',
+          `id = '${authorId.value}' and deleted_at is not null`,
+        ),
+      ).toBe(1);
     });
 
     it('a linha da authorship sobrevive ao delete', async () => {
@@ -69,11 +96,15 @@ describe('soft delete do User, contra o banco', () => {
 
       await users.restore(authorId);
 
-      const restored = await new MikroOrmUserRepository(orm.em.fork()).findById(authorId);
+      const restored = await new MikroOrmUserRepository(orm.em.fork()).findById(
+        authorId,
+      );
       expect(restored?.hasRole(AUTHOR_ROLE)).toBe(true);
       expect(restored?.isDeleted()).toBe(false);
       expect(restored?.name.value).toBe('Autor');
-      expect(await orm.em.fork().findOne(Authorship, { user: authorId })).not.toBeNull();
+      expect(
+        await orm.em.fork().findOne(Authorship, { user: authorId }),
+      ).not.toBeNull();
     });
   });
 
@@ -86,7 +117,12 @@ describe('soft delete do User, contra o banco', () => {
       await em.flush();
 
       expect(await users.findById(authorId)).toBeNull();
-      expect(await rawCount('users', `id = '${authorId.value}' and deleted_at is not null`)).toBe(1);
+      expect(
+        await rawCount(
+          'users',
+          `id = '${authorId.value}' and deleted_at is not null`,
+        ),
+      ).toBe(1);
       expect(await rawCount('authors', `id = '${authorId.value}'`)).toBe(1);
     });
 
@@ -99,7 +135,11 @@ describe('soft delete do User, contra o banco', () => {
 
       const deleted = await orm.em
         .fork()
-        .findOneOrFail(User, { id: authorId }, { filters: { [ACTIVE_FILTER]: false } });
+        .findOneOrFail(
+          User,
+          { id: authorId },
+          { filters: { [ACTIVE_FILTER]: false } },
+        );
       expect(deleted.deletedAt).toEqual(NOW);
     });
   });

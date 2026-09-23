@@ -30,7 +30,9 @@ export class RequestHeaders {
       return headers;
     }
 
-    for (const [name, value] of Object.entries(raw as Record<string, unknown>)) {
+    for (const [name, value] of Object.entries(
+      raw as Record<string, unknown>,
+    )) {
       if (Array.isArray(value)) {
         value.forEach((entry) => headers.append(name, String(entry)));
       } else if (value !== undefined && value !== null) {

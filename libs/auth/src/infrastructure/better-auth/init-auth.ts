@@ -1,6 +1,11 @@
-import { betterAuth, type BetterAuthOptions, type BetterAuthPlugin } from 'better-auth';
+import type { BetterAuthOptions, BetterAuthPlugin } from 'better-auth';
+import { betterAuth } from 'better-auth';
+
 import type { AuthConfig } from './config';
-import type { BetterAuthCorePlugins, BetterAuthPluginsWith } from './plugins/registry';
+import type {
+  BetterAuthCorePlugins,
+  BetterAuthPluginsWith,
+} from './plugins/registry';
 
 export const AUTH_USER_MODEL = 'authUser';
 
@@ -25,7 +30,11 @@ export class BetterAuthLogging {
     };
   }
 
-  static readonly toConsole: BetterAuthLogWriter = (level, message, ...args) => {
+  static readonly toConsole: BetterAuthLogWriter = (
+    level,
+    message,
+    ...args
+  ) => {
     const write = console[level === 'debug' ? 'log' : level] ?? console.log;
     write(`[better-auth] ${message}`, ...args);
   };
@@ -36,10 +45,20 @@ class SocialProviders {
   static of(config: AuthConfig): BetterAuthOptions['socialProviders'] {
     return {
       ...(config.googleClientId && config.googleClientSecret
-        ? { google: { clientId: config.googleClientId, clientSecret: config.googleClientSecret } }
+        ? {
+            google: {
+              clientId: config.googleClientId,
+              clientSecret: config.googleClientSecret,
+            },
+          }
         : {}),
       ...(config.githubClientId && config.githubClientSecret
-        ? { github: { clientId: config.githubClientId, clientSecret: config.githubClientSecret } }
+        ? {
+            github: {
+              clientId: config.githubClientId,
+              clientSecret: config.githubClientSecret,
+            },
+          }
         : {}),
     };
   }
@@ -51,16 +70,26 @@ export interface InitAuthOptions {
 }
 
 export class BetterAuthInstance {
-  static optionsFor<TPlugins extends readonly BetterAuthPlugin[]>(config: AuthConfig, plugins: TPlugins) {
+  static optionsFor<TPlugins extends readonly BetterAuthPlugin[]>(
+    config: AuthConfig,
+    plugins: TPlugins,
+  ) {
     return {
       appName: APP_NAME,
       secret: config.secret,
       baseURL: config.baseUrl,
       basePath: config.basePath,
       user: { modelName: AUTH_USER_MODEL },
-      emailAndPassword: { enabled: true, autoSignIn: true, requireEmailVerification: false },
+      emailAndPassword: {
+        enabled: true,
+        autoSignIn: true,
+        requireEmailVerification: false,
+      },
       account: {
-        accountLinking: { enabled: true, trustedProviders: ['credential', 'google', 'github'] },
+        accountLinking: {
+          enabled: true,
+          trustedProviders: ['credential', 'google', 'github'],
+        },
       },
       databaseHooks: {},
       socialProviders: SocialProviders.of(config),
@@ -97,8 +126,12 @@ export class BetterAuthInstance {
   }
 }
 
-export type BetterAuth = ReturnType<typeof BetterAuthInstance.create<BetterAuthCorePlugins>>;
+export type BetterAuth = ReturnType<
+  typeof BetterAuthInstance.create<BetterAuthCorePlugins>
+>;
 
 export type BetterAuthWith<TExtra extends readonly unknown[]> = ReturnType<
-  typeof BetterAuthInstance.create<BetterAuthPluginsWith<TExtra> & readonly BetterAuthPlugin[]>
+  typeof BetterAuthInstance.create<
+    BetterAuthPluginsWith<TExtra> & readonly BetterAuthPlugin[]
+  >
 >;

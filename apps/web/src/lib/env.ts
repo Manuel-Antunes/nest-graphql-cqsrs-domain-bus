@@ -1,4 +1,5 @@
-export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000';
+export const API_URL =
+  process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000';
 
 /** This application's own origin — Better Auth runs here, so its cookies belong to it. */
 export const WEB_URL = process.env.WEB_URL ?? 'http://localhost:4200';

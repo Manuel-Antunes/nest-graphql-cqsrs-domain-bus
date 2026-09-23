@@ -1,4 +1,5 @@
 import type { CredentialId } from '@nestposts/users/domain/user/vo/credential-id';
+
 import type { Session } from './session';
 
 export type PermissionRequest = Readonly<Record<string, readonly string[]>>;
@@ -42,7 +43,9 @@ export abstract class AuthService {
    * cannot: it has no browser to redirect, and the cookie has to be written into ITS response. So it
    * calls this, and whichever cookie plugin the composition root registered does the writing.
    */
-  abstract signInWithPassword(credentials: PasswordCredentials): Promise<SignedIn>;
+  abstract signInWithPassword(
+    credentials: PasswordCredentials,
+  ): Promise<SignedIn>;
 
   abstract signUpWithPassword(credential: NewCredential): Promise<SignedIn>;
 

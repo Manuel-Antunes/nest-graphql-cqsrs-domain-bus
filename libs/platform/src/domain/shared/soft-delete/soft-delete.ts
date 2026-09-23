@@ -1,9 +1,10 @@
-import { ValidatedDto } from "@nestposts/validated-dto/mixins";
-import { AlreadyDeletedException } from "./already-deleted.exception";
-import { NotDeletedException } from "./not-deleted.exception";
-import { SoftDeletionSchema } from "./schemas/soft-deletion.schema";
+import { ValidatedDto } from '@nestposts/validated-dto/mixins';
 
-export const SOFT_DELETABLE = Symbol.for("domain:soft-deletable");
+import { AlreadyDeletedException } from './already-deleted.exception';
+import { NotDeletedException } from './not-deleted.exception';
+import { SoftDeletionSchema } from './schemas/soft-deletion.schema';
+
+export const SOFT_DELETABLE = Symbol.for('domain:soft-deletable');
 
 export interface SoftDeletableEntity {
   readonly [SOFT_DELETABLE]: true;
@@ -19,7 +20,7 @@ export class SoftDeletion extends ValidatedDto(SoftDeletionSchema) {
 
   static isSoftDeletable(entity: unknown): entity is SoftDeletableEntity {
     return (
-      typeof entity === "object" &&
+      typeof entity === 'object' &&
       entity !== null &&
       (entity as any)[SOFT_DELETABLE] === true
     );
@@ -36,7 +37,7 @@ export class SoftDeletion extends ValidatedDto(SoftDeletionSchema) {
   override toString(): string {
     return this.isDeleted
       ? `apagado em ${this.deletedAt?.toISOString()}`
-      : "vivo";
+      : 'vivo';
   }
 }
 

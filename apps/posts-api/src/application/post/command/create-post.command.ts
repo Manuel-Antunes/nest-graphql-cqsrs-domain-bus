@@ -1,13 +1,14 @@
+import type { AsyncContext, ICommandHandler } from '@nestjs/cqrs';
 import { AutoMap } from '@automapper/classes';
 import { Inject, Scope } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
-import { type AsyncContext, Command, CommandHandler, EventPublisher, type ICommandHandler } from '@nestjs/cqrs';
+import { Command, CommandHandler, EventPublisher } from '@nestjs/cqrs';
+import { delegateRef } from '@nestposts/platform/domain/shared/delegation/delegate';
 import { PostAlreadyExistsException } from '@nestposts/posts/domain/post/exception/post-already-exists.exception';
 import { Post } from '@nestposts/posts/domain/post/post.entity';
 import { PostRepository } from '@nestposts/posts/domain/post/post.repository';
 import { PostId } from '@nestposts/posts/domain/post/vo/post-id';
 import { Author } from '@nestposts/users/domain/user/author.entity';
-import { delegateRef } from '@nestposts/platform/domain/shared/delegation/delegate';
 import { UserId } from '@nestposts/users/domain/user/vo/user-id';
 import { UserName } from '@nestposts/users/domain/user/vo/user-name';
 

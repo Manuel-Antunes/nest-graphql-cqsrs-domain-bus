@@ -1,3 +1,9 @@
+import type {
+  Mapper,
+  MappingConfiguration,
+  MappingProfile,
+} from '@automapper/core';
+import type { Author } from '@nestposts/users/domain/user/author.entity';
 import {
   createMap,
   forMember,
@@ -5,14 +11,9 @@ import {
   mapFrom,
   mapWith,
   mapWithArguments,
-  type Mapper,
-  type MappingConfiguration,
-  type MappingProfile,
 } from '@automapper/core';
 import { AutomapperProfile, InjectMapper } from '@automapper/nestjs';
 import { Injectable } from '@nestjs/common';
-import { CreatePostCommand } from '../../application/post/command/create-post.command';
-import { UpdatePostCommand } from '../../application/post/command/update-post.command';
 import { PostCreatedEvent } from '@nestposts/posts/domain/post/event/post-created.event';
 import { PostPreCreatedEvent } from '@nestposts/posts/domain/post/event/post-pre-created.event';
 import { PostUpdatedEvent } from '@nestposts/posts/domain/post/event/post-updated.event';
@@ -21,15 +22,18 @@ import { PostContent } from '@nestposts/posts/domain/post/vo/post-content';
 import { PostId } from '@nestposts/posts/domain/post/vo/post-id';
 import { PostTitle } from '@nestposts/posts/domain/post/vo/post-title';
 import { Tag } from '@nestposts/posts/domain/tag/tag.entity';
-import type { Author } from '@nestposts/users/domain/user/author.entity';
 import { UserId } from '@nestposts/users/domain/user/vo/user-id';
+
+import { CreatePostCommand } from '../../application/post/command/create-post.command';
+import { UpdatePostCommand } from '../../application/post/command/update-post.command';
 import { CreatePostInput } from '../../dto/graphql/create-post.input';
 import { PostView } from '../../dto/graphql/post.view';
 import { TagView } from '../../dto/graphql/tag.view';
 import { UpdatePostInput } from '../../dto/graphql/update-post.input';
 import { valueObjectConverter } from './value-object.converter';
 
-const authorOf = (args: Record<string, unknown>): Author => args.author as Author;
+const authorOf = (args: Record<string, unknown>): Author =>
+  args.author as Author;
 
 @Injectable()
 export class PostProfile extends AutomapperProfile {
@@ -39,7 +43,6 @@ export class PostProfile extends AutomapperProfile {
 
   override get profile(): MappingProfile {
     return (mapper) => {
-
       createMap(mapper, Tag, TagView);
 
       createMap(
@@ -97,7 +100,11 @@ export class PostProfile extends AutomapperProfile {
         ),
         forMember(
           (view) => view.tags,
-          mapFrom((event) => event.tags.map(({ tagId, name }) => new TagView({ id: tagId, name }))),
+          mapFrom((event) =>
+            event.tags.map(
+              ({ tagId, name }) => new TagView({ id: tagId, name }),
+            ),
+          ),
         ),
       );
 
@@ -115,7 +122,11 @@ export class PostProfile extends AutomapperProfile {
         ),
         forMember(
           (view) => view.tags,
-          mapFrom((event) => event.tags.map(({ tagId, name }) => new TagView({ id: tagId, name }))),
+          mapFrom((event) =>
+            event.tags.map(
+              ({ tagId, name }) => new TagView({ id: tagId, name }),
+            ),
+          ),
         ),
       );
 

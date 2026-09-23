@@ -1,13 +1,19 @@
+import type { Observable } from 'rxjs';
 import { Scope } from '@nestjs/common';
-import { type Observable, EMPTY } from 'rxjs';
-import { Subscription } from '../classes/subscription';
+import { EMPTY } from 'rxjs';
+
 import type { ISubscriptionHandler } from '../interfaces/subscription-handler.interface';
-import { SUBSCRIPTION_HANDLER_METADATA, SUBSCRIPTION_METADATA } from './constants';
+import { Subscription } from '../classes/subscription';
+import {
+  SUBSCRIPTION_HANDLER_METADATA,
+  SUBSCRIPTION_METADATA,
+} from './constants';
 import { SubscriptionHandler } from './subscription-handler.decorator';
 
 describe('@SubscriptionHandler', () => {
   class CounterEvent {}
-  const idOf = (subscription: object) => Reflect.getMetadata(SUBSCRIPTION_METADATA, subscription)?.id;
+  const idOf = (subscription: object) =>
+    Reflect.getMetadata(SUBSCRIPTION_METADATA, subscription)?.id;
 
   const INJECTABLE_WATERMARK = '__injectable__';
   const SCOPE_OPTIONS = 'scope:options';
@@ -23,7 +29,9 @@ describe('@SubscriptionHandler', () => {
     }
 
     expect(idOf(OnCounter)).toEqual(expect.any(String));
-    expect(Reflect.getMetadata(SUBSCRIPTION_HANDLER_METADATA, Handler)).toBe(OnCounter);
+    expect(Reflect.getMetadata(SUBSCRIPTION_HANDLER_METADATA, Handler)).toBe(
+      OnCounter,
+    );
   });
 
   it('o id é gravado uma vez só, e não muda a cada handler decorado', () => {
@@ -45,8 +53,12 @@ describe('@SubscriptionHandler', () => {
     }
 
     expect(idOf(OnCounter)).toBe(afterFirst);
-    expect(Reflect.getMetadata(SUBSCRIPTION_HANDLER_METADATA, First)).toBe(OnCounter);
-    expect(Reflect.getMetadata(SUBSCRIPTION_HANDLER_METADATA, Second)).toBe(OnCounter);
+    expect(Reflect.getMetadata(SUBSCRIPTION_HANDLER_METADATA, First)).toBe(
+      OnCounter,
+    );
+    expect(Reflect.getMetadata(SUBSCRIPTION_HANDLER_METADATA, Second)).toBe(
+      OnCounter,
+    );
   });
 
   it('duas subscriptions distintas ganham ids distintos', () => {
@@ -67,8 +79,12 @@ describe('@SubscriptionHandler', () => {
     }
 
     expect(idOf(OnA)).not.toBe(idOf(OnB));
-    expect(Reflect.getMetadata(SUBSCRIPTION_HANDLER_METADATA, HandlerA)).toBe(OnA);
-    expect(Reflect.getMetadata(SUBSCRIPTION_HANDLER_METADATA, HandlerB)).toBe(OnB);
+    expect(Reflect.getMetadata(SUBSCRIPTION_HANDLER_METADATA, HandlerA)).toBe(
+      OnA,
+    );
+    expect(Reflect.getMetadata(SUBSCRIPTION_HANDLER_METADATA, HandlerB)).toBe(
+      OnB,
+    );
   });
 
   it('uma subclasse decorada ganha o id dela, e não o do pai', () => {
@@ -89,8 +105,12 @@ describe('@SubscriptionHandler', () => {
     }
 
     expect(idOf(OnDerived)).not.toBe(idOf(OnBase));
-    expect(Reflect.getMetadata(SUBSCRIPTION_HANDLER_METADATA, DerivedHandler)).toBe(OnDerived);
-    expect(Reflect.getMetadata(SUBSCRIPTION_HANDLER_METADATA, BaseHandler)).toBe(OnBase);
+    expect(
+      Reflect.getMetadata(SUBSCRIPTION_HANDLER_METADATA, DerivedHandler),
+    ).toBe(OnDerived);
+    expect(
+      Reflect.getMetadata(SUBSCRIPTION_HANDLER_METADATA, BaseHandler),
+    ).toBe(OnBase);
   });
 
   describe('as opções do @Injectable', () => {
@@ -104,7 +124,9 @@ describe('@SubscriptionHandler', () => {
       }
 
       expect(Reflect.getMetadata(SCOPE_OPTIONS, Handler)).toBeUndefined();
-      expect(Reflect.getMetadata(INJECTABLE_WATERMARK, Handler)).toBeUndefined();
+      expect(
+        Reflect.getMetadata(INJECTABLE_WATERMARK, Handler),
+      ).toBeUndefined();
     });
 
     it('com opções, elas chegam ao @Injectable do handler', () => {
@@ -117,8 +139,12 @@ describe('@SubscriptionHandler', () => {
       }
 
       expect(Reflect.getMetadata(INJECTABLE_WATERMARK, Handler)).toBe(true);
-      expect(Reflect.getMetadata(SCOPE_OPTIONS, Handler)).toEqual({ scope: Scope.REQUEST });
-      expect(Reflect.getMetadata(SUBSCRIPTION_HANDLER_METADATA, Handler)).toBe(OnCounter);
+      expect(Reflect.getMetadata(SCOPE_OPTIONS, Handler)).toEqual({
+        scope: Scope.REQUEST,
+      });
+      expect(Reflect.getMetadata(SUBSCRIPTION_HANDLER_METADATA, Handler)).toBe(
+        OnCounter,
+      );
     });
   });
 });

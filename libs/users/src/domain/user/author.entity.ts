@@ -1,13 +1,15 @@
-import { PrimaryKeyProp, ref, type Ref } from "@mikro-orm/core";
-import { BaseEntity } from "@nestposts/platform/domain/shared/base-entity";
-import { Delegate } from "@nestposts/platform/domain/shared/delegation/delegate";
-import { User } from "./user.entity";
-import type { UserId } from "./vo/user-id";
+import type { Ref } from '@mikro-orm/core';
+import { PrimaryKeyProp, ref } from '@mikro-orm/core';
+import { BaseEntity } from '@nestposts/platform/domain/shared/base-entity';
+import { Delegate } from '@nestposts/platform/domain/shared/delegation/delegate';
 
-export const AUTHOR_ROLE = "author";
+import type { UserId } from './vo/user-id';
+import { User } from './user.entity';
+
+export const AUTHOR_ROLE = 'author';
 
 export class Authorship extends BaseEntity<{ user: Ref<User> }> {
-  [PrimaryKeyProp]?: "user";
+  [PrimaryKeyProp]?: 'user';
 
   user!: Ref<User>;
 
@@ -21,10 +23,10 @@ export class Authorship extends BaseEntity<{ user: Ref<User> }> {
 }
 
 export const Author = Delegate(User, {
-  name: "Author",
+  name: 'Author',
   to: Authorship,
-  as: "authorship",
-  from: "user",
+  as: 'authorship',
+  from: 'user',
   forwarding: [],
 });
 

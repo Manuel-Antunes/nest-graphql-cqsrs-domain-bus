@@ -1,7 +1,8 @@
-import { type IQueryHandler, Query, QueryHandler } from '@nestjs/cqrs';
+import type { IQueryHandler } from '@nestjs/cqrs';
 import type { Author } from '@nestposts/users/domain/user/author.entity';
-import { AuthorRepository } from '@nestposts/users/domain/user/author.repository';
 import type { UserId } from '@nestposts/users/domain/user/vo/user-id';
+import { Query, QueryHandler } from '@nestjs/cqrs';
+import { AuthorRepository } from '@nestposts/users/domain/user/author.repository';
 
 export namespace FindAuthorQuery {
   export class FindAuthor extends Query<Author | null> {

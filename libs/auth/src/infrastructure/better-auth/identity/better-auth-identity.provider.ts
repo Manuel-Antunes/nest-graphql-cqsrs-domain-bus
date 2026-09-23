@@ -1,10 +1,12 @@
+import type { Identity } from '@nestposts/users/domain/user/identity.provider';
 import { MikroORM } from '@mikro-orm/core';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { inRequestContext } from '@nestposts/database';
-import { type Identity, IdentityProvider } from '@nestposts/users/domain/user/identity.provider';
+import { IdentityProvider } from '@nestposts/users/domain/user/identity.provider';
 import { CredentialId } from '@nestposts/users/domain/user/vo/credential-id';
 import { Email } from '@nestposts/users/domain/user/vo/email';
 import { UserName } from '@nestposts/users/domain/user/vo/user-name';
+
 import type { BetterAuth } from '../init-auth';
 import { BETTER_AUTH } from '../tokens';
 
@@ -41,7 +43,9 @@ export class BetterAuthIdentityProvider extends IdentityProvider {
     return BetterAuthIdentityProvider.toIdentity(updated);
   }
 
-  private onIdentityStore<T>(work: (adapter: any) => Promise<unknown>): Promise<T> {
+  private onIdentityStore<T>(
+    work: (adapter: any) => Promise<unknown>,
+  ): Promise<T> {
     return inRequestContext(this.orm, async () => {
       const context = await this.auth.$context;
       return (await work(context.internalAdapter)) as T;

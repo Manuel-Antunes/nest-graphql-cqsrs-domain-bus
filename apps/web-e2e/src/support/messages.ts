@@ -1,5 +1,5 @@
-import { Broker, EXCHANGE, republished } from './broker';
 import type { StoredEvent } from './database';
+import { Broker, EXCHANGE, republished } from './broker';
 import { until } from './posts-api';
 import { e2eTransport } from './transport';
 
@@ -26,10 +26,15 @@ export interface Messages {
   /** The messages of one aggregate, keyed by the event's own name. */
   of(aggregateId: string): Promise<Map<string, PublishedMessage>>;
   /** Sends a message this system already produced a second time, byte for byte. */
-  redeliver(event: StoredEvent, routingKey: string, tags: string): Promise<boolean>;
+  redeliver(
+    event: StoredEvent,
+    routingKey: string,
+    tags: string,
+  ): Promise<boolean>;
 }
 
-const shortNameOf = (qualifiedName: string): string => qualifiedName.split('.')[1] ?? qualifiedName;
+const shortNameOf = (qualifiedName: string): string =>
+  qualifiedName.split('.')[1] ?? qualifiedName;
 
 /**
  * RabbitMQ: a queue of this suite's own, bound to the namespace, drained through the management API.
@@ -62,8 +67,14 @@ class BrokerMessages implements Messages {
     return this.seen;
   }
 
-  async redeliver(event: StoredEvent, routingKey: string, tags: string): Promise<boolean> {
-    const { routed } = await this.broker.publish(republished(event, routingKey, tags));
+  async redeliver(
+    event: StoredEvent,
+    routingKey: string,
+    tags: string,
+  ): Promise<boolean> {
+    const { routed } = await this.broker.publish(
+      republished(event, routingKey, tags),
+    );
     return routed;
   }
 }
@@ -100,7 +111,11 @@ class InngestMessages implements Messages {
    * The same event again, with the same `cqrs-transport-identifier` — which is what the inbox
    * deduplicates on, and therefore what makes this the same claim the broker's republish makes.
    */
-  async redeliver(event: StoredEvent, _routingKey: string, tags: string): Promise<boolean> {
+  async redeliver(
+    event: StoredEvent,
+    _routingKey: string,
+    tags: string,
+  ): Promise<boolean> {
     const response = await fetch(`${this.baseUrl}/e/dev`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -120,14 +135,22 @@ class InngestMessages implements Messages {
   }
 
   private async events(): Promise<
-    { name: string; data?: Record<string, unknown>; user?: Record<string, string> }[]
+    {
+      name: string;
+      data?: Record<string, unknown>;
+      user?: Record<string, string>;
+    }[]
   > {
     const response = await fetch(`${this.baseUrl}/v1/events?limit=50`);
     if (!response.ok) {
       return [];
     }
     const { data } = (await response.json()) as {
-      data: { name: string; data?: Record<string, unknown>; user?: Record<string, string> }[];
+      data: {
+        name: string;
+        data?: Record<string, unknown>;
+        user?: Record<string, string>;
+      }[];
     };
     return data ?? [];
   }
@@ -137,6 +160,8 @@ class InngestMessages implements Messages {
 export const messagesOf = (queue: string): Messages =>
   e2eTransport() === 'rabbitmq'
     ? new BrokerMessages(new Broker(), queue)
-    : new InngestMessages(process.env.INNGEST_BASE_URL ?? 'http://localhost:8288');
+    : new InngestMessages(
+        process.env.INNGEST_BASE_URL ?? 'http://localhost:8288',
+      );
 
 export { EXCHANGE };

@@ -1,12 +1,19 @@
 import { MikroORM } from '@mikro-orm/postgresql';
+
 import { startPostgres } from './postgres';
 
 describe('startPostgres', () => {
   const configured = process.env.POSTGRES_URL;
-  const nothingListening = 'postgresql://nestposts:nestposts@127.0.0.1:1/nestposts';
+  const nothingListening =
+    'postgresql://nestposts:nestposts@127.0.0.1:1/nestposts';
 
   const answers = async (clientUrl: string): Promise<boolean> => {
-    const orm = await MikroORM.init({ clientUrl, schema: 'public', entities: [], discovery: { warnWhenNoEntities: false } });
+    const orm = await MikroORM.init({
+      clientUrl,
+      schema: 'public',
+      entities: [],
+      discovery: { warnWhenNoEntities: false },
+    });
     try {
       await orm.em.getConnection().execute('select 1');
       return true;

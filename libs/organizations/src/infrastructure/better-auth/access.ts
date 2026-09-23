@@ -1,3 +1,7 @@
+import {
+  POST_RESOURCE,
+  WRITE_A_POST,
+} from '@nestposts/auth/infrastructure/better-auth/access';
 import { createAccessControl } from 'better-auth/plugins/access';
 import {
   adminAc as organizationAdminAc,
@@ -5,14 +9,15 @@ import {
   memberAc as organizationMemberAc,
   ownerAc as organizationOwnerAc,
 } from 'better-auth/plugins/organization/access';
-import { POST_RESOURCE, WRITE_A_POST } from '@nestposts/auth/infrastructure/better-auth/access';
 
 export const organizationStatements = {
   ...organizationDefaultStatements,
   [POST_RESOURCE]: [...WRITE_A_POST],
 } as const;
 
-export const organizationAccessControl = createAccessControl(organizationStatements);
+export const organizationAccessControl = createAccessControl(
+  organizationStatements,
+);
 
 export const organizationRoles = {
   owner: organizationAccessControl.newRole({

@@ -1,10 +1,11 @@
-import { metadataOnly } from '@nestposts/database/testing';
 import { MikroORM } from '@mikro-orm/core';
+import { metadataOnly } from '@nestposts/database/testing';
+import { issuesOf } from '@nestposts/platform/testing/invalid-input';
+
 import {
   AuthorshipEntitySchema,
   UserEntitySchema,
 } from '../../infrastructure/persistence/entities/user-orm.entity';
-import { issuesOf } from '@nestposts/platform/testing/invalid-input';
 import { AUTHOR_ROLE } from './author.entity';
 import { UserDeletedEvent } from './event/user-deleted.event';
 import { UserRegisteredEvent } from './event/user-registered.event';
@@ -29,9 +30,26 @@ describe('User', () => {
   const now = new Date('2026-09-08T12:00:00.000Z');
   const later = new Date('2026-09-08T12:05:00.000Z');
   const input = { email: 'Manuel@Example.com ', name: ' Manuel ' };
-  const register = (roles: readonly string[] = [], at = now) => User.register(id, input, roles, at);
-  const stateOf = ({ id, email, name, roles, createdAt, updatedAt, version, deletedAt }: User) => ({
-    id, email, name, roles, createdAt, updatedAt, version, deletedAt,
+  const register = (roles: readonly string[] = [], at = now) =>
+    User.register(id, input, roles, at);
+  const stateOf = ({
+    id,
+    email,
+    name,
+    roles,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  }: User) => ({
+    id,
+    email,
+    name,
+    roles,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
   });
 
   describe('registering', () => {
@@ -46,7 +64,13 @@ describe('User', () => {
         version: 1,
       });
       expect(user.getUncommittedEvents()).toEqual([
-        new UserRegisteredEvent(id.value, 'manuel@example.com', 'Manuel', [], now),
+        new UserRegisteredEvent(
+          id.value,
+          'manuel@example.com',
+          'Manuel',
+          [],
+          now,
+        ),
       ]);
     });
 
@@ -59,10 +83,14 @@ describe('User', () => {
     });
 
     it('rejects an invalid email and a blank name without raising anything', () => {
-      expect(() => User.register(id, { email: 'não-é-email', name: 'x' }, [], now)).toThrow(InvalidUserException);
-      expect(issuesOf(() => User.register(id, { email: 'a@b.com', name: '   ' }, [], now))).toContain(
-        'name não pode ser vazio',
-      );
+      expect(() =>
+        User.register(id, { email: 'não-é-email', name: 'x' }, [], now),
+      ).toThrow(InvalidUserException);
+      expect(
+        issuesOf(() =>
+          User.register(id, { email: 'a@b.com', name: '   ' }, [], now),
+        ),
+      ).toContain('name não pode ser vazio');
     });
   });
 
@@ -89,13 +117,17 @@ describe('User', () => {
       expect(user.id.equals(id)).toBe(true);
       expect(user.roles).toEqual([AUTHOR_ROLE]);
       expect(user.version).toBe(2);
-      expect(user.getUncommittedEvents()).toEqual([new UserRoleGrantedEvent(id.value, AUTHOR_ROLE, later)]);
+      expect(user.getUncommittedEvents()).toEqual([
+        new UserRoleGrantedEvent(id.value, AUTHOR_ROLE, later),
+      ]);
     });
 
     it('granting the same role twice is refused', () => {
       const user = register([AUTHOR_ROLE]);
 
-      expect(() => user.grantRole(AUTHOR_ROLE, later)).toThrow(/já tem o papel/);
+      expect(() => user.grantRole(AUTHOR_ROLE, later)).toThrow(
+        /já tem o papel/,
+      );
     });
 
     it('replaying the grant lands on the same roles', () => {
@@ -118,7 +150,9 @@ describe('User', () => {
 
       expect(user.deletedAt).toBe(later);
       expect(user.isActive()).toBe(false);
-      expect(user.getUncommittedEvents()).toEqual([new UserDeletedEvent(id.value, later)]);
+      expect(user.getUncommittedEvents()).toEqual([
+        new UserDeletedEvent(id.value, later),
+      ]);
     });
 
     it('restore clears the date', () => {
@@ -129,7 +163,9 @@ describe('User', () => {
 
       expect(user.deletedAt).toBeNull();
       expect(user.isActive()).toBe(true);
-      expect(user.getUncommittedEvents()).toEqual([new UserRestoredEvent(id.value, later)]);
+      expect(user.getUncommittedEvents()).toEqual([
+        new UserRestoredEvent(id.value, later),
+      ]);
     });
 
     it('does not delete twice, nor restore what is not deleted', () => {

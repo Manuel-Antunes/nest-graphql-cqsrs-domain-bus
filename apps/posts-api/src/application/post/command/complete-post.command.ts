@@ -1,12 +1,13 @@
+import type { AsyncContext, ICommandHandler } from '@nestjs/cqrs';
+import type { PostId } from '@nestposts/posts/domain/post/vo/post-id';
+import type { TagId } from '@nestposts/posts/domain/tag/vo/tag-id';
 import { Inject, Logger, Scope } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
-import { type AsyncContext, Command, CommandHandler, EventPublisher, type ICommandHandler } from '@nestjs/cqrs';
+import { Command, CommandHandler, EventPublisher } from '@nestjs/cqrs';
 import { PostNotFoundException } from '@nestposts/posts/domain/post/exception/post-not-found.exception';
 import { PostRepository } from '@nestposts/posts/domain/post/post.repository';
-import type { PostId } from '@nestposts/posts/domain/post/vo/post-id';
 import { TagNotFoundException } from '@nestposts/posts/domain/tag/exception/tag-not-found.exception';
 import { TagRepository } from '@nestposts/posts/domain/tag/tag.repository';
-import type { TagId } from '@nestposts/posts/domain/tag/vo/tag-id';
 
 export namespace CompletePostCommand {
   export class CompletePost extends Command<void> {
@@ -44,7 +45,9 @@ export namespace CompletePostCommand {
       if (!tag) {
         throw new TagNotFoundException(command.tagId);
       }
-      this.publisher.mergeObjectContext(post, this.request).complete([tag], new Date());
+      this.publisher
+        .mergeObjectContext(post, this.request)
+        .complete([tag], new Date());
       await this.posts.save(post);
       post.commit();
     }

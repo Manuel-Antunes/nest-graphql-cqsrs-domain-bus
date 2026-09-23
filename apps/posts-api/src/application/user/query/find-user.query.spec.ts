@@ -1,8 +1,15 @@
 import type { TestingModule } from '@nestjs/testing';
-import { createCqrsTestingModule, inRequestContext } from '../../../../test/support/cqrs-testing-module';
-import { givenAnAuthor, givenAUser } from '../../../../test/support/post-fixtures';
 import { AUTHOR_ROLE } from '@nestposts/users/domain/user/author.entity';
 import { UserId } from '@nestposts/users/domain/user/vo/user-id';
+
+import {
+  createCqrsTestingModule,
+  inRequestContext,
+} from '../../../../test/support/cqrs-testing-module';
+import {
+  givenAnAuthor,
+  givenAUser,
+} from '../../../../test/support/post-fixtures';
 import { FindUserQuery } from './find-user.query';
 
 describe('FindUserQuery.Handler', () => {

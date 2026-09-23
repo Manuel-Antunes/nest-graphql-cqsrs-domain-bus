@@ -2,7 +2,9 @@ import type { Member } from './member.entity';
 import type { Organization } from './organization.entity';
 import type { OrganizationId } from './vo/organization-id';
 
-export type OrganizationPermissionRequest = Readonly<Record<string, readonly string[]>>;
+export type OrganizationPermissionRequest = Readonly<
+  Record<string, readonly string[]>
+>;
 
 /**
  * **What the caller of THIS request may see and do, organization-wise** — the half of authorization
@@ -19,7 +21,9 @@ export abstract class OrganizationService {
 
   abstract activeOrganizationId(): Promise<OrganizationId | null>;
 
-  abstract setActiveOrganization(organizationId: OrganizationId | null): Promise<Organization | null>;
+  abstract setActiveOrganization(
+    organizationId: OrganizationId | null,
+  ): Promise<Organization | null>;
 
   abstract activeMember(): Promise<Member | null>;
 

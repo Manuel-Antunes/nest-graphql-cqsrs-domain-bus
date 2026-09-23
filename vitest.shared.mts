@@ -1,7 +1,8 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import type { ViteUserConfig } from 'vitest/config';
 import swc from 'unplugin-swc';
-import { defineConfig, type ViteUserConfig } from 'vitest/config';
+import { defineConfig } from 'vitest/config';
 
 /**
  * The one Vitest configuration every project extends.
@@ -18,7 +19,7 @@ import { defineConfig, type ViteUserConfig } from 'vitest/config';
  * `undefined` and MikroORM's "entity with this name was discovered, but not the prototype you are
  * passing". Aliased to source, the whole run is one module graph, transformed once, by SWC.
  */
-export type ProjectTestOptions = {
+export interface ProjectTestOptions {
   /** The project name, as it shows up in Vitest's output and in Nx. */
   name: string;
   include?: string[];
@@ -32,7 +33,7 @@ export type ProjectTestOptions = {
    * needs no infrastructure at all.
    */
   database?: boolean;
-};
+}
 
 /**
  * Every workspace package, aliased to its own sources.
@@ -50,10 +51,18 @@ const workspaceAliases = (): { find: RegExp; replacement: string }[] => {
     for (const project of readdirSync(join(root, group))) {
       const manifest = join(root, group, project, 'package.json');
       if (!existsSync(manifest)) continue;
-      const { name } = JSON.parse(readFileSync(manifest, 'utf8')) as { name: string };
+      const { name } = JSON.parse(readFileSync(manifest, 'utf8')) as {
+        name: string;
+      };
       const source = join(root, group, project, 'src');
-      aliases.push({ find: new RegExp(`^${name}/(.*)$`), replacement: `${source}/$1` });
-      aliases.push({ find: new RegExp(`^${name}$`), replacement: `${source}/index.ts` });
+      aliases.push({
+        find: new RegExp(`^${name}/(.*)$`),
+        replacement: `${source}/$1`,
+      });
+      aliases.push({
+        find: new RegExp(`^${name}$`),
+        replacement: `${source}/index.ts`,
+      });
     }
   }
   return aliases;
@@ -64,7 +73,11 @@ const swcPlugin = () =>
     module: { type: 'es6' },
     jsc: {
       parser: { syntax: 'typescript', decorators: true },
-      transform: { legacyDecorator: true, decoratorMetadata: true, useDefineForClassFields: false },
+      transform: {
+        legacyDecorator: true,
+        decoratorMetadata: true,
+        useDefineForClassFields: false,
+      },
     },
   });
 

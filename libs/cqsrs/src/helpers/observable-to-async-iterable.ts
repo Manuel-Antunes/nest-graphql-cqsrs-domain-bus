@@ -30,11 +30,16 @@ import type { Observable, Subscription } from 'rxjs';
  * There is no real backpressure (the `EventBus` is push; the queue grows), the same contract as the
  * in-memory PubSub — and enough for a proof of concept.
  */
-export function observableToAsyncIterable<T>(source: Observable<T>): AsyncIterableIterator<T> {
+export function observableToAsyncIterable<T>(
+  source: Observable<T>,
+): AsyncIterableIterator<T> {
   /** Emitted values nobody has asked for yet. */
   const buffered: T[] = [];
   /** `next()` calls that do not have a value to return yet. */
-  const waiting: Array<{ resolve: (result: IteratorResult<T>) => void; reject: (error: unknown) => void }> = [];
+  const waiting: Array<{
+    resolve: (result: IteratorResult<T>) => void;
+    reject: (error: unknown) => void;
+  }> = [];
   let finished = false;
   let failure: { error: unknown } | undefined;
   /** `let`, not `const`: an Observable may error or complete synchronously, still inside `subscribe`. */
@@ -57,7 +62,10 @@ export function observableToAsyncIterable<T>(source: Observable<T>): AsyncIterab
   };
 
   subscription = source.subscribe({
-    next: (value) => (waiting.length ? waiting.shift()!.resolve({ value, done: false }) : buffered.push(value)),
+    next: (value) =>
+      waiting.length
+        ? waiting.shift()!.resolve({ value, done: false })
+        : buffered.push(value),
     error: (error) => {
       failure = { error };
       finish();
@@ -76,7 +84,9 @@ export function observableToAsyncIterable<T>(source: Observable<T>): AsyncIterab
       if (finished) {
         return Promise.resolve(done());
       }
-      return new Promise((resolve, reject) => waiting.push({ resolve, reject }));
+      return new Promise((resolve, reject) =>
+        waiting.push({ resolve, reject }),
+      );
     },
     return: () => {
       finish();

@@ -1,13 +1,14 @@
 import {
-  SpanKind,
-  SpanStatusCode,
   context as activeContext,
   propagation,
+  SpanKind,
+  SpanStatusCode,
   trace,
 } from '@opentelemetry/api';
-import { CORRELATION_ID } from './request-context';
+
 import type { EnvelopeMetadata } from './outbound/event-envelope';
 import type { Ingestion } from './outbound/transport-metadata';
+import { CORRELATION_ID } from './request-context';
 
 const TRACER = '@nestposts/transport-eventbus';
 
@@ -20,7 +21,9 @@ const TRACER = '@nestposts/transport-eventbus';
  * With an SDK registered — see `@nestposts/observability` — the far side's work becomes a child of
  * the request that caused it, across the broker and across the service boundary.
  */
-export const injectTraceContext = (metadata: Record<string, string>): Record<string, string> => {
+export const injectTraceContext = (
+  metadata: Record<string, string>,
+): Record<string, string> => {
   propagation.inject(activeContext.active(), metadata);
   return metadata;
 };
@@ -40,35 +43,36 @@ export const traceContextOf = (metadata: EnvelopeMetadata) =>
  * It wraps the **whole** ingestion, the transaction included, and ends after the local bus has been
  * published to, so what it measures is what the message cost this service.
  */
-export const ingesting = async <T>(message: Ingestion, run: () => Promise<T>): Promise<T> =>
-  trace
-    .getTracer(TRACER)
-    .startActiveSpan(
-      `${message.messageType || 'message'} process`,
-      {
-        kind: SpanKind.CONSUMER,
-        attributes: {
-          'messaging.system': TRACER,
-          'messaging.operation': 'process',
-          'messaging.message.id': message.identifier,
-          'messaging.message.conversation_id': message.metadata[CORRELATION_ID],
-          'messaging.message.type': message.messageType,
-          'messaging.source.origin': message.origin,
-        },
+export const ingesting = async <T>(
+  message: Ingestion,
+  run: () => Promise<T>,
+): Promise<T> =>
+  trace.getTracer(TRACER).startActiveSpan(
+    `${message.messageType || 'message'} process`,
+    {
+      kind: SpanKind.CONSUMER,
+      attributes: {
+        'messaging.system': TRACER,
+        'messaging.operation': 'process',
+        'messaging.message.id': message.identifier,
+        'messaging.message.conversation_id': message.metadata[CORRELATION_ID],
+        'messaging.message.type': message.messageType,
+        'messaging.source.origin': message.origin,
       },
-      traceContextOf(message.metadata),
-      async (span) => {
-        try {
-          return await run();
-        } catch (failure) {
-          span.recordException(failure as Error);
-          span.setStatus({
-            code: SpanStatusCode.ERROR,
-            message: failure instanceof Error ? failure.message : String(failure),
-          });
-          throw failure;
-        } finally {
-          span.end();
-        }
-      },
-    );
+    },
+    traceContextOf(message.metadata),
+    async (span) => {
+      try {
+        return await run();
+      } catch (failure) {
+        span.recordException(failure as Error);
+        span.setStatus({
+          code: SpanStatusCode.ERROR,
+          message: failure instanceof Error ? failure.message : String(failure),
+        });
+        throw failure;
+      } finally {
+        span.end();
+      }
+    },
+  );

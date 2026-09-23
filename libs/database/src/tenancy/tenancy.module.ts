@@ -1,22 +1,19 @@
-import {
-  Inject,
-  type DynamicModule,
-  type MiddlewareConsumer,
-  Module,
-  type NestModule,
-  type Provider,
-  type Type,
+import type {
+  DynamicModule,
+  MiddlewareConsumer,
+  NestModule,
+  Provider,
+  Type,
 } from '@nestjs/common';
+import { Inject, Module } from '@nestjs/common';
 import { APP_INTERCEPTOR } from '@nestjs/core';
+
+import type { TenantResolverLike } from './tenant.resolver';
 import { TenantEntityManagers } from './tenant-entity-managers';
 import { SharedSchemaTenants, TenantSchemas } from './tenant-schemas';
 import { TenantInterceptor } from './tenant.interceptor';
 import { TenantMiddleware } from './tenant.middleware';
-import {
-  TENANT_RESOLVER,
-  TenantResolverProviders,
-  type TenantResolverLike,
-} from './tenant.resolver';
+import { TENANT_RESOLVER, TenantResolverProviders } from './tenant.resolver';
 
 export interface TenancyOptions {
   /** Where a tenant's rows live. Default: {@link SharedSchemaTenants} — the connection's own schema. */
@@ -54,7 +51,9 @@ export const TENANCY_OPTIONS = 'TENANCY_OPTIONS';
  */
 @Module({})
 export class TenancyModule implements NestModule {
-  constructor(@Inject(TENANCY_OPTIONS) private readonly options: TenancyOptions) {}
+  constructor(
+    @Inject(TENANCY_OPTIONS) private readonly options: TenancyOptions,
+  ) {}
 
   static forRoot(options: TenancyOptions = {}): DynamicModule {
     return {
@@ -73,9 +72,7 @@ export class TenancyModule implements NestModule {
     };
   }
 
-  private static schemaProvider(
-    schemas: TenancyOptions['schemas'],
-  ): Provider {
+  private static schemaProvider(schemas: TenancyOptions['schemas']): Provider {
     if (!schemas) {
       return { provide: TenantSchemas, useClass: SharedSchemaTenants };
     }

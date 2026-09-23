@@ -1,18 +1,25 @@
-import { closeTestDatabase, testDatabase } from '@nestposts/database/testing';
 import { MikroORM, ref } from '@mikro-orm/core';
-import { Post } from '@nestposts/posts/domain/post/post.entity';
-import { PostId } from '@nestposts/posts/domain/post/vo/post-id';
+import { closeTestDatabase, testDatabase } from '@nestposts/database/testing';
 import { BrokenDelegationException } from '@nestposts/platform/domain/shared/delegation/broken-delegation.exception';
 import { delegateRef } from '@nestposts/platform/domain/shared/delegation/delegate';
+import { referencesServeDelegations } from '@nestposts/platform/infrastructure/persistence/delegation/delegated-reference';
+import { Post } from '@nestposts/posts/domain/post/post.entity';
+import { PostId } from '@nestposts/posts/domain/post/vo/post-id';
 import { Tag } from '@nestposts/posts/domain/tag/tag.entity';
 import { TagId } from '@nestposts/posts/domain/tag/vo/tag-id';
-import { AUTHOR_ROLE, Author, Authorship } from '@nestposts/users/domain/user/author.entity';
-import { User } from '@nestposts/users/domain/user/user.entity';
-import { UserId } from '@nestposts/users/domain/user/vo/user-id';
 import { PostEntitySchema } from '@nestposts/posts/infrastructure/persistence/entities/post-orm.entity';
 import { TagSchema } from '@nestposts/posts/infrastructure/persistence/entities/tag-orm.entity';
-import { AuthorshipEntitySchema, UserEntitySchema } from '@nestposts/users/infrastructure/persistence/entities/user-orm.entity';
-import { referencesServeDelegations } from '@nestposts/platform/infrastructure/persistence/delegation/delegated-reference';
+import {
+  Author,
+  AUTHOR_ROLE,
+  Authorship,
+} from '@nestposts/users/domain/user/author.entity';
+import { User } from '@nestposts/users/domain/user/user.entity';
+import { UserId } from '@nestposts/users/domain/user/vo/user-id';
+import {
+  AuthorshipEntitySchema,
+  UserEntitySchema,
+} from '@nestposts/users/infrastructure/persistence/entities/user-orm.entity';
 
 describe('a referência de um delegado serve o id do sujeito', () => {
   let orm: MikroORM;
@@ -20,8 +27,13 @@ describe('a referência de um delegado serve o id do sujeito', () => {
 
   beforeAll(async () => {
     orm = await testDatabase({
-        entities: [PostEntitySchema, TagSchema, UserEntitySchema, AuthorshipEntitySchema],
-      });
+      entities: [
+        PostEntitySchema,
+        TagSchema,
+        UserEntitySchema,
+        AuthorshipEntitySchema,
+      ],
+    });
   });
 
   afterAll(() => closeTestDatabase(orm));
@@ -77,7 +89,9 @@ describe('a referência de um delegado serve o id do sujeito', () => {
 
   it('delegated() devolve o Author castado, e loadDelegated() carrega antes de castar', async () => {
     const { postId, userId } = await givenAPost();
-    const post = await orm.em.fork().findOneOrFail(Post, { id: postId }, { populate: ['author'] });
+    const post = await orm.em
+      .fork()
+      .findOneOrFail(Post, { id: postId }, { populate: ['author'] });
 
     const author = post.author.delegated();
 
@@ -94,9 +108,9 @@ describe('a referência de um delegado serve o id do sujeito', () => {
 
     const tagRef = ref(await em.findOneOrFail(Tag, { id: tag.id }));
 
-    expect(() => (tagRef as never as { delegated(): unknown }).delegated()).toThrow(
-      BrokenDelegationException,
-    );
+    expect(() =>
+      (tagRef as never as { delegated(): unknown }).delegated(),
+    ).toThrow(BrokenDelegationException);
   });
 
   it('instalar duas vezes não estraga o que já está lá', async () => {

@@ -1,4 +1,5 @@
 import type { Email } from '@nestposts/users/domain/user/vo/email';
+
 import type { Invitation } from './invitation.entity';
 import type { InvitationId } from './vo/invitation-id';
 import type { OrganizationId } from './vo/organization-id';

@@ -1,8 +1,9 @@
 import type { QueryBus } from '@nestjs/cqrs';
-import { FindPostsByAuthorQuery } from '../../application/post/query/find-posts-by-author.query';
 import type { Post } from '@nestposts/posts/domain/post/post.entity';
 import { PostId } from '@nestposts/posts/domain/post/vo/post-id';
 import { UserId } from '@nestposts/users/domain/user/vo/user-id';
+
+import { FindPostsByAuthorQuery } from '../../application/post/query/find-posts-by-author.query';
 import { AuthorView } from '../../dto/graphql/user.view';
 import { AuthorPostsResolver } from './author-posts.resolver';
 
@@ -35,7 +36,9 @@ describe('AuthorPostsResolver', () => {
     await resolver.posts(author, 2, 'cursor-anterior');
 
     expect(dispatched).toHaveLength(1);
-    expect(dispatched[0]).toBeInstanceOf(FindPostsByAuthorQuery.FindPostsByAuthor);
+    expect(dispatched[0]).toBeInstanceOf(
+      FindPostsByAuthorQuery.FindPostsByAuthor,
+    );
     const query = dispatched[0] as FindPostsByAuthorQuery.FindPostsByAuthor;
     expect(query.authorId.equals(authorId)).toBe(true);
     expect(query).toMatchObject({ first: 2, after: 'cursor-anterior' });

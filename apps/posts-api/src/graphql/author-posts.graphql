@@ -10,10 +10,14 @@ extend type Author {
   produtivo acumula milhares de posts, e pedir os 20 primeiros precisa custar 20.
   """
   posts(
-    """Quantos posts trazer; ausente = 20"""
+    """
+    Quantos posts trazer; ausente = 20
+    """
     first: Int
 
-    """Cursor do último post já visto"""
+    """
+    Cursor do último post já visto
+    """
     after: String
   ): PostConnection!
 }

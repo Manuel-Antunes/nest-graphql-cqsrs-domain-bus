@@ -1,11 +1,13 @@
+import type { TestingModule } from '@nestjs/testing';
 import { EventBus } from '@nestjs/cqrs';
-import { Test, type TestingModule } from '@nestjs/testing';
+import { Test } from '@nestjs/testing';
 import { SubscriptionBus } from '@nestposts/cqsrs';
 import { CqsrsModule } from '@nestposts/cqsrs/cqsrs.module';
 import { PostCreatedEvent } from '@nestposts/posts/domain/post/event/post-created.event';
 import { PostUpdatedEvent } from '@nestposts/posts/domain/post/event/post-updated.event';
 import { PostId } from '@nestposts/posts/domain/post/vo/post-id';
 import { UserId } from '@nestposts/users/domain/user/vo/user-id';
+
 import { OnPostCreatedSubscription } from './on-post-created.subscription';
 
 describe('OnPostCreatedSubscription', () => {
@@ -18,11 +20,22 @@ describe('OnPostCreatedSubscription', () => {
   const authorId = UserId.parse('9f1d1f36-7c2e-4a0a-9b7d-2f5c1a3e4b60');
   const now = new Date('2026-09-08T12:00:00.000Z');
 
-  const created = (id = postId) => new PostCreatedEvent(id.value, 'completo', 'oi', authorId.value, [], 2, now);
+  const created = (id = postId) =>
+    new PostCreatedEvent(
+      id.value,
+      'completo',
+      'oi',
+      authorId.value,
+      [],
+      2,
+      now,
+    );
 
   const collect = () => {
     const received: PostCreatedEvent[] = [];
-    const stream = bus.subscribe<PostCreatedEvent>(new OnPostCreatedSubscription.OnPostCreated());
+    const stream = bus.subscribe<PostCreatedEvent>(
+      new OnPostCreatedSubscription.OnPostCreated(),
+    );
     active.push(stream.subscribe((event) => received.push(event)));
     return received;
   };
@@ -49,13 +62,28 @@ describe('OnPostCreatedSubscription', () => {
     eventBus.publish(created());
     eventBus.publish(created(outro));
 
-    expect(received.map((event) => event.postId)).toEqual([postId.value, outro.value]);
+    expect(received.map((event) => event.postId)).toEqual([
+      postId.value,
+      outro.value,
+    ]);
   });
 
   it('não deixa passar evento de outro tipo publicado no mesmo bus', () => {
     const received = collect();
 
-    eventBus.publish(new PostUpdatedEvent(postId.value, 't', 'c', authorId.value, 'manuel', [], 2, now, now));
+    eventBus.publish(
+      new PostUpdatedEvent(
+        postId.value,
+        't',
+        'c',
+        authorId.value,
+        'manuel',
+        [],
+        2,
+        now,
+        now,
+      ),
+    );
     eventBus.publish(created());
 
     expect(received).toHaveLength(1);

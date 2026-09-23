@@ -1,11 +1,13 @@
-import { MEMORY_TRANSPORT, type MemoryServer } from '@camcima/nestjs-memory-microservices';
-import {
-  ClientProxy,
-  type ConsumerDeserializer,
-  type ProducerSerializer,
-  type ReadPacket,
-  type WritePacket,
+import type { MemoryServer } from '@camcima/nestjs-memory-microservices';
+import type {
+  ConsumerDeserializer,
+  ProducerSerializer,
+  ReadPacket,
+  WritePacket,
 } from '@nestjs/microservices';
+import { MEMORY_TRANSPORT } from '@camcima/nestjs-memory-microservices';
+import { ClientProxy } from '@nestjs/microservices';
+
 import { MemoryEventEnvelopeDeserializer } from '../inbound/deserializers/memory-event-envelope.deserializer';
 import { topicMatches } from './topic-pattern';
 
@@ -57,8 +59,11 @@ export class MemoryClient extends ClientProxy {
   constructor(options: MemoryClientOptions) {
     super();
     this.servers =
-      typeof options.servers === 'function' ? options.servers : () => options.servers as readonly MemoryServer[];
-    this.consumer = options.deserializer ?? new MemoryEventEnvelopeDeserializer();
+      typeof options.servers === 'function'
+        ? options.servers
+        : () => options.servers as readonly MemoryServer[];
+    this.consumer =
+      options.deserializer ?? new MemoryEventEnvelopeDeserializer();
     this.initializeSerializer(options);
   }
 
@@ -81,23 +86,32 @@ export class MemoryClient extends ClientProxy {
       .sort();
   }
 
-  protected publish(_packet: ReadPacket, callback: (packet: WritePacket) => void): () => void {
+  protected publish(
+    _packet: ReadPacket,
+    callback: (packet: WritePacket) => void,
+  ): () => void {
     callback({
-      err: new Error('the in-process transport carries events only; there is nobody to answer a send()'),
+      err: new Error(
+        'the in-process transport carries events only; there is nobody to answer a send()',
+      ),
     });
     return () => undefined;
   }
 
   protected async dispatchEvent<T = unknown>(packet: ReadPacket): Promise<T> {
     const routingKey = String(packet.pattern);
-    const wire = JSON.parse(JSON.stringify(await this.serializer.serialize(packet))) as unknown;
+    const wire = JSON.parse(
+      JSON.stringify(await this.serializer.serialize(packet)),
+    ) as unknown;
 
     for (const server of this.servers()) {
       for (const pattern of server.getHandlers().keys()) {
         if (!topicMatches(pattern, routingKey)) {
           continue;
         }
-        const incoming = await this.consumer.deserialize(wire, { channel: pattern });
+        const incoming = await this.consumer.deserialize(wire, {
+          channel: pattern,
+        });
         await server.emit(pattern, incoming.data);
       }
     }

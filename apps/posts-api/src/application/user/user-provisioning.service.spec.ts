@@ -1,16 +1,21 @@
 import type { TestingModule } from '@nestjs/testing';
+import type { CredentialId } from '@nestposts/users/domain/user/vo/credential-id';
+import {
+  Author,
+  AUTHOR_ROLE,
+  Authorship,
+} from '@nestposts/users/domain/user/author.entity';
+import { AuthorRepository } from '@nestposts/users/domain/user/author.repository';
+import { UnknownIdentityException } from '@nestposts/users/domain/user/exception/unknown-identity.exception';
+import { IdentityProvider } from '@nestposts/users/domain/user/identity.provider';
+import { User } from '@nestposts/users/domain/user/user.entity';
+
 import {
   createCqrsTestingModule,
   freshEm,
   inRequestContext,
 } from '../../../test/support/cqrs-testing-module';
 import { FakeIdentityProvider } from '../../../test/support/fake-identity-provider';
-import { AUTHOR_ROLE, Author, Authorship } from '@nestposts/users/domain/user/author.entity';
-import { AuthorRepository } from '@nestposts/users/domain/user/author.repository';
-import { IdentityProvider } from '@nestposts/users/domain/user/identity.provider';
-import { UnknownIdentityException } from '@nestposts/users/domain/user/exception/unknown-identity.exception';
-import { User } from '@nestposts/users/domain/user/user.entity';
-import type { CredentialId } from '@nestposts/users/domain/user/vo/credential-id';
 import { UserProvisioning } from './user-provisioning.service';
 
 describe('UserProvisioning', () => {
@@ -112,7 +117,9 @@ describe('UserProvisioning', () => {
       await provision();
       const promoted = await promote();
 
-      const author = await inRequestContext(module, () => authors.findById(promoted.id));
+      const author = await inRequestContext(module, () =>
+        authors.findById(promoted.id),
+      );
 
       expect(author).toBeInstanceOf(Author);
       expect(author!.authorship.id.equals(promoted.id)).toBe(true);

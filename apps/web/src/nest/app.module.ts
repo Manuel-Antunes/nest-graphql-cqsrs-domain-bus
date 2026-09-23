@@ -1,6 +1,10 @@
 import { Module } from '@nestjs/common';
 import { BetterAuthModule } from '@nestposts/auth/infrastructure/better-auth/better-auth.module';
-import { DatabaseModule, POSTS_SCHEMA, postgresDatabase } from '@nestposts/database';
+import {
+  DatabaseModule,
+  postgresDatabase,
+  POSTS_SCHEMA,
+} from '@nestposts/database';
 import { organizationAuthPluginProviders } from '@nestposts/organizations/infrastructure/better-auth/organization-better-auth.plugin';
 import { OrganizationsInfrastructureModule } from '@nestposts/organizations/infrastructure/organizations-infrastructure.module';
 import { OrganizationEntities } from '@nestposts/organizations/infrastructure/persistence/organization-entities';
@@ -25,7 +29,9 @@ import { NextCookiesBetterAuthPluginProvider } from './next-cookies.plugin';
  */
 @Module({
   imports: [
-    DatabaseModule.forRoot(postgresDatabase(process.env.POSTS_SCHEMA ?? POSTS_SCHEMA)),
+    DatabaseModule.forRoot(
+      postgresDatabase(process.env.POSTS_SCHEMA ?? POSTS_SCHEMA),
+    ),
     BetterAuthModule.forRoot({
       plugins: organizationAuthPluginProviders,
       trailingPlugins: [NextCookiesBetterAuthPluginProvider],

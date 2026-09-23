@@ -1,4 +1,5 @@
 import type { Provider } from '@nestjs/common';
+
 import { EventLog, MikroOrmEventLog } from './event-log';
 
 /**
@@ -6,4 +7,6 @@ import { EventLog, MikroOrmEventLog } from './event-log';
  * store, the feed, the sink that filled one and the writer that filled the other were four objects
  * answering to one table.
  */
-export const eventLogProviders: Provider[] = [{ provide: EventLog, useClass: MikroOrmEventLog }];
+export const eventLogProviders: Provider[] = [
+  { provide: EventLog, useClass: MikroOrmEventLog },
+];

@@ -1,5 +1,7 @@
-import { EventEnvelope, type EnvelopeMetadata } from '../../outbound/event-envelope';
-import { EventEnvelopeDeserializer, type IncomingEnvelope } from './event-envelope.deserializer';
+import type { EnvelopeMetadata } from '../../outbound/event-envelope';
+import type { IncomingEnvelope } from './event-envelope.deserializer';
+import { EventEnvelope } from '../../outbound/event-envelope';
+import { EventEnvelopeDeserializer } from './event-envelope.deserializer';
 
 /**
  * **The RabbitMQ half of the wire: the body is the event, the AMQP headers are the metadata.**
@@ -14,7 +16,10 @@ import { EventEnvelopeDeserializer, type IncomingEnvelope } from './event-envelo
  * event would come back once per service. Hence the normalisation.
  */
 export class RmqEventEnvelopeDeserializer extends EventEnvelopeDeserializer {
-  deserializeEnvelope(value: unknown, options?: Record<string, unknown>): IncomingEnvelope {
+  deserializeEnvelope(
+    value: unknown,
+    options?: Record<string, unknown>,
+  ): IncomingEnvelope {
     const message = (value ?? {}) as { pattern?: unknown; data?: unknown };
     const headers = (options?.['headers'] ?? {}) as Record<string, unknown>;
 

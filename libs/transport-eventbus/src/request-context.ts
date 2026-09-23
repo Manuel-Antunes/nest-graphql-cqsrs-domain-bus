@@ -1,8 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { AsyncContext } from '@nestjs/cqrs';
-import { isTraceContext, isTransportMetadata } from './outbound/event-envelope';
+
 import type { Ingestion } from './outbound/transport-metadata';
+import { isTraceContext, isTransportMetadata } from './outbound/event-envelope';
 
 /**
  * **The request that produced an event, crossing the wire.**
@@ -29,7 +30,10 @@ import type { Ingestion } from './outbound/transport-metadata';
  */
 export abstract class RequestContextCodec {
   /** The metadata keys that go on the envelope. Nothing is written when there is no context. */
-  abstract encode(context: AsyncContext | undefined, event: object): Record<string, string>;
+  abstract encode(
+    context: AsyncContext | undefined,
+    event: object,
+  ): Record<string, string>;
 
   /** The context an ingested event is published under, or `undefined` for none. */
   abstract decode(message: Ingestion): AsyncContext | undefined;
@@ -51,7 +55,10 @@ const CORRELATION = Symbol.for('nestposts.transport-eventbus.correlation');
  * An application with a richer notion of a request subclasses the codec, not this: see
  * `PostRequestContextCodec`.
  */
-export class TransportRequestContext extends AsyncContext implements ContextAttributes {
+export class TransportRequestContext
+  extends AsyncContext
+  implements ContextAttributes
+{
   constructor(
     readonly correlationId: string,
     readonly causationId?: string,
@@ -114,12 +121,20 @@ export class TransportRequestContext extends AsyncContext implements ContextAttr
  */
 @Injectable()
 export class CorrelatedRequestContext extends RequestContextCodec {
-  encode(context: AsyncContext | undefined, _event: object): Record<string, string> {
+  encode(
+    context: AsyncContext | undefined,
+    _event: object,
+  ): Record<string, string> {
     if (!context) {
       return {};
     }
-    const encoded: Record<string, string> = { [CORRELATION_ID]: correlationIdOf(context) };
-    const causationId = context instanceof TransportRequestContext ? context.causationId : undefined;
+    const encoded: Record<string, string> = {
+      [CORRELATION_ID]: correlationIdOf(context),
+    };
+    const causationId =
+      context instanceof TransportRequestContext
+        ? context.causationId
+        : undefined;
     if (causationId) {
       encoded[CAUSATION_ID] = causationId;
     }
@@ -134,7 +149,11 @@ export class CorrelatedRequestContext extends RequestContextCodec {
       return correlationId ? correlate(context, correlationId) : context;
     }
     return correlationId
-      ? new TransportRequestContext(correlationId, message.identifier, message.metadata)
+      ? new TransportRequestContext(
+          correlationId,
+          message.identifier,
+          message.metadata,
+        )
       : undefined;
   }
 
@@ -155,7 +174,10 @@ export class CorrelatedRequestContext extends RequestContextCodec {
  * Writes the correlation id a message arrived with onto the context rebuilt for it, so the whole chain
  * keeps one id however many services and however many context classes it passes through.
  */
-const correlate = <TContext extends AsyncContext>(context: TContext, correlationId: string): TContext => {
+const correlate = <TContext extends AsyncContext>(
+  context: TContext,
+  correlationId: string,
+): TContext => {
   Object.defineProperty(context, CORRELATION, {
     value: correlationId,
     enumerable: false,

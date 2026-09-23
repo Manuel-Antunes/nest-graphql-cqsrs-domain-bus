@@ -1,11 +1,12 @@
+import type { CredentialId } from '@nestposts/users/domain/user/vo/credential-id';
 import { EntityManager } from '@mikro-orm/core';
 import { Injectable } from '@nestjs/common';
 import { inRequestContext } from '@nestposts/database';
-import type { CredentialId } from '@nestposts/users/domain/user/vo/credential-id';
-import { Member } from '../../../domain/organization/member.entity';
-import { MemberRepository } from '../../../domain/organization/member.repository';
+
 import type { MemberId } from '../../../domain/organization/vo/member-id';
 import type { OrganizationId } from '../../../domain/organization/vo/organization-id';
+import { Member } from '../../../domain/organization/member.entity';
+import { MemberRepository } from '../../../domain/organization/member.repository';
 
 @Injectable()
 export class MikroOrmMemberRepository extends MemberRepository {
@@ -15,11 +16,18 @@ export class MikroOrmMemberRepository extends MemberRepository {
 
   findById(memberId: MemberId): Promise<Member | null> {
     return inRequestContext(this.em, () =>
-      this.em.findOne(Member, { id: memberId }, { populate: ['organization', 'user'] }),
+      this.em.findOne(
+        Member,
+        { id: memberId },
+        { populate: ['organization', 'user'] },
+      ),
     );
   }
 
-  findIn(organizationId: OrganizationId, credentialId: CredentialId): Promise<Member | null> {
+  findIn(
+    organizationId: OrganizationId,
+    credentialId: CredentialId,
+  ): Promise<Member | null> {
     return inRequestContext(this.em, () =>
       this.em.findOne(
         Member,

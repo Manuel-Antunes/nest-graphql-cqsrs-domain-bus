@@ -1,4 +1,6 @@
-"""Uma tag. Agregado próprio: tem id e eventos independentes do post."""
+"""
+Uma tag. Agregado próprio: tem id e eventos independentes do post.
+"""
 type Tag @key(fields: "id") {
   id: ID!
   name: String!
@@ -8,7 +10,9 @@ type TagConnection {
   edges: [TagEdge!]!
   pageInfo: PageInfo!
 
-  """Total de itens; null quando a fonte não conta"""
+  """
+  Total de itens; null quando a fonte não conta
+  """
   totalCount: Int
 }
 

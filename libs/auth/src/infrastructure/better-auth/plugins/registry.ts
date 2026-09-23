@@ -1,4 +1,5 @@
 import type { BetterAuthPlugin } from 'better-auth';
+
 import { AdminBetterAuthPluginProvider } from './admin-better-auth.plugin';
 import { JwtBetterAuthPluginProvider } from './jwt-better-auth.plugin';
 import { OAuthProviderBetterAuthPluginProvider } from './oauth-provider-better-auth.plugin';
@@ -11,7 +12,9 @@ export const coreBetterAuthPluginProviders = [
   OpenApiBetterAuthPluginProvider,
 ] as const;
 
-type PluginOf<TProvider> = TProvider extends { useFactory: (...args: any[]) => infer TPlugin }
+type PluginOf<TProvider> = TProvider extends {
+  useFactory: (...args: any[]) => infer TPlugin;
+}
   ? TPlugin
   : never;
 
@@ -19,7 +22,9 @@ export type PluginsOf<TProviders extends readonly unknown[]> = {
   -readonly [K in keyof TProviders]: PluginOf<TProviders[K]>;
 };
 
-export type BetterAuthCorePlugins = PluginsOf<typeof coreBetterAuthPluginProviders>;
+export type BetterAuthCorePlugins = PluginsOf<
+  typeof coreBetterAuthPluginProviders
+>;
 
 export type BetterAuthPluginsWith<TExtra extends readonly unknown[]> = [
   ...PluginsOf<TExtra>,

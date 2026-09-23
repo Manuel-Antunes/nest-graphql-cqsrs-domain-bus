@@ -1,8 +1,16 @@
-import { type FactoryProvider, Logger } from '@nestjs/common';
+import type { FactoryProvider } from '@nestjs/common';
 import type { BetterAuthOptions, BetterAuthPlugin } from 'better-auth';
+import { Logger } from '@nestjs/common';
+
 import type { AuthConfig } from '../config';
-import { type BetterAuth, BetterAuthInstance, BetterAuthLogging } from '../init-auth';
-import { BETTER_AUTH, BETTER_AUTH_ADAPTER, BETTER_AUTH_CONFIG, BETTER_AUTH_PLUGINS } from '../tokens';
+import type { BetterAuth } from '../init-auth';
+import { BetterAuthInstance, BetterAuthLogging } from '../init-auth';
+import {
+  BETTER_AUTH,
+  BETTER_AUTH_ADAPTER,
+  BETTER_AUTH_CONFIG,
+  BETTER_AUTH_PLUGINS,
+} from '../tokens';
 
 export const BetterAuthFactory = {
   provide: BETTER_AUTH,
@@ -14,9 +22,12 @@ export const BetterAuthFactory = {
     const logger = new Logger('BetterAuth');
     return BetterAuthInstance.create(config, adapter, plugins, {
       logger: BetterAuthLogging.through((level, message, ...args) => {
-        const write = (logger as unknown as Record<string, (msg: string, ...rest: unknown[]) => void>)[
-          level
-        ];
+        const write = (
+          logger as unknown as Record<
+            string,
+            (msg: string, ...rest: unknown[]) => void
+          >
+        )[level];
         write?.call(logger, message, ...args);
       }),
     }) as unknown as BetterAuth;

@@ -1,7 +1,8 @@
 import type { FactoryProvider } from '@nestjs/common';
 import { nextCookies } from 'better-auth/next-js';
 
-export const NEXT_COOKIES_BETTER_AUTH_PLUGIN = 'BETTER_AUTH_PLUGIN_NEXT_COOKIES';
+export const NEXT_COOKIES_BETTER_AUTH_PLUGIN =
+  'BETTER_AUTH_PLUGIN_NEXT_COOKIES';
 
 /**
  * Writes Better Auth's `set-cookie` into Next's cookie store.

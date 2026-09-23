@@ -67,8 +67,8 @@ export function LiveConsole() {
             onPostCreated / onPostUpdated
           </CardTitle>
           <CardDescription>
-            Quem empurra é o EventBus do @nestjs/cqrs, que a subscription escuta —
-            por isso o evento chega mesmo quando a mutation foi atendida por
+            Quem empurra é o EventBus do @nestjs/cqrs, que a subscription escuta
+            — por isso o evento chega mesmo quando a mutation foi atendida por
             outro container.
           </CardDescription>
         </CardHeader>

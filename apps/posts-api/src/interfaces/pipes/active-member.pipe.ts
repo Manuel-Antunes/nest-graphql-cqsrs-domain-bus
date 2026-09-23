@@ -1,9 +1,13 @@
-import { Injectable, type PipeTransform, Scope } from '@nestjs/common';
+import type { PipeTransform } from '@nestjs/common';
 import type { Member } from '@nestposts/organizations/domain/organization/member.entity';
+import { Injectable, Scope } from '@nestjs/common';
 import { OrganizationService } from '@nestposts/organizations/domain/organization/organization.service';
 
 @Injectable({ scope: Scope.REQUEST })
-export class ActiveMemberPipe implements PipeTransform<unknown, Promise<Member>> {
+export class ActiveMemberPipe implements PipeTransform<
+  unknown,
+  Promise<Member>
+> {
   constructor(private readonly organizations: OrganizationService) {}
 
   transform(): Promise<Member> {

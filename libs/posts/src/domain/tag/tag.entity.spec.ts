@@ -1,6 +1,7 @@
+import { issuesOf } from '@nestposts/platform/testing/invalid-input';
+
 import { TagCreatedEvent } from './event/tag-created.event';
 import { InvalidTagException } from './exception/invalid-tag.exception';
-import { issuesOf } from '@nestposts/platform/testing/invalid-input';
 import { DEFAULT_TAG_ID, DEFAULT_TAG_NAME, Tag } from './tag.entity';
 import { TagId } from './vo/tag-id';
 import { TagName } from './vo/tag-name';
@@ -12,13 +13,21 @@ describe('Tag', () => {
   it('create normalizes, raises TagCreated and returns the tag', () => {
     const tag = Tag.create(id, '  Untagged ', now);
 
-    expect(tag).toMatchObject({ id, name: TagName.parse('Untagged'), createdAt: now });
-    expect(tag.getUncommittedEvents()).toEqual([new TagCreatedEvent(id.value, 'Untagged', now)]);
+    expect(tag).toMatchObject({
+      id,
+      name: TagName.parse('Untagged'),
+      createdAt: now,
+    });
+    expect(tag.getUncommittedEvents()).toEqual([
+      new TagCreatedEvent(id.value, 'Untagged', now),
+    ]);
   });
 
   it('create with a blank name raises nothing', () => {
     expect(() => Tag.create(id, '   ', now)).toThrow(InvalidTagException);
-    expect(issuesOf(() => Tag.create(id, 'x'.repeat(51), now))).toContain('excede 50 caracteres');
+    expect(issuesOf(() => Tag.create(id, 'x'.repeat(51), now))).toContain(
+      'excede 50 caracteres',
+    );
   });
 
   it('the name value object trims and rejects the empty string', () => {
@@ -34,7 +43,10 @@ describe('the default tag', () => {
   });
 
   it('is a reference: id and name, with no row behind it', () => {
-    const tag = Tag.reference(TagId.parse(DEFAULT_TAG_ID), TagName.parse('Untagged'));
+    const tag = Tag.reference(
+      TagId.parse(DEFAULT_TAG_ID),
+      TagName.parse('Untagged'),
+    );
 
     expect(tag.getUncommittedEvents()).toEqual([]);
     expect(tag.createdAt).toBeUndefined();

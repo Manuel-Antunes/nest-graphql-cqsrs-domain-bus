@@ -624,8 +624,12 @@ describe('ValidatedDto - Top-Level Union Support', () => {
       @InheritValidatedMetadata()
       class Derivada extends Base {}
 
-      expect(Reflect.getMetadata('design:type', Derivada.prototype, 'value')).toBe(String);
-      expect(Reflect.getMetadata(marcaDeCampo, Derivada.prototype, 'value')).toBe('do-campo');
+      expect(
+        Reflect.getMetadata('design:type', Derivada.prototype, 'value'),
+      ).toBe(String);
+      expect(
+        Reflect.getMetadata(marcaDeCampo, Derivada.prototype, 'value'),
+      ).toBe('do-campo');
       expect(Reflect.getMetadata(marcaDeClasse, Derivada)).toBe('da-classe');
       expect((new Derivada('texto' as any) as any).value).toBe('texto');
     });

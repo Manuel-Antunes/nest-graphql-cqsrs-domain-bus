@@ -1,5 +1,8 @@
-import { EventBus, type IEvent, Saga, ofType } from '@nestjs/cqrs';
-import { type Observable, map } from 'rxjs';
+import type { IEvent } from '@nestjs/cqrs';
+import type { Observable } from 'rxjs';
+import { EventBus, ofType, Saga } from '@nestjs/cqrs';
+import { map } from 'rxjs';
+
 import { UnitOfWork } from './unit-of-work';
 
 class SomethingHappened {
@@ -63,7 +66,11 @@ describe('what a publisher’s unit of work reaches', () => {
         );
     }
     bus.registerSagas([
-      { metatype: Sagas, instance: new Sagas(), isDependencyTreeStatic: () => true } as never,
+      {
+        metatype: Sagas,
+        instance: new Sagas(),
+        isDependencyTreeStatic: () => true,
+      } as never,
     ]);
 
     let unit: UnitOfWork | undefined;

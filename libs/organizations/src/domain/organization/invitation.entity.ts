@@ -1,11 +1,13 @@
-import { BaseEntity, type Ref } from '@mikro-orm/core';
-import { Email } from '@nestposts/users/domain/user/vo/email';
+import type { Ref } from '@mikro-orm/core';
 import type { AuthUser } from '@nestposts/auth/domain/auth/auth-user.entity';
+import { BaseEntity } from '@mikro-orm/core';
+import { Email } from '@nestposts/users/domain/user/vo/email';
+
 import type { Organization } from './organization.entity';
+import type { OrganizationId } from './vo/organization-id';
 import { InvitationId } from './vo/invitation-id';
 import { InvitationStatus } from './vo/invitation-status';
 import { MemberRole } from './vo/member-role';
-import type { OrganizationId } from './vo/organization-id';
 
 export class Invitation extends BaseEntity {
   id!: InvitationId;

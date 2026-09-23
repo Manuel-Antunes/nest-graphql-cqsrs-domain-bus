@@ -1,5 +1,6 @@
 import type { Email } from '@nestposts/users/domain/user/vo/email';
 import type { UserName } from '@nestposts/users/domain/user/vo/user-name';
+
 import type { InvitationId } from './vo/invitation-id';
 import type { MemberRole } from './vo/member-role';
 import type { OrganizationName } from './vo/organization-name';

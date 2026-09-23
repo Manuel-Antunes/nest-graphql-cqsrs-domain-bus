@@ -1,5 +1,7 @@
-import { type EnvelopeMetadata, EventEnvelope } from '../../outbound/event-envelope';
-import { EventEnvelopeDeserializer, type IncomingEnvelope } from './event-envelope.deserializer';
+import type { EnvelopeMetadata } from '../../outbound/event-envelope';
+import type { IncomingEnvelope } from './event-envelope.deserializer';
+import { EventEnvelope } from '../../outbound/event-envelope';
+import { EventEnvelopeDeserializer } from './event-envelope.deserializer';
 
 /**
  * **The Inngest half of the wire**: the data came in `data`, the metadata in `user`.
@@ -9,7 +11,10 @@ import { EventEnvelopeDeserializer, type IncomingEnvelope } from './event-envelo
  * way a queue is on RabbitMQ, and the concrete class comes from the message type in the metadata.
  */
 export class InngestEventEnvelopeDeserializer extends EventEnvelopeDeserializer {
-  deserializeEnvelope(value: unknown, options?: Record<string, unknown>): IncomingEnvelope {
+  deserializeEnvelope(
+    value: unknown,
+    options?: Record<string, unknown>,
+  ): IncomingEnvelope {
     const event = (value ?? {}) as {
       name?: unknown;
       data?: Record<string, unknown>;

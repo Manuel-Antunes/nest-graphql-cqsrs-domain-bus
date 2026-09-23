@@ -1,4 +1,5 @@
 import type { ReadPacket } from '@nestjs/microservices';
+
 import { EventEnvelope } from '../event-envelope';
 import { EventEnvelopeSerializer } from './event-envelope.serializer';
 
@@ -15,6 +16,9 @@ export class MemoryEventEnvelopeSerializer extends EventEnvelopeSerializer {
     envelope: EventEnvelope<Record<string, unknown>>,
     packet: ReadPacket,
   ): unknown {
-    return { pattern: packet.pattern, data: { data: envelope.data, metadata: envelope.metadata } };
+    return {
+      pattern: packet.pattern,
+      data: { data: envelope.data, metadata: envelope.metadata },
+    };
   }
 }

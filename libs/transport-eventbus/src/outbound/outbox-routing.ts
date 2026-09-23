@@ -1,17 +1,19 @@
+import type { Observable } from 'rxjs';
 import { Injectable, Logger } from '@nestjs/common';
 import { DiscoveryService } from '@nestjs/core';
 import { ClientProxy } from '@nestjs/microservices';
-import { type Observable, defer, from, map } from 'rxjs';
-import {
-  EVERY_NAMESPACE,
-  Publisher,
-  type PublishedNamespaces,
-  namespacesIn,
-  publisherNamespacesOf,
-} from '../decorators/publisher.decorator';
+import { defer, from, map } from 'rxjs';
+
+import type { PublishedNamespaces } from '../decorators/publisher.decorator';
 import type { ITransportPublisherEventBus } from '../interfaces/transport-publisher.interface';
 import type { EventAddress } from './event-address';
 import type { EventEnvelope } from './event-envelope';
+import {
+  EVERY_NAMESPACE,
+  namespacesIn,
+  Publisher,
+  publisherNamespacesOf,
+} from '../decorators/publisher.decorator';
 
 /** A destination already resolved: what it is called, what it takes, and the client it sends on. */
 export class Route {
@@ -22,14 +24,19 @@ export class Route {
     namespaces: PublishedNamespaces,
     readonly client: ClientProxy,
     /** Upstream's path: a `@Publisher` class that implements `publish` sends its own messages. */
-    private readonly publisher?: ITransportPublisherEventBus & { publish?: (event: object) => unknown },
+    private readonly publisher?: ITransportPublisherEventBus & {
+      publish?: (event: object) => unknown;
+    },
   ) {
     this.namespaces = namespacesIn(namespaces);
   }
 
   /** Whether this destination takes the events of that namespace — `''` being an event with no `@EventType`. */
   takes(namespace: string): boolean {
-    return this.namespaces.includes(EVERY_NAMESPACE) || this.namespaces.includes(namespace);
+    return (
+      this.namespaces.includes(EVERY_NAMESPACE) ||
+      this.namespaces.includes(namespace)
+    );
   }
 
   /**
@@ -37,13 +44,18 @@ export class Route {
    * reason nothing here needs a promise: {@link EventForwarder} merges the destinations, and whoever
    * called `publish` decides once, at the edge, whether to await.
    */
-  send(envelope: EventEnvelope<object>, address: EventAddress): Observable<void> {
+  send(
+    envelope: EventEnvelope<object>,
+    address: EventAddress,
+  ): Observable<void> {
     if (this.publisher?.publish) {
-      return defer(() => from(Promise.resolve(this.publisher?.publish?.(envelope.data)))).pipe(
-        map(() => undefined),
-      );
+      return defer(() =>
+        from(Promise.resolve(this.publisher?.publish?.(envelope.data))),
+      ).pipe(map(() => undefined));
     }
-    return this.client.emit(address.routingKey, envelope).pipe(map(() => undefined));
+    return this.client
+      .emit(address.routingKey, envelope)
+      .pipe(map(() => undefined));
   }
 }
 
@@ -103,50 +115,61 @@ export class OutboxRouting {
 
   /** The table as it is, for a spec or a log line: `PostEventsPublisher ← [posts]`. */
   describe(): string[] {
-    return this.resolved().map((route) => `${route.declaration} ← [${route.namespaces.join(', ')}]`);
+    return this.resolved().map(
+      (route) => `${route.declaration} ← [${route.namespaces.join(', ')}]`,
+    );
   }
 
   private resolved(): Route[] {
     if (!this.table) {
       this.table = this.resolve();
-      this.logger.log(`destinations: ${this.describe().join(', ') || '(none)'}`);
+      this.logger.log(
+        `destinations: ${this.describe().join(', ') || '(none)'}`,
+      );
       this.warnAboutOverlaps(this.table);
     }
     return this.table;
   }
 
   private resolve(): Route[] {
-    return this.discovery.getProviders({ metadataKey: Publisher.KEY }).map((wrapper) => {
-      const declaration =
-        (wrapper.metatype as { name?: string } | undefined)?.name ?? String(wrapper.name ?? 'a publisher');
-      const namespaces =
-        (this.discovery.getMetadataByDecorator(Publisher, wrapper) as PublishedNamespaces | undefined) ??
-        publisherNamespacesOf(wrapper.instance as object);
+    return this.discovery
+      .getProviders({ metadataKey: Publisher.KEY })
+      .map((wrapper) => {
+        const declaration =
+          (wrapper.metatype as { name?: string } | undefined)?.name ??
+          String(wrapper.name ?? 'a publisher');
+        const namespaces =
+          (this.discovery.getMetadataByDecorator(Publisher, wrapper) as
+            PublishedNamespaces | undefined) ??
+          publisherNamespacesOf(wrapper.instance as object);
 
-      if (namespaces === undefined || namespacesIn(namespaces).length === 0) {
-        throw new Error(
-          `the @Publisher of ${declaration} names no namespace. A namespace is what an event's ` +
-            `@EventType declares and what this destination is selected by; without one, nothing ` +
-            `would ever be routed here. Name it, or take everything with EVERY_NAMESPACE.`,
+        if (namespaces === undefined || namespacesIn(namespaces).length === 0) {
+          throw new Error(
+            `the @Publisher of ${declaration} names no namespace. A namespace is what an event's ` +
+              `@EventType declares and what this destination is selected by; without one, nothing ` +
+              `would ever be routed here. Name it, or take everything with EVERY_NAMESPACE.`,
+          );
+        }
+
+        const client = (wrapper.instance as { client?: unknown } | undefined)
+          ?.client;
+        if (!(client instanceof ClientProxy)) {
+          throw new Error(
+            `the @Publisher of ${declaration} exposes ${describe(client)} as 'client', and not a ` +
+              `ClientProxy. The decorator marks the client of a destination; there is nothing to ` +
+              `publish on anything else.`,
+          );
+        }
+
+        return new Route(
+          declaration,
+          namespaces,
+          client,
+          wrapper.instance as ITransportPublisherEventBus & {
+            publish?: (event: object) => unknown;
+          },
         );
-      }
-
-      const client = (wrapper.instance as { client?: unknown } | undefined)?.client;
-      if (!(client instanceof ClientProxy)) {
-        throw new Error(
-          `the @Publisher of ${declaration} exposes ${describe(client)} as 'client', and not a ` +
-            `ClientProxy. The decorator marks the client of a destination; there is nothing to ` +
-            `publish on anything else.`,
-        );
-      }
-
-      return new Route(
-        declaration,
-        namespaces,
-        client,
-        wrapper.instance as ITransportPublisherEventBus & { publish?: (event: object) => unknown },
-      );
-    });
+      });
   }
 
   /**
@@ -159,7 +182,10 @@ export class OutboxRouting {
     const byNamespace = new Map<string, string[]>();
     for (const route of table) {
       for (const namespace of route.namespaces) {
-        byNamespace.set(namespace, [...(byNamespace.get(namespace) ?? []), route.declaration]);
+        byNamespace.set(namespace, [
+          ...(byNamespace.get(namespace) ?? []),
+          route.declaration,
+        ]);
       }
     }
     for (const [namespace, declarations] of byNamespace) {

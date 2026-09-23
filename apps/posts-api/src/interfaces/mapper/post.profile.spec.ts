@@ -1,32 +1,37 @@
+import type { Mapper } from '@automapper/core';
+import type { Ref } from '@mikro-orm/core';
+import type { DelegatedRef } from '@nestposts/platform/domain/shared/delegation/delegate';
+import { createMapper } from '@automapper/core';
+import { MikroORM, ref } from '@mikro-orm/core';
 import { closeTestDatabase, testDatabase } from '@nestposts/database/testing';
-import { createMapper, type Mapper } from '@automapper/core';
-import { MikroORM, ref, type Ref } from '@mikro-orm/core';
-import { CreatePostCommand } from '../../application/post/command/create-post.command';
-import { UpdatePostCommand } from '../../application/post/command/update-post.command';
+import { delegateRef } from '@nestposts/platform/domain/shared/delegation/delegate';
 import { PostCreatedEvent } from '@nestposts/posts/domain/post/event/post-created.event';
 import { PostPreCreatedEvent } from '@nestposts/posts/domain/post/event/post-pre-created.event';
 import { PostUpdatedEvent } from '@nestposts/posts/domain/post/event/post-updated.event';
 import { Post } from '@nestposts/posts/domain/post/post.entity';
-import {
-  type DelegatedRef,
-  delegateRef,
-} from '@nestposts/platform/domain/shared/delegation/delegate';
 import { PostContent } from '@nestposts/posts/domain/post/vo/post-content';
 import { PostId } from '@nestposts/posts/domain/post/vo/post-id';
 import { PostTitle } from '@nestposts/posts/domain/post/vo/post-title';
 import { Tag } from '@nestposts/posts/domain/tag/tag.entity';
 import { TagId } from '@nestposts/posts/domain/tag/vo/tag-id';
 import { TagName } from '@nestposts/posts/domain/tag/vo/tag-name';
-import { User } from '@nestposts/users/domain/user/user.entity';
-import { AUTHOR_ROLE, Author, Authorship } from '@nestposts/users/domain/user/author.entity';
-import { UserId } from '@nestposts/users/domain/user/vo/user-id';
-import { UserName } from '@nestposts/users/domain/user/vo/user-name';
 import { PostEntitySchema } from '@nestposts/posts/infrastructure/persistence/entities/post-orm.entity';
 import { TagSchema } from '@nestposts/posts/infrastructure/persistence/entities/tag-orm.entity';
+import {
+  Author,
+  AUTHOR_ROLE,
+  Authorship,
+} from '@nestposts/users/domain/user/author.entity';
+import { User } from '@nestposts/users/domain/user/user.entity';
+import { UserId } from '@nestposts/users/domain/user/vo/user-id';
+import { UserName } from '@nestposts/users/domain/user/vo/user-name';
 import {
   AuthorshipEntitySchema,
   UserEntitySchema,
 } from '@nestposts/users/infrastructure/persistence/entities/user-orm.entity';
+
+import { CreatePostCommand } from '../../application/post/command/create-post.command';
+import { UpdatePostCommand } from '../../application/post/command/update-post.command';
 import { CreatePostInput } from '../../dto/graphql/create-post.input';
 import { PostView } from '../../dto/graphql/post.view';
 import { TagView } from '../../dto/graphql/tag.view';
@@ -46,8 +51,13 @@ describe('PostProfile', () => {
 
   beforeAll(async () => {
     orm = await testDatabase({
-        entities: [PostEntitySchema, TagSchema, UserEntitySchema, AuthorshipEntitySchema],
-      });
+      entities: [
+        PostEntitySchema,
+        TagSchema,
+        UserEntitySchema,
+        AuthorshipEntitySchema,
+      ],
+    });
   });
 
   afterAll(() => closeTestDatabase(orm));
@@ -61,11 +71,17 @@ describe('PostProfile', () => {
   afterEach(() => mapper.dispose());
 
   const anAuthor = (): Author => {
-    const user = User.register(authorId, { email: 'manuel@example.com', name: 'Manuel' }, [AUTHOR_ROLE], createdAt);
+    const user = User.register(
+      authorId,
+      { email: 'manuel@example.com', name: 'Manuel' },
+      [AUTHOR_ROLE],
+      createdAt,
+    );
     return Author.cast(user, Authorship.of(user));
   };
 
-  const authorRef = (): DelegatedRef<Authorship, Author> => delegateRef(Author, anAuthor().authorship);
+  const authorRef = (): DelegatedRef<Authorship, Author> =>
+    delegateRef(Author, anAuthor().authorship);
 
   const aTag = (): Tag => Tag.create(tagId, 'nestjs', createdAt);
 
@@ -133,7 +149,14 @@ describe('PostProfile', () => {
     });
 
     it('dá um array de tags novo a cada view — duas subscriptions não dividem a mesma lista', () => {
-      const event = new PostPreCreatedEvent(postId.value, 't', 'c', authorId.value, 'Manuel', createdAt);
+      const event = new PostPreCreatedEvent(
+        postId.value,
+        't',
+        'c',
+        authorId.value,
+        'Manuel',
+        createdAt,
+      );
 
       const first = mapper.map(event, PostPreCreatedEvent, PostView);
       const second = mapper.map(event, PostPreCreatedEvent, PostView);
@@ -199,7 +222,10 @@ describe('PostProfile', () => {
       const author = anAuthor();
 
       const command = mapper.map(
-        { title: '  Nest + GraphQL  ', content: 'corpo do post' } as unknown as CreatePostInput,
+        {
+          title: '  Nest + GraphQL  ',
+          content: 'corpo do post',
+        } as unknown as CreatePostInput,
         CreatePostInput,
         CreatePostCommand.CreatePost,
         { extraArgs: () => ({ author }) },
@@ -218,8 +244,18 @@ describe('PostProfile', () => {
       const input = { title: 't', content: 'c' } as unknown as CreatePostInput;
       const options = { extraArgs: () => ({ author }) };
 
-      const first = mapper.map(input, CreatePostInput, CreatePostCommand.CreatePost, options);
-      const second = mapper.map(input, CreatePostInput, CreatePostCommand.CreatePost, options);
+      const first = mapper.map(
+        input,
+        CreatePostInput,
+        CreatePostCommand.CreatePost,
+        options,
+      );
+      const second = mapper.map(
+        input,
+        CreatePostInput,
+        CreatePostCommand.CreatePost,
+        options,
+      );
 
       expect(first.postId.equals(second.postId)).toBe(false);
     });
@@ -228,7 +264,11 @@ describe('PostProfile', () => {
   describe('UpdatePostInput → UpdatePost', () => {
     it('traduz o id e desembrulha os value objects para texto', () => {
       const command = mapper.map(
-        { id: postId.value, title: 'editado', content: 'corpo editado' } as unknown as UpdatePostInput,
+        {
+          id: postId.value,
+          title: 'editado',
+          content: 'corpo editado',
+        } as unknown as UpdatePostInput,
         UpdatePostInput,
         UpdatePostCommand.UpdatePost,
       );
@@ -240,7 +280,10 @@ describe('PostProfile', () => {
 
     it('deixa passar os campos ausentes sem tentar desembrulhá-los', () => {
       const command = mapper.map(
-        { id: postId.value, title: 'só o título' } as unknown as UpdatePostInput,
+        {
+          id: postId.value,
+          title: 'só o título',
+        } as unknown as UpdatePostInput,
         UpdatePostInput,
         UpdatePostCommand.UpdatePost,
       );

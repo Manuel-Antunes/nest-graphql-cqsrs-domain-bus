@@ -1,10 +1,16 @@
 extend type Post {
-  """Tags do post, como Relay cursor connection"""
+  """
+  Tags do post, como Relay cursor connection
+  """
   tags(
-    """Quantas tags trazer; ausente = 20"""
+    """
+    Quantas tags trazer; ausente = 20
+    """
     first: Int
 
-    """Cursor da última tag já vista"""
+    """
+    Cursor da última tag já vista
+    """
     after: String
   ): TagConnection!
 }

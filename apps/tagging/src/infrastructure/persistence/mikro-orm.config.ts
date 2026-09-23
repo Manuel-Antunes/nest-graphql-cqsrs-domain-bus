@@ -1,4 +1,4 @@
-import { TAGGING_SCHEMA, postgresDatabase } from '@nestposts/database';
+import { postgresDatabase, TAGGING_SCHEMA } from '@nestposts/database';
 
 /**
  * The connection, and nothing about who uses it.
@@ -9,5 +9,6 @@ import { TAGGING_SCHEMA, postgresDatabase } from '@nestposts/database';
  * rehydrating a Post builds a reference to its author, and a reference is something MikroORM can only
  * make for an entity it knows. Those tables are created and stay empty.
  */
-export const mikroOrmConfig = (schema = process.env.TAGGING_SCHEMA ?? TAGGING_SCHEMA) =>
-  postgresDatabase(schema);
+export const mikroOrmConfig = (
+  schema = process.env.TAGGING_SCHEMA ?? TAGGING_SCHEMA,
+) => postgresDatabase(schema);

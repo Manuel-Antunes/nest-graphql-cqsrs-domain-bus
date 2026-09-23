@@ -1,4 +1,5 @@
 import type { UserId } from '@nestposts/users/domain/user/vo/user-id';
+
 import type { PostId } from '../vo/post-id';
 
 export class PostNotWrittenByException extends Error {

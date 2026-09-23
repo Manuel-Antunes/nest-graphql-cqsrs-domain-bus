@@ -1,29 +1,43 @@
-import { dropTestSchema, ensureTestSchema, testDatabaseConfig } from '@nestposts/database/testing';
-import { MikroOrmModule } from '@mikro-orm/nestjs';
 import type { MemoryServer } from '@camcima/nestjs-memory-microservices';
+import type { IEventHandler } from '@nestjs/cqrs';
+import { MikroOrmModule } from '@mikro-orm/nestjs';
 import { Controller, Injectable } from '@nestjs/common';
 import { DiscoveryModule } from '@nestjs/core';
-import { AsyncContext, CqrsModule, EventsHandler, type IEventHandler } from '@nestjs/cqrs';
+import { AsyncContext, CqrsModule, EventsHandler } from '@nestjs/cqrs';
 import { EventPattern } from '@nestjs/microservices';
+import { ROOT_TENANT, Tenant, TENANT_HEADER } from '@nestposts/database';
+import {
+  dropTestSchema,
+  ensureTestSchema,
+  testDatabaseConfig,
+} from '@nestposts/database/testing';
 import { EventType } from '@nestposts/platform/domain/shared/event-type';
-import { ROOT_TENANT, TENANT_HEADER, Tenant } from '@nestposts/database';
+
+import type { Ingestion } from '../outbound/transport-metadata';
+import type { InProcessService } from '../testing';
+import type { TransportEventBusService } from '../transport-event-bus.service';
 import { TRANSPORT_EVENT_BUS_SERVICE } from '../constants';
 import { Publisher } from '../decorators/publisher.decorator';
-import { EventIngestion } from '../inbound/event-ingestion';
 import { TransportEvent } from '../decorators/transport-event.decorator';
-import { MemoryEventEnvelopeSerializer } from '../outbound/serializers/memory-event-envelope.serializer';
+import { EventIngestion } from '../inbound/event-ingestion';
 import { TRANSPORT_ORIGIN } from '../outbound/event-envelope';
-import { type Ingestion, ingestionOf } from '../outbound/transport-metadata';
-import { MessageInbox, MikroOrmMessageInbox } from '../persistence/message-inbox';
+import { MemoryEventEnvelopeSerializer } from '../outbound/serializers/memory-event-envelope.serializer';
+import { ingestionOf } from '../outbound/transport-metadata';
+import {
+  MessageInbox,
+  MikroOrmMessageInbox,
+} from '../persistence/message-inbox';
 import { transportEntities } from '../persistence/message-inbox.entity';
 import {
   CorrelatedRequestContext,
   RequestContextCodec,
   TransportRequestContext,
 } from '../request-context';
-import { type InProcessService, startInProcessService } from '../testing';
-import { eventIngestionProviders, transportEventBusProviders } from '../transport-event-bus.providers';
-import type { TransportEventBusService } from '../transport-event-bus.service';
+import { startInProcessService } from '../testing';
+import {
+  eventIngestionProviders,
+  transportEventBusProviders,
+} from '../transport-event-bus.providers';
 import { TransportIdentity } from '../transport-identity';
 import { MemoryClient } from './memory-client';
 
@@ -59,11 +73,13 @@ class PostRequest extends AsyncContext {
   }
 }
 
-const wire: { readonly toConsuming: MemoryServer[]; readonly toPublishing: MemoryServer[] } = {
+const wire: {
+  readonly toConsuming: MemoryServer[];
+  readonly toPublishing: MemoryServer[];
+} = {
   toConsuming: [],
   toPublishing: [],
 };
-
 
 @Injectable()
 @Publisher(POSTS)
@@ -94,7 +110,6 @@ class ArrivalsController {
     this.arrivals.envelopes.push(ingestionOf(event));
   }
 }
-
 
 @Injectable()
 @Publisher(POSTS)
@@ -156,7 +171,10 @@ describe('one hop between two services, over the in-process transport', () => {
       controllers: [ArrivalsController],
       providers: [
         ...transportEventBusProviders,
-        { provide: TransportIdentity, useValue: TransportIdentity.named('publishing-service') },
+        {
+          provide: TransportIdentity,
+          useValue: TransportIdentity.named('publishing-service'),
+        },
         { provide: RequestContextCodec, useClass: CorrelatedRequestContext },
         PublishingOutbox,
         Arrivals,
@@ -179,7 +197,10 @@ describe('one hop between two services, over the in-process transport', () => {
       providers: [
         ...transportEventBusProviders,
         ...eventIngestionProviders,
-        { provide: TransportIdentity, useValue: TransportIdentity.named('consuming-service') },
+        {
+          provide: TransportIdentity,
+          useValue: TransportIdentity.named('consuming-service'),
+        },
         { provide: RequestContextCodec, useClass: CorrelatedRequestContext },
         { provide: MessageInbox, useClass: MikroOrmMessageInbox },
         ConsumingOutbox,
@@ -216,14 +237,23 @@ describe('one hop between two services, over the in-process transport', () => {
 
   it('carries the event across as an instance of the real class, fields and dates intact', async () => {
     await publishingBus.publish(
-      new PostPreCreatedEvent('p-1', 'Nest + GraphQL', new Date('2026-09-08T12:00:00.000Z')),
+      new PostPreCreatedEvent(
+        'p-1',
+        'Nest + GraphQL',
+        new Date('2026-09-08T12:00:00.000Z'),
+      ),
     );
     await settle();
 
     expect(received.events).toHaveLength(1);
     expect(received.events[0]).toBeInstanceOf(PostPreCreatedEvent);
-    expect(received.events[0]).toMatchObject({ postId: 'p-1', title: 'Nest + GraphQL' });
-    expect(received.events[0].occurredAt).toEqual(new Date('2026-09-08T12:00:00.000Z'));
+    expect(received.events[0]).toMatchObject({
+      postId: 'p-1',
+      title: 'Nest + GraphQL',
+    });
+    expect(received.events[0].occurredAt).toEqual(
+      new Date('2026-09-08T12:00:00.000Z'),
+    );
   });
 
   it('restores the request that opened it, so the far side runs in the same one', async () => {
@@ -237,31 +267,49 @@ describe('one hop between two services, over the in-process transport', () => {
 
     const context = received.contexts.at(-1);
     expect(context).toBeInstanceOf(TransportRequestContext);
-    expect((context as TransportRequestContext).attributes).toMatchObject({ 'post-id': 'p-2' });
+    expect((context as TransportRequestContext).attributes).toMatchObject({
+      'post-id': 'p-2',
+    });
   });
 
   it('keeps one correlation id for every event of one request', async () => {
     const request = new PostRequest('p-3');
 
-    await publishingBus.publish(new PostPreCreatedEvent('p-3', 'first', new Date()), request);
-    await publishingBus.publish(new PostPreCreatedEvent('p-3', 'second', new Date()), request);
+    await publishingBus.publish(
+      new PostPreCreatedEvent('p-3', 'first', new Date()),
+      request,
+    );
+    await publishingBus.publish(
+      new PostPreCreatedEvent('p-3', 'second', new Date()),
+      request,
+    );
     await settle();
 
-    const [first, second] = received.contexts.slice(-2) as TransportRequestContext[];
+    const [first, second] = received.contexts.slice(
+      -2,
+    ) as TransportRequestContext[];
     expect(first.correlationId).toBe(second.correlationId);
   });
 
   it('remembers each message, and names the service it came from', async () => {
-    await publishingBus.publish(new PostPreCreatedEvent('p-4', 'remembered', new Date()));
+    await publishingBus.publish(
+      new PostPreCreatedEvent('p-4', 'remembered', new Date()),
+    );
     await settle();
 
     await expect(inbox.received()).resolves.toEqual(
-      expect.arrayContaining([expect.objectContaining({ origin: 'publishing-service' })]),
+      expect.arrayContaining([
+        expect.objectContaining({ origin: 'publishing-service' }),
+      ]),
     );
   });
 
   it('delivers a redelivery of the same message to nobody', async () => {
-    const event = new PostPreCreatedEvent('p-5', 'twice on the wire', new Date());
+    const event = new PostPreCreatedEvent(
+      'p-5',
+      'twice on the wire',
+      new Date(),
+    );
 
     await publishingBus.publish(event);
     await publishingBus.publish(event);
@@ -278,7 +326,9 @@ describe('one hop between two services, over the in-process transport', () => {
   });
 
   it('does not send back what it received: the origin mark cuts the loop', async () => {
-    await publishingBus.publish(new PostPreCreatedEvent('p-6', 'not a boomerang', new Date()));
+    await publishingBus.publish(
+      new PostPreCreatedEvent('p-6', 'not a boomerang', new Date()),
+    );
     await settle();
     const ingested = received.events.at(-1)!;
     arrivals.messages.length = 0;
@@ -290,7 +340,9 @@ describe('one hop between two services, over the in-process transport', () => {
   });
 
   it('sends an event of its own on the same destination, which is what proves the cut is about origin', async () => {
-    await consumingBus.publish(new PostPreCreatedEvent('p-7', 'mine', new Date()));
+    await consumingBus.publish(
+      new PostPreCreatedEvent('p-7', 'mine', new Date()),
+    );
     await settle();
 
     expect(arrivals.messages).toHaveLength(1);
@@ -310,24 +362,35 @@ describe('one hop between two services, over the in-process transport', () => {
     it('the tenant the first service named arrives as an attribute of the restored context', async () => {
       const context = await tenanted('p-8', 'acme');
 
-      expect(context.attributes).toMatchObject({ [TENANT_HEADER]: 'acme', 'post-id': 'p-8' });
+      expect(context.attributes).toMatchObject({
+        [TENANT_HEADER]: 'acme',
+        'post-id': 'p-8',
+      });
     });
 
     it('and goes back out on the second service own event, without it having to know about tenants', async () => {
       const context = await tenanted('p-9', 'globex');
       arrivals.envelopes.length = 0;
 
-      await consumingBus.publish(new PostPreCreatedEvent('p-9', 'decided', new Date()), context);
+      await consumingBus.publish(
+        new PostPreCreatedEvent('p-9', 'decided', new Date()),
+        context,
+      );
       await settle();
 
-      expect(arrivals.envelopes.at(-1)?.metadata).toMatchObject({ [TENANT_HEADER]: 'globex' });
+      expect(arrivals.envelopes.at(-1)?.metadata).toMatchObject({
+        [TENANT_HEADER]: 'globex',
+      });
     });
 
     it('but the authorship does NOT: the second service publishes under its own name', async () => {
       const context = await tenanted('p-10', 'initech');
       arrivals.envelopes.length = 0;
 
-      await consumingBus.publish(new PostPreCreatedEvent('p-10', 'decided', new Date()), context);
+      await consumingBus.publish(
+        new PostPreCreatedEvent('p-10', 'decided', new Date()),
+        context,
+      );
       await settle();
 
       const metadata = arrivals.envelopes.at(-1)?.metadata ?? {};
@@ -336,11 +399,15 @@ describe('one hop between two services, over the in-process transport', () => {
     });
 
     it('a tenant nobody named crosses as the root one', async () => {
-      expect((await tenanted('p-11', ROOT_TENANT)).attributes[TENANT_HEADER]).toBe(ROOT_TENANT);
+      expect(
+        (await tenanted('p-11', ROOT_TENANT)).attributes[TENANT_HEADER],
+      ).toBe(ROOT_TENANT);
     });
 
     it('the wire carries whatever the producer wrote — the reader is what normalizes it', async () => {
-      const onTheWire = (await tenanted('p-12', 'undefined')).attributes[TENANT_HEADER];
+      const onTheWire = (await tenanted('p-12', 'undefined')).attributes[
+        TENANT_HEADER
+      ];
 
       expect(onTheWire).toBe('undefined');
       expect(Tenant.normalize(onTheWire)).toBe(ROOT_TENANT);

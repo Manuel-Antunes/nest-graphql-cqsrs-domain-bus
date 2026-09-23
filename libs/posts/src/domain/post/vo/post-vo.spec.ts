@@ -1,6 +1,6 @@
+import { POST_TITLE_MAX_LENGTH } from '../schemas/post-title.schema';
 import { PostContent } from './post-content';
 import { PostId } from './post-id';
-import { POST_TITLE_MAX_LENGTH } from '../schemas/post-title.schema';
 import { PostTitle } from './post-title';
 
 describe('value objects do Post', () => {
@@ -41,7 +41,9 @@ describe('value objects do Post', () => {
 
   describe('PostTitle', () => {
     it('normaliza pelo schema: o trim é da travessia, não de quem chama', () => {
-      expect(PostTitle.parse('  Nest + GraphQL  ').value).toBe('Nest + GraphQL');
+      expect(PostTitle.parse('  Nest + GraphQL  ').value).toBe(
+        'Nest + GraphQL',
+      );
     });
 
     it('length responde sobre o valor já normalizado', () => {
@@ -54,26 +56,34 @@ describe('value objects do Post', () => {
     it('recusa o vazio e o que passa do limite, com a mensagem do domínio', () => {
       expect(PostTitle.safeParse('   ').success).toBe(false);
       expect(() => PostTitle.parse('')).toThrow(/title não pode ser vazio/);
-      expect(() => PostTitle.parse('x'.repeat(POST_TITLE_MAX_LENGTH + 1))).toThrow(
-        new RegExp(`title excede ${POST_TITLE_MAX_LENGTH} caracteres`),
-      );
+      expect(() =>
+        PostTitle.parse('x'.repeat(POST_TITLE_MAX_LENGTH + 1)),
+      ).toThrow(new RegExp(`title excede ${POST_TITLE_MAX_LENGTH} caracteres`));
     });
 
     it('aceita exatamente o limite — a borda é inclusiva', () => {
-      expect(PostTitle.parse('x'.repeat(POST_TITLE_MAX_LENGTH)).length).toBe(POST_TITLE_MAX_LENGTH);
+      expect(PostTitle.parse('x'.repeat(POST_TITLE_MAX_LENGTH)).length).toBe(
+        POST_TITLE_MAX_LENGTH,
+      );
     });
   });
 
   describe('PostContent', () => {
     it('normaliza e recusa o vazio; comprimento é livre porque a coluna é TEXT', () => {
       expect(PostContent.parse('  oi  ').value).toBe('oi');
-      expect(() => PostContent.parse('   ')).toThrow(/content não pode ser vazio/);
+      expect(() => PostContent.parse('   ')).toThrow(
+        /content não pode ser vazio/,
+      );
       expect(PostContent.parse('x'.repeat(10_000)).value).toHaveLength(10_000);
     });
 
     it('dois conteúdos com o mesmo texto são o mesmo valor', () => {
-      expect(PostContent.parse('oi').equals(PostContent.parse(' oi '))).toBe(true);
-      expect(PostContent.parse('oi').equals(PostContent.parse('tchau'))).toBe(false);
+      expect(PostContent.parse('oi').equals(PostContent.parse(' oi '))).toBe(
+        true,
+      );
+      expect(PostContent.parse('oi').equals(PostContent.parse('tchau'))).toBe(
+        false,
+      );
     });
   });
 });

@@ -14,5 +14,9 @@ export interface Session {
 }
 
 export function isAuthor(session: Session | null): boolean {
-  return session?.user.role?.split(',').some((role) => role.trim() === AUTHOR_ROLE) ?? false;
+  return (
+    session?.user.role
+      ?.split(',')
+      .some((role) => role.trim() === AUTHOR_ROLE) ?? false
+  );
 }

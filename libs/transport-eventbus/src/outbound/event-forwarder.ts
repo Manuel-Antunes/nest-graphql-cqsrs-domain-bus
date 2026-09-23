@@ -1,9 +1,11 @@
+import type { Observable } from 'rxjs';
 import { Injectable, Logger } from '@nestjs/common';
-import { EMPTY, type Observable, from, map, mergeMap, tap } from 'rxjs';
+import { EMPTY, from, map, mergeMap, tap } from 'rxjs';
+
+import { TransportIdentity } from '../transport-identity';
 import { EventAddress } from './event-address';
 import { EventEnvelopeFactory } from './event-envelope.factory';
 import { OutboxRouting } from './outbox-routing';
-import { TransportIdentity } from '../transport-identity';
 import { identifierOf, isIngested, originOf } from './transport-metadata';
 
 /**

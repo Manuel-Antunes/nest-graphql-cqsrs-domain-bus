@@ -2,10 +2,11 @@ import type { Cursor } from '@mikro-orm/core';
 import { UseInterceptors } from '@nestjs/common';
 import { QueryBus } from '@nestjs/cqrs';
 import { Args, Parent, ResolveField, Resolver } from '@nestjs/graphql';
-import { FindPostsByAuthorQuery } from '../../application/post/query/find-posts-by-author.query';
 import { Post } from '@nestposts/posts/domain/post/post.entity';
-import { PostView } from '../../dto/graphql/post.view';
+
 import type { AuthorView } from '../../dto/graphql/user.view';
+import { FindPostsByAuthorQuery } from '../../application/post/query/find-posts-by-author.query';
+import { PostView } from '../../dto/graphql/post.view';
 import { ConnectionInterceptor } from '../interceptors/connection.interceptor';
 
 @Resolver('Author')

@@ -1,15 +1,15 @@
-import { RequestContext } from '@mikro-orm/core';
-import {
-  type CallHandler,
-  type ExecutionContext,
-  Inject,
-  Injectable,
-  Logger,
-  type NestInterceptor,
+import type {
+  CallHandler,
+  ExecutionContext,
+  NestInterceptor,
 } from '@nestjs/common';
+import { RequestContext } from '@mikro-orm/core';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Observable } from 'rxjs';
+
+import type { TenantResolver } from './tenant.resolver';
 import { TenantEntityManagers } from './tenant-entity-managers';
-import { TENANT_RESOLVER, type TenantResolver } from './tenant.resolver';
+import { TENANT_RESOLVER } from './tenant.resolver';
 
 /**
  * **The tenant's context for everything that is not an Express request.**
@@ -40,12 +40,14 @@ export class TenantInterceptor implements NestInterceptor {
     this.logger.debug(`${context.getType<string>()} in tenant ${tenantId}`);
 
     return new Observable((subscriber) => {
-      const subscription = RequestContext.create(this.tenants.forTenant(tenantId), () =>
-        next.handle().subscribe({
-          next: (value) => subscriber.next(value),
-          error: (error) => subscriber.error(error),
-          complete: () => subscriber.complete(),
-        }),
+      const subscription = RequestContext.create(
+        this.tenants.forTenant(tenantId),
+        () =>
+          next.handle().subscribe({
+            next: (value) => subscriber.next(value),
+            error: (error) => subscriber.error(error),
+            complete: () => subscriber.complete(),
+          }),
       );
       return () => subscription.unsubscribe();
     });

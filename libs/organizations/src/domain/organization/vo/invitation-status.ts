@@ -1,4 +1,5 @@
 import { ValidatedDto } from '@nestposts/validated-dto/mixins';
+
 import {
   ACCEPTED_INVITATION,
   CANCELED_INVITATION,
@@ -7,7 +8,9 @@ import {
   REJECTED_INVITATION,
 } from '../schemas/invitation-status.schema';
 
-export class InvitationStatus extends ValidatedDto.Scalar(InvitationStatusSchema) {
+export class InvitationStatus extends ValidatedDto.Scalar(
+  InvitationStatusSchema,
+) {
   isPending(): boolean {
     return this.value === PENDING_INVITATION;
   }
@@ -17,6 +20,8 @@ export class InvitationStatus extends ValidatedDto.Scalar(InvitationStatusSchema
   }
 
   isRefused(): boolean {
-    return this.value === REJECTED_INVITATION || this.value === CANCELED_INVITATION;
+    return (
+      this.value === REJECTED_INVITATION || this.value === CANCELED_INVITATION
+    );
   }
 }

@@ -1,6 +1,12 @@
-import { type ChildProcess, spawn } from 'node:child_process';
-import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { spawn } from 'node:child_process';
+import {
+  appendFileSync,
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+} from 'node:fs';
 import { join } from 'node:path';
+import type { ChildProcess } from 'node:child_process';
 
 import { WORKSPACE_ROOT } from './docker';
 import { sleep } from './posts-api';
@@ -13,7 +19,10 @@ export interface Readiness {
 export class HttpHealth implements Readiness {
   readonly description: string;
 
-  constructor(private readonly probe: () => Promise<boolean>, url: string) {
+  constructor(
+    private readonly probe: () => Promise<boolean>,
+    url: string,
+  ) {
     this.description = `${url} respondendo`;
   }
 
@@ -82,7 +91,8 @@ export class Service {
       stdio: ['ignore', 'pipe', 'pipe'],
       detached: true,
     });
-    const record = (chunk: Buffer) => appendFileSync(this.logFile, chunk.toString());
+    const record = (chunk: Buffer) =>
+      appendFileSync(this.logFile, chunk.toString());
     this.child.stdout?.on('data', record);
     this.child.stderr?.on('data', record);
   }

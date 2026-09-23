@@ -1,7 +1,8 @@
 import type { ResultOf } from '@graphql-typed-document-node/core';
 import { print } from 'graphql';
 
-import { type GraphQlAnswer, expect, test } from '../fixtures/test';
+import type { GraphQlAnswer } from '../fixtures/test';
+import { expect, test } from '../fixtures/test';
 import { graphql } from '../gql';
 
 const MeAtTheApi = graphql(`
@@ -33,7 +34,9 @@ test.describe('autenticação pelo navegador', () => {
     );
 
     expect(session, 'nenhum cookie de sessão').toBeDefined();
-    expect(session!.httpOnly, 'a sessão não pode ser legível por script').toBe(true);
+    expect(session!.httpOnly, 'a sessão não pode ser legível por script').toBe(
+      true,
+    );
     expect(
       signUps,
       'o login não pode sair para outra origem: o Better Auth que responde é o deste app',
@@ -61,16 +64,19 @@ test.describe('autenticação pelo navegador', () => {
       .join('; ');
 
     const response = await request.post(`${apiUrl}/graphql`, {
-      headers: { 'content-type': 'application/json', cookie: cookies },
+      headers: { 'content-type': 'application/json', 'cookie': cookies },
       data: { query: print(MeAtTheApi) },
     });
 
-    const answer = (await response.json()) as GraphQlAnswer<ResultOf<typeof MeAtTheApi>>;
+    const answer = (await response.json()) as GraphQlAnswer<
+      ResultOf<typeof MeAtTheApi>
+    >;
     expect(answer.errors, JSON.stringify(answer.errors)).toBeUndefined();
     expect(answer.data!.me.email).toBe(accounts.author.email);
-    expect(answer.data!.me.__typename, 'o perfil de domínio foi provisionado na primeira leitura').toBe(
-      'Author',
-    );
+    expect(
+      answer.data!.me.__typename,
+      'o perfil de domínio foi provisionado na primeira leitura',
+    ).toBe('Author');
   });
 
   test('a sessão sobrevive a um reload, porque é uma linha e não um estado de cliente', async ({
@@ -94,11 +100,17 @@ test.describe('autenticação pelo navegador', () => {
     await page.getByLabel('Senha').fill('senha-errada-de-proposito');
     await page.getByRole('button', { name: 'Entrar' }).click();
 
-    await expect(page.getByText(/INVALID_EMAIL_OR_PASSWORD|Credenciais inválidas/i)).toBeVisible();
+    await expect(
+      page.getByText(/INVALID_EMAIL_OR_PASSWORD|Credenciais inválidas/i),
+    ).toBeVisible();
     await expect(page.getByText(accounts.author.email + ' ')).toHaveCount(0);
   });
 
-  test('quem já entrou é reconhecido ao voltar ao login', async ({ page, accounts, signIn }) => {
+  test('quem já entrou é reconhecido ao voltar ao login', async ({
+    page,
+    accounts,
+    signIn,
+  }) => {
     await signIn(accounts.author);
 
     await page.goto('/login');
@@ -135,4 +147,4 @@ test.describe('autenticação pelo navegador', () => {
 
     await expect(page.getByText('author', { exact: true })).toBeVisible();
   });
-})
+});

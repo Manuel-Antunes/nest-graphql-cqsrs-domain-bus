@@ -1,9 +1,11 @@
+import type { AnyMikroORM } from '@nestposts/database/testing';
 import { inRequestContext } from '@nestposts/database';
-import { type AnyMikroORM, closeTestDatabase, testDatabase } from '@nestposts/database/testing';
+import { closeTestDatabase, testDatabase } from '@nestposts/database/testing';
 import { CredentialId } from '@nestposts/users/domain/user/vo/credential-id';
 import { Email } from '@nestposts/users/domain/user/vo/email';
 import { UserName } from '@nestposts/users/domain/user/vo/user-name';
 import { mikroOrmAdapter } from 'better-auth-mikro-orm';
+
 import { AuthUser } from '../../domain/auth/auth-user.entity';
 import { AuthConfiguration } from '../better-auth/config';
 import { BetterAuthInstance } from '../better-auth/init-auth';
@@ -17,9 +19,13 @@ describe('better-auth writing through the entities this module maps', () => {
 
   const NOW = new Date('2026-09-21T12:00:00.000Z');
 
-  const inContext = <T>(work: () => Promise<T>): Promise<T> => inRequestContext(orm.em, work);
+  const inContext = <T>(work: () => Promise<T>): Promise<T> =>
+    inRequestContext(orm.em, work);
 
-  const found = <T extends object>(entity: { new (): T }, where: object): Promise<T> =>
+  const found = <T extends object>(
+    entity: { new (): T },
+    where: object,
+  ): Promise<T> =>
     inContext(() => orm.em.fork().findOneOrFail(entity, where) as Promise<T>);
 
   beforeAll(async () => {
@@ -28,18 +34,30 @@ describe('better-auth writing through the entities this module maps', () => {
     adapter = mikroOrmAdapter(orm)(
       BetterAuthInstance.optionsFor(
         config,
-        BetterAuthPlugins.build(BetterAuthPlugins.providersWith(), [[BETTER_AUTH_CONFIG, config]]),
+        BetterAuthPlugins.build(BetterAuthPlugins.providersWith(), [
+          [BETTER_AUTH_CONFIG, config],
+        ]),
       ),
     );
   });
 
   afterAll(() => closeTestDatabase(orm));
 
-  const givenACredential = async (id: string, email: string): Promise<string> => {
+  const givenACredential = async (
+    id: string,
+    email: string,
+  ): Promise<string> => {
     const row = await inContext(() =>
       adapter.create<Record<string, unknown>, { id: string }>({
         model: 'user',
-        data: { id, name: 'Manuel', email, emailVerified: false, createdAt: NOW, updatedAt: NOW },
+        data: {
+          id,
+          name: 'Manuel',
+          email,
+          emailVerified: false,
+          createdAt: NOW,
+          updatedAt: NOW,
+        },
         forceAllowId: true,
       }),
     );
@@ -99,7 +117,11 @@ describe('better-auth writing through the entities this module maps', () => {
       }),
     );
 
-    expect(row).toMatchObject({ id: 'cred_2', email: 'ana@example.com', name: 'Manuel' });
+    expect(row).toMatchObject({
+      id: 'cred_2',
+      email: 'ana@example.com',
+      name: 'Manuel',
+    });
   });
 
   it('an update through better-auth lands on the value-object column', async () => {

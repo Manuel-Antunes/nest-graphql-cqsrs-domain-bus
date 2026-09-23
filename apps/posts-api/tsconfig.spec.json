@@ -3,15 +3,9 @@
   "compilerOptions": {
     "outDir": "out-tsc/vitest",
     "tsBuildInfoFile": "out-tsc/vitest/tsconfig.spec.tsbuildinfo",
-    "types": [
-      "node",
-      "vitest/globals"
-    ]
+    "types": ["node", "vitest/globals"]
   },
-  "include": [
-    "src/**/*.spec.ts",
-    "test/**/*.ts"
-  ],
+  "include": ["src/**/*.spec.ts", "test/**/*.ts"],
   "references": [
     {
       "path": "./tsconfig.app.json"

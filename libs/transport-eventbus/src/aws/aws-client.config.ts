@@ -35,7 +35,9 @@ export const awsClientConfig = (): AwsClientConfig => {
   return {
     endpoint,
     region: region ?? DEFAULT_LOCAL_REGION,
-    ...(process.env.AWS_ACCESS_KEY_ID ? {} : { credentials: LOCAL_CREDENTIALS }),
+    ...(process.env.AWS_ACCESS_KEY_ID
+      ? {}
+      : { credentials: LOCAL_CREDENTIALS }),
   };
 };
 
@@ -47,7 +49,9 @@ export const awsClientConfig = (): AwsClientConfig => {
  * visibility, or delete it, has to derive one. Against LocalStack the URL is the endpoint's, which is
  * why this reads the same environment the clients do.
  */
-export const queueUrlFromArn = (arn: string | undefined): string | undefined => {
+export const queueUrlFromArn = (
+  arn: string | undefined,
+): string | undefined => {
   const parts = (arn ?? '').split(':');
   if (parts.length < 6) {
     return undefined;

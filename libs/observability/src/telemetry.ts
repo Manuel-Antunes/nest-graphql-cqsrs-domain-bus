@@ -1,7 +1,7 @@
+import type { Instrumentation } from '@opentelemetry/instrumentation';
 import { trace } from '@opentelemetry/api';
 import { OTLPLogExporter } from '@opentelemetry/exporter-logs-otlp-http';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
-import type { Instrumentation } from '@opentelemetry/instrumentation';
 import { AmqplibInstrumentation } from '@opentelemetry/instrumentation-amqplib';
 import { AwsInstrumentation } from '@opentelemetry/instrumentation-aws-sdk';
 import { GraphQLInstrumentation } from '@opentelemetry/instrumentation-graphql';
@@ -9,11 +9,23 @@ import { HttpInstrumentation } from '@opentelemetry/instrumentation-http';
 import { NestInstrumentation } from '@opentelemetry/instrumentation-nestjs-core';
 import { PgInstrumentation } from '@opentelemetry/instrumentation-pg';
 import { PinoInstrumentation } from '@opentelemetry/instrumentation-pino';
-import { defaultResource, resourceFromAttributes } from '@opentelemetry/resources';
-import { BatchLogRecordProcessor, SimpleLogRecordProcessor } from '@opentelemetry/sdk-logs';
+import {
+  defaultResource,
+  resourceFromAttributes,
+} from '@opentelemetry/resources';
+import {
+  BatchLogRecordProcessor,
+  SimpleLogRecordProcessor,
+} from '@opentelemetry/sdk-logs';
 import { NodeSDK } from '@opentelemetry/sdk-node';
-import { BatchSpanProcessor, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
-import { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } from '@opentelemetry/semantic-conventions';
+import {
+  BatchSpanProcessor,
+  SimpleSpanProcessor,
+} from '@opentelemetry/sdk-trace-base';
+import {
+  ATTR_SERVICE_NAME,
+  ATTR_SERVICE_VERSION,
+} from '@opentelemetry/semantic-conventions';
 
 export interface TelemetryOptions {
   /** What this process is called in a trace. One name per deployable, not per module. */
@@ -78,7 +90,8 @@ export const startTelemetry = (options: TelemetryOptions): TelemetryHandle => {
     resource: defaultResource().merge(
       resourceFromAttributes({
         [ATTR_SERVICE_NAME]: options.serviceName,
-        [ATTR_SERVICE_VERSION]: options.serviceVersion ?? process.env.npm_package_version,
+        [ATTR_SERVICE_VERSION]:
+          options.serviceVersion ?? process.env.npm_package_version,
         'deployment.environment.name': process.env.NODE_ENV ?? 'development',
       }),
     ),
@@ -118,7 +131,9 @@ export const flushTelemetry = async (): Promise<void> => {
     getDelegate?: () => unknown;
     forceFlush?: () => Promise<void>;
   };
-  const delegate = (provider.getDelegate?.() ?? provider) as { forceFlush?: () => Promise<void> };
+  const delegate = (provider.getDelegate?.() ?? provider) as {
+    forceFlush?: () => Promise<void>;
+  };
   await delegate.forceFlush?.();
 };
 
@@ -132,10 +147,14 @@ export const flushTelemetry = async (): Promise<void> => {
  */
 const defaultInstrumentations = (): Instrumentation[] => [
   new HttpInstrumentation({
-    ignoreIncomingRequestHook: (request) => (request.url ?? '').startsWith('/health'),
+    ignoreIncomingRequestHook: (request) =>
+      (request.url ?? '').startsWith('/health'),
   }),
   new NestInstrumentation(),
-  new GraphQLInstrumentation({ allowValues: false, ignoreTrivialResolveSpans: true }),
+  new GraphQLInstrumentation({
+    allowValues: false,
+    ignoreTrivialResolveSpans: true,
+  }),
   new PgInstrumentation(),
   new AmqplibInstrumentation(),
   new AwsInstrumentation(),
@@ -152,6 +171,7 @@ const isEnabled = (options: TelemetryOptions): boolean => {
     return false;
   }
   return Boolean(
-    process.env.OTEL_EXPORTER_OTLP_ENDPOINT ?? process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT,
+    process.env.OTEL_EXPORTER_OTLP_ENDPOINT ??
+    process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT,
   );
 };

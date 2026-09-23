@@ -1,8 +1,6 @@
 {
   "name": "posts",
-  "namespaces": [
-    "posts"
-  ],
+  "namespaces": ["posts"],
   "tables": [
     {
       "name": "account",
@@ -232,9 +230,7 @@
       },
       "indexes": [
         {
-          "columnNames": [
-            "id"
-          ],
+          "columnNames": ["id"],
           "composite": false,
           "constraint": true,
           "keyName": "account_pkey",
@@ -441,9 +437,7 @@
       },
       "indexes": [
         {
-          "columnNames": [
-            "email"
-          ],
+          "columnNames": ["email"],
           "composite": false,
           "constraint": true,
           "keyName": "auth_user_email_unique",
@@ -451,9 +445,7 @@
           "unique": true
         },
         {
-          "columnNames": [
-            "id"
-          ],
+          "columnNames": ["id"],
           "composite": false,
           "constraint": true,
           "keyName": "auth_user_pkey",
@@ -490,9 +482,7 @@
       },
       "indexes": [
         {
-          "columnNames": [
-            "id"
-          ],
+          "columnNames": ["id"],
           "composite": false,
           "constraint": true,
           "keyName": "authors_pkey",
@@ -504,14 +494,10 @@
       "triggers": [],
       "foreignKeys": {
         "authors_id_foreign": {
-          "columnNames": [
-            "id"
-          ],
+          "columnNames": ["id"],
           "constraintName": "authors_id_foreign",
           "localTableName": "posts.authors",
-          "referencedColumnNames": [
-            "id"
-          ],
+          "referencedColumnNames": ["id"],
           "referencedTableName": "posts.users",
           "updateRule": "cascade",
           "deleteRule": "cascade"
@@ -662,9 +648,7 @@
       },
       "indexes": [
         {
-          "columnNames": [
-            "email"
-          ],
+          "columnNames": ["email"],
           "composite": false,
           "constraint": false,
           "keyName": "invitation_email_index",
@@ -672,9 +656,7 @@
           "unique": false
         },
         {
-          "columnNames": [
-            "id"
-          ],
+          "columnNames": ["id"],
           "composite": false,
           "constraint": true,
           "keyName": "invitation_pkey",
@@ -686,25 +668,17 @@
       "triggers": [],
       "foreignKeys": {
         "invitation_inviter_id_foreign": {
-          "columnNames": [
-            "inviter_id"
-          ],
+          "columnNames": ["inviter_id"],
           "constraintName": "invitation_inviter_id_foreign",
           "localTableName": "posts.invitation",
-          "referencedColumnNames": [
-            "id"
-          ],
+          "referencedColumnNames": ["id"],
           "referencedTableName": "posts.auth_user"
         },
         "invitation_organization_id_foreign": {
-          "columnNames": [
-            "organization_id"
-          ],
+          "columnNames": ["organization_id"],
           "constraintName": "invitation_organization_id_foreign",
           "localTableName": "posts.invitation",
-          "referencedColumnNames": [
-            "id"
-          ],
+          "referencedColumnNames": ["id"],
           "referencedTableName": "posts.organization"
         }
       },
@@ -836,9 +810,7 @@
       },
       "indexes": [
         {
-          "columnNames": [
-            "id"
-          ],
+          "columnNames": ["id"],
           "composite": false,
           "constraint": true,
           "keyName": "jwks_pkey",
@@ -943,10 +915,7 @@
       },
       "indexes": [
         {
-          "columnNames": [
-            "organization_id",
-            "user_id"
-          ],
+          "columnNames": ["organization_id", "user_id"],
           "composite": true,
           "constraint": false,
           "keyName": "member_organization_id_user_id_index",
@@ -954,9 +923,7 @@
           "unique": false
         },
         {
-          "columnNames": [
-            "id"
-          ],
+          "columnNames": ["id"],
           "composite": false,
           "constraint": true,
           "keyName": "member_pkey",
@@ -968,25 +935,17 @@
       "triggers": [],
       "foreignKeys": {
         "member_organization_id_foreign": {
-          "columnNames": [
-            "organization_id"
-          ],
+          "columnNames": ["organization_id"],
           "constraintName": "member_organization_id_foreign",
           "localTableName": "posts.member",
-          "referencedColumnNames": [
-            "id"
-          ],
+          "referencedColumnNames": ["id"],
           "referencedTableName": "posts.organization"
         },
         "member_user_id_foreign": {
-          "columnNames": [
-            "user_id"
-          ],
+          "columnNames": ["user_id"],
           "constraintName": "member_user_id_foreign",
           "localTableName": "posts.member",
-          "referencedColumnNames": [
-            "id"
-          ],
+          "referencedColumnNames": ["id"],
           "referencedTableName": "posts.auth_user"
         }
       },
@@ -1254,9 +1213,7 @@
       },
       "indexes": [
         {
-          "columnNames": [
-            "id"
-          ],
+          "columnNames": ["id"],
           "composite": false,
           "constraint": true,
           "keyName": "oauth_access_token_pkey",
@@ -1264,9 +1221,7 @@
           "unique": true
         },
         {
-          "columnNames": [
-            "token"
-          ],
+          "columnNames": ["token"],
           "composite": false,
           "constraint": true,
           "keyName": "oauth_access_token_token_unique",
@@ -1898,9 +1853,7 @@
       },
       "indexes": [
         {
-          "columnNames": [
-            "client_id"
-          ],
+          "columnNames": ["client_id"],
           "composite": false,
           "constraint": true,
           "keyName": "oauth_client_client_id_unique",
@@ -1908,9 +1861,7 @@
           "unique": true
         },
         {
-          "columnNames": [
-            "id"
-          ],
+          "columnNames": ["id"],
           "composite": false,
           "constraint": true,
           "keyName": "oauth_client_pkey",
@@ -1964,9 +1915,7 @@
       },
       "indexes": [
         {
-          "columnNames": [
-            "id"
-          ],
+          "columnNames": ["id"],
           "composite": false,
           "constraint": true,
           "keyName": "oauth_client_assertion_pkey",
@@ -2071,9 +2020,7 @@
       },
       "indexes": [
         {
-          "columnNames": [
-            "id"
-          ],
+          "columnNames": ["id"],
           "composite": false,
           "constraint": true,
           "keyName": "oauth_client_resource_pkey",
@@ -2246,9 +2193,7 @@
       },
       "indexes": [
         {
-          "columnNames": [
-            "id"
-          ],
+          "columnNames": ["id"],
           "composite": false,
           "constraint": true,
           "keyName": "oauth_consent_pkey",
@@ -2574,9 +2519,7 @@
       },
       "indexes": [
         {
-          "columnNames": [
-            "id"
-          ],
+          "columnNames": ["id"],
           "composite": false,
           "constraint": true,
           "keyName": "oauth_refresh_token_pkey",
@@ -2584,9 +2527,7 @@
           "unique": true
         },
         {
-          "columnNames": [
-            "token"
-          ],
+          "columnNames": ["token"],
           "composite": false,
           "constraint": true,
           "keyName": "oauth_refresh_token_token_unique",
@@ -2861,9 +2802,7 @@
       },
       "indexes": [
         {
-          "columnNames": [
-            "identifier"
-          ],
+          "columnNames": ["identifier"],
           "composite": false,
           "constraint": true,
           "keyName": "oauth_resource_identifier_unique",
@@ -2871,9 +2810,7 @@
           "unique": true
         },
         {
-          "columnNames": [
-            "id"
-          ],
+          "columnNames": ["id"],
           "composite": false,
           "constraint": true,
           "keyName": "oauth_resource_pkey",
@@ -2995,9 +2932,7 @@
       },
       "indexes": [
         {
-          "columnNames": [
-            "id"
-          ],
+          "columnNames": ["id"],
           "composite": false,
           "constraint": true,
           "keyName": "organization_pkey",
@@ -3005,9 +2940,7 @@
           "unique": true
         },
         {
-          "columnNames": [
-            "slug"
-          ],
+          "columnNames": ["slug"],
           "composite": false,
           "constraint": true,
           "keyName": "organization_slug_unique",
@@ -3020,10 +2953,7 @@
         {
           "name": "organization_tenant_schema",
           "timing": "after",
-          "events": [
-            "insert",
-            "delete"
-          ],
+          "events": ["insert", "delete"],
           "forEach": "row",
           "body": "\n        IF TG_OP = 'INSERT' THEN\n          EXECUTE format('create schema if not exists %I', 'tenant_' || NEW.slug);\n        ELSIF TG_OP = 'DELETE' THEN\n          EXECUTE format('drop schema if exists %I cascade', 'tenant_' || OLD.slug);\n        END IF;\n        RETURN NULL;\n      "
         }
@@ -3191,10 +3121,7 @@
       },
       "indexes": [
         {
-          "columnNames": [
-            "created_at",
-            "id"
-          ],
+          "columnNames": ["created_at", "id"],
           "composite": true,
           "constraint": false,
           "keyName": "posts_created_at_id_index",
@@ -3202,9 +3129,7 @@
           "unique": false
         },
         {
-          "columnNames": [
-            "deleted_at"
-          ],
+          "columnNames": ["deleted_at"],
           "composite": false,
           "constraint": false,
           "keyName": "posts_deleted_at_index",
@@ -3212,9 +3137,7 @@
           "unique": false
         },
         {
-          "columnNames": [
-            "id"
-          ],
+          "columnNames": ["id"],
           "composite": false,
           "constraint": true,
           "keyName": "posts_pkey",
@@ -3226,14 +3149,10 @@
       "triggers": [],
       "foreignKeys": {
         "posts_author_id_foreign": {
-          "columnNames": [
-            "author_id"
-          ],
+          "columnNames": ["author_id"],
           "constraintName": "posts_author_id_foreign",
           "localTableName": "posts.posts",
-          "referencedColumnNames": [
-            "id"
-          ],
+          "referencedColumnNames": ["id"],
           "referencedTableName": "posts.authors"
         }
       },
@@ -3280,10 +3199,7 @@
       },
       "indexes": [
         {
-          "columnNames": [
-            "post_id",
-            "tag_id"
-          ],
+          "columnNames": ["post_id", "tag_id"],
           "composite": true,
           "constraint": true,
           "keyName": "posts_tags_pkey",
@@ -3295,27 +3211,19 @@
       "triggers": [],
       "foreignKeys": {
         "posts_tags_post_id_foreign": {
-          "columnNames": [
-            "post_id"
-          ],
+          "columnNames": ["post_id"],
           "constraintName": "posts_tags_post_id_foreign",
           "localTableName": "posts.posts_tags",
-          "referencedColumnNames": [
-            "id"
-          ],
+          "referencedColumnNames": ["id"],
           "referencedTableName": "posts.posts",
           "updateRule": "cascade",
           "deleteRule": "cascade"
         },
         "posts_tags_tag_id_foreign": {
-          "columnNames": [
-            "tag_id"
-          ],
+          "columnNames": ["tag_id"],
           "constraintName": "posts_tags_tag_id_foreign",
           "localTableName": "posts.posts_tags",
-          "referencedColumnNames": [
-            "id"
-          ],
+          "referencedColumnNames": ["id"],
           "referencedTableName": "posts.tags",
           "updateRule": "cascade",
           "deleteRule": "cascade"
@@ -3500,9 +3408,7 @@
       },
       "indexes": [
         {
-          "columnNames": [
-            "id"
-          ],
+          "columnNames": ["id"],
           "composite": false,
           "constraint": true,
           "keyName": "session_pkey",
@@ -3510,9 +3416,7 @@
           "unique": true
         },
         {
-          "columnNames": [
-            "token"
-          ],
+          "columnNames": ["token"],
           "composite": false,
           "constraint": true,
           "keyName": "session_token_unique",
@@ -3583,9 +3487,7 @@
       },
       "indexes": [
         {
-          "columnNames": [
-            "name"
-          ],
+          "columnNames": ["name"],
           "composite": false,
           "constraint": true,
           "keyName": "tags_name_unique",
@@ -3593,9 +3495,7 @@
           "unique": true
         },
         {
-          "columnNames": [
-            "id"
-          ],
+          "columnNames": ["id"],
           "composite": false,
           "constraint": true,
           "keyName": "tags_pkey",
@@ -3700,9 +3600,7 @@
       },
       "indexes": [
         {
-          "columnNames": [
-            "identifier"
-          ],
+          "columnNames": ["identifier"],
           "composite": false,
           "constraint": true,
           "keyName": "transport_event_feed_identifier_unique",
@@ -3710,9 +3608,7 @@
           "unique": true
         },
         {
-          "columnNames": [
-            "position"
-          ],
+          "columnNames": ["position"],
           "composite": false,
           "constraint": true,
           "keyName": "transport_event_feed_pkey",
@@ -3800,9 +3696,7 @@
       },
       "indexes": [
         {
-          "columnNames": [
-            "identifier"
-          ],
+          "columnNames": ["identifier"],
           "composite": false,
           "constraint": true,
           "keyName": "transport_message_inbox_pkey",
@@ -3958,9 +3852,7 @@
       },
       "indexes": [
         {
-          "columnNames": [
-            "deleted_at"
-          ],
+          "columnNames": ["deleted_at"],
           "composite": false,
           "constraint": false,
           "keyName": "users_deleted_at_index",
@@ -3968,9 +3860,7 @@
           "unique": false
         },
         {
-          "columnNames": [
-            "email"
-          ],
+          "columnNames": ["email"],
           "composite": false,
           "constraint": false,
           "keyName": "users_email_index",
@@ -3978,9 +3868,7 @@
           "unique": false
         },
         {
-          "columnNames": [
-            "id"
-          ],
+          "columnNames": ["id"],
           "composite": false,
           "constraint": true,
           "keyName": "users_pkey",
@@ -4102,9 +3990,7 @@
       },
       "indexes": [
         {
-          "columnNames": [
-            "id"
-          ],
+          "columnNames": ["id"],
           "composite": false,
           "constraint": true,
           "keyName": "verification_pkey",

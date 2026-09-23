@@ -2,7 +2,11 @@ import path, { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { NextConfig } from 'next';
 
-const monorepoRoot = path.resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
+const monorepoRoot = path.resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  '..',
+  '..',
+);
 
 /**
  * The auth stack is left OUT of the server bundle, and loaded by Node instead.
@@ -40,7 +44,9 @@ const EXTERNAL_ON_THE_SERVER = [
 ];
 
 const isExternal = (request: string): boolean =>
-  EXTERNAL_ON_THE_SERVER.some((name) => request === name || request.startsWith(`${name}/`));
+  EXTERNAL_ON_THE_SERVER.some(
+    (name) => request === name || request.startsWith(`${name}/`),
+  );
 
 const nextConfig: NextConfig = {
   outputFileTracingRoot: monorepoRoot,
@@ -49,11 +55,16 @@ const nextConfig: NextConfig = {
       return config;
     }
     config.externals = [
-      ...(Array.isArray(config.externals) ? config.externals : [config.externals].filter(Boolean)),
+      ...(Array.isArray(config.externals)
+        ? config.externals
+        : [config.externals].filter(Boolean)),
       (
         { request }: { request?: string },
         callback: (error?: unknown, result?: string) => void,
-      ) => (request && isExternal(request) ? callback(undefined, `commonjs ${request}`) : callback()),
+      ) =>
+        request && isExternal(request)
+          ? callback(undefined, `commonjs ${request}`)
+          : callback(),
     ];
     return config;
   },

@@ -1,7 +1,11 @@
-import { type DynamicModule, Module, Scope } from '@nestjs/common';
-import { DatabaseModule, type DatabaseEntities } from '@nestposts/database';
-import type { AuthConfig } from './config';
+import type { DynamicModule } from '@nestjs/common';
+import type { DatabaseEntities } from '@nestposts/database';
+import { Module, Scope } from '@nestjs/common';
+import { DatabaseModule } from '@nestposts/database';
 import { IdentityProvider } from '@nestposts/users/domain/user/identity.provider';
+
+import type { AuthConfig } from './config';
+import type { BetterAuthPluginProvider } from './plugins/registry';
 import { AuthService } from '../../domain/auth/auth.service';
 import { authEntities } from '../persistence/auth-entities';
 import {
@@ -11,7 +15,7 @@ import {
   BetterAuthPluginsFactory,
 } from './factories';
 import { BetterAuthIdentityProvider } from './identity/better-auth-identity.provider';
-import { BetterAuthPlugins, type BetterAuthPluginProvider } from './plugins/registry';
+import { BetterAuthPlugins } from './plugins/registry';
 import { BetterAuthService } from './services/better-auth.service';
 import { BETTER_AUTH, BETTER_AUTH_CONFIG } from './tokens';
 
@@ -42,7 +46,12 @@ export interface BetterAuthModuleOptions {
 @Module({})
 export class BetterAuthModule {
   static forRoot(options: BetterAuthModuleOptions = {}): DynamicModule {
-    const { plugins = [], trailingPlugins = [], entities = authEntities, imports = [] } = options;
+    const {
+      plugins = [],
+      trailingPlugins = [],
+      entities = authEntities,
+      imports = [],
+    } = options;
     const providers = BetterAuthPlugins.providersWith(plugins, trailingPlugins);
 
     return {
@@ -55,17 +64,18 @@ export class BetterAuthModule {
        * second set of plugins, a second JWKS, and sessions one half issues that the other rejects.
        */
       global: true,
-      imports: [
-        ...imports,
-        DatabaseModule.forFeature(entities),
-      ],
+      imports: [...imports, DatabaseModule.forFeature(entities)],
       providers: [
         BetterAuthConfigFactory.with(options.config),
         BetterAuthAdapterFactory,
         ...providers,
         BetterAuthPluginsFactory(providers),
         BetterAuthFactory,
-        { provide: AuthService, useClass: BetterAuthService,scope: Scope.REQUEST },
+        {
+          provide: AuthService,
+          useClass: BetterAuthService,
+          scope: Scope.REQUEST,
+        },
         { provide: IdentityProvider, useClass: BetterAuthIdentityProvider },
       ],
       exports: [BETTER_AUTH, BETTER_AUTH_CONFIG, AuthService, IdentityProvider],

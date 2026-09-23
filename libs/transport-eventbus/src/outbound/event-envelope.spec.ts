@@ -1,11 +1,11 @@
 import {
+  decodeTags,
+  encodeTags,
   EventEnvelope,
   TRANSPORT_IDENTIFIER,
   TRANSPORT_MESSAGE_TYPE,
   TRANSPORT_ORIGIN,
   TRANSPORT_TAGS,
-  decodeTags,
-  encodeTags,
 } from './event-envelope';
 
 describe('EventEnvelope', () => {
@@ -18,7 +18,9 @@ describe('EventEnvelope', () => {
 
   const overTheWire = (body: object) => {
     const sent = new EventEnvelope(body, metadata).encoded();
-    const received = JSON.parse(JSON.stringify({ data: sent.data, metadata: sent.metadata })) as {
+    const received = JSON.parse(
+      JSON.stringify({ data: sent.data, metadata: sent.metadata }),
+    ) as {
       data: Record<string, unknown>;
       metadata: Record<string, string>;
     };
@@ -27,7 +29,12 @@ describe('EventEnvelope', () => {
 
   describe('the two halves', () => {
     it('carries the event as itself, field for field', () => {
-      const body = { postId: 'p-1', title: 'Nest', tags: [{ tagId: 't-1', name: 'Untagged' }], version: 2 };
+      const body = {
+        postId: 'p-1',
+        title: 'Nest',
+        tags: [{ tagId: 't-1', name: 'Untagged' }],
+        version: 2,
+      };
 
       expect(overTheWire(body).data).toEqual(body);
     });
@@ -71,9 +78,9 @@ describe('EventEnvelope', () => {
     });
 
     it('leaves a string that merely looks like a date a string', () => {
-      expect(overTheWire({ content: '2026-09-08T12:00:00.000Z' }).data.content).toBe(
-        '2026-09-08T12:00:00.000Z',
-      );
+      expect(
+        overTheWire({ content: '2026-09-08T12:00:00.000Z' }).data.content,
+      ).toBe('2026-09-08T12:00:00.000Z');
     });
 
     it('goes on the wire as the event, not as a wrapper around it', () => {

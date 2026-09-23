@@ -1,24 +1,31 @@
+import type { Ref } from '@mikro-orm/core';
+import type { DelegatedRef } from '@nestposts/platform/domain/shared/delegation/delegate';
+import { MikroORM, ref } from '@mikro-orm/core';
 import { metadataOnly } from '@nestposts/database/testing';
-import { MikroORM, ref, type Ref } from '@mikro-orm/core';
-import { Tag } from '../tag/tag.entity';
-import { TagId } from '../tag/vo/tag-id';
-import { User } from '@nestposts/users/domain/user/user.entity';
-import { AUTHOR_ROLE, Author, Authorship } from '@nestposts/users/domain/user/author.entity';
-import { UserId } from '@nestposts/users/domain/user/vo/user-id';
-import { UserName } from '@nestposts/users/domain/user/vo/user-name';
-import { PostCreatedEvent } from './event/post-created.event';
-import { PostPreCreatedEvent } from './event/post-pre-created.event';
-import { PostDeletedEvent } from './event/post-deleted.event';
-import { PostRestoredEvent } from './event/post-restored.event';
-import { PostUpdatedEvent } from './event/post-updated.event';
+import { delegateRef } from '@nestposts/platform/domain/shared/delegation/delegate';
 import { AlreadyDeletedException } from '@nestposts/platform/domain/shared/soft-delete/already-deleted.exception';
 import { NotDeletedException } from '@nestposts/platform/domain/shared/soft-delete/not-deleted.exception';
-import { InvalidPostException } from './exception/invalid-post.exception';
 import { issuesOf } from '@nestposts/platform/testing/invalid-input';
-import { PostNotWrittenByException } from './exception/post-not-written-by.exception';
+import {
+  Author,
+  AUTHOR_ROLE,
+  Authorship,
+} from '@nestposts/users/domain/user/author.entity';
+import { User } from '@nestposts/users/domain/user/user.entity';
+import { UserId } from '@nestposts/users/domain/user/vo/user-id';
+import { UserName } from '@nestposts/users/domain/user/vo/user-name';
+
 import { PostEntitySchema } from '../../infrastructure/persistence/entities/post-orm.entity';
 import { TagSchema } from '../../infrastructure/persistence/entities/tag-orm.entity';
-import { type DelegatedRef, delegateRef } from '@nestposts/platform/domain/shared/delegation/delegate';
+import { Tag } from '../tag/tag.entity';
+import { TagId } from '../tag/vo/tag-id';
+import { PostCreatedEvent } from './event/post-created.event';
+import { PostDeletedEvent } from './event/post-deleted.event';
+import { PostPreCreatedEvent } from './event/post-pre-created.event';
+import { PostRestoredEvent } from './event/post-restored.event';
+import { PostUpdatedEvent } from './event/post-updated.event';
+import { InvalidPostException } from './exception/invalid-post.exception';
+import { PostNotWrittenByException } from './exception/post-not-written-by.exception';
 import { Post } from './post.entity';
 import { PostContent } from './vo/post-content';
 import { PostId } from './vo/post-id';
@@ -36,23 +43,67 @@ describe('Post', () => {
   const id = PostId.parse('0c1ee4d8-9b0d-4a8a-9d5f-2b1a5e7c3f10');
   const now = new Date('2026-09-08T12:00:00.000Z');
   const later = new Date('2026-09-08T12:05:00.000Z');
-  const tag = () => Tag.create(TagId.parse('5f7a1c7e-4d0b-4b7a-9e3c-1a2b3c4d5e6f'), 'Untagged', now);
-  const tagInEvent = { tagId: '5f7a1c7e-4d0b-4b7a-9e3c-1a2b3c4d5e6f', name: 'Untagged' };
+  const tag = () =>
+    Tag.create(
+      TagId.parse('5f7a1c7e-4d0b-4b7a-9e3c-1a2b3c4d5e6f'),
+      'Untagged',
+      now,
+    );
+  const tagInEvent = {
+    tagId: '5f7a1c7e-4d0b-4b7a-9e3c-1a2b3c4d5e6f',
+    name: 'Untagged',
+  };
 
   const authorId = UserId.parse('9f1d1f36-7c2e-4a0a-9b7d-2f5c1a3e4b60');
   const anAuthor = (at = now): DelegatedRef<Authorship, Author> =>
     delegateRef(
       Author,
-      Authorship.of(User.register(authorId, { email: 'manuel@example.com', name: 'manuel' }, [AUTHOR_ROLE], at)),
+      Authorship.of(
+        User.register(
+          authorId,
+          { email: 'manuel@example.com', name: 'manuel' },
+          [AUTHOR_ROLE],
+          at,
+        ),
+      ),
     );
   const authorName = UserName.parse('manuel');
-  const aPost = () => Post.create(id, { title: 'Nest + GraphQL', content: 'oi' }, anAuthor(), authorName, now);
-  const stateOf = ({ id, title, content, author, createdAt, updatedAt, version, tags }: Post) => ({
-    id, title, content, author: author.id, createdAt, updatedAt, version, tags: tags.getIdentifiers(),
+  const aPost = () =>
+    Post.create(
+      id,
+      { title: 'Nest + GraphQL', content: 'oi' },
+      anAuthor(),
+      authorName,
+      now,
+    );
+  const stateOf = ({
+    id,
+    title,
+    content,
+    author,
+    createdAt,
+    updatedAt,
+    version,
+    tags,
+  }: Post) => ({
+    id,
+    title,
+    content,
+    author: author.id,
+    createdAt,
+    updatedAt,
+    version,
+    tags: tags.getIdentifiers(),
   });
 
   it('create normalizes, raises PostPreCreated and returns a post that is not complete yet', () => {
-    const post = Post.create(id, { title: '  Nest + GraphQL  ', content: ' oi ' }, anAuthor(), authorName, now);
+    const post = Post.create(
+      id,
+      { title: '  Nest + GraphQL  ', content: ' oi ' },
+      anAuthor(),
+      authorName,
+      now,
+    );
 
     expect(post).toMatchObject({
       id,
@@ -67,7 +118,14 @@ describe('Post', () => {
     expect(post.hasNoTags()).toBe(true);
     expect(post.isComplete()).toBe(false);
     expect(post.getUncommittedEvents()).toEqual([
-      new PostPreCreatedEvent(id.value, 'Nest + GraphQL', 'oi', authorId.value, 'manuel', now),
+      new PostPreCreatedEvent(
+        id.value,
+        'Nest + GraphQL',
+        'oi',
+        authorId.value,
+        'manuel',
+        now,
+      ),
     ]);
   });
 
@@ -78,23 +136,43 @@ describe('Post', () => {
 
       post.complete([tag()], later);
 
-      expect(post).toMatchObject({ version: 2, publishedAt: later, updatedAt: later });
+      expect(post).toMatchObject({
+        version: 2,
+        publishedAt: later,
+        updatedAt: later,
+      });
       expect(post.isComplete()).toBe(true);
-      expect(post.tags.getIdentifiers().map(String)).toEqual([tagInEvent.tagId]);
+      expect(post.tags.getIdentifiers().map(String)).toEqual([
+        tagInEvent.tagId,
+      ]);
       expect(post.getUncommittedEvents()).toEqual([
-        new PostCreatedEvent(id.value, 'Nest + GraphQL', 'oi', authorId.value, [tagInEvent], 2, later),
+        new PostCreatedEvent(
+          id.value,
+          'Nest + GraphQL',
+          'oi',
+          authorId.value,
+          [tagInEvent],
+          2,
+          later,
+        ),
       ]);
     });
 
     it('is where a post born with tags goes, in the same unit of work', () => {
-      const post = Post.create(id, { title: 'Nest', content: 'oi' }, anAuthor(), authorName, now, [tag()]);
+      const post = Post.create(
+        id,
+        { title: 'Nest', content: 'oi' },
+        anAuthor(),
+        authorName,
+        now,
+        [tag()],
+      );
 
       expect(post.isComplete()).toBe(true);
       expect(post.version).toBe(2);
-      expect(post.getUncommittedEvents().map((event) => event.constructor.name)).toEqual([
-        'PostPreCreatedEvent',
-        'PostCreatedEvent',
-      ]);
+      expect(
+        post.getUncommittedEvents().map((event) => event.constructor.name),
+      ).toEqual(['PostPreCreatedEvent', 'PostCreatedEvent']);
     });
 
     it('refuses a second completion, because a post is published once', () => {
@@ -120,28 +198,61 @@ describe('Post', () => {
 
       const sourced = Post.from({});
       sourced.loadFromHistory([
-        new PostPreCreatedEvent(id.value, 'Nest + GraphQL', 'oi', authorId.value, 'manuel', now),
+        new PostPreCreatedEvent(
+          id.value,
+          'Nest + GraphQL',
+          'oi',
+          authorId.value,
+          'manuel',
+          now,
+        ),
         event,
         event,
       ]);
 
       expect(sourced.version).toBe(2);
       expect(sourced.publishedAt).toEqual(later);
-      expect(sourced.tags.getIdentifiers().map(String)).toEqual([tagInEvent.tagId]);
+      expect(sourced.tags.getIdentifiers().map(String)).toEqual([
+        tagInEvent.tagId,
+      ]);
     });
   });
 
   it('create with an invalid value raises nothing', () => {
-    expect(() => Post.create(id, { title: '   ', content: 'oi' }, anAuthor(), authorName, now)).toThrow(InvalidPostException);
-    expect(issuesOf(() => Post.create(id, { title: 'ok', content: '' }, anAuthor(), authorName, now))).toContain(
-      'content não pode ser vazio',
-    );
+    expect(() =>
+      Post.create(
+        id,
+        { title: '   ', content: 'oi' },
+        anAuthor(),
+        authorName,
+        now,
+      ),
+    ).toThrow(InvalidPostException);
+    expect(
+      issuesOf(() =>
+        Post.create(
+          id,
+          { title: 'ok', content: '' },
+          anAuthor(),
+          authorName,
+          now,
+        ),
+      ),
+    ).toContain('content não pode ser vazio');
   });
 
   it('create rejects a title longer than the maximum', () => {
-    expect(issuesOf(() => Post.create(id, { title: 'x'.repeat(201), content: 'oi' }, anAuthor(), authorName, now))).toContain(
-      'title excede 200 caracteres',
-    );
+    expect(
+      issuesOf(() =>
+        Post.create(
+          id,
+          { title: 'x'.repeat(201), content: 'oi' },
+          anAuthor(),
+          authorName,
+          now,
+        ),
+      ),
+    ).toContain('title excede 200 caracteres');
   });
 
   it('update raises PostUpdated with the resulting state and keeps the tags', () => {
@@ -158,7 +269,17 @@ describe('Post', () => {
     });
     expect(post.tags.getIdentifiers().map(String)).toEqual([tagInEvent.tagId]);
     expect(post.getUncommittedEvents()).toEqual([
-      new PostUpdatedEvent(id.value, 'editado', 'oi', authorId.value, 'manuel', [tagInEvent], 3, now, later),
+      new PostUpdatedEvent(
+        id.value,
+        'editado',
+        'oi',
+        authorId.value,
+        'manuel',
+        [tagInEvent],
+        3,
+        now,
+        later,
+      ),
     ]);
   });
 
@@ -178,7 +299,9 @@ describe('Post', () => {
     post.uncommit();
 
     expect(() => post.update({}, later)).toThrow(/update sem mudanças/);
-    expect(() => post.update({ title: 'Nest + GraphQL', content: 'oi' }, later)).toThrow(InvalidPostException);
+    expect(() =>
+      post.update({ title: 'Nest + GraphQL', content: 'oi' }, later),
+    ).toThrow(InvalidPostException);
     expect(post.getUncommittedEvents()).toEqual([]);
     expect(post.version).toBe(1);
   });
@@ -187,7 +310,9 @@ describe('Post', () => {
     const post = aPost();
     post.uncommit();
 
-    expect(issuesOf(() => post.update({ title: '   ' }, later))).toContain('title não pode ser vazio');
+    expect(issuesOf(() => post.update({ title: '   ' }, later))).toContain(
+      'title não pode ser vazio',
+    );
     expect(post.getUncommittedEvents()).toEqual([]);
   });
 
@@ -200,7 +325,17 @@ describe('Post', () => {
     expect(post.hasTag(tagInEvent.tagId)).toBe(true);
     expect(post.hasNoTags()).toBe(false);
     expect(post.getUncommittedEvents()).toEqual([
-      new PostUpdatedEvent(id.value, 'Nest + GraphQL', 'oi', authorId.value, 'manuel', [tagInEvent], 2, now, later),
+      new PostUpdatedEvent(
+        id.value,
+        'Nest + GraphQL',
+        'oi',
+        authorId.value,
+        'manuel',
+        [tagInEvent],
+        2,
+        now,
+        later,
+      ),
     ]);
   });
 
@@ -222,7 +357,9 @@ describe('Post', () => {
 
       expect(post.isDeleted()).toBe(true);
       expect(post.deletedAt).toEqual(later);
-      expect(post.getUncommittedEvents()).toEqual([new PostDeletedEvent(id.value, 2, later)]);
+      expect(post.getUncommittedEvents()).toEqual([
+        new PostDeletedEvent(id.value, 2, later),
+      ]);
     });
 
     it('apagar duas vezes é recusado pela guarda do mixin, e nada é disparado', () => {
@@ -241,7 +378,9 @@ describe('Post', () => {
 
       expect(post.isDeleted()).toBe(false);
       expect(post.deletedAt).toBeNull();
-      expect(post.getUncommittedEvents()).toEqual([new PostRestoredEvent(id.value, 3, later)]);
+      expect(post.getUncommittedEvents()).toEqual([
+        new PostRestoredEvent(id.value, 3, later),
+      ]);
     });
 
     it('restaurar o que não está apagado é recusado, e nada é disparado', () => {
@@ -260,12 +399,16 @@ describe('Post', () => {
       const once = { deletedAt: post.deletedAt, version: post.version };
       post.apply(event, { fromHistory: true });
 
-      expect({ deletedAt: post.deletedAt, version: post.version }).toEqual(once);
+      expect({ deletedAt: post.deletedAt, version: post.version }).toEqual(
+        once,
+      );
     });
   });
 
   it('the state returned by update is the same as sourcing the raised events', () => {
-    const decided = aPost().assignTag(tag(), now).update({ content: 'editado' }, later);
+    const decided = aPost()
+      .assignTag(tag(), now)
+      .update({ content: 'editado' }, later);
 
     const sourced = new Post();
     sourced.loadFromHistory(decided.getUncommittedEvents());
@@ -276,7 +419,17 @@ describe('Post', () => {
 
   it('applying the same event twice leaves the same state', () => {
     const post = aPost();
-    const event = new PostUpdatedEvent(id.value, 'editado', 'oi', authorId.value, 'manuel', [tagInEvent], 2, now, later);
+    const event = new PostUpdatedEvent(
+      id.value,
+      'editado',
+      'oi',
+      authorId.value,
+      'manuel',
+      [tagInEvent],
+      2,
+      now,
+      later,
+    );
 
     post.apply(event, { fromHistory: true });
     const once = stateOf(post);
@@ -305,7 +458,9 @@ describe('Post', () => {
       const post = aPost();
       const intruso = outroAutor();
 
-      expect(() => post.assertWrittenBy(intruso)).toThrow(PostNotWrittenByException);
+      expect(() => post.assertWrittenBy(intruso)).toThrow(
+        PostNotWrittenByException,
+      );
       expect(() => post.assertWrittenBy(intruso)).toThrow(new RegExp(id.value));
     });
 
@@ -319,7 +474,9 @@ describe('Post', () => {
       );
 
       expect(mesmoAutorOutraInstancia).not.toBe(post.author.delegated());
-      expect(() => post.assertWrittenBy(mesmoAutorOutraInstancia)).not.toThrow();
+      expect(() =>
+        post.assertWrittenBy(mesmoAutorOutraInstancia),
+      ).not.toThrow();
     });
 
     it('ter o papel de autor não substitui ser o autor deste post', () => {
@@ -327,7 +484,9 @@ describe('Post', () => {
       const outro = outroAutor();
 
       expect(outro.hasRole(AUTHOR_ROLE)).toBe(true);
-      expect(() => post.assertWrittenBy(outro)).toThrow(PostNotWrittenByException);
+      expect(() => post.assertWrittenBy(outro)).toThrow(
+        PostNotWrittenByException,
+      );
     });
 
     it('a recusa não muda nada no post: nenhum evento é disparado', () => {
@@ -350,7 +509,12 @@ describe('Post', () => {
         version: 1,
       });
 
-      expect(post).toMatchObject({ id, createdAt: now, updatedAt: now, version: 1 });
+      expect(post).toMatchObject({
+        id,
+        createdAt: now,
+        updatedAt: now,
+        version: 1,
+      });
       expect(post.title).toEqual(PostTitle.parse('Nest + GraphQL'));
       expect(post.getUncommittedEvents()).toEqual([]);
     });
@@ -384,7 +548,9 @@ describe('Post', () => {
       post.updatedAt = new Date('2026-09-08T11:00:00.000Z');
 
       expect(() => post.validate()).toThrow(InvalidPostException);
-      expect(issuesOf(() => post.validate())).toContain('updatedAt cannot precede createdAt');
+      expect(issuesOf(() => post.validate())).toContain(
+        'updatedAt cannot precede createdAt',
+      );
     });
 
     it('validate rejects a version below one', () => {
@@ -398,13 +564,32 @@ describe('Post', () => {
       const post = aPost();
 
       expect(() =>
-        post.apply(new PostUpdatedEvent(id.value, 'outro title', 'outro content', authorId.value, 'manuel', [], 0, now, later)),
+        post.apply(
+          new PostUpdatedEvent(
+            id.value,
+            'outro title',
+            'outro content',
+            authorId.value,
+            'manuel',
+            [],
+            0,
+            now,
+            later,
+          ),
+        ),
       ).toThrow(InvalidPostException);
     });
 
     it('equals compares by identity, not by reference', () => {
       const post = aPost();
-      const same = Post.from({ id, title: post.title, content: post.content, createdAt: now, updatedAt: now, version: 1 });
+      const same = Post.from({
+        id,
+        title: post.title,
+        content: post.content,
+        createdAt: now,
+        updatedAt: now,
+        version: 1,
+      });
 
       expect(post.equals(same)).toBe(true);
       expect(post.equals(Post.from({ id: PostId.generate() }))).toBe(false);

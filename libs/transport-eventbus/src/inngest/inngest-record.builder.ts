@@ -31,7 +31,9 @@ export interface InngestRecordOptions {
   readonly ts?: number | Date;
 }
 
-const INNGEST_RECORD = Symbol.for('nestposts.transport-eventbus.inngest-record');
+const INNGEST_RECORD = Symbol.for(
+  'nestposts.transport-eventbus.inngest-record',
+);
 
 /** A payload with Inngest options attached — the shape {@link InngestRecordBuilder} builds. */
 export interface InngestRecord<TData = unknown> {
@@ -43,7 +45,9 @@ export interface InngestRecord<TData = unknown> {
  * Whether a payload carries Inngest options. A marker symbol and not a duck-typed `'options' in
  * value`, because a domain event with a property called `options` is not a transport instruction.
  */
-export const isInngestRecord = <TData>(value: unknown): value is InngestRecord<TData> =>
+export const isInngestRecord = <TData>(
+  value: unknown,
+): value is InngestRecord<TData> =>
   typeof value === 'object' &&
   value !== null &&
   (value as Record<symbol, unknown>)[INNGEST_RECORD] === true;
@@ -77,12 +81,18 @@ export class InngestRecordBuilder<TData = unknown> {
   }
 
   setUser(user: Record<string, string>): this {
-    this.options = { ...this.options, user: { ...(this.options.user ?? {}), ...user } };
+    this.options = {
+      ...this.options,
+      user: { ...(this.options.user ?? {}), ...user },
+    };
     return this;
   }
 
   setMetadata(metadata: Record<string, string>): this {
-    this.options = { ...this.options, metadata: { ...(this.options.metadata ?? {}), ...metadata } };
+    this.options = {
+      ...this.options,
+      metadata: { ...(this.options.metadata ?? {}), ...metadata },
+    };
     return this;
   }
 
@@ -111,6 +121,10 @@ export class InngestRecordBuilder<TData = unknown> {
   }
 
   build(): InngestRecord<TData> {
-    return { data: this.data, options: this.options, [INNGEST_RECORD]: true } as InngestRecord<TData>;
+    return {
+      data: this.data,
+      options: this.options,
+      [INNGEST_RECORD]: true,
+    } as InngestRecord<TData>;
   }
 }

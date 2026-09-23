@@ -1,18 +1,18 @@
-import { classes } from "@automapper/classes";
 import type {
   Dictionary,
   Mapping,
   MappingStrategyInitializer,
   MetadataIdentifier,
-} from "@automapper/core";
+} from '@automapper/core';
+import { classes } from '@automapper/classes';
 
 export function validatedDtoClasses(): MappingStrategyInitializer<MetadataIdentifier> {
   function isValidatedDto(
     identifier: MetadataIdentifier,
   ): identifier is new (data?: unknown) => unknown {
-    return typeof identifier === "function" && "__schema" in identifier;
+    return typeof identifier === 'function' && '__schema' in identifier;
   }
-  
+
   function materializeValidatedDto<
     TSource extends Dictionary<TSource>,
     TDestination extends Dictionary<TDestination>,

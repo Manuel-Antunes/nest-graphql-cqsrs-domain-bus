@@ -1,14 +1,17 @@
 import { pipeline } from 'node:stream/promises';
-import awsLambdaFastify, {
-  type LambdaResponseStreamed,
-  type PromiseHandler,
+import type {
+  LambdaResponseStreamed,
+  PromiseHandler,
 } from '@fastify/aws-lambda';
-import { Logger } from '@nestjs/common';
 import type { StreamifyHandler } from 'aws-lambda';
 import type { FastifyInstance } from 'fastify';
+import awsLambdaFastify from '@fastify/aws-lambda';
+import { Logger } from '@nestjs/common';
+
+import type { HandlerOptions } from './settle';
 import { BootTimeoutError } from './boot';
-import { type HandlerOptions, settle } from './settle';
 import { lambdaRuntime } from './runtime';
+import { settle } from './settle';
 
 /** What {@link streamingHandler} needs from a booted application: the Fastify underneath it. */
 export interface StreamingApplication {
@@ -62,17 +65,22 @@ export const streamingHandler = (
           throw failure;
         }
         logger.error(`${failure.message} — answering 503`);
-        unavailable(runtime.HttpResponseStream.from(responseStream, UNAVAILABLE));
+        unavailable(
+          runtime.HttpResponseStream.from(responseStream, UNAVAILABLE),
+        );
         return;
       }
 
-      const dispatch = (proxy ??= awsLambdaFastify<unknown, typeof PROXY_OPTIONS>(
-        application.instance,
-        PROXY_OPTIONS,
-      ));
+      const dispatch = (proxy ??= awsLambdaFastify<
+        unknown,
+        typeof PROXY_OPTIONS
+      >(application.instance, PROXY_OPTIONS));
 
       const { meta, stream } = await dispatch(event, context);
-      await pipeline(stream, runtime.HttpResponseStream.from(responseStream, { ...meta }));
+      await pipeline(
+        stream,
+        runtime.HttpResponseStream.from(responseStream, { ...meta }),
+      );
     } finally {
       /**
        * The response is already with the caller; this only keeps the sandbox alive long enough to
@@ -91,11 +99,17 @@ export const streamingHandler = (
  * handlers are the same ones an HTTP server serves, and a request that knows it is in Lambda is a
  * request that could start behaving differently there.
  */
-const PROXY_OPTIONS = { payloadAsStream: true, decorateRequest: false } as const;
+const PROXY_OPTIONS = {
+  payloadAsStream: true,
+  decorateRequest: false,
+} as const;
 
 const UNAVAILABLE = {
   statusCode: 503,
-  headers: { 'content-type': 'application/json', 'retry-after': RETRY_AFTER_SECONDS },
+  headers: {
+    'content-type': 'application/json',
+    'retry-after': RETRY_AFTER_SECONDS,
+  },
 };
 
 const unavailable = (stream: NodeJS.WritableStream): void => {

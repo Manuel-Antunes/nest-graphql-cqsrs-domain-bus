@@ -36,7 +36,8 @@ const TRACE_CONTEXT_KEYS = new Set(['traceparent', 'tracestate', 'baggage']);
  * is just wrong, with every service's work hanging off the first one. `injectTraceContext` writes
  * the current one instead, at the moment the envelope is built.
  */
-export const isTraceContext = (key: string): boolean => TRACE_CONTEXT_KEYS.has(key.toLowerCase());
+export const isTraceContext = (key: string): boolean =>
+  TRACE_CONTEXT_KEYS.has(key.toLowerCase());
 
 /** `namespace.Name#version` — what the other side resolves the class by. */
 export const TRANSPORT_MESSAGE_TYPE = 'cqrs-transport-message-type';
@@ -134,10 +135,13 @@ export class EventEnvelope<TData = unknown> {
  */
 export const encodeData = (body: object): Record<string, unknown> =>
   JSON.parse(
-    JSON.stringify(body, function (this: Record<string, unknown>, key, value: unknown) {
-      const raw = this[key];
-      return raw instanceof Date ? { [DATE]: raw.toISOString() } : value;
-    }) ?? 'null',
+    JSON.stringify(
+      body,
+      function (this: Record<string, unknown>, key, value: unknown) {
+        const raw = this[key];
+        return raw instanceof Date ? { [DATE]: raw.toISOString() } : value;
+      },
+    ) ?? 'null',
   ) as Record<string, unknown>;
 
 /** The body as the application wrote it: every tagged date is a `Date` again. */
@@ -151,7 +155,12 @@ export const decodeData = (body: unknown): Record<string, unknown> =>
  * the record in two.
  */
 export const encodeTags = (tags: readonly WireTag[]): string =>
-  tags.map((tag) => `${encodeURIComponent(tag.key)}=${encodeURIComponent(tag.value)}`).join(';');
+  tags
+    .map(
+      (tag) =>
+        `${encodeURIComponent(tag.key)}=${encodeURIComponent(tag.value)}`,
+    )
+    .join(';');
 
 export const decodeTags = (encoded: string | undefined): WireTag[] =>
   !encoded
@@ -175,10 +184,16 @@ const revive = (value: unknown): unknown => {
   }
   if (value && typeof value === 'object') {
     const entries = Object.entries(value as Record<string, unknown>);
-    if (entries.length === 1 && entries[0][0] === DATE && typeof entries[0][1] === 'string') {
+    if (
+      entries.length === 1 &&
+      entries[0][0] === DATE &&
+      typeof entries[0][1] === 'string'
+    ) {
       return new Date(entries[0][1]);
     }
-    return Object.fromEntries(entries.map(([key, nested]) => [key, revive(nested)]));
+    return Object.fromEntries(
+      entries.map(([key, nested]) => [key, revive(nested)]),
+    );
   }
   return value;
 };

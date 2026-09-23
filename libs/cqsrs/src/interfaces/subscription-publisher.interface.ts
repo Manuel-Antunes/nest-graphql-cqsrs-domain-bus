@@ -5,6 +5,8 @@ import type { ISubscription } from './subscription.interface';
  * The default (`DefaultSubscriptionPubSub`) pushes into the bus's own `Subject`, which is what turns
  * the `SubscriptionBus` into an `Observable` of "who subscribed to what".
  */
-export interface ISubscriptionPublisher<SubscriptionBase extends ISubscription = ISubscription> {
+export interface ISubscriptionPublisher<
+  SubscriptionBase extends ISubscription = ISubscription,
+> {
   publish<T extends SubscriptionBase = SubscriptionBase>(subscription: T): any;
 }

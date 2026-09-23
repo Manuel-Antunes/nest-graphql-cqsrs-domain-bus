@@ -1,7 +1,11 @@
 type Subscription {
-  """Emite a cada PostCreated (tópico global)"""
+  """
+  Emite a cada PostCreated (tópico global)
+  """
   onPostCreated: Post!
 
-  """Emite a cada PostUpdated; postId filtra por tópico (null = todos)"""
+  """
+  Emite a cada PostUpdated; postId filtra por tópico (null = todos)
+  """
   onPostUpdated(postId: ID): Post!
 }

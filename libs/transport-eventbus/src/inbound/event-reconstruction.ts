@@ -1,14 +1,18 @@
 import { Logger } from '@nestjs/common';
-import { eventTypeFor, registeredEventTypes } from '@nestposts/platform/domain/shared/event-type';
 import {
-  type EnvelopeMetadata,
+  eventTypeFor,
+  registeredEventTypes,
+} from '@nestposts/platform/domain/shared/event-type';
+
+import type { ITransportDataEventBus } from '../interfaces/transport-data.interface';
+import type { EnvelopeMetadata } from '../outbound/event-envelope';
+import {
+  decodeData,
   EventEnvelope,
   TRANSPORT_IDENTIFIER,
   TRANSPORT_MESSAGE_TYPE,
-  decodeData,
 } from '../outbound/event-envelope';
 import { markIngested } from '../outbound/transport-metadata';
-import type { ITransportDataEventBus } from '../interfaces/transport-data.interface';
 
 const logger = new Logger('EventReconstruction');
 
@@ -38,7 +42,8 @@ const logger = new Logger('EventReconstruction');
  * event this process just raised, and therefore what keeps it from being forwarded straight back out.
  */
 export const reconstruct = (envelope: EventEnvelope): object => {
-  const declared = eventTypeFor(envelope.messageType) ?? byLocalName(envelope.messageType);
+  const declared =
+    eventTypeFor(envelope.messageType) ?? byLocalName(envelope.messageType);
   const event = declared
     ? (Object.create(declared.eventClass.prototype) as object)
     : anonymous(envelope.messageType);
@@ -70,7 +75,10 @@ export const envelopeFrom = (message: unknown): EventEnvelope => {
     return upstreamEnvelope(raw);
   }
   if (isEnvelopeShape(raw)) {
-    return new EventEnvelope(decodeData(raw['data']), raw['metadata'] as EnvelopeMetadata);
+    return new EventEnvelope(
+      decodeData(raw['data']),
+      raw['metadata'] as EnvelopeMetadata,
+    );
   }
   throw new TypeError(
     `a transport message that is not an envelope: ${JSON.stringify(raw).slice(0, 200)}. Declare an ` +
@@ -80,7 +88,8 @@ export const envelopeFrom = (message: unknown): EventEnvelope => {
 };
 
 /** The event, from whatever arrived: upstream's `@TransportEvent()` in one call. */
-export const reconstructEvent = (message: unknown): object => reconstruct(envelopeFrom(message));
+export const reconstructEvent = (message: unknown): object =>
+  reconstruct(envelopeFrom(message));
 
 const parse = (message: unknown): Record<string, unknown> =>
   typeof message === 'string' || Buffer.isBuffer(message)
@@ -93,7 +102,8 @@ const isUpstreamShape = (raw: Record<string, unknown>): boolean =>
 const isEnvelopeShape = (raw: Record<string, unknown>): boolean =>
   typeof raw['metadata'] === 'object' &&
   raw['metadata'] !== null &&
-  typeof (raw['metadata'] as EnvelopeMetadata)[TRANSPORT_MESSAGE_TYPE] === 'string';
+  typeof (raw['metadata'] as EnvelopeMetadata)[TRANSPORT_MESSAGE_TYPE] ===
+    'string';
 
 const upstreamEnvelope = (raw: Record<string, unknown>): EventEnvelope => {
   const { payload, eventName } = raw as unknown as ITransportDataEventBus;
@@ -126,5 +136,6 @@ const anonymous = (name: string): object => {
 
 const byLocalName = (eventName: string) =>
   registeredEventTypes().find(
-    (metadata) => metadata.name === eventName || metadata.eventClass.name === eventName,
+    (metadata) =>
+      metadata.name === eventName || metadata.eventClass.name === eventName,
   );

@@ -1,9 +1,10 @@
+import type { AsyncContext, ICommandHandler } from '@nestjs/cqrs';
+import type { Post } from '@nestposts/posts/domain/post/post.entity';
+import type { PostId } from '@nestposts/posts/domain/post/vo/post-id';
 import { Inject, Logger, Scope } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
-import { type AsyncContext, Command, CommandHandler, EventPublisher, type ICommandHandler } from '@nestjs/cqrs';
+import { Command, CommandHandler, EventPublisher } from '@nestjs/cqrs';
 import { PostNotFoundException } from '@nestposts/posts/domain/post/exception/post-not-found.exception';
-import type { PostId } from '@nestposts/posts/domain/post/vo/post-id';
-import type { Post } from '@nestposts/posts/domain/post/post.entity';
 import { Tag } from '@nestposts/posts/domain/tag/tag.entity';
 import { EventSourcedRepository } from '@nestposts/transport-eventbus';
 
@@ -40,9 +41,13 @@ export namespace CompletePostWithDefaultTagCommand {
       }
 
       const defaultTag = Tag.default();
-      this.logger.debug(`post ${command.postId.value} takes the default tag ${defaultTag.name.value}`);
+      this.logger.debug(
+        `post ${command.postId.value} takes the default tag ${defaultTag.name.value}`,
+      );
 
-      this.publisher.mergeObjectContext(post, this.request).complete([defaultTag], new Date());
+      this.publisher
+        .mergeObjectContext(post, this.request)
+        .complete([defaultTag], new Date());
       await this.posts.save(post);
       post.commit();
     }

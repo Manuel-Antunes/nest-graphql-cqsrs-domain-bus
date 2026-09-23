@@ -8,7 +8,9 @@ type Post @key(fields: "id") {
   createdAt: DateTime!
   updatedAt: DateTime!
 
-  """Quantidade de eventos aplicados (1 = só criado)"""
+  """
+  Quantidade de eventos aplicados (1 = só criado)
+  """
   version: Int!
 }
 
@@ -16,7 +18,9 @@ type PostConnection {
   edges: [PostEdge!]!
   pageInfo: PageInfo!
 
-  """Total de itens; null quando a fonte não conta"""
+  """
+  Total de itens; null quando a fonte não conta
+  """
   totalCount: Int
 }
 

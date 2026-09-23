@@ -1,7 +1,8 @@
 import type { ResultOf } from '@graphql-typed-document-node/core';
 import { print } from 'graphql';
 
-import { type GraphQlAnswer, expect, test } from '../fixtures/test';
+import type { GraphQlAnswer } from '../fixtures/test';
+import { expect, test } from '../fixtures/test';
 import { graphql } from '../gql';
 import { until } from '../support/posts-api';
 
@@ -9,7 +10,8 @@ const PRE_CREATED = 'posts.PostPreCreated';
 const CREATED = 'posts.PostCreated';
 const UPDATED = 'posts.PostUpdated';
 
-const stripVersion = (messageType: string): string => messageType.split('#')[0]!;
+const stripVersion = (messageType: string): string =>
+  messageType.split('#')[0]!;
 
 const EditSagaPost = graphql(`
   mutation EditSagaPost($id: ID!) {
@@ -60,9 +62,13 @@ test.describe.serial('a saga coreografada, escrita no navegador', () => {
     await page.getByLabel('Conteúdo').fill('escrito no formulário');
     await page.getByRole('button', { name: 'Publicar' }).click();
 
-    await expect(page.getByText('Resposta da mutation — versão 1')).toBeVisible();
+    await expect(
+      page.getByText('Resposta da mutation — versão 1'),
+    ).toBeVisible();
 
-    const href = await page.getByRole('link', { name: 'Abrir o post' }).getAttribute('href');
+    const href = await page
+      .getByRole('link', { name: 'Abrir o post' })
+      .getAttribute('href');
     postId = href!.split('/').pop()!;
     expect(postId).toMatch(/^[0-9a-f-]{36}$/);
   });
@@ -80,7 +86,9 @@ test.describe.serial('a saga coreografada, escrita no navegador', () => {
   }) => {
     await expect(async () => {
       await page.goto(`/posts/${postId}`);
-      await expect(page.getByText('Untagged').first()).toBeVisible({ timeout: 1_000 });
+      await expect(page.getByText('Untagged').first()).toBeVisible({
+        timeout: 1_000,
+      });
     }).toPass({ timeout: 30_000 });
   });
 
@@ -91,7 +99,10 @@ test.describe.serial('a saga coreografada, escrita no navegador', () => {
     const post = await postsStore.post(postId);
 
     expect(post).toMatchObject({ version: 2 });
-    expect(post!.published_at, 'um post completo está publicado').not.toBeNull();
+    expect(
+      post!.published_at,
+      'um post completo está publicado',
+    ).not.toBeNull();
     expect(await postsStore.tagsOf(postId)).toEqual(['Untagged']);
     expect(
       (await taggingStore.streamOf(postId)).map(stripVersion),
@@ -114,12 +125,22 @@ test.describe.serial('a saga coreografada, escrita no navegador', () => {
     const ingestedHere = await postsStore.inbox();
     const ingestedThere = await taggingStore.inbox();
 
-    expect(ingestedHere.length, 'a posts-api não ingeriu nada').toBeGreaterThan(0);
-    expect([...new Set(ingestedHere.map((row) => row.origin))]).toEqual(['tagging']);
-    expect(ingestedHere.every((row) => row.message_type.startsWith(CREATED))).toBe(true);
+    expect(ingestedHere.length, 'a posts-api não ingeriu nada').toBeGreaterThan(
+      0,
+    );
+    expect([...new Set(ingestedHere.map((row) => row.origin))]).toEqual([
+      'tagging',
+    ]);
+    expect(
+      ingestedHere.every((row) => row.message_type.startsWith(CREATED)),
+    ).toBe(true);
 
-    expect(ingestedThere.length, 'o tagging não ingeriu nada').toBeGreaterThan(0);
-    expect([...new Set(ingestedThere.map((row) => row.origin))]).toEqual(['posts-api']);
+    expect(ingestedThere.length, 'o tagging não ingeriu nada').toBeGreaterThan(
+      0,
+    );
+    expect([...new Set(ingestedThere.map((row) => row.origin))]).toEqual([
+      'posts-api',
+    ]);
   });
 
   test('reentregar a MESMA mensagem não produz uma segunda decisão', async ({
@@ -134,7 +155,10 @@ test.describe.serial('a saga coreografada, escrita no navegador', () => {
       `postId=${postId}`,
     );
 
-    expect(accepted, 'o transporte não endereçou a reentrega: o binding mudou').toBe(true);
+    expect(
+      accepted,
+      'o transporte não endereçou a reentrega: o binding mudou',
+    ).toBe(true);
     await new Promise((resolve) => setTimeout(resolve, 4000));
     expect(
       await taggingStore.countEvents(postId, CREATED),
@@ -168,7 +192,8 @@ test.describe.serial('a saga coreografada, escrita no navegador', () => {
   });
 });
 
-test.describe.serial('o que a request carrega atravessa os dois processos', () => {
+test.describe
+  .serial('o que a request carrega atravessa os dois processos', () => {
   test('uma request, um correlation id', async ({
     accounts,
     signIn,
@@ -179,18 +204,23 @@ test.describe.serial('o que a request carrega atravessa os dois processos', () =
     await wire.watch('posts.#');
     await signIn(accounts.author);
 
-    const created = await executeGraphql(CreateCorrelatedPost, { title: 'Uma request só' });
+    const created = await executeGraphql(CreateCorrelatedPost, {
+      title: 'Uma request só',
+    });
     expect(created.errors, JSON.stringify(created.errors)).toBeUndefined();
     const seen = await wire.of(created.data!.createPost.id);
 
-    expect(seen.size, 'o transporte não trouxe os dois eventos da saga').toBe(2);
+    expect(seen.size, 'o transporte não trouxe os dois eventos da saga').toBe(
+      2,
+    );
     const [born, completed] = ['PostPreCreated', 'PostCreated'].map(
       (name) => seen.get(name)!.headers,
     );
     expect(born['cqrs-transport-origin']).toBe('posts-api');
-    expect(completed['cqrs-transport-origin'], 'o segundo evento é decisão do outro processo').toBe(
-      'tagging',
-    );
+    expect(
+      completed['cqrs-transport-origin'],
+      'o segundo evento é decisão do outro processo',
+    ).toBe('tagging');
     expect(
       completed['cqrs-transport-correlation-id'],
       'a saga inteira sob um correlation id só',
@@ -213,7 +243,9 @@ test.describe.serial('o que a request carrega atravessa os dois processos', () =
     const wire = messages('nestposts.e2e.tenant-spy');
     await wire.watch('posts.#');
 
-    const context = await browser.newContext({ extraHTTPHeaders: { 'x-tenant': 'Acme' } });
+    const context = await browser.newContext({
+      extraHTTPHeaders: { 'x-tenant': 'Acme' },
+    });
     const page = await context.newPage();
     await page.goto('/login');
     await page.getByLabel('E-mail').fill(accounts.author.email);
@@ -221,21 +253,27 @@ test.describe.serial('o que a request carrega atravessa os dois processos', () =
     await page.getByRole('button', { name: 'Entrar' }).click();
     await expect(page.getByText(accounts.author.email).first()).toBeVisible();
 
-    const created = await page.evaluate<TenantPostAnswer, string>(async (query) => {
-      const response = await fetch('/api/graphql', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ query }),
-      });
-      return response.json() as Promise<TenantPostAnswer>;
-    }, print(CreateTenantPost));
+    const created = await page.evaluate<TenantPostAnswer, string>(
+      async (query) => {
+        const response = await fetch('/api/graphql', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ query }),
+        });
+        return response.json() as Promise<TenantPostAnswer>;
+      },
+      print(CreateTenantPost),
+    );
     expect(created.errors, JSON.stringify(created.errors)).toBeUndefined();
     const seen = await wire.of(created.data!.createPost.id);
 
     const [born, completed] = ['PostPreCreated', 'PostCreated'].map(
       (name) => seen.get(name)!.headers,
     );
-    expect(born['x-tenant'], 'o header do navegador entrou na PostRequest').toBe('acme');
+    expect(
+      born['x-tenant'],
+      'o header do navegador entrou na PostRequest',
+    ).toBe('acme');
     expect(
       completed['x-tenant'],
       'o tagging republicou sob o contexto que recebeu: o tenant atravessou os dois processos',

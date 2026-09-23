@@ -8,6 +8,9 @@ extend type Query {
 
 directive @link(url: String!, import: [String]) repeatable on SCHEMA
 
-directive @key(fields: String!, resolvable: Boolean = true) repeatable on OBJECT | INTERFACE
+directive @key(
+  fields: String!
+  resolvable: Boolean = true
+) repeatable on OBJECT | INTERFACE
 
 directive @shareable repeatable on OBJECT | FIELD_DEFINITION

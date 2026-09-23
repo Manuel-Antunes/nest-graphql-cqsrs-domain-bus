@@ -2,13 +2,15 @@ import { subscriptionKey } from '../helpers/subscription-key';
 import { EVENT_TYPE_SYMBOL } from './constants';
 
 /** The type of event a subscription delivers. */
-export type SubscriptionEvent<S> = S extends Subscription<infer TEvent, any> ? TEvent : never;
+export type SubscriptionEvent<S> =
+  S extends Subscription<infer TEvent, any> ? TEvent : never;
 
 /**
  * The type of a subscription's filter criteria — what the interface layer has to assemble in order to
  * request it. `SubscriptionCriteria<OnPostUpdatedSubscription>` is `{ postId?: string | null }`.
  */
-export type SubscriptionCriteria<S> = S extends Subscription<any, infer TCriteria> ? TCriteria : never;
+export type SubscriptionCriteria<S> =
+  S extends Subscription<any, infer TCriteria> ? TCriteria : never;
 
 /**
  * A subscription message: "notify me on every event of this kind that matches these criteria".

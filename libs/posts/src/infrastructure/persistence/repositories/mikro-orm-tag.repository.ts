@@ -1,9 +1,10 @@
 import { EntityManager } from '@mikro-orm/core';
 import { Injectable } from '@nestjs/common';
-import { Tag } from '../../../domain/tag/tag.entity';
-import { TagRepository } from '../../../domain/tag/tag.repository';
+
 import type { TagId } from '../../../domain/tag/vo/tag-id';
 import type { TagName } from '../../../domain/tag/vo/tag-name';
+import { Tag } from '../../../domain/tag/tag.entity';
+import { TagRepository } from '../../../domain/tag/tag.repository';
 
 @Injectable()
 export class MikroOrmTagRepository extends TagRepository {

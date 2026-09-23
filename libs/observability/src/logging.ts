@@ -1,5 +1,6 @@
 import type { DynamicModule } from '@nestjs/common';
-import { LoggerModule, type Params } from 'nestjs-pino';
+import type { Params } from 'nestjs-pino';
+import { LoggerModule } from 'nestjs-pino';
 
 export interface LoggingOptions {
   /** The same name the traces carry, so a log line and a span agree about who wrote them. */
@@ -41,14 +42,17 @@ export const loggingModule = (options: LoggingOptions): DynamicModule =>
   LoggerModule.forRoot(loggingParams(options));
 
 export const loggingParams = (options: LoggingOptions): Params => {
-  const pretty = options.pretty ?? (process.stdout.isTTY === true && !inLambda());
+  const pretty =
+    options.pretty ?? (process.stdout.isTTY === true && !inLambda());
 
   return {
     pinoHttp: {
       name: options.serviceName,
       level: options.level ?? process.env.LOG_LEVEL ?? 'info',
       ...(pretty
-        ? { transport: { target: 'pino-pretty', options: { singleLine: true } } }
+        ? {
+            transport: { target: 'pino-pretty', options: { singleLine: true } },
+          }
         : {}),
       /**
        * A health check every second is a log line every second, and it buries what somebody is

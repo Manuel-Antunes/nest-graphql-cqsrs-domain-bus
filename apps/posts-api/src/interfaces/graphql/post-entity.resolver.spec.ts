@@ -1,6 +1,7 @@
 import type { QueryBus } from '@nestjs/cqrs';
-import { FindPostQuery } from '../../application/post/query/find-post.query';
 import { PostId } from '@nestposts/posts/domain/post/vo/post-id';
+
+import { FindPostQuery } from '../../application/post/query/find-post.query';
 import { PostEntityResolver } from './post-entity.resolver';
 
 describe('PostEntityResolver', () => {
@@ -24,19 +25,25 @@ describe('PostEntityResolver', () => {
 
     expect(dispatched).toHaveLength(1);
     expect(dispatched[0]).toBeInstanceOf(FindPostQuery.FindPost);
-    expect((dispatched[0] as FindPostQuery.FindPost).postId.equals(postId)).toBe(true);
+    expect(
+      (dispatched[0] as FindPostQuery.FindPost).postId.equals(postId),
+    ).toBe(true);
   });
 
   it('a key that resolves to nothing is null, which is the position the router reads', async () => {
     const { resolver } = resolverOn(null);
 
-    await expect(resolver.resolveReference({ __typename: 'Post', id: postId.value })).resolves.toBeNull();
+    await expect(
+      resolver.resolveReference({ __typename: 'Post', id: postId.value }),
+    ).resolves.toBeNull();
   });
 
   it('an id that is not an id is refused before any query is dispatched', async () => {
     const { resolver, dispatched } = resolverOn(null);
 
-    expect(() => resolver.resolveReference({ __typename: 'Post', id: 'not-an-id' })).toThrow();
+    expect(() =>
+      resolver.resolveReference({ __typename: 'Post', id: 'not-an-id' }),
+    ).toThrow();
     expect(dispatched).toHaveLength(0);
   });
 });

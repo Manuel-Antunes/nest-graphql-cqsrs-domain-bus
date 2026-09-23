@@ -1,7 +1,14 @@
-import { type ExecutionContext, Injectable } from '@nestjs/common';
+import type { ExecutionContext } from '@nestjs/common';
 import type { AsyncContext } from '@nestjs/cqrs';
-import { HeaderTenantResolver, TENANT_HEADER, Tenant } from '@nestposts/database';
-import { type ContextAttributes, TransportRequestContext } from '../request-context';
+import { Injectable } from '@nestjs/common';
+import {
+  HeaderTenantResolver,
+  Tenant,
+  TENANT_HEADER,
+} from '@nestposts/database';
+
+import type { ContextAttributes } from '../request-context';
+import { TransportRequestContext } from '../request-context';
 import { IncomingRequest } from './incoming-request';
 
 /**
@@ -31,15 +38,20 @@ export class TransportTenantResolver extends HeaderTenantResolver {
    * which is the same method `encode` reads to put it on the wire, so a context that publishes a
    * tenant is a context this can read one from, with nothing to keep in step.
    */
-  static tenantCarriedBy(context: AsyncContext | undefined): string | undefined {
+  static tenantCarriedBy(
+    context: AsyncContext | undefined,
+  ): string | undefined {
     if (!context) {
       return undefined;
     }
     const carried =
       context instanceof TransportRequestContext
         ? context.attributes[TENANT_HEADER]
-        : typeof (context as unknown as ContextAttributes).toAttributes === 'function'
-          ? (context as unknown as ContextAttributes).toAttributes()[TENANT_HEADER]
+        : typeof (context as unknown as ContextAttributes).toAttributes ===
+            'function'
+          ? (context as unknown as ContextAttributes).toAttributes()[
+              TENANT_HEADER
+            ]
           : undefined;
 
     return carried ? Tenant.normalize(carried) : undefined;
@@ -47,7 +59,9 @@ export class TransportTenantResolver extends HeaderTenantResolver {
 
   override tenantOf(context: ExecutionContext): string {
     if (context.getType<string>() === 'rpc') {
-      const carried = TransportTenantResolver.tenantCarriedBy(this.incoming.of(context));
+      const carried = TransportTenantResolver.tenantCarriedBy(
+        this.incoming.of(context),
+      );
       if (carried) {
         return carried;
       }

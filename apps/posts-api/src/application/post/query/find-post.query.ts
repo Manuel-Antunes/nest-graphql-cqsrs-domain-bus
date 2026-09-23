@@ -1,7 +1,8 @@
-import { type IQueryHandler, Query, QueryHandler } from '@nestjs/cqrs';
+import type { IQueryHandler } from '@nestjs/cqrs';
 import type { Post } from '@nestposts/posts/domain/post/post.entity';
-import { PostRepository } from '@nestposts/posts/domain/post/post.repository';
 import type { PostId } from '@nestposts/posts/domain/post/vo/post-id';
+import { Query, QueryHandler } from '@nestjs/cqrs';
+import { PostRepository } from '@nestposts/posts/domain/post/post.repository';
 
 export namespace FindPostQuery {
   export class FindPost extends Query<Post | null> {
@@ -12,9 +13,7 @@ export namespace FindPostQuery {
 
   @QueryHandler(FindPost)
   export class Handler implements IQueryHandler<FindPost> {
-    constructor(
-      private readonly posts: PostRepository,
-    ) {}
+    constructor(private readonly posts: PostRepository) {}
     async execute(query: FindPost): Promise<Post | null> {
       return this.posts.findById(query.postId);
     }

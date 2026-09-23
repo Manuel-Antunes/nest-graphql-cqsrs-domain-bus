@@ -1,4 +1,6 @@
-import { BaseEntity, ChangeSetType, type FlushEventArgs } from '@mikro-orm/core';
+import type { FlushEventArgs } from '@mikro-orm/core';
+import { BaseEntity, ChangeSetType } from '@mikro-orm/core';
+
 import { WithSoftDelete } from '../../../domain/shared/soft-delete/soft-delete';
 import { SoftDeleteSubscriber } from './soft-delete.subscriber';
 
@@ -12,7 +14,9 @@ describe('SoftDeleteSubscriber', () => {
 
   const subscriber = new SoftDeleteSubscriber();
 
-  const flushWith = (changeSets: Array<{ type: ChangeSetType; entity: unknown }>) => {
+  const flushWith = (
+    changeSets: Array<{ type: ChangeSetType; entity: unknown }>,
+  ) => {
     const recomputed: unknown[] = [];
     const args = {
       uow: {
@@ -25,7 +29,9 @@ describe('SoftDeleteSubscriber', () => {
 
   it('um DELETE vira UPDATE, com a data marcada e o changeset recomputado', () => {
     const entity = new Apagavel();
-    const { args, recomputed } = flushWith([{ type: ChangeSetType.DELETE, entity }]);
+    const { args, recomputed } = flushWith([
+      { type: ChangeSetType.DELETE, entity },
+    ]);
 
     subscriber.onFlush(args);
 
@@ -36,7 +42,9 @@ describe('SoftDeleteSubscriber', () => {
 
   it('um DELETE_EARLY vira UPDATE_EARLY, preservando a ordem que ele pedia', () => {
     const entity = new Apagavel();
-    const { args, recomputed } = flushWith([{ type: ChangeSetType.DELETE_EARLY, entity }]);
+    const { args, recomputed } = flushWith([
+      { type: ChangeSetType.DELETE_EARLY, entity },
+    ]);
 
     subscriber.onFlush(args);
 
@@ -74,7 +82,9 @@ describe('SoftDeleteSubscriber', () => {
   });
 
   it('uma entidade que não herda o mixin continua sendo apagada de verdade', () => {
-    const { args, recomputed } = flushWith([{ type: ChangeSetType.DELETE, entity: new Comum() }]);
+    const { args, recomputed } = flushWith([
+      { type: ChangeSetType.DELETE, entity: new Comum() },
+    ]);
 
     subscriber.onFlush(args);
 

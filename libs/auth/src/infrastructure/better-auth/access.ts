@@ -1,10 +1,10 @@
+import { AUTHOR_ROLE } from '@nestposts/users/domain/user/author.entity';
 import { createAccessControl } from 'better-auth/plugins/access';
 import {
   adminAc as systemAdminAc,
   defaultStatements as systemDefaultStatements,
   userAc as systemUserAc,
 } from 'better-auth/plugins/admin/access';
-import { AUTHOR_ROLE } from '@nestposts/users/domain/user/author.entity';
 
 export const POST_RESOURCE = 'post';
 

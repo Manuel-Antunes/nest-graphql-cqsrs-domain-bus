@@ -1,20 +1,18 @@
-import { MemoryServer } from '@camcima/nestjs-memory-microservices';
 import type { HttpServer } from '@nestjs/common';
+import type { ClientProxy, MicroserviceOptions } from '@nestjs/microservices';
 import type { Inngest } from 'inngest';
-import {
-  type ClientProxy,
-  ClientProxyFactory,
-  type MicroserviceOptions,
-  Transport,
-} from '@nestjs/microservices';
+import { MemoryServer } from '@camcima/nestjs-memory-microservices';
+import { ClientProxyFactory, Transport } from '@nestjs/microservices';
 import {
   AwsEventEnvelopeSerializer,
+  inngestApp,
   InngestClientProxy,
   InngestEventEnvelopeDeserializer,
   InngestEventEnvelopeSerializer,
   InngestStrategy,
+  localQueueUrl,
+  localTopicArn,
   MemoryClient,
-  inngestApp,
   MemoryEventEnvelopeSerializer,
   RmqEventEnvelopeDeserializer,
   RmqEventEnvelopeSerializer,
@@ -22,8 +20,6 @@ import {
   SqsEventEnvelopeDeserializer,
   SqsStrategy,
   TransportIdentity,
-  localQueueUrl,
-  localTopicArn,
 } from '@nestposts/transport-eventbus';
 
 export const POST_EVENTS_CLIENT = 'POST_EVENTS_CLIENT';
@@ -39,10 +35,12 @@ export const EXCHANGE = process.env.POSTS_EXCHANGE ?? 'nestposts.events';
 export const POST_COMPLETED_QUEUE =
   process.env.POSTS_COMPLETED_QUEUE ?? 'nestposts.posts-api.post-completed';
 
-export const EVENTS_TOPIC_ARN = process.env.POSTS_TOPIC_ARN ?? localTopicArn('nestposts-events.fifo');
+export const EVENTS_TOPIC_ARN =
+  process.env.POSTS_TOPIC_ARN ?? localTopicArn('nestposts-events.fifo');
 
 export const POST_COMPLETED_QUEUE_URL =
-  process.env.POSTS_COMPLETED_QUEUE_URL ?? localQueueUrl('nestposts-posts-api-completed.fifo');
+  process.env.POSTS_COMPLETED_QUEUE_URL ??
+  localQueueUrl('nestposts-posts-api-completed.fifo');
 
 export type TransportMode = 'inngest' | 'rabbitmq' | 'memory' | 'aws';
 
@@ -71,9 +69,12 @@ export const inboundDestination = (): string =>
     memory: 'in process',
   })[transportMode()];
 
-export const subscriptionsFromFeed = (): boolean => process.env.POSTS_SUBSCRIPTION_SOURCE === 'feed';
+export const subscriptionsFromFeed = (): boolean =>
+  process.env.POSTS_SUBSCRIPTION_SOURCE === 'feed';
 
-const urls = (): string[] => [process.env.RABBITMQ_URL ?? 'amqp://localhost:5672'];
+const urls = (): string[] => [
+  process.env.RABBITMQ_URL ?? 'amqp://localhost:5672',
+];
 
 export const postEventsClient = (): ClientProxy => {
   switch (transportMode()) {
@@ -88,7 +89,10 @@ export const postEventsClient = (): ClientProxy => {
         serializer: new AwsEventEnvelopeSerializer(),
       });
     case 'memory':
-      return new MemoryClient({ servers: [], serializer: new MemoryEventEnvelopeSerializer() });
+      return new MemoryClient({
+        servers: [],
+        serializer: new MemoryEventEnvelopeSerializer(),
+      });
     default:
       return ClientProxyFactory.create({
         transport: Transport.RMQ,
@@ -105,10 +109,14 @@ export const postEventsClient = (): ClientProxy => {
 };
 
 export const lambdaTransport = (): MicroserviceOptions => ({
-  strategy: new SqsStrategy({ deserializer: new SqsEventEnvelopeDeserializer() }),
+  strategy: new SqsStrategy({
+    deserializer: new SqsEventEnvelopeDeserializer(),
+  }),
 });
 
-export const postCompletedTransport = (httpAdapter?: HttpServer): MicroserviceOptions => {
+export const postCompletedTransport = (
+  httpAdapter?: HttpServer,
+): MicroserviceOptions => {
   switch (transportMode()) {
     case 'inngest':
       return {

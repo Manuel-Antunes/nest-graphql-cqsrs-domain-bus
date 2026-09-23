@@ -1,25 +1,26 @@
+import type { IEvent, IEventPublisher } from '@nestjs/cqrs';
+import type { TestingModule } from '@nestjs/testing';
+import type { Observable } from 'rxjs';
 import { Global, Inject, Injectable, Module, Scope } from '@nestjs/common';
+import { REQUEST } from '@nestjs/core';
 import {
   CommandBus,
   EventBus,
   EventPublisher,
-  type IEvent,
-  type IEventPublisher,
   ofType,
   QueryBus,
 } from '@nestjs/cqrs';
-import { REQUEST } from '@nestjs/core';
-import { Test, type TestingModule } from '@nestjs/testing';
-import type { Observable } from 'rxjs';
-import { Subscription } from './classes/subscription';
-import { CqsrsModule } from './cqsrs.module';
-import { SubscriptionHandler } from './decorators/subscription-handler.decorator';
+import { Test } from '@nestjs/testing';
+
 import type {
   CqsrsModuleOptions,
   CqsrsModuleOptionsFactory,
   ISubscriptionHandler,
   ISubscriptionPublisher,
 } from './interfaces/index';
+import { Subscription } from './classes/subscription';
+import { CqsrsModule } from './cqsrs.module';
+import { SubscriptionHandler } from './decorators/subscription-handler.decorator';
 import { SubscriptionBus } from './subscription-bus';
 
 class Pinged {
@@ -38,7 +39,9 @@ class OnPingedHandler implements ISubscriptionHandler<OnPinged> {
 }
 
 const subscriptionPublisher: ISubscriptionPublisher = { publish: () => {} };
-const eventPublisher: IEventPublisher = { publish: <T extends IEvent>(_event: T) => {} };
+const eventPublisher: IEventPublisher = {
+  publish: <T extends IEvent>(_event: T) => {},
+};
 const options: CqsrsModuleOptions = { subscriptionPublisher, eventPublisher };
 
 const AGGREGATE_PUBLISHER = 'AGGREGATE_PUBLISHER';
@@ -52,7 +55,10 @@ class ApplicationPublisher extends EventPublisher {
 
 @Global()
 @Module({
-  providers: [ApplicationPublisher, { provide: AGGREGATE_PUBLISHER, useExisting: ApplicationPublisher }],
+  providers: [
+    ApplicationPublisher,
+    { provide: AGGREGATE_PUBLISHER, useExisting: ApplicationPublisher },
+  ],
   exports: [AGGREGATE_PUBLISHER],
 })
 class ApplicationPublisherModule {}
@@ -75,7 +81,10 @@ class HandlersModule {}
 
 const CONFIG = 'CONFIG';
 
-@Module({ providers: [{ provide: CONFIG, useValue: { url: 'redis://' } }], exports: [CONFIG] })
+@Module({
+  providers: [{ provide: CONFIG, useValue: { url: 'redis://' } }],
+  exports: [CONFIG],
+})
 class ConfigStubModule {}
 
 @Injectable()
@@ -134,7 +143,7 @@ describe("CqsrsModule and the application's EventPublisher", () => {
   it.each([
     ['the module that imports CqsrsModule', inTheImportingModule],
     ['a module that imports nothing of the sort', inAnotherModule],
-    ])('is the named one for a handler in %s', async (_shape, arrange) => {
+  ])('is the named one for a handler in %s', async (_shape, arrange) => {
     const app = await bootstrap(arrange(namedPublisher));
 
     expect(app.get(PublishingHandler, { strict: false }).publisher).toBe(
@@ -145,17 +154,27 @@ describe("CqsrsModule and the application's EventPublisher", () => {
   it.each([
     ['the module that imports CqsrsModule', inTheImportingModule],
     ['a module that imports nothing of the sort', inAnotherModule],
-    ])('is the named one for a REQUEST-scoped handler in %s', async (_shape, arrange) => {
-    const app = await bootstrap(arrange(namedPublisher));
+  ])(
+    'is the named one for a REQUEST-scoped handler in %s',
+    async (_shape, arrange) => {
+      const app = await bootstrap(arrange(namedPublisher));
 
-    const handler = await app.resolve(RequestScopedHandler, undefined, { strict: false });
-    expect(handler.publisher).toBe(app.get(ApplicationPublisher, { strict: false }));
-  });
+      const handler = await app.resolve(RequestScopedHandler, undefined, {
+        strict: false,
+      });
+      expect(handler.publisher).toBe(
+        app.get(ApplicationPublisher, { strict: false }),
+      );
+    },
+  );
 
   it('is the named one with the options resolved asynchronously too', async () => {
     const app = await bootstrap(
       inAnotherModule([
-        CqsrsModule.forRootAsync({ useValue: {}, aggregatePublisher: AGGREGATE_PUBLISHER }),
+        CqsrsModule.forRootAsync({
+          useValue: {},
+          aggregatePublisher: AGGREGATE_PUBLISHER,
+        }),
         ApplicationPublisherModule,
       ]),
     );
@@ -170,7 +189,10 @@ describe('CqsrsModule.forRootAsync', () => {
   let module: TestingModule;
 
   const bootstrap = async (imports: any[]) => {
-    module = await Test.createTestingModule({ imports, providers: [OnPingedHandler] }).compile();
+    module = await Test.createTestingModule({
+      imports,
+      providers: [OnPingedHandler],
+    }).compile();
     await module.init();
     return module;
   };
@@ -202,7 +224,14 @@ describe('CqsrsModule.forRootAsync', () => {
   it.each([
     ['useValue', () => CqsrsModule.forRootAsync({ useValue: options })],
     ['useClass', () => CqsrsModule.forRootAsync({ useClass: OptionsFactory })],
-    ['useExisting', () => CqsrsModule.forRootAsync({ imports: [OptionsFactoryModule], useExisting: OptionsFactory })],
+    [
+      'useExisting',
+      () =>
+        CqsrsModule.forRootAsync({
+          imports: [OptionsFactoryModule],
+          useExisting: OptionsFactory,
+        }),
+    ],
   ])('resolves the options with %s', async (_form, build) => {
     const app = await bootstrap([build()]);
 
@@ -212,7 +241,14 @@ describe('CqsrsModule.forRootAsync', () => {
 
   it.each([
     ['useClass', () => CqsrsModule.forRootAsync({ useClass: OptionsFactory })],
-    ['useExisting', () => CqsrsModule.forRootAsync({ imports: [OptionsFactoryModule], useExisting: OptionsFactory })],
+    [
+      'useExisting',
+      () =>
+        CqsrsModule.forRootAsync({
+          imports: [OptionsFactoryModule],
+          useExisting: OptionsFactory,
+        }),
+    ],
   ])('calls the %s factory once', async (_form, build) => {
     await bootstrap([build()]);
 
@@ -250,6 +286,8 @@ describe('CqsrsModule.forRootAsync', () => {
   });
 
   it('refuses a configuration that says nothing about where the options come from', () => {
-    expect(() => CqsrsModule.forRootAsync({})).toThrow(/useValue, useFactory, useClass, or useExisting/);
+    expect(() => CqsrsModule.forRootAsync({})).toThrow(
+      /useValue, useFactory, useClass, or useExisting/,
+    );
   });
 });

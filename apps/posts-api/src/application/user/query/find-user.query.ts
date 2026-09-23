@@ -1,7 +1,8 @@
-import { type IQueryHandler, Query, QueryHandler } from '@nestjs/cqrs';
+import type { IQueryHandler } from '@nestjs/cqrs';
 import type { User } from '@nestposts/users/domain/user/user.entity';
-import { UserRepository } from '@nestposts/users/domain/user/user.repository';
 import type { UserId } from '@nestposts/users/domain/user/vo/user-id';
+import { Query, QueryHandler } from '@nestjs/cqrs';
+import { UserRepository } from '@nestposts/users/domain/user/user.repository';
 
 export namespace FindUserQuery {
   export class FindUser extends Query<User | null> {

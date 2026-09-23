@@ -1,10 +1,7 @@
+import type { ISubscriptionHandler } from '@nestposts/cqsrs';
 import type { Observable } from 'rxjs';
 import { EventBus, ofType } from '@nestjs/cqrs';
-import {
-  type ISubscriptionHandler,
-  Subscription,
-  SubscriptionHandler,
-} from '@nestposts/cqsrs';
+import { Subscription, SubscriptionHandler } from '@nestposts/cqsrs';
 import { PostCreatedEvent } from '@nestposts/posts/domain/post/event/post-created.event';
 
 export namespace OnPostCreatedSubscription {

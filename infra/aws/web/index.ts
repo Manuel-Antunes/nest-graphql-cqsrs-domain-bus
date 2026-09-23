@@ -23,7 +23,11 @@ export const web = new sst.aws.Nextjs('Web', {
   path: 'apps/web',
   vpc,
   router: { instance: router },
-  server: { timeout: '60 seconds', architecture: 'arm64', layers: [COLLECTOR_LAYER] },
+  server: {
+    timeout: '60 seconds',
+    architecture: 'arm64',
+    layers: [COLLECTOR_LAYER],
+  },
   transform: {
     server: (args) => {
       args.copyFiles = [

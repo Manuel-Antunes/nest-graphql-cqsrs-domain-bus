@@ -1,4 +1,5 @@
-import { type ArgumentsHost, Catch, type ExceptionFilter, HttpException, HttpStatus } from '@nestjs/common';
+import type { ArgumentsHost, ExceptionFilter } from '@nestjs/common';
+import { Catch, HttpException, HttpStatus } from '@nestjs/common';
 import { GraphQLError } from 'graphql';
 
 const CODES: Record<number, string> = {

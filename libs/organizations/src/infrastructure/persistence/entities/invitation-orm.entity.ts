@@ -1,11 +1,12 @@
+import { AuthUserEntitySchema } from '@nestposts/auth/infrastructure/persistence/entities/auth-user-orm.entity';
 import { defineEntity, p, valueObjectType } from '@nestposts/database';
 import { Email } from '@nestposts/users/domain/user/vo/email';
+
 import { Invitation } from '../../../domain/organization/invitation.entity';
 import { INVITATION_ID_MAX_LENGTH } from '../../../domain/organization/schemas/invitation-id.schema';
 import { INVITATION_STATUS_MAX_LENGTH } from '../../../domain/organization/schemas/invitation-status.schema';
 import { InvitationId } from '../../../domain/organization/vo/invitation-id';
 import { InvitationStatus } from '../../../domain/organization/vo/invitation-status';
-import { AuthUserEntitySchema } from '@nestposts/auth/infrastructure/persistence/entities/auth-user-orm.entity';
 import { MemberRoleType } from './member-orm.entity';
 import { OrganizationEntitySchema } from './organization-orm.entity';
 

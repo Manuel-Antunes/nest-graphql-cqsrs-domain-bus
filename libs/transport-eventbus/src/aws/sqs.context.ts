@@ -1,5 +1,6 @@
-import { BaseRpcContext } from '@nestjs/microservices';
 import type { Context as LambdaContext, SQSRecord } from 'aws-lambda';
+import { BaseRpcContext } from '@nestjs/microservices';
+
 import type { EnvelopeMetadata } from '../outbound/event-envelope';
 
 type SqsContextArgs = [
@@ -64,7 +65,10 @@ export class SqsContext extends BaseRpcContext<SqsContextArgs> {
    * against a count of deliveries.
    */
   getRetryCount(): number {
-    const received = Number.parseInt(this.args[0].attributes?.ApproximateReceiveCount ?? '', 10);
+    const received = Number.parseInt(
+      this.args[0].attributes?.ApproximateReceiveCount ?? '',
+      10,
+    );
     return Number.isNaN(received) ? 0 : Math.max(0, received - 1);
   }
 }

@@ -1,5 +1,6 @@
 import { EntityManager } from '@mikro-orm/core';
 import { Injectable } from '@nestjs/common';
+
 import { TransportMessage } from './message-inbox.entity';
 
 /** One message as the inbox remembers it. */
@@ -46,7 +47,11 @@ export abstract class MessageInbox {
    *   already been ingested — in which case acknowledging the delivery and dropping it is the correct
    *   behaviour, not an error.
    */
-  abstract register(identifier: string, messageType: string, origin?: string): Promise<boolean>;
+  abstract register(
+    identifier: string,
+    messageType: string,
+    origin?: string,
+  ): Promise<boolean>;
 
   /** What this service has ingested, newest first. */
   abstract received(): Promise<ReceivedMessage[]>;
@@ -87,7 +92,11 @@ export class MikroOrmMessageInbox extends MessageInbox {
     super();
   }
 
-  async register(identifier: string, messageType: string, origin?: string): Promise<boolean> {
+  async register(
+    identifier: string,
+    messageType: string,
+    origin?: string,
+  ): Promise<boolean> {
     const em = this.em.getContext();
     const affected = await em.getConnection().execute(
       `insert into ${table(em)} (identifier, message_type, origin, received_at)
@@ -102,24 +111,26 @@ export class MikroOrmMessageInbox extends MessageInbox {
 
   async received(): Promise<ReceivedMessage[]> {
     const em = this.em.getContext();
-    return em
-      .getConnection()
-      .execute(
-        `select identifier, message_type as "messageType", origin from ${table(em)}
+    return em.getConnection().execute(
+      `select identifier, message_type as "messageType", origin from ${table(em)}
          order by received_at desc, identifier`,
-        [],
-        'all',
-        em.getTransactionContext(),
-      );
+      [],
+      'all',
+      em.getTransactionContext(),
+    );
   }
 }
 
 const table = (em: EntityManager): string => {
   const metadata = em.getMetadata().find(TransportMessage);
   const platform = em.getPlatform();
-  const name = platform.quoteIdentifier(metadata?.tableName ?? 'transport_message_inbox');
+  const name = platform.quoteIdentifier(
+    metadata?.tableName ?? 'transport_message_inbox',
+  );
   const schema = metadata?.schema ?? em.config.get('schema');
-  return schema && schema !== '*' ? `${platform.quoteIdentifier(schema)}.${name}` : name;
+  return schema && schema !== '*'
+    ? `${platform.quoteIdentifier(schema)}.${name}`
+    : name;
 };
 
 /**
@@ -128,9 +139,11 @@ const table = (em: EntityManager): string => {
  * opinion about the database behind it.
  */
 const rowsIn = (result: unknown): number => {
-  const outcome = (
-    Array.isArray(result) ? (result[0] as Record<string, unknown>) : (result as Record<string, unknown>)
-  ) ?? {};
-  const affected = outcome['affectedRows'] ?? outcome['changes'] ?? outcome['rowCount'];
+  const outcome =
+    (Array.isArray(result)
+      ? (result[0] as Record<string, unknown>)
+      : (result as Record<string, unknown>)) ?? {};
+  const affected =
+    outcome['affectedRows'] ?? outcome['changes'] ?? outcome['rowCount'];
   return typeof affected === 'number' ? affected : 0;
 };

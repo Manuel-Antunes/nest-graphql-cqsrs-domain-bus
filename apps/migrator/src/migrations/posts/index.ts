@@ -6,11 +6,20 @@ import { Migration20260922172513_unify_event_log } from './Migration202609221725
 
 export const postsMigrations = [
   { name: 'Migration20260921214755_init', class: Migration20260921214755_init },
-  { name: 'Migration20260921232939_add_organization', class: Migration20260921232939_add_organization },
+  {
+    name: 'Migration20260921232939_add_organization',
+    class: Migration20260921232939_add_organization,
+  },
   {
     name: 'Migration20260921235341_organization_tenant_schema',
     class: Migration20260921235341_organization_tenant_schema,
   },
-  { name: 'Migration20260922040710_add_event_feed', class: Migration20260922040710_add_event_feed },
-  { name: 'Migration20260922172513_unify_event_log', class: Migration20260922172513_unify_event_log },
+  {
+    name: 'Migration20260922040710_add_event_feed',
+    class: Migration20260922040710_add_event_feed,
+  },
+  {
+    name: 'Migration20260922172513_unify_event_log',
+    class: Migration20260922172513_unify_event_log,
+  },
 ];

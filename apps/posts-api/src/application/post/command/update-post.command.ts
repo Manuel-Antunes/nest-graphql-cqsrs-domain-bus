@@ -1,7 +1,8 @@
+import type { AsyncContext, ICommandHandler } from '@nestjs/cqrs';
 import { AutoMap } from '@automapper/classes';
 import { Inject, Scope } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
-import { type AsyncContext, Command, CommandHandler, EventPublisher, type ICommandHandler } from '@nestjs/cqrs';
+import { Command, CommandHandler, EventPublisher } from '@nestjs/cqrs';
 import { PostNotFoundException } from '@nestposts/posts/domain/post/exception/post-not-found.exception';
 import { PostRepository } from '@nestposts/posts/domain/post/post.repository';
 import { PostId } from '@nestposts/posts/domain/post/vo/post-id';
@@ -15,7 +16,11 @@ export namespace UpdatePostCommand {
     @AutoMap(() => String)
     readonly content?: string | null;
 
-    constructor(postId: PostId, title?: string | null, content?: string | null) {
+    constructor(
+      postId: PostId,
+      title?: string | null,
+      content?: string | null,
+    ) {
       super();
       this.postId = postId;
       this.title = title;

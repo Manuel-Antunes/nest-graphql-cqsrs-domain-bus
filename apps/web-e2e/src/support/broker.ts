@@ -9,7 +9,11 @@ export const EXCHANGE = 'nestposts.events';
  * Building one by hand is what makes the redelivery test also a test of the wire format — a header
  * this suite gets wrong is a header the ingestion will not find.
  */
-export const republished = (event: StoredEvent, routingKey: string, tags: string): unknown => ({
+export const republished = (
+  event: StoredEvent,
+  routingKey: string,
+  tags: string,
+): unknown => ({
   properties: {
     headers: {
       'cqrs-transport-message-type': event.message_type,
@@ -20,7 +24,10 @@ export const republished = (event: StoredEvent, routingKey: string, tags: string
     },
   },
   routing_key: routingKey,
-  payload: JSON.stringify({ pattern: routingKey, data: JSON.parse(event.payload) }),
+  payload: JSON.stringify({
+    pattern: routingKey,
+    data: JSON.parse(event.payload),
+  }),
   payload_encoding: 'string',
 });
 
@@ -56,8 +63,13 @@ export class Broker {
    * the applications redeclare them on startup with exactly the bindings they declare today.
    */
   async deleteKnownQueues(): Promise<void> {
-    for (const queue of ['nestposts.posts-api.post-completed', 'nestposts.tagging.post-events']) {
-      await this.request('DELETE', `/queues/%2F/${queue}`).catch(() => undefined);
+    for (const queue of [
+      'nestposts.posts-api.post-completed',
+      'nestposts.tagging.post-events',
+    ]) {
+      await this.request('DELETE', `/queues/%2F/${queue}`).catch(
+        () => undefined,
+      );
     }
   }
 
@@ -70,7 +82,10 @@ export class Broker {
     }>;
     return all
       .filter((one) => one.destination.startsWith('nestposts'))
-      .map((one) => `${one.source || '(default)'}  ${one.routing_key}  ->  ${one.destination}`);
+      .map(
+        (one) =>
+          `${one.source || '(default)'}  ${one.routing_key}  ->  ${one.destination}`,
+      );
   }
 
   async publish(envelope: unknown): Promise<{ routed: boolean }> {
@@ -91,16 +106,27 @@ export class Broker {
    */
   async spyOn(queue: string, routingKey: string): Promise<void> {
     await this.mustSucceed(
-      this.request('PUT', `/queues/%2F/${queue}`, JSON.stringify({ durable: true, auto_delete: true })),
+      this.request(
+        'PUT',
+        `/queues/%2F/${queue}`,
+        JSON.stringify({ durable: true, auto_delete: true }),
+      ),
       `declarando a fila ${queue}`,
     );
     await this.mustSucceed(
-      this.request('POST', `/bindings/%2F/e/${EXCHANGE}/q/${queue}`, JSON.stringify({ routing_key: routingKey })),
+      this.request(
+        'POST',
+        `/bindings/%2F/e/${EXCHANGE}/q/${queue}`,
+        JSON.stringify({ routing_key: routingKey }),
+      ),
       `ligando ${queue} a ${EXCHANGE} por ${routingKey}`,
     );
   }
 
-  private async mustSucceed(call: Promise<Response>, what: string): Promise<void> {
+  private async mustSucceed(
+    call: Promise<Response>,
+    what: string,
+  ): Promise<void> {
     const response = await call;
     if (!response.ok) {
       throw new Error(`${what}: ${response.status} ${await response.text()}`);
@@ -118,10 +144,17 @@ export class Broker {
     return Array.isArray(messages) ? (messages as SpiedMessage[]) : [];
   }
 
-  private request(method: string, path: string, body?: string): Promise<Response> {
+  private request(
+    method: string,
+    path: string,
+    body?: string,
+  ): Promise<Response> {
     return fetch(`${this.api}${path}`, {
       method,
-      headers: { 'content-type': 'application/json', Authorization: this.credentials },
+      headers: {
+        'content-type': 'application/json',
+        'Authorization': this.credentials,
+      },
       body,
     });
   }

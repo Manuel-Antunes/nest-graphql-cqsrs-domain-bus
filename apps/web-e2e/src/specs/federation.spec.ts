@@ -58,17 +58,27 @@ test.describe.serial('the subgraph, resolved by key', () => {
     await expect
       .poll(
         async () =>
-          (await executeGraphql(FederatedPostProbe, { id: postId })).data?.post?.version,
-        { message: 'the other service has to complete the post before it carries a tag' },
+          (await executeGraphql(FederatedPostProbe, { id: postId })).data?.post
+            ?.version,
+        {
+          message:
+            'the other service has to complete the post before it carries a tag',
+        },
       )
       .toBe(2);
   });
 
-  test('the screen resolves the keys the router would send', async ({ page }) => {
+  test('the screen resolves the keys the router would send', async ({
+    page,
+  }) => {
     await page.goto('/federation');
 
-    await expect(page.getByRole('heading', { name: 'Federação' })).toBeVisible();
-    await page.getByRole('button', { name: /Resolver \d+ representações/ }).click();
+    await expect(
+      page.getByRole('heading', { name: 'Federação' }),
+    ).toBeVisible();
+    await page
+      .getByRole('button', { name: /Resolver \d+ representações/ })
+      .click();
 
     const received = page.getByLabel('Entidades recebidas');
     await expect(received).toContainText('"Post"');
@@ -80,7 +90,9 @@ test.describe.serial('the subgraph, resolved by key', () => {
     page,
   }) => {
     await page.goto('/federation');
-    await page.getByRole('button', { name: /Resolver \d+ representações/ }).click();
+    await page
+      .getByRole('button', { name: /Resolver \d+ representações/ })
+      .click();
 
     const positions = page
       .getByRole('list', { name: 'Entidades por posição' })
@@ -89,22 +101,31 @@ test.describe.serial('the subgraph, resolved by key', () => {
     await expect(positions.first()).toBeVisible();
     const answers = await positions.allInnerTexts();
 
-    expect(answers.length, 'one answer per representation sent').toBeGreaterThan(3);
+    expect(
+      answers.length,
+      'one answer per representation sent',
+    ).toBeGreaterThan(3);
     expect(
       answers.filter((answer) => answer.endsWith('null')).length,
       'the missing post, and every author asked for as a User',
     ).toBeGreaterThanOrEqual(2);
   });
 
-  test('the router holds no session, and the subgraph still answers', async ({ browser }) => {
+  test('the router holds no session, and the subgraph still answers', async ({
+    browser,
+  }) => {
     const context = await browser.newContext();
     const anonymous = await context.newPage();
 
     await anonymous.goto('/federation');
     await expect(anonymous.getByText('Sem sessão')).toBeVisible();
-    await anonymous.getByRole('button', { name: /Resolver \d+ representações/ }).click();
+    await anonymous
+      .getByRole('button', { name: /Resolver \d+ representações/ })
+      .click();
 
-    await expect(anonymous.getByLabel('Entidades recebidas')).toContainText('"Post"');
+    await expect(anonymous.getByLabel('Entidades recebidas')).toContainText(
+      '"Post"',
+    );
     await expect(anonymous.getByRole('link', { name: 'Entrar' })).toBeVisible();
 
     await context.close();

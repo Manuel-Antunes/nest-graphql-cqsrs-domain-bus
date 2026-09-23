@@ -1,12 +1,13 @@
 import { AsyncContext } from '@nestjs/cqrs';
+
+import type { Ingestion } from './outbound/transport-metadata';
 import {
   CAUSATION_ID,
-  CORRELATION_ID,
   CorrelatedRequestContext,
-  TransportRequestContext,
+  CORRELATION_ID,
   correlationIdOf,
+  TransportRequestContext,
 } from './request-context';
-import type { Ingestion } from './outbound/transport-metadata';
 
 class PostRequest extends AsyncContext {
   constructor(readonly postId: string) {
@@ -50,7 +51,9 @@ describe('the request context on the wire', () => {
     });
 
     it('carries what the application context says it stands for', () => {
-      expect(codec.encode(new PostRequest('p-1'), {})).toMatchObject({ 'post-id': 'p-1' });
+      expect(codec.encode(new PostRequest('p-1'), {})).toMatchObject({
+        'post-id': 'p-1',
+      });
     });
 
     it('keeps the correlation id a context arrived with, however many hops it takes', () => {
@@ -68,13 +71,20 @@ describe('the request context on the wire', () => {
       const context = codec.decode(arrivedWith({ [CORRELATION_ID]: 'c-1' }));
 
       expect(context).toBeInstanceOf(TransportRequestContext);
-      expect(context).toMatchObject({ correlationId: 'c-1', causationId: 'evt-1' });
+      expect(context).toMatchObject({
+        correlationId: 'c-1',
+        causationId: 'evt-1',
+      });
     });
 
     it('keeps the attributes, so an application can read its own', () => {
-      const context = codec.decode(arrivedWith({ [CORRELATION_ID]: 'c-1', 'post-id': 'p-1' }));
+      const context = codec.decode(
+        arrivedWith({ [CORRELATION_ID]: 'c-1', 'post-id': 'p-1' }),
+      );
 
-      expect((context as TransportRequestContext).attributes).toMatchObject({ 'post-id': 'p-1' });
+      expect((context as TransportRequestContext).attributes).toMatchObject({
+        'post-id': 'p-1',
+      });
     });
 
     it('restores nothing when no request crossed', () => {
@@ -94,7 +104,9 @@ describe('the request context on the wire', () => {
 
   describe("an application's own context, rebuilt by contextFor", () => {
     class PostRequestCodec extends CorrelatedRequestContext {
-      protected override contextFor(message: Ingestion): AsyncContext | undefined {
+      protected override contextFor(
+        message: Ingestion,
+      ): AsyncContext | undefined {
         const postId = message.metadata['post-id'];
         return postId ? new PostRequest(postId) : undefined;
       }
@@ -103,7 +115,9 @@ describe('the request context on the wire', () => {
     const applicationCodec = new PostRequestCodec();
 
     it('is what the ingested event is published under', () => {
-      const context = applicationCodec.decode(arrivedWith({ 'post-id': 'p-1' }));
+      const context = applicationCodec.decode(
+        arrivedWith({ 'post-id': 'p-1' }),
+      );
 
       expect(context).toBeInstanceOf(PostRequest);
       expect((context as PostRequest).postId).toBe('p-1');
@@ -119,9 +133,9 @@ describe('the request context on the wire', () => {
     });
 
     it('falls back to the generic context when the message says nothing this application knows', () => {
-      expect(applicationCodec.decode(arrivedWith({ [CORRELATION_ID]: 'c-2' }))).toBeInstanceOf(
-        TransportRequestContext,
-      );
+      expect(
+        applicationCodec.decode(arrivedWith({ [CORRELATION_ID]: 'c-2' })),
+      ).toBeInstanceOf(TransportRequestContext);
     });
   });
 });

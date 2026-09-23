@@ -1,12 +1,13 @@
 import type { EntitySchema } from '@nestposts/database';
 import type { BetterAuthPlugin } from 'better-auth';
+
+import type {
+  BetterAuthPluginProvider,
+  PluginDependencies,
+} from '../better-auth/plugins/registry';
 import { AuthConfiguration } from '../better-auth/config';
 import { BetterAuthInstance } from '../better-auth/init-auth';
-import {
-  type BetterAuthPluginProvider,
-  type PluginDependencies,
-  BetterAuthPlugins,
-} from '../better-auth/plugins/registry';
+import { BetterAuthPlugins } from '../better-auth/plugins/registry';
 import { BetterAuthSchema } from '../better-auth/schema';
 import { BETTER_AUTH_CONFIG } from '../better-auth/tokens';
 import { AuthUserEntitySchema } from './entities/auth-user-orm.entity';
@@ -37,17 +38,20 @@ export class BetterAuthEntities {
     dependencies = [],
   }: BetterAuthEntityOptions = {}): EntitySchema[] {
     const config = AuthConfiguration.fromEnvironment();
-    const built = BetterAuthPlugins.build(BetterAuthPlugins.providersWith(plugins), [
-      [BETTER_AUTH_CONFIG, config],
-      ...dependencies,
-    ]);
+    const built = BetterAuthPlugins.build(
+      BetterAuthPlugins.providersWith(plugins),
+      [[BETTER_AUTH_CONFIG, config], ...dependencies],
+    );
 
     return [
       AuthUserEntitySchema,
-      ...BetterAuthSchema.define(BetterAuthInstance.optionsFor(config, built as readonly BetterAuthPlugin[]), [
-        AUTH_USER_MODEL_KEY,
-        ...mapped,
-      ]),
+      ...BetterAuthSchema.define(
+        BetterAuthInstance.optionsFor(
+          config,
+          built as readonly BetterAuthPlugin[],
+        ),
+        [AUTH_USER_MODEL_KEY, ...mapped],
+      ),
     ] as EntitySchema[];
   }
 }

@@ -1,5 +1,9 @@
 import type { Type } from '@nestjs/common';
-import { EventTypeConflictException, EventTypeMissingException } from './event-type.exception';
+
+import {
+  EventTypeConflictException,
+  EventTypeMissingException,
+} from './event-type.exception';
 
 export interface EventTag {
   readonly key: string;
@@ -30,7 +34,8 @@ const EVENT_TYPE = Symbol.for('nestposts.platform.event-type');
 const byMessageType = new Map<string, EventTypeMetadata>();
 const byQualifiedName = new Map<string, EventTypeMetadata>();
 
-const localNameOf = (eventClass: Type<object>): string => eventClass.name.replace(/Event$/, '');
+const localNameOf = (eventClass: Type<object>): string =>
+  eventClass.name.replace(/Event$/, '');
 
 export const messageTypeOf = (qualifiedName: string, version: string): string =>
   `${qualifiedName}#${version}`;
@@ -53,7 +58,11 @@ export function EventType(options: EventTypeOptions): ClassDecorator {
 
     const clash = byQualifiedName.get(qualifiedName);
     if (clash && clash.eventClass !== eventClass) {
-      throw new EventTypeConflictException(qualifiedName, clash.eventClass.name, eventClass.name);
+      throw new EventTypeConflictException(
+        qualifiedName,
+        clash.eventClass.name,
+        eventClass.name,
+      );
     }
 
     Object.defineProperty(eventClass, EVENT_TYPE, {
@@ -66,12 +75,19 @@ export function EventType(options: EventTypeOptions): ClassDecorator {
   };
 }
 
-export function eventTypeOf(event: object | Type<object>): EventTypeMetadata | undefined {
-  const eventClass = typeof event === 'function' ? event : (event.constructor as Type<object>);
-  return (eventClass as unknown as Record<symbol, EventTypeMetadata | undefined>)[EVENT_TYPE];
+export function eventTypeOf(
+  event: object | Type<object>,
+): EventTypeMetadata | undefined {
+  const eventClass =
+    typeof event === 'function' ? event : (event.constructor as Type<object>);
+  return (
+    eventClass as unknown as Record<symbol, EventTypeMetadata | undefined>
+  )[EVENT_TYPE];
 }
 
-export function requireEventTypeOf(event: object | Type<object>): EventTypeMetadata {
+export function requireEventTypeOf(
+  event: object | Type<object>,
+): EventTypeMetadata {
   const metadata = eventTypeOf(event);
   if (!metadata) {
     const eventClass = typeof event === 'function' ? event : event.constructor;
@@ -80,8 +96,13 @@ export function requireEventTypeOf(event: object | Type<object>): EventTypeMetad
   return metadata;
 }
 
-export function eventTypeFor(messageType: string): EventTypeMetadata | undefined {
-  return byMessageType.get(messageType) ?? byQualifiedName.get(qualifiedNameIn(messageType));
+export function eventTypeFor(
+  messageType: string,
+): EventTypeMetadata | undefined {
+  return (
+    byMessageType.get(messageType) ??
+    byQualifiedName.get(qualifiedNameIn(messageType))
+  );
 }
 
 export function qualifiedNameIn(messageType: string): string {
@@ -104,7 +125,11 @@ export function eventTagsOf(event: object): EventTag[] {
   return metadata.tags
     .map((key) => ({ key, value: tagValueOf(values[key]) }))
     .filter((tag): tag is EventTag => tag.value !== undefined)
-    .sort((one, other) => one.key.localeCompare(other.key) || one.value.localeCompare(other.value));
+    .sort(
+      (one, other) =>
+        one.key.localeCompare(other.key) ||
+        one.value.localeCompare(other.value),
+    );
 }
 
 export function registeredEventTypes(): EventTypeMetadata[] {

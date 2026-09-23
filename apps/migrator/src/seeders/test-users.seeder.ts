@@ -1,13 +1,14 @@
 import type { EntityManager } from '@mikro-orm/postgresql';
+import type { BetterAuth } from '@nestposts/auth/infrastructure/better-auth/init-auth';
 import { Seeder } from '@mikro-orm/seeder';
 import { AuthUser } from '@nestposts/auth/domain/auth/auth-user.entity';
-import { inRequestContext } from '@nestposts/database';
 import { BETTER_AUTH } from '@nestposts/auth/infrastructure/better-auth/tokens';
-import type { BetterAuth } from '@nestposts/auth/infrastructure/better-auth/init-auth';
+import { inRequestContext } from '@nestposts/database';
 import { AUTHOR_ROLE } from '@nestposts/users/domain/user/author.entity';
 import { IdentityProvider } from '@nestposts/users/domain/user/identity.provider';
 import { CredentialId } from '@nestposts/users/domain/user/vo/credential-id';
 import { Email } from '@nestposts/users/domain/user/vo/email';
+
 import { seederContainer } from './container';
 
 export interface SeededUser {

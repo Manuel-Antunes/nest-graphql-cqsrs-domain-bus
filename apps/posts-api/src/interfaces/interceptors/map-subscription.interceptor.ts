@@ -1,13 +1,14 @@
-import type { Mapper, ModelIdentifier } from "@automapper/core";
-import { InjectMapper } from "@automapper/nestjs";
-import {
-  mixin,
-  type CallHandler,
-  type ExecutionContext,
-  type NestInterceptor,
-  type Type,
-} from "@nestjs/common";
-import { map, type Observable } from "rxjs";
+import type { Mapper, ModelIdentifier } from '@automapper/core';
+import type {
+  CallHandler,
+  ExecutionContext,
+  NestInterceptor,
+  Type,
+} from '@nestjs/common';
+import type { Observable } from 'rxjs';
+import { InjectMapper } from '@automapper/nestjs';
+import { mixin } from '@nestjs/common';
+import { map } from 'rxjs';
 
 export const MapSubscriptionInterceptor = <
   TSource extends Record<string, any>,
@@ -59,7 +60,7 @@ export const MapSubscriptionInterceptor = <
     ): Observable<AsyncIterable<TDestination>> {
       const mapper = this.mapper;
       const mapped = (stream: AsyncIterable<TSource>) =>
-        this.mapAsyncIterable(stream, event =>
+        this.mapAsyncIterable(stream, (event) =>
           mapper.mapAsync(event, from, to),
         );
 
@@ -69,4 +70,3 @@ export const MapSubscriptionInterceptor = <
 
   return mixin(MixinMapSubscriptionInterceptor);
 };
-

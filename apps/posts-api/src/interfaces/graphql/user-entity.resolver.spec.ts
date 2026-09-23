@@ -1,8 +1,9 @@
 import type { QueryBus } from '@nestjs/cqrs';
-import { FindUserQuery } from '../../application/user/query/find-user.query';
 import { AUTHOR_ROLE } from '@nestposts/users/domain/user/author.entity';
 import { User } from '@nestposts/users/domain/user/user.entity';
 import { UserId } from '@nestposts/users/domain/user/vo/user-id';
+
+import { FindUserQuery } from '../../application/user/query/find-user.query';
 import { UserEntityResolver } from './user-entity.resolver';
 
 describe('UserEntityResolver', () => {
@@ -10,7 +11,12 @@ describe('UserEntityResolver', () => {
   const now = new Date('2026-09-08T12:00:00.000Z');
 
   const aUserWith = (roles: readonly string[]): User =>
-    User.register(userId, { email: 'reader@example.com', name: 'reader' }, roles, now);
+    User.register(
+      userId,
+      { email: 'reader@example.com', name: 'reader' },
+      roles,
+      now,
+    );
 
   const resolverOn = (result: unknown) => {
     const dispatched: unknown[] = [];
@@ -29,14 +35,18 @@ describe('UserEntityResolver', () => {
     await resolver.resolveReference({ __typename: 'User', id: userId.value });
 
     expect(dispatched[0]).toBeInstanceOf(FindUserQuery.FindUser);
-    expect((dispatched[0] as FindUserQuery.FindUser).userId.equals(userId)).toBe(true);
+    expect(
+      (dispatched[0] as FindUserQuery.FindUser).userId.equals(userId),
+    ).toBe(true);
   });
 
   it('resolves the user who carries no capability', async () => {
     const reader = aUserWith([]);
     const { resolver } = resolverOn(reader);
 
-    await expect(resolver.resolveReference({ __typename: 'User', id: userId.value })).resolves.toBe(reader);
+    await expect(
+      resolver.resolveReference({ __typename: 'User', id: userId.value }),
+    ).resolves.toBe(reader);
   });
 
   it('an author asked for as a User is null, because that is what me answers too', async () => {

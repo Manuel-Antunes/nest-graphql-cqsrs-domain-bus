@@ -1,5 +1,6 @@
 import type { Type } from '@nestjs/common';
 import { requireEventTypeOf } from '@nestposts/platform/domain/shared/event-type';
+
 import {
   AWS_NAMESPACE_ATTRIBUTE,
   AWS_ORIGIN_ATTRIBUTE,
@@ -7,7 +8,8 @@ import {
 } from './aws-message';
 
 /** One clause of a policy: a value to match, or one of SNS's operators. */
-export type SnsFilterTerm = string | { readonly 'anything-but': readonly string[] };
+export type SnsFilterTerm =
+  string | { readonly 'anything-but': readonly string[] };
 
 /**
  * A subscription's filter policy, in the shape SNS takes it: **OR within an attribute, AND across
@@ -49,7 +51,11 @@ export class SnsFilterPolicy {
   static everyEventOf(target: string | Type<object>): SnsFilterPolicyDocument {
     return typeof target === 'string'
       ? { [AWS_NAMESPACE_ATTRIBUTE]: [target] }
-      : { [AWS_QUALIFIED_NAME_ATTRIBUTE]: [requireEventTypeOf(target).qualifiedName] };
+      : {
+          [AWS_QUALIFIED_NAME_ATTRIBUTE]: [
+            requireEventTypeOf(target).qualifiedName,
+          ],
+        };
   }
 
   /**
@@ -73,7 +79,9 @@ export class SnsFilterPolicy {
    * different attributes are **conditions** (SNS ANDs them) — which is the same reading a topic
    * exchange gives two bindings on one queue.
    */
-  static merge(...policies: SnsFilterPolicyDocument[]): SnsFilterPolicyDocument {
+  static merge(
+    ...policies: SnsFilterPolicyDocument[]
+  ): SnsFilterPolicyDocument {
     const merged: Record<string, SnsFilterTerm[]> = {};
     for (const policy of policies) {
       for (const [attribute, terms] of Object.entries(policy)) {

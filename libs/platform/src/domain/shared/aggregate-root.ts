@@ -1,6 +1,7 @@
-import { IAggregateRoot, WithAggregateRoot } from "@nestjs/cqrs";
-import { DomainEvent } from "./domain-event";
-import { BaseEntity } from "./base-entity";
+import { IAggregateRoot, WithAggregateRoot } from '@nestjs/cqrs';
+
+import { BaseEntity } from './base-entity';
+import { DomainEvent } from './domain-event';
 
 export function AggregateRoot<
   TBase extends abstract new (...args: any[]) => BaseEntity,

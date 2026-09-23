@@ -1,7 +1,8 @@
 import type { QueryBus } from '@nestjs/cqrs';
-import { FindTagQuery } from '../../application/tag/query/find-tag.query';
 import { Tag } from '@nestposts/posts/domain/tag/tag.entity';
 import { TagId } from '@nestposts/posts/domain/tag/vo/tag-id';
+
+import { FindTagQuery } from '../../application/tag/query/find-tag.query';
 import { TagEntityResolver } from './tag-entity.resolver';
 
 describe('TagEntityResolver', () => {
@@ -25,13 +26,17 @@ describe('TagEntityResolver', () => {
     await resolver.resolveReference({ __typename: 'Tag', id: tagId.value });
 
     expect(dispatched[0]).toBeInstanceOf(FindTagQuery.FindTag);
-    expect((dispatched[0] as FindTagQuery.FindTag).tagId.equals(tagId)).toBe(true);
+    expect((dispatched[0] as FindTagQuery.FindTag).tagId.equals(tagId)).toBe(
+      true,
+    );
   });
 
   it('gives back the tag the handler found, untouched', async () => {
     const tag = Tag.create(tagId, 'Untagged', now);
     const { resolver } = resolverOn(tag);
 
-    await expect(resolver.resolveReference({ __typename: 'Tag', id: tagId.value })).resolves.toBe(tag);
+    await expect(
+      resolver.resolveReference({ __typename: 'Tag', id: tagId.value }),
+    ).resolves.toBe(tag);
   });
 });

@@ -8,7 +8,10 @@
 export const topicMatches = (pattern: string, routingKey: string): boolean =>
   matches(pattern.split('.'), routingKey.split('.'));
 
-const matches = (pattern: readonly string[], key: readonly string[]): boolean => {
+const matches = (
+  pattern: readonly string[],
+  key: readonly string[],
+): boolean => {
   if (pattern.length === 0) {
     return key.length === 0;
   }

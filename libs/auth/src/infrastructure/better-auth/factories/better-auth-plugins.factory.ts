@@ -1,5 +1,6 @@
 import type { FactoryProvider } from '@nestjs/common';
 import type { BetterAuthPlugin } from 'better-auth';
+
 import type { BetterAuthPluginProvider } from '../plugins/registry';
 import { BETTER_AUTH_PLUGINS } from '../tokens';
 

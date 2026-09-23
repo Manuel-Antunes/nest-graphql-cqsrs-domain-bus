@@ -1,8 +1,10 @@
-import { type AnyMikroORM, metadataOnly } from '@nestposts/database/testing';
+import type { AnyMikroORM } from '@nestposts/database/testing';
+import { metadataOnly } from '@nestposts/database/testing';
 import { mikroOrmAdapter } from 'better-auth-mikro-orm';
+
+import { authEntities } from '../../persistence/auth-entities';
 import { AuthConfiguration } from '../config';
 import { BetterAuthInstance } from '../init-auth';
-import { authEntities } from '../../persistence/auth-entities';
 import { BETTER_AUTH_CONFIG } from '../tokens';
 import { BetterAuthPlugins } from './registry';
 
@@ -10,10 +12,19 @@ describe('the better-auth plugin registry', () => {
   let orm: AnyMikroORM;
 
   const build = () => {
-    const config = AuthConfiguration.fromEnvironment({ AUTH_URL: 'http://localhost:3000' } as NodeJS.ProcessEnv);
+    const config = AuthConfiguration.fromEnvironment({
+      AUTH_URL: 'http://localhost:3000',
+    } as NodeJS.ProcessEnv);
     const providers = BetterAuthPlugins.providersWith();
-    const plugins = BetterAuthPlugins.build(providers, [[BETTER_AUTH_CONFIG, config]]);
-    return { config, providers, plugins, auth: BetterAuthInstance.create(config, mikroOrmAdapter(orm), plugins) };
+    const plugins = BetterAuthPlugins.build(providers, [
+      [BETTER_AUTH_CONFIG, config],
+    ]);
+    return {
+      config,
+      providers,
+      plugins,
+      auth: BetterAuthInstance.create(config, mikroOrmAdapter(orm), plugins),
+    };
   };
 
   beforeAll(async () => {
@@ -45,8 +56,12 @@ describe('the better-auth plugin registry', () => {
   it('carries no organization endpoint: that plugin belongs to the module built on this one', () => {
     const { auth } = build();
 
-    expect((auth.api as Record<string, unknown>).setActiveOrganization).toBeUndefined();
-    expect((auth.api as Record<string, unknown>).createOrganization).toBeUndefined();
+    expect(
+      (auth.api as Record<string, unknown>).setActiveOrganization,
+    ).toBeUndefined();
+    expect(
+      (auth.api as Record<string, unknown>).createOrganization,
+    ).toBeUndefined();
   });
 
   it('the standalone build resolves the same dependencies the container injects', () => {
@@ -59,11 +74,19 @@ describe('the better-auth plugin registry', () => {
   });
 
   it('refuses a plugin dependency the standalone resolver does not know', () => {
-    const config = AuthConfiguration.fromEnvironment({ AUTH_URL: 'http://localhost:3000' } as NodeJS.ProcessEnv);
+    const config = AuthConfiguration.fromEnvironment({
+      AUTH_URL: 'http://localhost:3000',
+    } as NodeJS.ProcessEnv);
 
     expect(() =>
       BetterAuthPlugins.build(
-        [{ provide: 'X', useFactory: (value: unknown) => value, inject: ['NOT_REGISTERED'] }],
+        [
+          {
+            provide: 'X',
+            useFactory: (value: unknown) => value,
+            inject: ['NOT_REGISTERED'],
+          },
+        ],
         [[BETTER_AUTH_CONFIG, config]],
       ),
     ).toThrow(/NOT_REGISTERED/);
