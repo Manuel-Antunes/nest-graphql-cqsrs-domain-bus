@@ -14,8 +14,14 @@ The only exceptions:
 1. **The developer explicitly asks** for a given field, function or block to be commented. Comment
    that thing only — do not take the request as licence to annotate the surrounding code.
 2. **The comment is load-bearing**, i.e. removing it changes behaviour: `@ts-expect-error`,
-   `@ts-ignore`, `@ts-nocheck`, linter directives, bundler hints. There are currently two in the
-   repository, both `@ts-expect-error` in `libs/validated-dto/src/mixins/validated-dto.mixin.spec.ts`.
+   `@ts-ignore`, `@ts-nocheck`, linter directives, bundler hints. There are currently five
+   hand-written ones (the `/* eslint-disable */` in every `sst-env.d.ts` is generated and does not
+   count): two `@ts-expect-error` in `libs/validated-dto/src/mixins/validated-dto.mixin.spec.ts`,
+   `react-hooks/exhaustive-deps` in `saga-runner.tsx`, and two where the rule is right in general and
+   wrong here — `no-empty-object-type` on `ValidatedDto`'s `Extras = {}` default, which as `object`
+   stops a top-level union DTO from accepting a scalar, and `consistent-type-definitions` on
+   `entities-probe.tsx`, where an `interface` has no implicit index signature and stops satisfying the
+   codegen'd `_Any`. The last two were tried the other way first and `typecheck` caught both.
 3. **The in-house libraries** — `libs/cqsrs`, `libs/database`, `libs/validated-dto` and
    `libs/transport-eventbus` — may carry **JSDoc**, and only JSDoc (`/** … */`), as usage
    documentation of their public API. These are
@@ -35,7 +41,10 @@ part of the schema and are served through introspection and GraphiQL. Keep them.
 comments; do not write them.
 
 The shell scripts and the JavaScript under `docker/` are the exception to the exception: they are a
-test harness, they are read by whoever is debugging a broker at 2am, and they carry comments.
+test harness, they are read by whoever is debugging a broker at 2am, and they carry comments. So is
+everything under `infra/lambda/` — `collector.yaml` and `otel-preload.cjs` are deployment bootstrap,
+not application code: they run before anything this repository wrote, nothing imports them, and what
+they are for cannot be read off a call site because there is no call site.
 
 When a piece of code seems to need an explanation, prefer, in this order: a better name, a smaller
 function, a type that makes the invalid state unrepresentable, a test that demonstrates the
@@ -52,6 +61,37 @@ messages, log lines, GraphQL descriptions and test names. Do not mass-translate 
 separate, explicit task. Follow the English rule for anything you add or substantially rewrite, and
 leave surrounding Portuguese alone unless asked.
 
+### Linting: one config per project, and one rule that is load-bearing
+
+`eslint.base.config.mjs` is the shared half and `eslint.nest.config.mjs` is what the NestJS projects
+add to it. **Every project carries its own `eslint.config.mjs`**, even when it is three lines
+re-exporting the shared one, because `@nx/eslint/plugin` infers a `lint` target from the presence of
+that file and from nothing else — the root config ignores `apps/**`, `libs/**`, `infra/**`. A project
+without one is a project that is silently never linted. `nx.json`'s `targetDefaults.lint` is what
+gives every one of them the `fix` configuration, so the block is written once rather than seventeen
+times.
+
+- **`@typescript-eslint/consistent-type-imports` is OFF for the NestJS projects, and that is not
+  taste.** These projects compile with `emitDecoratorMetadata`, and Nest's DI reads the
+  `design:paramtypes` it emits. Turn the rule on and `pnpm lint:fix` rewrites
+  `constructor(private readonly repo: PostRepository)`'s import to `import type` — the metadata then
+  says `Object`, the provider resolves to `undefined`, the build still succeeds and the failure is at
+  runtime, far from the edit. `eslint.nest.config.mjs` turns it off for exactly that reason, and the
+  proof it works is that `lint:fix` changes **nothing** across the fourteen Nest projects.
+- **Generated code is not linted**: `src/gql/**` (codegen) in `apps/web` and `apps/web-e2e`, and
+  `apps/migrator`'s `src/migrations/**`, which MikroORM writes.
+- **`graphql.config.yml` is what `@graphql-eslint` reads**, and the `web` project's `schema` there
+  deliberately **excludes** `apps/posts-api/src/graphql/federation.graphql`. That file is the
+  `extend schema @link(...)` line, and with it the plugin takes the federation path and hands the
+  document to `buildSubgraphSchema`; without it the schema builds plainly. The federation directives
+  the rest of the SDL uses (`@key`, `@shareable`) are declared in `apps/web/federation.graphql`,
+  beside the `_Any`/`_Entity`/`_entities` that are already there for the same reason: they exist at
+  runtime and codegen cannot see them.
+- **CI is `tools/github/*`**, composite actions called by `.github/workflows/ci.yml` — one job per
+  check (`test`, `test-e2e`, `web`) through a single `ci` action, so the environment is prepared in
+  one place. `web` is the static one: `format:check`, then `lint` and `typecheck` for every project,
+  then the Next build.
+
 ## Commands
 
 Package manager is **pnpm** (pinned: `pnpm@10.28.0`), workspace orchestrated by **Nx 23**.
@@ -66,6 +106,9 @@ pnpm test                      # nx run-many -t test: every project's Vitest sui
 pnpm test:e2e                  # EVERY app's test-e2e, one at a time: posts-api, then the browser
 pnpm test:web                  # apps/web-e2e alone: Playwright, THREE PROCESSES over real RabbitMQ
 pnpm test:all                  # the unit suites, then both e2e levels
+pnpm lint                      # nx run-many -t lint, then prettier --check .
+pnpm lint:fix                  # the same with `-c fix` (eslint --fix), then prettier --write .
+pnpm format / format:check     # prettier alone
 pnpm graph                     # the project graph, which is also the layer graph
 
 docker compose up -d localstack   # SNS + SQS, with the topology docker/localstack/init creates
@@ -151,7 +194,8 @@ libs/transport-eventbus  the CQRS event bus over Nest's microservice transports 
                          RabbitMQ / SNS+SQS / in-process
 libs/observability       the one door to observability: startTelemetry (the OTel SDK) and
                          loggingModule (pino, with trace_id on every record). A library depends on
-                         @opentelemetry/api; an application depends on this
+                         @opentelemetry/api; an application depends on this. Import
+                         @nestposts/observability/telemetry, NEVER the barrel — see Observability
 libs/lambda              how AWS enters a Nest application: bootOnce (one boot per container),
                          streamingHandler (HTTP over a Function URL) and queueHandler (SQS)
 
@@ -687,6 +731,49 @@ layer says what to tell the client about it.
   with `extensions.code`; `MikroOrmExceptionFilter` (on the mutation resolvers) translates an integrity
   violation into `BAD_USER_INPUT`/`CONFLICT` without leaking driver messages.
 
+### Observability: what may not be bundled, and what has to load first
+
+One trace covers the whole saga — `apps/web` → `apps/posts-api` → `apps/tagging` → back — and every
+rule below exists because breaking it produces **no error at all**: the system works, the trace is
+just wrong or absent, and only on AWS.
+
+- **An instrumentation patches a module as it is `require`d, so anything it patches must not be
+  bundled.** That is the whole reason `INSTALLED_PACKAGES` (`infra/aws/support/functions.ts`) exists,
+  and why `pg`, `pino`, `@opentelemetry/instrumentation-pino` and the logs SDK are on it. The
+  converse is accepted and worth knowing: `graphql`, `@nestjs/graphql` and `@nestjs/core` **are**
+  bundled, so `GraphQLInstrumentation` and `NestInstrumentation` produce nothing on Lambda. They stay
+  bundled because `@apollo/subgraph` must share the bundle's `graphql`, and because `@nestjs/core`
+  external with `@nestjs/common` bundled is two halves of one DI container.
+- **`startTelemetry` has to run before anything it instruments is loaded — including as a side
+  effect of its own import.** `apps/*/src/telemetry.ts` imports
+  `@nestposts/observability/telemetry`, **never the package barrel**: the barrel is
+  `export * from './logging'` before `export * from './telemetry'`, and `logging.ts` imports
+  `nestjs-pino`. Through the barrel, `pino` is in the require cache before the SDK exists, nothing is
+  patched, and the deployed stack reports traces with **not one log line** beside them. For the same
+  reason `import '../telemetry'` is the first statement of every Lambda entry point, ahead of
+  `@nestposts/lambda`.
+- **`@opentelemetry/api-logs` does not share the way `@opentelemetry/api` does.** `api` keeps its
+  providers on a versioned `globalThis` symbol, so two copies still agree; `api-logs` keeps the
+  provider in a module-level static, so a bundled copy and an installed copy are two registries that
+  never meet and every record goes to a no-op logger.
+- **The Lambda entry span is `@opentelemetry/instrumentation-aws-lambda`, registered by
+  `infra/lambda/otel-preload.cjs` through `NODE_OPTIONS=--require`.** It cannot be a line in the
+  application: that instrumentation patches the handler module named by `_HANDLER`, and here that
+  module is the esbuild bundle — the very thing that starts the SDK. The preload travels beside the
+  bundle exactly as `collector.yaml` does, and its own file carries the rest of the reasoning. The
+  `--require` is added by the `NodeFunction` factory and **not** by `sharedEnvironment`, because that
+  object is spread into `apps/web`'s Next server, whose artifact has neither the file nor the
+  packages it requires.
+- **A span that ends before the unit of work commits publishes nothing.** Outbound events are staged
+  while a handler runs and only leave at `commit()`, so `ingesting()` in
+  `libs/transport-eventbus/src/tracing.ts` wraps `UnitOfWork.run`, not the other way round.
+  `injectTraceContext` writes `traceparent` from the **active** context; with no span active it
+  writes nothing, and the next service opens a trace of its own.
+- **`propagateContextUrls` has to name the URL the application actually calls.**
+  `apps/web/src/instrumentation.node.ts` derives it from `API_URL`, which is the router's domain —
+  not the function URL. A pattern that matches neither means the Next server never sends
+  `traceparent` and the browser's half and the API's half are two unrelated traces.
+
 ## Tests
 
 There is no fake repository: handler specs boot the real `CqsrsModule` and a **schema of their own**
@@ -885,11 +972,15 @@ DTOs count.
   collector's `decouple` processor lets the invocation finish while the export carries on. A
   `flushTelemetry()` per invocation would cost a round trip per request for the same result. The
   layer is only attached when an upstream endpoint is configured.
-- **Logs are pino records, and they carry `trace_id`.** `loggingModule()` replaces Nest's logger and
-  `PinoInstrumentation` joins the two halves, so a log line and the span it happened inside are one
-  story. There is no correlation id of our own on a record — `trace_id` already is one. It cannot be
-  tested under Vitest: the instrumentation patches `pino` as it is **required**, and Vitest loads
-  modules through a runner of its own.
+- **Logs are pino records, and they carry `trace_id` — which took three separate fixes to be true on
+  AWS.** `loggingModule()` replaces Nest's logger and `PinoInstrumentation` joins the two halves, so a
+  log line and the span it happened inside are one story. There is no correlation id of our own on a
+  record — `trace_id` already is one. Everything about it is a load-order or a bundling question, and
+  the Observability section above is the list; the short version is that `pino` must be installed
+  rather than bundled, and `startTelemetry` must run before anything requires it. It cannot be tested
+  under Vitest either: the instrumentation patches `pino` as it is **required**, and Vitest loads
+  modules through a runner of its own. **The only place this is provable is a deployed stage**, by
+  reading the collector's destination.
 - **A command runs in a unit of work, and that is why there is nothing to drain.** `UnitOfWork`
   (`@nestposts/cqsrs`) is Axon's, in the shape this framework can have one. While a command handler
   runs, every `publish` is **staged**; when it returns, the staged events are appended to the

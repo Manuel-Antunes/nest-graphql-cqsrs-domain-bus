@@ -27,6 +27,10 @@ import {
   postsApiIdentity,
   subscriptionsFromFeed,
 } from './infrastructure/transport/transport.config';
+import {
+  subscriptionDeadline,
+  subscriptionMaxSeconds,
+} from './interfaces/graphql/subscription-deadline.plugin';
 import { InterfacesModule } from './interfaces/interfaces.module';
 import { MapperErrorHandler } from './interfaces/mapper/mapper-error.handler';
 import { validatedDtoClasses } from './interfaces/mapper/validated-dto.strategy';
@@ -51,6 +55,9 @@ import { validatedDtoClasses } from './interfaces/mapper/validated-dto.strategy'
       fieldResolverEnhancers: ['interceptors'],
       graphiql: true,
       maskedErrors: false,
+      plugins: subscriptionMaxSeconds()
+        ? [subscriptionDeadline(subscriptionMaxSeconds())]
+        : [],
     }),
     AutomapperModule.forRoot({
       strategyInitializer: validatedDtoClasses(),

@@ -1,6 +1,8 @@
 import { GraphQLInstrumentation } from '@opentelemetry/instrumentation-graphql';
 import { registerOTel } from '@vercel/otel';
 
+import { API_URL } from '@/lib/env';
+
 registerOTel({
   serviceName: 'nestposts-web',
   spanProcessors: ['auto'],
@@ -8,6 +10,7 @@ registerOTel({
   instrumentationConfig: {
     fetch: {
       propagateContextUrls: [
+        API_URL,
         /lambda-url\..*\.on\.aws/,
         /execute-api\..*\.amazonaws\.com/,
       ],

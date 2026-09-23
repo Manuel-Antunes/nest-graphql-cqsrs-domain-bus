@@ -40,8 +40,10 @@ export const traceContextOf = (metadata: EnvelopeMetadata) =>
  * the command the saga dispatched. Without it each service traces its own half and the two halves
  * are two traces that happen to share a correlation id.
  *
- * It wraps the **whole** ingestion, the transaction included, and ends after the local bus has been
- * published to, so what it measures is what the message cost this service.
+ * It wraps the **whole** ingestion — the transaction, the local bus, and the **unit of work**, which
+ * is the part that matters here. What this service publishes in reaction is staged while the handler
+ * runs and only leaves at the unit's `commit()`, so a span that ended before the commit left every
+ * outgoing message without a `traceparent`. See `EventIngestion.ingest` for the order.
  */
 export const ingesting = async <T>(
   message: Ingestion,

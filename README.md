@@ -1286,3 +1286,79 @@ flowing. So `toAttributes()` carries the application's attributes and refuses an
 `cqrs-transport-`. `tagging.spec` is what caught it; `pnpm test:web` is what proves the whole path,
 asserting `x-tenant` on the AMQP headers of both events — the second one published by the other
 process.
+
+## One trace across the saga, and the four ways it silently was not
+
+A choreographed saga is the case a trace is *for*: the work leaves the process that started it, and
+the only way to read it afterwards is if every hop hangs off the same trace. What that looks like
+when it is right, from the browser's request to the second service's answer coming back:
+
+```
+web        POST /api/graphql/route              next.js                       ← the root
+web        fetch POST …/graphql                 @vercel/otel/fetch
+posts-api  <the invocation>                     instrumentation-aws-lambda
+posts-api  PostEventsTopic.fifo send            instrumentation-aws-sdk
+tagging    posts.PostPreCreated#1.0.0 process   @nestposts/transport-eventbus
+tagging    PostEventsTopic.fifo send            instrumentation-aws-sdk
+posts-api  posts.PostCreated#2.0.0 process      @nestposts/transport-eventbus
+```
+
+Only the two `transport-eventbus` rows are this repository's own, and that is the point: the rest is
+the community's. They stay ours for a reason nothing off the shelf covers —
+`instrumentation-aws-sdk` propagates context through SNS and SQS **message attributes**, and this
+envelope deliberately carries its metadata in the **body**, because SNS allows ten attributes and the
+envelope passes that as soon as a request has a tenant and a trace.
+
+**Every failure below deployed successfully and served traffic.** None of them logged anything. That
+is the shape of the whole problem: a trace that is merely wrong looks exactly like a trace that is
+right, until someone opens one and finds it stops at a service boundary.
+
+**The consumer span ended before the work left.** `EventIngestion.ingest` ran `ingesting()` *inside*
+`UnitOfWork.run`. But outbound events are staged while the handler runs and only leave at `commit()`,
+which happens after the work returns — so the publish happened after the span had ended.
+`injectTraceContext` writes `traceparent` from the *active* context; with none active it wrote
+nothing, and the far side opened a trace of its own. The fix is the nesting, the other way round. The
+symptom before it: `tagging`'s span and `posts-api`'s span had no parent and no trace in common,
+while sharing a correlation id — which is exactly the "two traces that happen to share a correlation
+id" that `tracing.ts` was written to rule out.
+
+**Nothing opened a span for the request at all.** On Lambda `@fastify/aws-lambda` hands the event
+straight to Fastify, so no socket is accepted and `HttpInstrumentation`'s server half never fires;
+`graphql` and `@nestjs/core` are bundled, so the instrumentations that patch them by module name find
+nothing. The mutation therefore ran outside any trace, and a publish from outside a trace carries no
+`traceparent` — the first hop was broken before the transport ever got a chance. This is
+`@opentelemetry/instrumentation-aws-lambda`'s job, and it needs `infra/lambda/otel-preload.cjs` and
+`NODE_OPTIONS=--require` to do it, because it patches the handler module and the handler module is
+what starts the SDK. That file explains itself; what it does not say is that the alternative,
+`@opentelemetry/auto-instrumentations-node`, was measured at 75MB against an artifact already at
+174MB of a 250MB limit.
+
+**The Next server never sent `traceparent`.** `@vercel/otel` propagates only to URLs listed in
+`propagateContextUrls`, and the list named the function URL patterns while the application calls the
+**router** — a CloudFront domain. Nothing matched, nothing was sent, and the browser's half of the
+work was a trace with no relation to the API's. It is derived from `API_URL` now, the same constant
+the Apollo links use, so a stage that moves its API does not quietly stop propagating.
+
+**And the logs were never there at all.** Not late, not partial: the collection had zero rows since
+the day it was created, while traces arrived the whole time. `PinoInstrumentation` both stamps
+`trace_id` on a record and emits it to the OTel logs SDK, and it does both by patching `pino` as it is
+required. Three things had to be true and none were. `pino` was bundled, so there was no `require` to
+intercept. `@opentelemetry/instrumentation-pino` was bundled too, and `@opentelemetry/api-logs` —
+unlike `@opentelemetry/api`, which keeps its providers on a versioned `globalThis` symbol — keeps the
+provider in a module-level static, so the bundled copy and the installed copy were two registries that
+never met. And last, the one that survived the other two fixes: `apps/*/src/telemetry.ts` imported
+`startTelemetry` from the package **barrel**, which is `export * from './logging'` before
+`export * from './telemetry'` — and `logging.ts` imports `nestjs-pino`. The statement that was about
+to start the SDK loaded `pino` first, as a side effect of itself.
+
+That last one is worth keeping in mind beyond this case, because it is not really about pino: any
+instrumentation that patches on `require` is a bet that nothing pulled the module in earlier, and a
+barrel is the easiest way to lose that bet without writing a line of code. Hence the rule —
+`@nestposts/observability/telemetry`, never the barrel — and `import '../telemetry'` as the first
+statement of every Lambda entry point.
+
+**What proved it.** Nothing local could: the SDK does not start unless `OTEL_EXPORTER_OTLP_ENDPOINT`
+is set, and Vitest loads modules through a runner of its own, so the patching this all depends on
+never happens in a test. The loop that worked was a deployed stage, the saga driven through the web
+origin, and then querying the collector's destination for a trace whose spans name more than one
+service — and, once the logs came back, for a log record carrying the same `trace_id` as that trace.

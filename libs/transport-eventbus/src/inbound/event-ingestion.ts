@@ -86,6 +86,13 @@ export class EventIngestion {
   async ingest(event: object): Promise<void> {
     try {
       const message = this.messageOf(event);
+      if (message.origin && message.origin === this.identity.applicationName) {
+        this.logger.debug(
+          `inbox ← ${message.messageType} (${message.identifier}) dropped: this service's own echo`,
+        );
+        return;
+      }
+
       /**
        * Decoded **once**, here, and handed both to the unit and to the publish. Decoding it twice
        * would make two `AsyncContext` objects for one message, and the unit would then not recognise
@@ -93,9 +100,20 @@ export class EventIngestion {
        * and the Lambda freeze is back.
        */
       const context = this.context.decode(message);
-      await UnitOfWork.run(
-        () => this.ingestOnce(event, message, context),
-        context,
+
+      /**
+       * The span is **outside** the unit of work, and that is the whole point of the order. What this
+       * service publishes in reaction is staged while the handler runs and only leaves at
+       * `commit()` — which happens after the work returns. With the span inside the unit, the commit
+       * ran after it had ended, `injectTraceContext` found no span in the context, and every message
+       * this service produced went out with no `traceparent`: the next service opened a trace of its
+       * own and the saga read as one trace per hop.
+       */
+      await ingesting(message, () =>
+        UnitOfWork.run(
+          () => this.ingestMessage(event, message, context),
+          context,
+        ),
       );
     } catch (failure) {
       this.logger.error(
@@ -104,21 +122,6 @@ export class EventIngestion {
       );
       throw failure;
     }
-  }
-
-  private async ingestOnce(
-    event: object,
-    message: Ingestion,
-    context?: AsyncContext,
-  ): Promise<void> {
-    if (message.origin && message.origin === this.identity.applicationName) {
-      this.logger.debug(
-        `inbox ← ${message.messageType} (${message.identifier}) dropped: this service's own echo`,
-      );
-      return;
-    }
-
-    await ingesting(message, () => this.ingestMessage(event, message, context));
   }
 
   private async ingestMessage(

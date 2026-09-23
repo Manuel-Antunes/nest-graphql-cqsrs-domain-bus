@@ -3,6 +3,7 @@
 import { postgresUrl } from '../data';
 import { router } from '../edge/router';
 import { completed, postEvents, taggingEvents } from '../messaging';
+import { BASE_NODE_OPTIONS } from '../support';
 
 /**
  * **Every process that reads a session shares this**, `apps/web` included — it is what makes a
@@ -61,7 +62,7 @@ export const sharedEnvironment = {
    * The flag is what the capability was called before it was on by default, and it is still accepted
    * where it already is — so this is safe to keep when the runtime catches up.
    */
-  NODE_OPTIONS: '--experimental-require-module',
+  NODE_OPTIONS: BASE_NODE_OPTIONS,
   POSTGRES_URL: postgresUrl,
   /**
    * The application exports **to the collector beside it**, never over the network. What the
@@ -81,6 +82,19 @@ export const postsEnvironment = {
   POSTS_TOPIC_ARN: postEvents.arn,
   POSTS_COMPLETED_QUEUE_URL: completed.url,
   POSTS_SCHEMA: 'posts',
+  /**
+   * **How long an SSE subscription is allowed to live**, well under the function's 300s timeout.
+   *
+   * It exists because Lambda never tells a function that its client hung up: a response stream stays
+   * `writable` and emits nothing, so a subscriber who closed the tab keeps an invocation — and the
+   * event log poll behind it — alive until the timeout kills it. There is no signal to wait for, so
+   * the stream ends itself and the `graphql-sse` client reconnects.
+   *
+   * The number is a trade: shorter wastes less on a client that already left, longer reconnects a
+   * live one less often. Each reconnect starts at the log's head, so it is also how wide a window of
+   * missed events is accepted. Only a deployment can decide this, which is why the default is off.
+   */
+  SUBSCRIPTION_MAX_SECONDS: '120',
   /**
    * The local `EventBus` is one per container, and here there are several: the one that closes the
    * saga is the queue function, the one holding a subscription open is the HTTP one. `feed` points

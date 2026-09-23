@@ -73,6 +73,11 @@ const INSTALLED_PACKAGES = [
   '@opentelemetry/instrumentation-pg',
   '@opentelemetry/instrumentation-amqplib',
   '@opentelemetry/instrumentation-aws-sdk',
+  '@opentelemetry/instrumentation-aws-lambda',
+  'pino',
+  '@opentelemetry/instrumentation-pino',
+  '@opentelemetry/sdk-logs',
+  '@opentelemetry/exporter-logs-otlp-http',
 ];
 
 /**
@@ -199,6 +204,25 @@ export const COLLECTOR_CONFIG = {
   to: 'collector.yaml',
 };
 
+/** The OpenTelemetry preload, beside the bundle for the same reason. Its own file says why. */
+export const OTEL_PRELOAD = {
+  from: 'infra/lambda/otel-preload.cjs',
+  to: 'otel-preload.cjs',
+};
+
+/**
+ * **`--require` is what makes `@opentelemetry/instrumentation-aws-lambda` possible at all**, and it
+ * belongs HERE rather than in `sharedEnvironment`.
+ *
+ * That object is spread into `apps/web`'s Next server too, and that function is built by OpenNext:
+ * it carries neither this file nor the OpenTelemetry packages it requires. A `--require` it cannot
+ * resolve is `MODULE_NOT_FOUND` before the first line of the handler — a 500 on every page, which is
+ * exactly the failure `sharedEnvironment` was extracted to prevent, arriving from the other side.
+ */
+export const BASE_NODE_OPTIONS = '--experimental-require-module';
+
+const PRELOADED_NODE_OPTIONS = `${BASE_NODE_OPTIONS} --require /var/task/otel-preload.cjs`;
+
 /** Where every function of this system lives, what it is allowed to reach, and what it waits for. */
 export interface LambdaPlatform {
   readonly vpc: sst.aws.Vpc;
@@ -267,8 +291,12 @@ export class NodeFunction extends $util.ComponentResource {
         layers: [COLLECTOR_LAYER],
         url: args.url,
         streaming: args.streaming,
-        copyFiles: [COLLECTOR_CONFIG, ...(args.copyFiles ?? [])],
-        environment: { ...args.platform.environment, ...args.environment },
+        copyFiles: [COLLECTOR_CONFIG, OTEL_PRELOAD, ...(args.copyFiles ?? [])],
+        environment: {
+          ...args.platform.environment,
+          ...args.environment,
+          NODE_OPTIONS: PRELOADED_NODE_OPTIONS,
+        },
         nodejs: {
           /**
            * **CommonJS, and it is not a preference.** SST bundles as ESM by default, and in an ESM
