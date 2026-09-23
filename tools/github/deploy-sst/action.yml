@@ -26,8 +26,8 @@ runs:
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
 
-    - name: Build what sst.config.ts imports
-      run: NX_TUI=false npx nx run @nestposts/transport-eventbus:build
+    - name: Build what sst.config.ts reads before its Build resource runs
+      run: NX_TUI=false npx nx run-many -t build --projects=@nestposts/posts-api,@nestposts/tagging,@nestposts/migrator
       shell: bash
 
     - name: Force Sst Unlock
