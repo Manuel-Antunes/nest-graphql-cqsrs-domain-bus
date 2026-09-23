@@ -18,6 +18,7 @@ import {
 
 import { EntitiesQuery, FederationSeedQuery } from '../query';
 
+// eslint-disable-next-line @typescript-eslint/consistent-type-definitions
 type Representation = { __typename: string; id: string };
 
 const NO_SUCH_POST = '00000000-0000-4000-8000-000000000000';

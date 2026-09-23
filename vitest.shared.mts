@@ -103,7 +103,8 @@ export const testProject = ({
       testTimeout,
       hookTimeout: 30000,
       setupFiles: ['reflect-metadata'],
-      reporters: ['default'],
+      reporters: process.env.CI ? ['default', 'junit'] : ['default'],
+      outputFile: { junit: 'target/test-results/junit.xml' },
       coverage: {
         provider: 'v8',
         include: ['src/**/*.ts'],

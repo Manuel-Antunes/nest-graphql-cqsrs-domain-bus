@@ -92,9 +92,9 @@ function getRegistryDecorators(
     }
 
     return decorators;
-  } catch (e) {
+  } catch {
+    return [];
   }
-  return [];
 }
 
 /**
@@ -517,6 +517,7 @@ type DistributiveOmit<T, K extends PropertyKey> = T extends any ? Omit<T, K> : n
  * - ZodDiscriminatedUnion schemas (optimized)
  * - ZodUnion schemas (fallback)
  */
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export function ValidatedDto<Schema extends z.ZodType<any>, Extras = {}>(
   schema: Schema,
   options?: ValidatedDtoOptions,

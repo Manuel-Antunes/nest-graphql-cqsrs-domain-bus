@@ -5,6 +5,10 @@ data/
 *.tsbuildinfo
 .DS_Store
 
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+
 # artefatos de cobertura
 coverage/
 .vitest/

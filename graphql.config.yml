@@ -1,18 +1,21 @@
 projects:
   posts-api:
-    schema: apps/posts-api/src/main/resources/schema.graphql
+    schema: apps/posts-api/src/graphql/**/*.graphql
     include:
       - apps/posts-api/src/**
     extensions:
       endpoints:
         local:
-          url: http://localhost:8080/graphql
+          url: http://localhost:3000/graphql
           headers:
             Authorization: Bearer ${env:GRAPHQL_TOKEN}
           introspect: false
 
   web:
-    schema: apps/web/schema.graphql
+    schema:
+      - apps/posts-api/src/graphql/**/*.graphql
+      - '!apps/posts-api/src/graphql/federation.graphql'
+      - apps/web/federation.graphql
     documents:
       - apps/web/src/**/*.{ts,tsx}
     include:
@@ -22,7 +25,7 @@ projects:
     extensions:
       endpoints:
         local:
-          url: http://localhost:8080/graphql
+          url: http://localhost:3000/graphql
           headers:
             Authorization: Bearer ${env:GRAPHQL_TOKEN}
           introspect: false

@@ -5,3 +5,9 @@ union _Entity = Author | Post | Tag | User
 extend type Query {
   _entities(representations: [_Any!]!): [_Entity]!
 }
+
+directive @link(url: String!, import: [String]) repeatable on SCHEMA
+
+directive @key(fields: String!, resolvable: Boolean = true) repeatable on OBJECT | INTERFACE
+
+directive @shareable repeatable on OBJECT | FIELD_DEFINITION

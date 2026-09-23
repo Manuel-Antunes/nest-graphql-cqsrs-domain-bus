@@ -15,8 +15,21 @@
     ],
     "sharedGlobals": [
       "{workspaceRoot}/tsconfig.base.json",
-      "{workspaceRoot}/vitest.shared.mts"
+      "{workspaceRoot}/vitest.shared.mts",
+      "{workspaceRoot}/eslint.nest.config.mjs"
     ]
+  },
+  "targetDefaults": {
+    "lint": {
+      "options": {
+        "forwardAllArgs": false
+      },
+      "configurations": {
+        "fix": {
+          "command": "eslint . --fix"
+        }
+      }
+    }
   },
   "plugins": [
     {
@@ -31,6 +44,12 @@
           "buildDepsName": "build-deps",
           "watchDepsName": "watch-deps"
         }
+      }
+    },
+    {
+      "plugin": "@nx/eslint/plugin",
+      "options": {
+        "targetName": "lint"
       }
     },
     {

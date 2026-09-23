@@ -48,7 +48,11 @@ export function observableToAsyncIterable<T>(source: Observable<T>): AsyncIterab
     finished = true;
     subscription?.unsubscribe();
     for (const pending of waiting.splice(0)) {
-      failure ? pending.reject(failure.error) : pending.resolve(done());
+      if (failure) {
+        pending.reject(failure.error);
+      } else {
+        pending.resolve(done());
+      }
     }
   };
 

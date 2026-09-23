@@ -52,7 +52,7 @@ export const EVERY_NAMESPACE = '*';
 export const Publisher = DiscoveryService.createDecorator<PublishedNamespaces>();
 
 /** The namespaces a destination declared, or `undefined` when it declared none. */
-export const publisherNamespacesOf = (publisher: object | Function): readonly string[] | undefined => {
+export const publisherNamespacesOf = (publisher: object): readonly string[] | undefined => {
   const target = typeof publisher === 'function' ? publisher : publisher.constructor;
   const declared = Reflect.getMetadata(Publisher.KEY, target) as PublishedNamespaces | undefined;
   return declared === undefined ? undefined : namespacesIn(declared);

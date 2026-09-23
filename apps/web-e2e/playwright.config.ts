@@ -29,7 +29,13 @@ export default defineConfig({
   retries: 0,
   timeout: 90_000,
   expect: { timeout: 30_000 },
-  reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : [['list']],
+  reporter: process.env.CI
+    ? [
+        ['list'],
+        ['html', { outputFolder: 'target/playwright-report', open: 'never' }],
+        ['junit', { outputFile: 'target/test-results/junit.xml' }],
+      ]
+    : [['list']],
   use: {
     baseURL: WEB_URL,
     trace: 'retain-on-failure',

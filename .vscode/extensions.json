@@ -1,0 +1,9 @@
+{
+  "recommendations": [
+    "editorconfig.editorconfig",
+    "esbenp.prettier-vscode",
+    "dbaeumer.vscode-eslint",
+    "graphql.vscode-graphql",
+    "bradlc.vscode-tailwindcss"
+  ]
+}
