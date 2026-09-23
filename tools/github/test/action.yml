@@ -1,0 +1,26 @@
+name: 'test'
+description: 'The lower level of the suite: the domain, the handlers, the wiring and the mapping, in every project'
+inputs:
+  upload_reports:
+    description: "Keep the tests' junit reports as an artifact of the run."
+    default: 'true'
+    required: false
+runs:
+  using: composite
+  steps:
+    - name: Run unit and wiring tests
+      run: pnpm test
+      shell: bash
+      env:
+        CI: 'true'
+
+    - name: Upload test reports
+      if: ${{ always() && inputs.upload_reports == 'true' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-reports
+        path: |
+          apps/*/target/test-results/**
+          libs/*/target/test-results/**
+        if-no-files-found: ignore
+        retention-days: 7

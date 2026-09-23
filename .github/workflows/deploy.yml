@@ -1,0 +1,40 @@
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      stage:
+        description: 'Target stage'
+        type: string
+        default: dev
+        required: true
+      args:
+        description: 'Extra `sst deploy` arguments (--target, --exclude, --continue, --verbose)'
+        type: string
+        default: ''
+        required: false
+
+concurrency:
+  group: deploy-${{ inputs.stage }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  deployments: write
+
+jobs:
+  deploy:
+    name: deploy ${{ inputs.stage }}
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 120
+    environment: ${{ inputs.stage }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./tools/github/deploy
+        with:
+          stage: ${{ inputs.stage }}
+          args: ${{ inputs.args }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          better-stack-url: ${{ secrets.BETTER_STACK_URL }}
+          better-stack-api-key: ${{ secrets.BETTER_STACK_API_KEY }}

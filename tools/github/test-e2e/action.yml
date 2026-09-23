@@ -1,0 +1,69 @@
+name: 'test-e2e'
+description: 'The two HEAVY levels: the in-process e2e of posts-api and the saga crossed through the browser'
+inputs:
+  upload_reports:
+    description: >
+      Keep the reports, the Playwright VIDEOS/SCREENSHOTS/TRACES and the applications' logs as
+      artifacts of the run. They are what one opens, from the PR, to see what the suite saw.
+    default: 'true'
+    required: false
+runs:
+  using: composite
+  steps:
+    - name: Install the browser the suite drives
+      run: npx playwright install --with-deps chromium
+      shell: bash
+
+    - name: Run end-to-end tests
+      run: pnpm test:e2e
+      shell: bash
+      env:
+        CI: 'true'
+
+    - name: Upload the Playwright report
+      if: ${{ always() && inputs.upload_reports == 'true' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: playwright-report
+        path: apps/web-e2e/target/playwright-report/**
+        if-no-files-found: ignore
+        retention-days: 7
+
+    - name: Upload videos, screenshots and traces
+      if: ${{ always() && inputs.upload_reports == 'true' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: playwright-artifacts
+        path: apps/web-e2e/target/playwright/**
+        if-no-files-found: ignore
+        retention-days: 7
+
+    - name: Upload test reports and application logs
+      if: ${{ always() && inputs.upload_reports == 'true' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: e2e-reports
+        path: |
+          apps/*/target/test-results/**
+          apps/web-e2e/target/logs/**
+        if-no-files-found: ignore
+        retention-days: 7
+
+    - name: Point at what was captured
+      if: ${{ always() && inputs.upload_reports == 'true' }}
+      run: |
+        set -euo pipefail
+        {
+          echo "### Output of the end-to-end suite"
+          echo
+          echo "Artifacts of this run (**Summary** tab, *Artifacts* section):"
+          echo
+          echo "| artifact | what is inside |"
+          echo "| --- | --- |"
+          echo "| \`playwright-report\`   | the HTML report — open the \`index.html\` |"
+          echo "| \`playwright-artifacts\`| video, screenshot and trace of every test that FAILED |"
+          echo "| \`e2e-reports\`         | junit, and the logs of posts-api, tagging and web |"
+          echo
+          echo "A trace opens at <https://trace.playwright.dev> without installing anything."
+        } >> "$GITHUB_STEP_SUMMARY"
+      shell: bash

@@ -1,0 +1,37 @@
+name: 'setup'
+description: 'The environment every job of this monorepo needs: pnpm, Node and the Nx cache'
+inputs:
+  node-version:
+    description: >
+      The Node runtime. The default is 22, which is the version the applications are written for:
+      they run as CommonJS through `require(esm)`, which is what lets them load MikroORM 7 and
+      AutoMapper 9, both ESM-only.
+    default: '22'
+    required: false
+  install:
+    description: 'Run `pnpm install`. Turn it off only in a job that touches nothing JavaScript.'
+    default: 'true'
+    required: false
+runs:
+  using: composite
+  steps:
+    - name: Set up pnpm
+      uses: pnpm/action-setup@v4
+
+    - name: Set up Node
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+        cache: pnpm
+
+    - name: Install dependencies
+      if: ${{ inputs.install == 'true' }}
+      run: pnpm install --frozen-lockfile
+      shell: bash
+
+    - name: Cache Nx
+      uses: actions/cache@v4
+      with:
+        path: .nx/cache
+        key: ${{ runner.os }}-nx-${{ github.sha }}
+        restore-keys: ${{ runner.os }}-nx-

@@ -1,0 +1,49 @@
+name: 'ci'
+description: 'The continuous integration of this monorepo: prepares the environment and runs the requested checks'
+inputs:
+  checks:
+    description: >
+      Which checks to run, comma separated: `test`, `test-e2e`, `web`. `all` runs the three.
+
+      The parameter exists so that the SAME entry point serves one job per check — it is what gives
+      the workflow its parallelism without duplicating the environment setup in three places. A
+      single job, with `all`, works too, and is what makes sense in a local hook.
+    default: 'all'
+    required: true
+  node-version:
+    description: 'Passed on to `setup`. See the rationale for the default 22 there.'
+    default: '22'
+    required: false
+runs:
+  using: composite
+  steps:
+    - name: Resolve the requested checks
+      id: selection
+      run: |
+        set -euo pipefail
+        selected=",${CHECKS},"
+        wants() { [ "$CHECKS" = "all" ] && return 0; case "$selected" in *",$1,"*) return 0 ;; *) return 1 ;; esac; }
+        for check in test test-e2e web; do
+          if wants "$check"; then echo "${check//-/_}=true" >> "$GITHUB_OUTPUT"; else echo "${check//-/_}=false" >> "$GITHUB_OUTPUT"; fi
+        done
+        echo "running: $CHECKS"
+      shell: bash
+      env:
+        CHECKS: ${{ inputs.checks }}
+
+    - name: Set up the environment
+      uses: ./tools/github/setup
+      with:
+        node-version: ${{ inputs.node-version }}
+
+    - name: Unit, wiring and schema tests
+      if: ${{ steps.selection.outputs.test == 'true' }}
+      uses: ./tools/github/test
+
+    - name: End-to-end tests
+      if: ${{ steps.selection.outputs.test_e2e == 'true' }}
+      uses: ./tools/github/test-e2e
+
+    - name: Static checks and the web build
+      if: ${{ steps.selection.outputs.web == 'true' }}
+      uses: ./tools/github/web

@@ -1,0 +1,63 @@
+name: 'deploy'
+description: 'The deploy of the SST stack: prepares the environment, authenticates against AWS and calls `deploy-sst`'
+inputs:
+  stage:
+    description: 'Target stage (dev, prod, stg and so on)'
+    default: 'develop'
+    required: true
+  aws-region:
+    description: 'The region. The stack is written for us-east-1 — `infra/aws/README.md` says why.'
+    default: 'us-east-1'
+    required: false
+  aws-access-key-id:
+    description: 'From `secrets.AWS_ACCESS_KEY_ID`. A composite action does not see secrets by itself.'
+    required: true
+  aws-secret-access-key:
+    description: 'From `secrets.AWS_SECRET_ACCESS_KEY`.'
+    required: true
+  better-stack-url:
+    description: >
+      From `secrets.BETTER_STACK_URL`. It is NOT optional: `infra/aws/support/functions.ts` reads it
+      with `requiredEnv` and FAILS the deploy when it is missing — on purpose, because a collector
+      with no destination boots, does not complain, and loses the telemetry in silence. On a machine
+      it comes from the root `.env`, which SST loads by itself; on a runner there is no `.env`.
+    required: true
+  better-stack-api-key:
+    description: 'From `secrets.BETTER_STACK_API_KEY`. Same story.'
+    required: true
+  args:
+    description: 'Passed on to `deploy-sst` — `--target`, `--exclude`, `--continue`, `--verbose`.'
+    default: ''
+    required: false
+  upload_outputs:
+    description: 'Passed on to `deploy-sst`. See the warning about credentials in outputs there.'
+    default: 'true'
+    required: false
+runs:
+  using: composite
+  steps:
+    - name: Set up the environment
+      uses: ./tools/github/setup
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ inputs.aws-access-key-id }}
+        aws-secret-access-key: ${{ inputs.aws-secret-access-key }}
+        aws-region: ${{ inputs.aws-region }}
+
+    - name: Export the telemetry destination
+      run: |
+        echo "BETTER_STACK_URL=$BETTER_STACK_URL" >> "$GITHUB_ENV"
+        echo "BETTER_STACK_API_KEY=$BETTER_STACK_API_KEY" >> "$GITHUB_ENV"
+      shell: bash
+      env:
+        BETTER_STACK_URL: ${{ inputs.better-stack-url }}
+        BETTER_STACK_API_KEY: ${{ inputs.better-stack-api-key }}
+
+    - name: Deploy
+      uses: ./tools/github/deploy-sst
+      with:
+        stage: ${{ inputs.stage }}
+        args: ${{ inputs.args }}
+        upload_outputs: ${{ inputs.upload_outputs }}

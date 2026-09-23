@@ -1,0 +1,16 @@
+name: 'web'
+description: 'The STATIC checks of every project, plus the build of the Next.js client'
+runs:
+  using: composite
+  steps:
+    - name: Check formatting
+      run: pnpm format:check
+      shell: bash
+
+    - name: Lint and typecheck every project
+      run: npx nx run-many -t lint typecheck
+      shell: bash
+
+    - name: Build the web client
+      run: npx nx run @nestposts/web:build
+      shell: bash
