@@ -8,11 +8,10 @@ data/
 .vscode/*
 !.vscode/settings.json
 !.vscode/extensions.json
-
+!.vscode/mcp.json
 # artefatos de cobertura
 coverage/
 .vitest/
-
 # Nx e os artefatos por projeto
 .nx/
 **/dist/
@@ -25,10 +24,10 @@ target/
 playwright-report/
 blob-report/
 .playwright/
-
 # SST baixa a sua plataforma e guarda o estado do stage aqui, e gera os tipos dos links
 .sst/
 sst-env.d.ts
 **/sst-env.d.ts
-
 .env
+.grit
+_tmp_*

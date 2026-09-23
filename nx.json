@@ -77,5 +77,6 @@
       }
     }
   ],
-  "analytics": false
+  "analytics": false,
+  "parallel": 8
 }

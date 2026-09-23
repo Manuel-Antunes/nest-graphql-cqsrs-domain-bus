@@ -4,6 +4,30 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+catalogs:
+  default:
+    '@nx/js':
+      specifier: 23.2.1
+      version: 23.2.1
+    '@nx/nest':
+      specifier: 23.2.1
+      version: 23.2.1
+    '@nx/next':
+      specifier: 23.2.1
+      version: 23.2.1
+    '@nx/playwright':
+      specifier: 23.2.1
+      version: 23.2.1
+    '@nx/workspace':
+      specifier: 23.2.1
+      version: 23.2.1
+    nx:
+      specifier: 23.2.1
+      version: 23.2.1
+    typescript:
+      specifier: ^6.0.3
+      version: 6.0.3
+
 overrides:
   '@better-auth/utils': 0.4.2
 
@@ -145,10 +169,10 @@ importers:
         version: 2.0.1
       better-auth:
         specifier: ^1.7.3
-        version: 1.7.3(@opentelemetry/api@1.9.1)(next@15.5.25(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(@playwright/test@1.63.0)(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(pg@8.23.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(vitest@5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.5.0)(@vitest/coverage-v8@5.0.0)(jsdom@30.1.0(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@26.5.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.0)))
+        version: 1.7.3(@opentelemetry/api@1.9.1)(next@15.5.25(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(@playwright/test@1.63.0)(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(pg@8.23.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(vitest@5.0.0)
       better-auth-mikro-orm:
         specifier: 1.0.0-next.2
-        version: 1.0.0-next.2(@mikro-orm/core@7.2.1(dataloader@2.2.3))(better-auth@1.7.3(@opentelemetry/api@1.9.1)(next@15.5.25(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(@playwright/test@1.63.0)(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(pg@8.23.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(vitest@5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.5.0)(@vitest/coverage-v8@5.0.0)(jsdom@30.1.0(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@26.5.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.0))))
+        version: 1.0.0-next.2(@mikro-orm/core@7.2.1(dataloader@2.2.3))(better-auth@1.7.3(@opentelemetry/api@1.9.1)(next@15.5.25(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(@playwright/test@1.63.0)(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(pg@8.23.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(vitest@5.0.0))
       class-transformer:
         specifier: ^0.5.1
         version: 0.5.1
@@ -200,43 +224,49 @@ importers:
         version: 7.2.1(dataloader@2.2.3)
       '@nestjs/cli':
         specifier: ^12.0.0
-        version: 12.0.0(@swc/core@1.16.2)(@types/node@26.5.0)(prettier@3.9.8)(tsconfig-paths-webpack-plugin@4.2.0)(webpack@5.111.1(@swc/core@1.16.2)(esbuild@0.28.2))
+        version: 12.0.0(@swc/core@1.16.2(@swc/helpers@0.5.23))(@types/node@26.5.0)(prettier@3.9.8)(tsconfig-paths-webpack-plugin@4.2.0)(webpack@5.111.1(@swc/core@1.16.2(@swc/helpers@0.5.23))(esbuild@0.28.2))
       '@nestjs/testing':
         specifier: ^12.0.1
         version: 12.0.1(@nestjs/common@12.0.1(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@12.0.1)(@nestjs/microservices@12.0.3)(@nestjs/platform-express@12.0.1)
       '@nx/docker':
         specifier: 23.2.1
-        version: 23.2.1(nx@23.2.1(@swc/core@1.16.2))
+        version: 23.2.1(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))
       '@nx/eslint':
         specifier: 23.2.1
-        version: 23.2.1(@babel/traverse@7.29.8)(@nx/jest@23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2)(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(nx@23.2.1(@swc/core@1.16.2))(typescript@6.0.3))(@swc/core@1.16.2)(@zkochan/js-yaml@0.0.7)(eslint@9.39.5(jiti@2.7.0))(nx@23.2.1(@swc/core@1.16.2))
+        version: 23.2.1(@babel/traverse@7.29.8)(@nx/jest@23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2(@swc/helpers@0.5.23))(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))(typescript@6.0.3))(@swc/core@1.16.2(@swc/helpers@0.5.23))(@zkochan/js-yaml@0.0.7)(eslint@9.39.5(jiti@2.7.0))(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))
       '@nx/eslint-plugin':
         specifier: 23.2.1
-        version: 23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2)(@typescript-eslint/parser@8.70.1(eslint@9.39.5(jiti@2.7.0))(typescript@6.0.3))(eslint-config-prettier@10.1.8(eslint@9.39.5(jiti@2.7.0)))(eslint@9.39.5(jiti@2.7.0))(nx@23.2.1(@swc/core@1.16.2))(typescript@6.0.3)
+        version: 23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2(@swc/helpers@0.5.23))(@typescript-eslint/parser@8.70.1(eslint@9.39.5(jiti@2.7.0))(typescript@6.0.3))(eslint-config-prettier@10.1.8(eslint@9.39.5(jiti@2.7.0)))(eslint@9.39.5(jiti@2.7.0))(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))(typescript@6.0.3)
       '@nx/js':
-        specifier: 23.2.1
-        version: 23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2)(nx@23.2.1(@swc/core@1.16.2))
+        specifier: 'catalog:'
+        version: 23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2(@swc/helpers@0.5.23))(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))
       '@nx/nest':
-        specifier: 23.2.1
-        version: 23.2.1(@babel/traverse@7.29.8)(@nestjs/common@12.0.1(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@12.0.1)(@nx/jest@23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2)(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(nx@23.2.1(@swc/core@1.16.2))(typescript@6.0.3))(@swc/core@1.16.2)(@types/node@26.5.0)(@zkochan/js-yaml@0.0.7)(babel-plugin-macros@3.1.0)(chokidar@5.0.0)(eslint@9.39.5(jiti@2.7.0))(fastify@5.12.5)(nx@23.2.1(@swc/core@1.16.2))(prettier@3.9.8)(reflect-metadata@0.2.2)(rxjs@7.8.2)(typescript@6.0.3)
+        specifier: 'catalog:'
+        version: 23.2.1(@babel/traverse@7.29.8)(@nestjs/common@12.0.1(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@12.0.1)(@nx/jest@23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2(@swc/helpers@0.5.23))(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))(typescript@6.0.3))(@swc/core@1.16.2(@swc/helpers@0.5.23))(@types/node@26.5.0)(@zkochan/js-yaml@0.0.7)(babel-plugin-macros@3.1.0)(chokidar@5.0.0)(eslint@9.39.5(jiti@2.7.0))(fastify@5.12.5)(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))(prettier@3.9.8)(reflect-metadata@0.2.2)(rxjs@7.8.2)(typescript@6.0.3)
       '@nx/next':
-        specifier: 23.2.1
-        version: 23.2.1(d8b27f9e4548b0101442ab3cdb5a53e4)
+        specifier: 'catalog:'
+        version: 23.2.1(a231760325e218f915f6ae97bb620ce1)
       '@nx/playwright':
-        specifier: ^23.2.1
-        version: 23.2.1(@babel/traverse@7.29.8)(@nx/jest@23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2)(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(nx@23.2.1(@swc/core@1.16.2))(typescript@6.0.3))(@playwright/test@1.63.0)(@swc/core@1.16.2)(@zkochan/js-yaml@0.0.7)(eslint@9.39.5(jiti@2.7.0))(nx@23.2.1(@swc/core@1.16.2))
+        specifier: 'catalog:'
+        version: 23.2.1(@babel/traverse@7.29.8)(@nx/jest@23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2(@swc/helpers@0.5.23))(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))(typescript@6.0.3))(@playwright/test@1.63.0)(@swc/core@1.16.2(@swc/helpers@0.5.23))(@zkochan/js-yaml@0.0.7)(eslint@9.39.5(jiti@2.7.0))(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))
       '@nx/vite':
         specifier: 23.2.1
-        version: 23.2.1(@babel/traverse@7.29.8)(@nx/eslint@23.2.1(@babel/traverse@7.29.8)(@nx/jest@23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2)(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(nx@23.2.1(@swc/core@1.16.2))(typescript@6.0.3))(@swc/core@1.16.2)(@zkochan/js-yaml@0.0.7)(eslint@9.39.5(jiti@2.7.0))(nx@23.2.1(@swc/core@1.16.2)))(@swc/core@1.16.2)(nx@23.2.1(@swc/core@1.16.2))(typescript@6.0.3)(vite@8.3.0(@types/node@26.5.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.0))(vitest@5.0.0)
+        version: 23.2.1(@babel/traverse@7.29.8)(@nx/eslint@23.2.1(@babel/traverse@7.29.8)(@nx/jest@23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2(@swc/helpers@0.5.23))(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))(typescript@6.0.3))(@swc/core@1.16.2(@swc/helpers@0.5.23))(@zkochan/js-yaml@0.0.7)(eslint@9.39.5(jiti@2.7.0))(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23))))(@swc/core@1.16.2(@swc/helpers@0.5.23))(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))(typescript@6.0.3)(vite@8.3.0(@types/node@26.5.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.0))(vitest@5.0.0)
       '@nx/vitest':
         specifier: 23.2.1
-        version: 23.2.1(@babel/traverse@7.29.8)(@nx/eslint@23.2.1(@babel/traverse@7.29.8)(@nx/jest@23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2)(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(nx@23.2.1(@swc/core@1.16.2))(typescript@6.0.3))(@swc/core@1.16.2)(@zkochan/js-yaml@0.0.7)(eslint@9.39.5(jiti@2.7.0))(nx@23.2.1(@swc/core@1.16.2)))(@swc/core@1.16.2)(nx@23.2.1(@swc/core@1.16.2))(typescript@6.0.3)(vite@8.3.0(@types/node@26.5.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.0))(vitest@5.0.0)
+        version: 23.2.1(@babel/traverse@7.29.8)(@nx/eslint@23.2.1(@babel/traverse@7.29.8)(@nx/jest@23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2(@swc/helpers@0.5.23))(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))(typescript@6.0.3))(@swc/core@1.16.2(@swc/helpers@0.5.23))(@zkochan/js-yaml@0.0.7)(eslint@9.39.5(jiti@2.7.0))(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23))))(@swc/core@1.16.2(@swc/helpers@0.5.23))(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))(typescript@6.0.3)(vite@8.3.0(@types/node@26.5.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.0))(vitest@5.0.0)
+      '@nx/workspace':
+        specifier: 'catalog:'
+        version: 23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23))
       '@playwright/test':
         specifier: ^1.63.0
         version: 1.63.0
       '@swc/core':
         specifier: ^1.16.2
-        version: 1.16.2
+        version: 1.16.2(@swc/helpers@0.5.23)
+      '@swc/helpers':
+        specifier: ~0.5.18
+        version: 0.5.23
       '@testcontainers/postgresql':
         specifier: ^11.7.1
         version: 11.14.0
@@ -254,7 +284,7 @@ importers:
         version: 5.0.0(vitest@5.0.0)
       '@vitest/eslint-plugin':
         specifier: ^1.6.27
-        version: 1.6.27(@typescript-eslint/eslint-plugin@8.70.1(@typescript-eslint/parser@8.70.1(eslint@9.39.5(jiti@2.7.0))(typescript@6.0.3))(eslint@9.39.5(jiti@2.7.0))(typescript@6.0.3))(eslint@9.39.5(jiti@2.7.0))(typescript@6.0.3)(vitest@5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.5.0)(@vitest/coverage-v8@5.0.0)(jsdom@30.1.0(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@26.5.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.0)))
+        version: 1.6.27(@typescript-eslint/eslint-plugin@8.70.1(@typescript-eslint/parser@8.70.1(eslint@9.39.5(jiti@2.7.0))(typescript@6.0.3))(eslint@9.39.5(jiti@2.7.0))(typescript@6.0.3))(eslint@9.39.5(jiti@2.7.0))(typescript@6.0.3)(vitest@5.0.0)
       eslint:
         specifier: ^9.39.5
         version: 9.39.5(jiti@2.7.0)
@@ -274,8 +304,8 @@ importers:
         specifier: ^3.3.0
         version: 3.3.0
       nx:
-        specifier: 23.2.1
-        version: 23.2.1(@swc/core@1.16.2)
+        specifier: 'catalog:'
+        version: 23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23))
       pg:
         specifier: ^8.23.0
         version: 8.23.0
@@ -295,14 +325,14 @@ importers:
         specifier: ^11.14.0
         version: 11.14.0
       typescript:
-        specifier: ^6.0.3
+        specifier: 'catalog:'
         version: 6.0.3
       typescript-eslint:
         specifier: ^8.70.0
         version: 8.70.1(eslint@9.39.5(jiti@2.7.0))(typescript@6.0.3)
       unplugin-swc:
         specifier: ^1.6.0
-        version: 1.6.0(@swc/core@1.16.2)(esbuild@0.28.2)(rolldown@1.2.7)(rollup@4.63.4)(vite@8.3.0(@types/node@26.5.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.0))(webpack@5.111.1(@swc/core@1.16.2)(esbuild@0.28.2))
+        version: 1.6.0(@swc/core@1.16.2(@swc/helpers@0.5.23))(esbuild@0.28.2)(rolldown@1.2.7)(rollup@4.63.4)(vite@8.3.0(@types/node@26.5.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.0))(webpack@5.111.1(@swc/core@1.16.2(@swc/helpers@0.5.23))(esbuild@0.28.2))
       vite:
         specifier: ^8.3.0
         version: 8.3.0(@types/node@26.5.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.0)
@@ -454,10 +484,10 @@ importers:
         version: 2.1.3(@opentelemetry/api-logs@0.222.0)(@opentelemetry/api@1.9.1)(@opentelemetry/instrumentation@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/resources@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-metrics@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.11.0(@opentelemetry/api@1.9.1))
       better-auth:
         specifier: ^1.7.3
-        version: 1.7.3(@opentelemetry/api@1.9.1)(next@15.5.25(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(@playwright/test@1.63.0)(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(pg@8.23.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(vitest@5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.5.0)(@vitest/coverage-v8@5.0.0)(jsdom@30.1.0(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@26.5.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.0)))
+        version: 1.7.3(@opentelemetry/api@1.9.1)(next@15.5.25(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(@playwright/test@1.63.0)(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(pg@8.23.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(vitest@4.1.11(@opentelemetry/api@1.9.1)(@types/node@26.5.0)(@vitest/coverage-v8@5.0.0(vitest@5.0.0))(jsdom@30.1.0(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@26.5.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.0)))
       better-auth-mikro-orm:
         specifier: 1.0.0-next.2
-        version: 1.0.0-next.2(@mikro-orm/core@7.2.1(dataloader@2.2.3))(better-auth@1.7.3(@opentelemetry/api@1.9.1)(next@15.5.25(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(@playwright/test@1.63.0)(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(pg@8.23.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(vitest@5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.5.0)(@vitest/coverage-v8@5.0.0)(jsdom@30.1.0(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@26.5.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.0))))
+        version: 1.0.0-next.2(@mikro-orm/core@7.2.1(dataloader@2.2.3))(better-auth@1.7.3(@opentelemetry/api@1.9.1)(next@15.5.25(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(@playwright/test@1.63.0)(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(pg@8.23.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(vitest@4.1.11(@opentelemetry/api@1.9.1)(@types/node@26.5.0)(@vitest/coverage-v8@5.0.0(vitest@5.0.0))(jsdom@30.1.0(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@26.5.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.0))))
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -548,7 +578,7 @@ importers:
         version: 5.2.0(vite@8.3.0(@types/node@26.5.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.0))
       '@vitest/eslint-plugin':
         specifier: ^1.6.27
-        version: 1.6.27(@typescript-eslint/eslint-plugin@8.70.1(@typescript-eslint/parser@8.70.1(eslint@9.39.5(jiti@2.7.0))(typescript@6.0.3))(eslint@9.39.5(jiti@2.7.0))(typescript@6.0.3))(eslint@9.39.5(jiti@2.7.0))(typescript@6.0.3)(vitest@5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.5.0)(@vitest/coverage-v8@5.0.0)(jsdom@30.1.0(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@26.5.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.0)))
+        version: 1.6.27(@typescript-eslint/eslint-plugin@8.70.1(@typescript-eslint/parser@8.70.1(eslint@9.39.5(jiti@2.7.0))(typescript@6.0.3))(eslint@9.39.5(jiti@2.7.0))(typescript@6.0.3))(eslint@9.39.5(jiti@2.7.0))(typescript@6.0.3)(vitest@4.1.11(@opentelemetry/api@1.9.1)(@types/node@26.5.0)(@vitest/coverage-v8@5.0.0(vitest@5.0.0))(jsdom@30.1.0(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@26.5.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.0)))
       eslint-config-next:
         specifier: 15.5.25
         version: 15.5.25(eslint@9.39.5(jiti@2.7.0))(typescript@6.0.3)
@@ -4664,6 +4694,9 @@ packages:
   '@swc/helpers@0.5.15':
     resolution: {integrity: sha512-JQ5TuMi45Owi4/BIMAJBoSQoOJu12oOk/gADqlcUL9JEdHB8vyjUSsxqeNXnmXHjYKMi2WcYtezGEEhqUI/E2g==}
 
+  '@swc/helpers@0.5.23':
+    resolution: {integrity: sha512-5lSsMOTXURePglDfvuAQUqkGek9Hg2kksOYay2m0+XR++b2NWYL/4sWyuvVBIs8oKnJaxkdi9whaL/sqN13afw==}
+
   '@swc/types@0.1.28':
     resolution: {integrity: sha512-V6Mnml8v09QALx6K0elJ7o9K/MkVDtW3t6L+7Ou/JcWtb3xwId2AH4FeOceySd2JaO87IMw4+6vSZxLm34LPbw==}
 
@@ -5187,6 +5220,9 @@ packages:
       vitest:
         optional: true
 
+  '@vitest/expect@4.1.11':
+    resolution: {integrity: sha512-VX2x5vNJXET47KAFzwERI+KRMtTTCSWTfSMKsW7JsUsXV4psq++e3DvZpuTDOpHcxytiDs6p2nhVb2tVDiiUYw==}
+
   '@vitest/istanbul-lib-coverage@1.0.1':
     resolution: {integrity: sha512-k3DJZ8LhMBK9NS4SclF1ASD3OgXEWDorbIcPTRDK0/Zae6fRvu+fJRxtFdLfHsa9Y24beCdPnoNZ4LviTNstfA==}
     engines: {node: '>=22'}
@@ -5194,6 +5230,17 @@ packages:
   '@vitest/istanbul-lib-report@1.0.1':
     resolution: {integrity: sha512-1EOLRfsTMnyAr3+kEAsP4o9dhaDlGPpD7H5iLBBeq//YpNB1VIahkPhB+eRp9N2Dkfw8oySROjE3yf9XDeaIkQ==}
     engines: {node: '>=22'}
+
+  '@vitest/mocker@4.1.11':
+    resolution: {integrity: sha512-2XJVD55d1o5AZous5CCGKS74g/riOj9odEt2bQpCVZeblHyHdnMeFl4jl0XjU21stf4mbjUkew2eXQZt65g5CQ==}
+    peerDependencies:
+      msw: ^2.4.9
+      vite: ^6.0.0 || ^7.0.0 || ^8.0.0
+    peerDependenciesMeta:
+      msw:
+        optional: true
+      vite:
+        optional: true
 
   '@vitest/mocker@5.0.0':
     resolution: {integrity: sha512-66PGTMIiVJP3t4a5yxU9qPtf7MdTBs8jmToMvy+HVflB3Yy13WJZTtPePdvU+wjRV02SKK5doLbSA6o9pwOmiA==}
@@ -5206,8 +5253,23 @@ packages:
       vite:
         optional: true
 
+  '@vitest/pretty-format@4.1.11':
+    resolution: {integrity: sha512-yiZzPbGTS9Sr/JpFl8zHrcIkAofNbFV6k21vIgQN/cY/oxZeXhJv5sc/MBJ5jFKWmWs+oJHw0UXLZjmf931+Vw==}
+
+  '@vitest/runner@4.1.11':
+    resolution: {integrity: sha512-LztvUgdwMNJMIkj3hQnnxiC2Xy1zNxq928W/xhjCLaNCzqTZOudjwbQf6v9IntZGPw132i2Lq2rgTRZHD3JHNw==}
+
+  '@vitest/snapshot@4.1.11':
+    resolution: {integrity: sha512-pN7ikn1ON7h8ee4gIAp4AzyK+zBtJPzVbqOgu5LCEh4VaJVbPQcgYQYJIMGQPXVeJJq1fnfazis7a5pFNPahog==}
+
+  '@vitest/spy@4.1.11':
+    resolution: {integrity: sha512-apNa/prQy2qCeywhnixOHPRCgGNhvg7T4Dapfl1GahLp/R+uhBm5cPyFoNVyqsNd2h1nJxL6BqqdIjiABL60YA==}
+
   '@vitest/spy@5.0.0':
     resolution: {integrity: sha512-uy+luWBAPw9XfthoHi5AkfHUnuPYEESjl0p/r+meoBnU8bxg5GDQ3Ey8MjcJ6sqahkL4PFyrvfMJJBw7LbU06g==}
+
+  '@vitest/utils@4.1.11':
+    resolution: {integrity: sha512-zTCVGpyFsGWBhllOyKlTw/vnr6D9qxsfSDyfbyZmTyjHw5N/VuvzHpHoQjm2ZJzn4RJgx5w4r7V0er69CmLgPQ==}
 
   '@webassemblyjs/ast@1.14.1':
     resolution: {integrity: sha512-nuBEDgQfm1ccRp/8bCQrx1frohyufl4JlbMMZ4P1wpeOfDhF6FQkxZJ1b/e+PLwr6X1Nhw6OLme5usuBWYBvuQ==}
@@ -8695,6 +8757,9 @@ packages:
     resolution: {integrity: sha512-gDKb8aZMDeD/tZWs9P6+q0J9Mwkdl6xMV8TjnGP3qJVJ06bdMgkbBlLU8IdfOsIsFz2BW1rNVT3XuNEl8zPAvw==}
     engines: {node: '>=8'}
 
+  pathe@2.0.3:
+    resolution: {integrity: sha512-WUjGcAqP1gQacoQe+OBJsFA7Ld4DyXuUIjZ5cc75cLHvJ7dtNsTugphxIADwspS+AraAUePCKrSVtPLFj/F88w==}
+
   pg-cloudflare@1.4.0:
     resolution: {integrity: sha512-Vo7z/6rrQYxpNRylp4Tlob2elzbh+N/MOQbxFVWCxS7oEx6jF53GTJFxK2WWpKuBRkmiin4Mt+xofFDjx09R0A==}
 
@@ -9751,6 +9816,9 @@ packages:
   tiny-invariant@1.3.3:
     resolution: {integrity: sha512-+FbBPE1o9QAYvviau/qC5SE3caw21q3xkvWKBtja5vgqOWIHHJ3ioaq1VPfn/Szqctz2bU/oYeKd9/z5BL+PVg==}
 
+  tinybench@2.9.0:
+    resolution: {integrity: sha512-0+DUvqWMValLmha6lr4kD8iAMK1HzV0/aKnCtWb9v9641TnP/MFb7Pc2bxoxQjTXAErryXVgUOfv2YqNllqGeg==}
+
   tinybench@6.1.4:
     resolution: {integrity: sha512-9APumHG7r4yOk4X4WlkmE71aZcv1gvin1czO3OQ1U9iJcFA5Ja/ygyb0vPOVHTthFozUYs8CLoLUlM8grb2lTQ==}
     engines: {node: '>=20.0.0'}
@@ -10117,6 +10185,47 @@ packages:
       tsx:
         optional: true
       yaml:
+        optional: true
+
+  vitest@4.1.11:
+    resolution: {integrity: sha512-fhACrNXUidIbGSBr5FlbuBkO7VWC1ZyLl0DO4CU2DrQoAPxX84Ysxs+HeGQpii5lZWV1Q4gBZTTu49mF+A6Edw==}
+    engines: {node: ^20.0.0 || ^22.0.0 || >=24.0.0}
+    hasBin: true
+    peerDependencies:
+      '@edge-runtime/vm': '*'
+      '@opentelemetry/api': ^1.9.0
+      '@types/node': ^20.0.0 || ^22.0.0 || >=24.0.0
+      '@vitest/browser-playwright': 4.1.11
+      '@vitest/browser-preview': 4.1.11
+      '@vitest/browser-webdriverio': 4.1.11
+      '@vitest/coverage-istanbul': 4.1.11
+      '@vitest/coverage-v8': 4.1.11
+      '@vitest/ui': 4.1.11
+      happy-dom: '*'
+      jsdom: '*'
+      vite: ^6.0.0 || ^7.0.0 || ^8.0.0
+    peerDependenciesMeta:
+      '@edge-runtime/vm':
+        optional: true
+      '@opentelemetry/api':
+        optional: true
+      '@types/node':
+        optional: true
+      '@vitest/browser-playwright':
+        optional: true
+      '@vitest/browser-preview':
+        optional: true
+      '@vitest/browser-webdriverio':
+        optional: true
+      '@vitest/coverage-istanbul':
+        optional: true
+      '@vitest/coverage-v8':
+        optional: true
+      '@vitest/ui':
+        optional: true
+      happy-dom:
+        optional: true
+      jsdom:
         optional: true
 
   vitest@5.0.0:
@@ -11835,7 +11944,7 @@ snapshots:
       '@better-auth/core': 1.7.3(@better-auth/utils@0.5.0)(@better-fetch/fetch@1.3.1)(@opentelemetry/api@1.9.1)(better-call@1.4.0(zod@4.5.4))(jose@6.2.12)(kysely@0.29.6)(nanostores@1.5.3)
       '@better-auth/utils': 0.5.0
       '@better-fetch/fetch': 1.3.1
-      better-auth: 1.7.3(@opentelemetry/api@1.9.1)(next@15.5.25(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(@playwright/test@1.63.0)(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(pg@8.23.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(vitest@5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.5.0)(@vitest/coverage-v8@5.0.0)(jsdom@30.1.0(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@26.5.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.0)))
+      better-auth: 1.7.3(@opentelemetry/api@1.9.1)(next@15.5.25(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(@playwright/test@1.63.0)(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(pg@8.23.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(vitest@5.0.0)
       better-call: 1.4.0(zod@4.5.4)
       jose: 6.2.12
       zod: 4.5.4
@@ -11945,7 +12054,6 @@ snapshots:
     dependencies:
       '@emnapi/wasi-threads': 1.2.1
       tslib: 2.8.1
-    optional: true
 
   '@emnapi/core@1.4.5':
     dependencies:
@@ -11960,7 +12068,6 @@ snapshots:
   '@emnapi/runtime@1.11.3':
     dependencies:
       tslib: 2.8.1
-    optional: true
 
   '@emnapi/runtime@1.4.5':
     dependencies:
@@ -11973,7 +12080,6 @@ snapshots:
   '@emnapi/wasi-threads@1.2.1':
     dependencies:
       tslib: 2.8.1
-    optional: true
 
   '@envelop/apollo-federation@8.2.1(@envelop/core@5.6.1)(graphql@16.14.2)':
     dependencies:
@@ -13299,8 +13405,8 @@ snapshots:
 
   '@napi-rs/wasm-runtime@0.2.4':
     dependencies:
-      '@emnapi/core': 1.4.5
-      '@emnapi/runtime': 1.4.5
+      '@emnapi/core': 1.10.0
+      '@emnapi/runtime': 1.11.3
       '@tybys/wasm-util': 0.9.0
 
   '@napi-rs/wasm-runtime@1.2.4(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)':
@@ -13310,7 +13416,7 @@ snapshots:
       '@tybys/wasm-util': 0.10.4
     optional: true
 
-  '@nestjs/cli@12.0.0(@swc/core@1.16.2)(@types/node@26.5.0)(prettier@3.9.8)(tsconfig-paths-webpack-plugin@4.2.0)(webpack@5.111.1(@swc/core@1.16.2)(esbuild@0.28.2))':
+  '@nestjs/cli@12.0.0(@swc/core@1.16.2(@swc/helpers@0.5.23))(@types/node@26.5.0)(prettier@3.9.8)(tsconfig-paths-webpack-plugin@4.2.0)(webpack@5.111.1(@swc/core@1.16.2(@swc/helpers@0.5.23))(esbuild@0.28.2))':
     dependencies:
       '@angular-devkit/core': 22.1.5(chokidar@5.0.0)
       '@angular-devkit/schematics': 22.1.5(chokidar@5.0.0)
@@ -13327,9 +13433,9 @@ snapshots:
       tsconfig-paths: 4.2.0
       typescript: 6.0.3
     optionalDependencies:
-      '@swc/core': 1.16.2
+      '@swc/core': 1.16.2(@swc/helpers@0.5.23)
       tsconfig-paths-webpack-plugin: 4.2.0
-      webpack: 5.111.1(@swc/core@1.16.2)(esbuild@0.28.2)
+      webpack: 5.111.1(@swc/core@1.16.2(@swc/helpers@0.5.23))(esbuild@0.28.2)
     transitivePeerDependencies:
       - '@types/node'
       - prettier
@@ -13547,26 +13653,26 @@ snapshots:
 
   '@npmcli/redact@4.0.0': {}
 
-  '@nx/devkit@23.2.1(nx@23.2.1(@swc/core@1.16.2))':
+  '@nx/devkit@23.2.1(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))':
     dependencies:
       ejs: 5.0.1
       minimatch: 10.2.5
-      nx: 23.2.1(@swc/core@1.16.2)
+      nx: 23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23))
       semver: 7.8.5
       tslib: 2.8.1
       yargs-parser: 21.1.1
 
-  '@nx/docker@23.2.1(nx@23.2.1(@swc/core@1.16.2))':
+  '@nx/docker@23.2.1(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))':
     dependencies:
-      '@nx/devkit': 23.2.1(nx@23.2.1(@swc/core@1.16.2))
+      '@nx/devkit': 23.2.1(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))
       tslib: 2.8.1
     transitivePeerDependencies:
       - nx
 
-  '@nx/eslint-plugin@23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2)(@typescript-eslint/parser@8.70.1(eslint@9.39.5(jiti@2.7.0))(typescript@6.0.3))(eslint-config-prettier@10.1.8(eslint@9.39.5(jiti@2.7.0)))(eslint@9.39.5(jiti@2.7.0))(nx@23.2.1(@swc/core@1.16.2))(typescript@6.0.3)':
+  '@nx/eslint-plugin@23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2(@swc/helpers@0.5.23))(@typescript-eslint/parser@8.70.1(eslint@9.39.5(jiti@2.7.0))(typescript@6.0.3))(eslint-config-prettier@10.1.8(eslint@9.39.5(jiti@2.7.0)))(eslint@9.39.5(jiti@2.7.0))(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))(typescript@6.0.3)':
     dependencies:
-      '@nx/devkit': 23.2.1(nx@23.2.1(@swc/core@1.16.2))
-      '@nx/js': 23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2)(nx@23.2.1(@swc/core@1.16.2))
+      '@nx/devkit': 23.2.1(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))
+      '@nx/js': 23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2(@swc/helpers@0.5.23))(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))
       '@phenomnomnominal/tsquery': 6.2.0(typescript@6.0.3)
       '@typescript-eslint/type-utils': 8.70.1(eslint@9.39.5(jiti@2.7.0))(typescript@6.0.3)
       '@typescript-eslint/utils': 8.70.1(eslint@9.39.5(jiti@2.7.0))(typescript@6.0.3)
@@ -13590,16 +13696,16 @@ snapshots:
       - typescript
       - verdaccio
 
-  '@nx/eslint@23.2.1(@babel/traverse@7.29.8)(@nx/jest@23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2)(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(nx@23.2.1(@swc/core@1.16.2))(typescript@6.0.3))(@swc/core@1.16.2)(@zkochan/js-yaml@0.0.7)(eslint@9.39.5(jiti@2.7.0))(nx@23.2.1(@swc/core@1.16.2))':
+  '@nx/eslint@23.2.1(@babel/traverse@7.29.8)(@nx/jest@23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2(@swc/helpers@0.5.23))(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))(typescript@6.0.3))(@swc/core@1.16.2(@swc/helpers@0.5.23))(@zkochan/js-yaml@0.0.7)(eslint@9.39.5(jiti@2.7.0))(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))':
     dependencies:
-      '@nx/devkit': 23.2.1(nx@23.2.1(@swc/core@1.16.2))
-      '@nx/js': 23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2)(nx@23.2.1(@swc/core@1.16.2))
+      '@nx/devkit': 23.2.1(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))
+      '@nx/js': 23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2(@swc/helpers@0.5.23))(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))
       eslint: 9.39.5(jiti@2.7.0)
       semver: 7.8.5
       tslib: 2.8.1
       typescript: 6.0.3
     optionalDependencies:
-      '@nx/jest': 23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2)(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(nx@23.2.1(@swc/core@1.16.2))(typescript@6.0.3)
+      '@nx/jest': 23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2(@swc/helpers@0.5.23))(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))(typescript@6.0.3)
       '@zkochan/js-yaml': 0.0.7
     transitivePeerDependencies:
       - '@babel/traverse'
@@ -13610,12 +13716,12 @@ snapshots:
       - supports-color
       - verdaccio
 
-  '@nx/jest@23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2)(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(nx@23.2.1(@swc/core@1.16.2))(typescript@6.0.3)':
+  '@nx/jest@23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2(@swc/helpers@0.5.23))(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))(typescript@6.0.3)':
     dependencies:
       '@jest/reporters': 30.5.2
       '@jest/test-result': 30.5.2
-      '@nx/devkit': 23.2.1(nx@23.2.1(@swc/core@1.16.2))
-      '@nx/js': 23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2)(nx@23.2.1(@swc/core@1.16.2))
+      '@nx/devkit': 23.2.1(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))
+      '@nx/js': 23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2(@swc/helpers@0.5.23))(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))
       '@phenomnomnominal/tsquery': 6.2.0(typescript@6.0.3)
       identity-obj-proxy: 3.0.0
       jest-config: 30.5.2(@types/node@26.5.0)(babel-plugin-macros@3.1.0)
@@ -13643,7 +13749,7 @@ snapshots:
       - typescript
       - verdaccio
 
-  '@nx/js@23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2)(nx@23.2.1(@swc/core@1.16.2))':
+  '@nx/js@23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2(@swc/helpers@0.5.23))(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))':
     dependencies:
       '@babel/core': 7.29.7
       '@babel/plugin-proposal-decorators': 7.29.7(@babel/core@7.29.7)
@@ -13655,8 +13761,8 @@ snapshots:
       '@babel/preset-env': 7.29.7(@babel/core@7.29.7)
       '@babel/preset-typescript': 7.29.7(@babel/core@7.29.7)
       '@babel/runtime': 7.29.7
-      '@nx/devkit': 23.2.1(nx@23.2.1(@swc/core@1.16.2))
-      '@nx/workspace': 23.2.1(@swc/core@1.16.2)
+      '@nx/devkit': 23.2.1(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))
+      '@nx/workspace': 23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23))
       '@zkochan/js-yaml': 0.0.7
       babel-plugin-const-enum: 1.2.0(@babel/core@7.29.7)
       babel-plugin-macros: 3.1.0
@@ -13681,13 +13787,13 @@ snapshots:
       - nx
       - supports-color
 
-  '@nx/nest@23.2.1(@babel/traverse@7.29.8)(@nestjs/common@12.0.1(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@12.0.1)(@nx/jest@23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2)(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(nx@23.2.1(@swc/core@1.16.2))(typescript@6.0.3))(@swc/core@1.16.2)(@types/node@26.5.0)(@zkochan/js-yaml@0.0.7)(babel-plugin-macros@3.1.0)(chokidar@5.0.0)(eslint@9.39.5(jiti@2.7.0))(fastify@5.12.5)(nx@23.2.1(@swc/core@1.16.2))(prettier@3.9.8)(reflect-metadata@0.2.2)(rxjs@7.8.2)(typescript@6.0.3)':
+  '@nx/nest@23.2.1(@babel/traverse@7.29.8)(@nestjs/common@12.0.1(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@12.0.1)(@nx/jest@23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2(@swc/helpers@0.5.23))(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))(typescript@6.0.3))(@swc/core@1.16.2(@swc/helpers@0.5.23))(@types/node@26.5.0)(@zkochan/js-yaml@0.0.7)(babel-plugin-macros@3.1.0)(chokidar@5.0.0)(eslint@9.39.5(jiti@2.7.0))(fastify@5.12.5)(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))(prettier@3.9.8)(reflect-metadata@0.2.2)(rxjs@7.8.2)(typescript@6.0.3)':
     dependencies:
       '@nestjs/schematics': 11.1.0(chokidar@5.0.0)(prettier@3.9.8)(typescript@6.0.3)
-      '@nx/devkit': 23.2.1(nx@23.2.1(@swc/core@1.16.2))
-      '@nx/eslint': 23.2.1(@babel/traverse@7.29.8)(@nx/jest@23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2)(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(nx@23.2.1(@swc/core@1.16.2))(typescript@6.0.3))(@swc/core@1.16.2)(@zkochan/js-yaml@0.0.7)(eslint@9.39.5(jiti@2.7.0))(nx@23.2.1(@swc/core@1.16.2))
-      '@nx/js': 23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2)(nx@23.2.1(@swc/core@1.16.2))
-      '@nx/node': 23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2)(@types/node@26.5.0)(@zkochan/js-yaml@0.0.7)(babel-plugin-macros@3.1.0)(eslint@9.39.5(jiti@2.7.0))(fastify@5.12.5)(nx@23.2.1(@swc/core@1.16.2))(typescript@6.0.3)
+      '@nx/devkit': 23.2.1(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))
+      '@nx/eslint': 23.2.1(@babel/traverse@7.29.8)(@nx/jest@23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2(@swc/helpers@0.5.23))(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))(typescript@6.0.3))(@swc/core@1.16.2(@swc/helpers@0.5.23))(@zkochan/js-yaml@0.0.7)(eslint@9.39.5(jiti@2.7.0))(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))
+      '@nx/js': 23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2(@swc/helpers@0.5.23))(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))
+      '@nx/node': 23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2(@swc/helpers@0.5.23))(@types/node@26.5.0)(@zkochan/js-yaml@0.0.7)(babel-plugin-macros@3.1.0)(eslint@9.39.5(jiti@2.7.0))(fastify@5.12.5)(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))(typescript@6.0.3)
       semver: 7.8.5
       tslib: 2.8.1
     optionalDependencies:
@@ -13720,16 +13826,16 @@ snapshots:
       - typescript
       - verdaccio
 
-  '@nx/next@23.2.1(d8b27f9e4548b0101442ab3cdb5a53e4)':
+  '@nx/next@23.2.1(a231760325e218f915f6ae97bb620ce1)':
     dependencies:
       '@babel/plugin-proposal-decorators': 7.29.7(@babel/core@7.29.7)
-      '@nx/devkit': 23.2.1(nx@23.2.1(@swc/core@1.16.2))
-      '@nx/eslint': 23.2.1(@babel/traverse@7.29.8)(@nx/jest@23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2)(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(nx@23.2.1(@swc/core@1.16.2))(typescript@6.0.3))(@swc/core@1.16.2)(@zkochan/js-yaml@0.0.7)(eslint@9.39.5(jiti@2.7.0))(nx@23.2.1(@swc/core@1.16.2))
-      '@nx/js': 23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2)(nx@23.2.1(@swc/core@1.16.2))
-      '@nx/react': 23.2.1(@babel/core@7.29.7)(@babel/traverse@7.29.8)(@nx/jest@23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2)(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(nx@23.2.1(@swc/core@1.16.2))(typescript@6.0.3))(@nx/playwright@23.2.1(@babel/traverse@7.29.8)(@nx/jest@23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2)(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(nx@23.2.1(@swc/core@1.16.2))(typescript@6.0.3))(@playwright/test@1.63.0)(@swc/core@1.16.2)(@zkochan/js-yaml@0.0.7)(eslint@9.39.5(jiti@2.7.0))(nx@23.2.1(@swc/core@1.16.2)))(@swc/core@1.16.2)(@zkochan/js-yaml@0.0.7)(eslint@9.39.5(jiti@2.7.0))(nx@23.2.1(@swc/core@1.16.2))(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(typescript@6.0.3)(vite@8.3.0(@types/node@26.5.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.0))(vitest@5.0.0)
-      '@nx/web': 23.2.1(d79c2f014bee685abf4fe41d0a728ca4)
+      '@nx/devkit': 23.2.1(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))
+      '@nx/eslint': 23.2.1(@babel/traverse@7.29.8)(@nx/jest@23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2(@swc/helpers@0.5.23))(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))(typescript@6.0.3))(@swc/core@1.16.2(@swc/helpers@0.5.23))(@zkochan/js-yaml@0.0.7)(eslint@9.39.5(jiti@2.7.0))(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))
+      '@nx/js': 23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2(@swc/helpers@0.5.23))(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))
+      '@nx/react': 23.2.1(@babel/core@7.29.7)(@babel/traverse@7.29.8)(@nx/jest@23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2(@swc/helpers@0.5.23))(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))(typescript@6.0.3))(@nx/playwright@23.2.1(@babel/traverse@7.29.8)(@nx/jest@23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2(@swc/helpers@0.5.23))(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))(typescript@6.0.3))(@playwright/test@1.63.0)(@swc/core@1.16.2(@swc/helpers@0.5.23))(@zkochan/js-yaml@0.0.7)(eslint@9.39.5(jiti@2.7.0))(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23))))(@swc/core@1.16.2(@swc/helpers@0.5.23))(@zkochan/js-yaml@0.0.7)(eslint@9.39.5(jiti@2.7.0))(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(typescript@6.0.3)(vite@8.3.0(@types/node@26.5.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.0))(vitest@5.0.0)
+      '@nx/web': 23.2.1(5e99655171643bd710406457198a90b3)
       '@phenomnomnominal/tsquery': 6.2.0(typescript@6.0.3)
-      copy-webpack-plugin: 14.0.0(webpack@5.111.1(@swc/core@1.16.2)(esbuild@0.28.2))
+      copy-webpack-plugin: 14.0.0(webpack@5.111.1(@swc/core@1.16.2(@swc/helpers@0.5.23))(esbuild@0.28.2))
       ignore: 7.0.9
       next: 15.5.25(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(@playwright/test@1.63.0)(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
       semver: 7.8.5
@@ -13762,13 +13868,13 @@ snapshots:
       - vitest
       - webpack
 
-  '@nx/node@23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2)(@types/node@26.5.0)(@zkochan/js-yaml@0.0.7)(babel-plugin-macros@3.1.0)(eslint@9.39.5(jiti@2.7.0))(fastify@5.12.5)(nx@23.2.1(@swc/core@1.16.2))(typescript@6.0.3)':
+  '@nx/node@23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2(@swc/helpers@0.5.23))(@types/node@26.5.0)(@zkochan/js-yaml@0.0.7)(babel-plugin-macros@3.1.0)(eslint@9.39.5(jiti@2.7.0))(fastify@5.12.5)(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))(typescript@6.0.3)':
     dependencies:
-      '@nx/devkit': 23.2.1(nx@23.2.1(@swc/core@1.16.2))
-      '@nx/docker': 23.2.1(nx@23.2.1(@swc/core@1.16.2))
-      '@nx/eslint': 23.2.1(@babel/traverse@7.29.8)(@nx/jest@23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2)(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(nx@23.2.1(@swc/core@1.16.2))(typescript@6.0.3))(@swc/core@1.16.2)(@zkochan/js-yaml@0.0.7)(eslint@9.39.5(jiti@2.7.0))(nx@23.2.1(@swc/core@1.16.2))
-      '@nx/jest': 23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2)(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(nx@23.2.1(@swc/core@1.16.2))(typescript@6.0.3)
-      '@nx/js': 23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2)(nx@23.2.1(@swc/core@1.16.2))
+      '@nx/devkit': 23.2.1(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))
+      '@nx/docker': 23.2.1(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))
+      '@nx/eslint': 23.2.1(@babel/traverse@7.29.8)(@nx/jest@23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2(@swc/helpers@0.5.23))(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))(typescript@6.0.3))(@swc/core@1.16.2(@swc/helpers@0.5.23))(@zkochan/js-yaml@0.0.7)(eslint@9.39.5(jiti@2.7.0))(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))
+      '@nx/jest': 23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2(@swc/helpers@0.5.23))(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))(typescript@6.0.3)
+      '@nx/js': 23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2(@swc/helpers@0.5.23))(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))
       kill-port: 1.6.1
       semver: 7.8.5
       tcp-port-used: 1.0.3
@@ -13824,11 +13930,11 @@ snapshots:
   '@nx/nx-win32-x64-msvc@23.2.1':
     optional: true
 
-  '@nx/playwright@23.2.1(@babel/traverse@7.29.8)(@nx/jest@23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2)(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(nx@23.2.1(@swc/core@1.16.2))(typescript@6.0.3))(@playwright/test@1.63.0)(@swc/core@1.16.2)(@zkochan/js-yaml@0.0.7)(eslint@9.39.5(jiti@2.7.0))(nx@23.2.1(@swc/core@1.16.2))':
+  '@nx/playwright@23.2.1(@babel/traverse@7.29.8)(@nx/jest@23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2(@swc/helpers@0.5.23))(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))(typescript@6.0.3))(@playwright/test@1.63.0)(@swc/core@1.16.2(@swc/helpers@0.5.23))(@zkochan/js-yaml@0.0.7)(eslint@9.39.5(jiti@2.7.0))(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))':
     dependencies:
-      '@nx/devkit': 23.2.1(nx@23.2.1(@swc/core@1.16.2))
-      '@nx/eslint': 23.2.1(@babel/traverse@7.29.8)(@nx/jest@23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2)(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(nx@23.2.1(@swc/core@1.16.2))(typescript@6.0.3))(@swc/core@1.16.2)(@zkochan/js-yaml@0.0.7)(eslint@9.39.5(jiti@2.7.0))(nx@23.2.1(@swc/core@1.16.2))
-      '@nx/js': 23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2)(nx@23.2.1(@swc/core@1.16.2))
+      '@nx/devkit': 23.2.1(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))
+      '@nx/eslint': 23.2.1(@babel/traverse@7.29.8)(@nx/jest@23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2(@swc/helpers@0.5.23))(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))(typescript@6.0.3))(@swc/core@1.16.2(@swc/helpers@0.5.23))(@zkochan/js-yaml@0.0.7)(eslint@9.39.5(jiti@2.7.0))(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))
+      '@nx/js': 23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2(@swc/helpers@0.5.23))(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))
       https-proxy-agent: 7.0.6
       minimatch: 10.2.5
       semver: 7.8.5
@@ -13847,13 +13953,13 @@ snapshots:
       - supports-color
       - verdaccio
 
-  '@nx/react@23.2.1(@babel/core@7.29.7)(@babel/traverse@7.29.8)(@nx/jest@23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2)(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(nx@23.2.1(@swc/core@1.16.2))(typescript@6.0.3))(@nx/playwright@23.2.1(@babel/traverse@7.29.8)(@nx/jest@23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2)(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(nx@23.2.1(@swc/core@1.16.2))(typescript@6.0.3))(@playwright/test@1.63.0)(@swc/core@1.16.2)(@zkochan/js-yaml@0.0.7)(eslint@9.39.5(jiti@2.7.0))(nx@23.2.1(@swc/core@1.16.2)))(@swc/core@1.16.2)(@zkochan/js-yaml@0.0.7)(eslint@9.39.5(jiti@2.7.0))(nx@23.2.1(@swc/core@1.16.2))(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(typescript@6.0.3)(vite@8.3.0(@types/node@26.5.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.0))(vitest@5.0.0)':
+  '@nx/react@23.2.1(@babel/core@7.29.7)(@babel/traverse@7.29.8)(@nx/jest@23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2(@swc/helpers@0.5.23))(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))(typescript@6.0.3))(@nx/playwright@23.2.1(@babel/traverse@7.29.8)(@nx/jest@23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2(@swc/helpers@0.5.23))(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))(typescript@6.0.3))(@playwright/test@1.63.0)(@swc/core@1.16.2(@swc/helpers@0.5.23))(@zkochan/js-yaml@0.0.7)(eslint@9.39.5(jiti@2.7.0))(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23))))(@swc/core@1.16.2(@swc/helpers@0.5.23))(@zkochan/js-yaml@0.0.7)(eslint@9.39.5(jiti@2.7.0))(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(typescript@6.0.3)(vite@8.3.0(@types/node@26.5.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.0))(vitest@5.0.0)':
     dependencies:
       '@babel/preset-react': 7.29.7(@babel/core@7.29.7)
-      '@nx/devkit': 23.2.1(nx@23.2.1(@swc/core@1.16.2))
-      '@nx/eslint': 23.2.1(@babel/traverse@7.29.8)(@nx/jest@23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2)(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(nx@23.2.1(@swc/core@1.16.2))(typescript@6.0.3))(@swc/core@1.16.2)(@zkochan/js-yaml@0.0.7)(eslint@9.39.5(jiti@2.7.0))(nx@23.2.1(@swc/core@1.16.2))
-      '@nx/js': 23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2)(nx@23.2.1(@swc/core@1.16.2))
-      '@nx/web': 23.2.1(d79c2f014bee685abf4fe41d0a728ca4)
+      '@nx/devkit': 23.2.1(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))
+      '@nx/eslint': 23.2.1(@babel/traverse@7.29.8)(@nx/jest@23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2(@swc/helpers@0.5.23))(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))(typescript@6.0.3))(@swc/core@1.16.2(@swc/helpers@0.5.23))(@zkochan/js-yaml@0.0.7)(eslint@9.39.5(jiti@2.7.0))(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))
+      '@nx/js': 23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2(@swc/helpers@0.5.23))(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))
+      '@nx/web': 23.2.1(5e99655171643bd710406457198a90b3)
       '@phenomnomnominal/tsquery': 6.2.0(typescript@6.0.3)
       minimatch: 10.2.5
       react: 19.1.0
@@ -13861,7 +13967,7 @@ snapshots:
       semver: 7.8.5
       tslib: 2.8.1
     optionalDependencies:
-      '@nx/vite': 23.2.1(@babel/traverse@7.29.8)(@nx/eslint@23.2.1(@babel/traverse@7.29.8)(@nx/jest@23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2)(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(nx@23.2.1(@swc/core@1.16.2))(typescript@6.0.3))(@swc/core@1.16.2)(@zkochan/js-yaml@0.0.7)(eslint@9.39.5(jiti@2.7.0))(nx@23.2.1(@swc/core@1.16.2)))(@swc/core@1.16.2)(nx@23.2.1(@swc/core@1.16.2))(typescript@6.0.3)(vite@8.3.0(@types/node@26.5.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.0))(vitest@5.0.0)
+      '@nx/vite': 23.2.1(@babel/traverse@7.29.8)(@nx/eslint@23.2.1(@babel/traverse@7.29.8)(@nx/jest@23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2(@swc/helpers@0.5.23))(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))(typescript@6.0.3))(@swc/core@1.16.2(@swc/helpers@0.5.23))(@zkochan/js-yaml@0.0.7)(eslint@9.39.5(jiti@2.7.0))(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23))))(@swc/core@1.16.2(@swc/helpers@0.5.23))(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))(typescript@6.0.3)(vite@8.3.0(@types/node@26.5.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.0))(vitest@5.0.0)
     transitivePeerDependencies:
       - '@babel/core'
       - '@babel/traverse'
@@ -13882,11 +13988,11 @@ snapshots:
       - vite
       - vitest
 
-  '@nx/vite@23.2.1(@babel/traverse@7.29.8)(@nx/eslint@23.2.1(@babel/traverse@7.29.8)(@nx/jest@23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2)(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(nx@23.2.1(@swc/core@1.16.2))(typescript@6.0.3))(@swc/core@1.16.2)(@zkochan/js-yaml@0.0.7)(eslint@9.39.5(jiti@2.7.0))(nx@23.2.1(@swc/core@1.16.2)))(@swc/core@1.16.2)(nx@23.2.1(@swc/core@1.16.2))(typescript@6.0.3)(vite@8.3.0(@types/node@26.5.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.0))(vitest@5.0.0)':
+  '@nx/vite@23.2.1(@babel/traverse@7.29.8)(@nx/eslint@23.2.1(@babel/traverse@7.29.8)(@nx/jest@23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2(@swc/helpers@0.5.23))(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))(typescript@6.0.3))(@swc/core@1.16.2(@swc/helpers@0.5.23))(@zkochan/js-yaml@0.0.7)(eslint@9.39.5(jiti@2.7.0))(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23))))(@swc/core@1.16.2(@swc/helpers@0.5.23))(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))(typescript@6.0.3)(vite@8.3.0(@types/node@26.5.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.0))(vitest@5.0.0)':
     dependencies:
-      '@nx/devkit': 23.2.1(nx@23.2.1(@swc/core@1.16.2))
-      '@nx/js': 23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2)(nx@23.2.1(@swc/core@1.16.2))
-      '@nx/vitest': 23.2.1(@babel/traverse@7.29.8)(@nx/eslint@23.2.1(@babel/traverse@7.29.8)(@nx/jest@23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2)(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(nx@23.2.1(@swc/core@1.16.2))(typescript@6.0.3))(@swc/core@1.16.2)(@zkochan/js-yaml@0.0.7)(eslint@9.39.5(jiti@2.7.0))(nx@23.2.1(@swc/core@1.16.2)))(@swc/core@1.16.2)(nx@23.2.1(@swc/core@1.16.2))(typescript@6.0.3)(vite@8.3.0(@types/node@26.5.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.0))(vitest@5.0.0)
+      '@nx/devkit': 23.2.1(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))
+      '@nx/js': 23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2(@swc/helpers@0.5.23))(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))
+      '@nx/vitest': 23.2.1(@babel/traverse@7.29.8)(@nx/eslint@23.2.1(@babel/traverse@7.29.8)(@nx/jest@23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2(@swc/helpers@0.5.23))(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))(typescript@6.0.3))(@swc/core@1.16.2(@swc/helpers@0.5.23))(@zkochan/js-yaml@0.0.7)(eslint@9.39.5(jiti@2.7.0))(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23))))(@swc/core@1.16.2(@swc/helpers@0.5.23))(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))(typescript@6.0.3)(vite@8.3.0(@types/node@26.5.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.0))(vitest@5.0.0)
       '@phenomnomnominal/tsquery': 6.2.0(typescript@6.0.3)
       ajv: 8.20.0
       picomatch: 4.0.4
@@ -13906,15 +14012,15 @@ snapshots:
       - verdaccio
       - vitest
 
-  '@nx/vitest@23.2.1(@babel/traverse@7.29.8)(@nx/eslint@23.2.1(@babel/traverse@7.29.8)(@nx/jest@23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2)(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(nx@23.2.1(@swc/core@1.16.2))(typescript@6.0.3))(@swc/core@1.16.2)(@zkochan/js-yaml@0.0.7)(eslint@9.39.5(jiti@2.7.0))(nx@23.2.1(@swc/core@1.16.2)))(@swc/core@1.16.2)(nx@23.2.1(@swc/core@1.16.2))(typescript@6.0.3)(vite@8.3.0(@types/node@26.5.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.0))(vitest@5.0.0)':
+  '@nx/vitest@23.2.1(@babel/traverse@7.29.8)(@nx/eslint@23.2.1(@babel/traverse@7.29.8)(@nx/jest@23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2(@swc/helpers@0.5.23))(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))(typescript@6.0.3))(@swc/core@1.16.2(@swc/helpers@0.5.23))(@zkochan/js-yaml@0.0.7)(eslint@9.39.5(jiti@2.7.0))(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23))))(@swc/core@1.16.2(@swc/helpers@0.5.23))(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))(typescript@6.0.3)(vite@8.3.0(@types/node@26.5.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.0))(vitest@5.0.0)':
     dependencies:
-      '@nx/devkit': 23.2.1(nx@23.2.1(@swc/core@1.16.2))
-      '@nx/js': 23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2)(nx@23.2.1(@swc/core@1.16.2))
+      '@nx/devkit': 23.2.1(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))
+      '@nx/js': 23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2(@swc/helpers@0.5.23))(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))
       '@phenomnomnominal/tsquery': 6.2.0(typescript@6.0.3)
       semver: 7.8.5
       tslib: 2.8.1
     optionalDependencies:
-      '@nx/eslint': 23.2.1(@babel/traverse@7.29.8)(@nx/jest@23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2)(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(nx@23.2.1(@swc/core@1.16.2))(typescript@6.0.3))(@swc/core@1.16.2)(@zkochan/js-yaml@0.0.7)(eslint@9.39.5(jiti@2.7.0))(nx@23.2.1(@swc/core@1.16.2))
+      '@nx/eslint': 23.2.1(@babel/traverse@7.29.8)(@nx/jest@23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2(@swc/helpers@0.5.23))(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))(typescript@6.0.3))(@swc/core@1.16.2(@swc/helpers@0.5.23))(@zkochan/js-yaml@0.0.7)(eslint@9.39.5(jiti@2.7.0))(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))
       vite: 8.3.0(@types/node@26.5.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.0)
       vitest: 5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.5.0)(@vitest/coverage-v8@5.0.0)(jsdom@30.1.0(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@26.5.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.0))
     transitivePeerDependencies:
@@ -13927,19 +14033,19 @@ snapshots:
       - typescript
       - verdaccio
 
-  '@nx/web@23.2.1(d79c2f014bee685abf4fe41d0a728ca4)':
+  '@nx/web@23.2.1(5e99655171643bd710406457198a90b3)':
     dependencies:
-      '@nx/devkit': 23.2.1(nx@23.2.1(@swc/core@1.16.2))
-      '@nx/js': 23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2)(nx@23.2.1(@swc/core@1.16.2))
+      '@nx/devkit': 23.2.1(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))
+      '@nx/js': 23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2(@swc/helpers@0.5.23))(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))
       detect-port: 2.1.0
       http-server: 14.1.1
       picocolors: 1.1.1
       tslib: 2.8.1
     optionalDependencies:
-      '@nx/eslint': 23.2.1(@babel/traverse@7.29.8)(@nx/jest@23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2)(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(nx@23.2.1(@swc/core@1.16.2))(typescript@6.0.3))(@swc/core@1.16.2)(@zkochan/js-yaml@0.0.7)(eslint@9.39.5(jiti@2.7.0))(nx@23.2.1(@swc/core@1.16.2))
-      '@nx/jest': 23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2)(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(nx@23.2.1(@swc/core@1.16.2))(typescript@6.0.3)
-      '@nx/playwright': 23.2.1(@babel/traverse@7.29.8)(@nx/jest@23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2)(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(nx@23.2.1(@swc/core@1.16.2))(typescript@6.0.3))(@playwright/test@1.63.0)(@swc/core@1.16.2)(@zkochan/js-yaml@0.0.7)(eslint@9.39.5(jiti@2.7.0))(nx@23.2.1(@swc/core@1.16.2))
-      '@nx/vite': 23.2.1(@babel/traverse@7.29.8)(@nx/eslint@23.2.1(@babel/traverse@7.29.8)(@nx/jest@23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2)(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(nx@23.2.1(@swc/core@1.16.2))(typescript@6.0.3))(@swc/core@1.16.2)(@zkochan/js-yaml@0.0.7)(eslint@9.39.5(jiti@2.7.0))(nx@23.2.1(@swc/core@1.16.2)))(@swc/core@1.16.2)(nx@23.2.1(@swc/core@1.16.2))(typescript@6.0.3)(vite@8.3.0(@types/node@26.5.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.0))(vitest@5.0.0)
+      '@nx/eslint': 23.2.1(@babel/traverse@7.29.8)(@nx/jest@23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2(@swc/helpers@0.5.23))(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))(typescript@6.0.3))(@swc/core@1.16.2(@swc/helpers@0.5.23))(@zkochan/js-yaml@0.0.7)(eslint@9.39.5(jiti@2.7.0))(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))
+      '@nx/jest': 23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2(@swc/helpers@0.5.23))(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))(typescript@6.0.3)
+      '@nx/playwright': 23.2.1(@babel/traverse@7.29.8)(@nx/jest@23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2(@swc/helpers@0.5.23))(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))(typescript@6.0.3))(@playwright/test@1.63.0)(@swc/core@1.16.2(@swc/helpers@0.5.23))(@zkochan/js-yaml@0.0.7)(eslint@9.39.5(jiti@2.7.0))(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))
+      '@nx/vite': 23.2.1(@babel/traverse@7.29.8)(@nx/eslint@23.2.1(@babel/traverse@7.29.8)(@nx/jest@23.2.1(@babel/traverse@7.29.8)(@swc/core@1.16.2(@swc/helpers@0.5.23))(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))(typescript@6.0.3))(@swc/core@1.16.2(@swc/helpers@0.5.23))(@zkochan/js-yaml@0.0.7)(eslint@9.39.5(jiti@2.7.0))(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23))))(@swc/core@1.16.2(@swc/helpers@0.5.23))(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))(typescript@6.0.3)(vite@8.3.0(@types/node@26.5.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.0))(vitest@5.0.0)
     transitivePeerDependencies:
       - '@babel/traverse'
       - '@swc-node/register'
@@ -13950,12 +14056,12 @@ snapshots:
       - supports-color
       - verdaccio
 
-  '@nx/workspace@23.2.1(@swc/core@1.16.2)':
+  '@nx/workspace@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23))':
     dependencies:
-      '@nx/devkit': 23.2.1(nx@23.2.1(@swc/core@1.16.2))
+      '@nx/devkit': 23.2.1(nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)))
       '@zkochan/js-yaml': 0.0.7
       chalk: 4.1.2
-      nx: 23.2.1(@swc/core@1.16.2)
+      nx: 23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23))
       picomatch: 4.0.4
       semver: 7.8.5
       tslib: 2.8.1
@@ -15072,7 +15178,7 @@ snapshots:
   '@swc/core-win32-x64-msvc@1.16.2':
     optional: true
 
-  '@swc/core@1.16.2':
+  '@swc/core@1.16.2(@swc/helpers@0.5.23)':
     dependencies:
       '@swc/counter': 0.1.3
       '@swc/types': 0.1.28
@@ -15089,10 +15195,15 @@ snapshots:
       '@swc/core-win32-arm64-msvc': 1.16.2
       '@swc/core-win32-ia32-msvc': 1.16.2
       '@swc/core-win32-x64-msvc': 1.16.2
+      '@swc/helpers': 0.5.23
 
   '@swc/counter@0.1.3': {}
 
   '@swc/helpers@0.5.15':
+    dependencies:
+      tslib: 2.8.1
+
+  '@swc/helpers@0.5.23':
     dependencies:
       tslib: 2.8.1
 
@@ -15203,7 +15314,7 @@ snapshots:
     dependencies:
       '@nestjs/common': 12.0.1(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)
       '@nestjs/core': 12.0.1(@nestjs/common@12.0.1(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/microservices@12.0.3)(@nestjs/platform-express@12.0.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)
-      better-auth: 1.7.3(@opentelemetry/api@1.9.1)(next@15.5.25(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(@playwright/test@1.63.0)(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(pg@8.23.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(vitest@5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.5.0)(@vitest/coverage-v8@5.0.0)(jsdom@30.1.0(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@26.5.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.0)))
+      better-auth: 1.7.3(@opentelemetry/api@1.9.1)(next@15.5.25(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(@playwright/test@1.63.0)(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(pg@8.23.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(vitest@5.0.0)
       typescript: 6.0.3
     optionalDependencies:
       '@nestjs/graphql': 14.0.0(@apollo/subgraph@2.15.1(graphql@16.14.2))(@fastify/websocket@11.3.0)(@nestjs/common@12.0.1(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@12.0.1)(class-transformer@0.5.1)(class-validator@0.15.1)(graphql@16.14.2)(reflect-metadata@0.2.2)(ts-morph@26.0.0)
@@ -15615,7 +15726,19 @@ snapshots:
       tinyrainbow: 3.1.1
       vitest: 5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.5.0)(@vitest/coverage-v8@5.0.0)(jsdom@30.1.0(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@26.5.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.0))
 
-  '@vitest/eslint-plugin@1.6.27(@typescript-eslint/eslint-plugin@8.70.1(@typescript-eslint/parser@8.70.1(eslint@9.39.5(jiti@2.7.0))(typescript@6.0.3))(eslint@9.39.5(jiti@2.7.0))(typescript@6.0.3))(eslint@9.39.5(jiti@2.7.0))(typescript@6.0.3)(vitest@5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.5.0)(@vitest/coverage-v8@5.0.0)(jsdom@30.1.0(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@26.5.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.0)))':
+  '@vitest/eslint-plugin@1.6.27(@typescript-eslint/eslint-plugin@8.70.1(@typescript-eslint/parser@8.70.1(eslint@9.39.5(jiti@2.7.0))(typescript@6.0.3))(eslint@9.39.5(jiti@2.7.0))(typescript@6.0.3))(eslint@9.39.5(jiti@2.7.0))(typescript@6.0.3)(vitest@4.1.11(@opentelemetry/api@1.9.1)(@types/node@26.5.0)(@vitest/coverage-v8@5.0.0(vitest@5.0.0))(jsdom@30.1.0(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@26.5.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.0)))':
+    dependencies:
+      '@typescript-eslint/scope-manager': 8.70.1
+      '@typescript-eslint/utils': 8.70.1(eslint@9.39.5(jiti@2.7.0))(typescript@6.0.3)
+      eslint: 9.39.5(jiti@2.7.0)
+    optionalDependencies:
+      '@typescript-eslint/eslint-plugin': 8.70.1(@typescript-eslint/parser@8.70.1(eslint@9.39.5(jiti@2.7.0))(typescript@6.0.3))(eslint@9.39.5(jiti@2.7.0))(typescript@6.0.3)
+      typescript: 6.0.3
+      vitest: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@26.5.0)(@vitest/coverage-v8@5.0.0(vitest@5.0.0))(jsdom@30.1.0(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@26.5.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.0))
+    transitivePeerDependencies:
+      - supports-color
+
+  '@vitest/eslint-plugin@1.6.27(@typescript-eslint/eslint-plugin@8.70.1(@typescript-eslint/parser@8.70.1(eslint@9.39.5(jiti@2.7.0))(typescript@6.0.3))(eslint@9.39.5(jiti@2.7.0))(typescript@6.0.3))(eslint@9.39.5(jiti@2.7.0))(typescript@6.0.3)(vitest@5.0.0)':
     dependencies:
       '@typescript-eslint/scope-manager': 8.70.1
       '@typescript-eslint/utils': 8.70.1(eslint@9.39.5(jiti@2.7.0))(typescript@6.0.3)
@@ -15627,11 +15750,30 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  '@vitest/expect@4.1.11':
+    dependencies:
+      '@standard-schema/spec': 1.1.0
+      '@types/chai': 5.2.3
+      '@vitest/spy': 4.1.11
+      '@vitest/utils': 4.1.11
+      chai: 6.2.2
+      tinyrainbow: 3.1.1
+    optional: true
+
   '@vitest/istanbul-lib-coverage@1.0.1': {}
 
   '@vitest/istanbul-lib-report@1.0.1':
     dependencies:
       '@vitest/istanbul-lib-coverage': 1.0.1
+
+  '@vitest/mocker@4.1.11(vite@8.3.0(@types/node@26.5.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.0))':
+    dependencies:
+      '@vitest/spy': 4.1.11
+      estree-walker: 3.0.3
+      magic-string: 0.30.21
+    optionalDependencies:
+      vite: 8.3.0(@types/node@26.5.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.0)
+    optional: true
 
   '@vitest/mocker@5.0.0(vite@8.3.0(@types/node@26.5.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.0))':
     dependencies:
@@ -15642,7 +15784,36 @@ snapshots:
     optionalDependencies:
       vite: 8.3.0(@types/node@26.5.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.0)
 
+  '@vitest/pretty-format@4.1.11':
+    dependencies:
+      tinyrainbow: 3.1.1
+    optional: true
+
+  '@vitest/runner@4.1.11':
+    dependencies:
+      '@vitest/utils': 4.1.11
+      pathe: 2.0.3
+    optional: true
+
+  '@vitest/snapshot@4.1.11':
+    dependencies:
+      '@vitest/pretty-format': 4.1.11
+      '@vitest/utils': 4.1.11
+      magic-string: 0.30.21
+      pathe: 2.0.3
+    optional: true
+
+  '@vitest/spy@4.1.11':
+    optional: true
+
   '@vitest/spy@5.0.0': {}
+
+  '@vitest/utils@4.1.11':
+    dependencies:
+      '@vitest/pretty-format': 4.1.11
+      convert-source-map: 2.0.0
+      tinyrainbow: 3.1.1
+    optional: true
 
   '@webassemblyjs/ast@1.14.1':
     dependencies:
@@ -16212,13 +16383,48 @@ snapshots:
     dependencies:
       tweetnacl: 0.14.5
 
-  better-auth-mikro-orm@1.0.0-next.2(@mikro-orm/core@7.2.1(dataloader@2.2.3))(better-auth@1.7.3(@opentelemetry/api@1.9.1)(next@15.5.25(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(@playwright/test@1.63.0)(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(pg@8.23.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(vitest@5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.5.0)(@vitest/coverage-v8@5.0.0)(jsdom@30.1.0(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@26.5.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.0)))):
+  better-auth-mikro-orm@1.0.0-next.2(@mikro-orm/core@7.2.1(dataloader@2.2.3))(better-auth@1.7.3(@opentelemetry/api@1.9.1)(next@15.5.25(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(@playwright/test@1.63.0)(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(pg@8.23.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(vitest@4.1.11(@opentelemetry/api@1.9.1)(@types/node@26.5.0)(@vitest/coverage-v8@5.0.0(vitest@5.0.0))(jsdom@30.1.0(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@26.5.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.0)))):
     dependencies:
       '@mikro-orm/core': 7.2.1(dataloader@2.2.3)
-      better-auth: 1.7.3(@opentelemetry/api@1.9.1)(next@15.5.25(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(@playwright/test@1.63.0)(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(pg@8.23.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(vitest@5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.5.0)(@vitest/coverage-v8@5.0.0)(jsdom@30.1.0(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@26.5.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.0)))
+      better-auth: 1.7.3(@opentelemetry/api@1.9.1)(next@15.5.25(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(@playwright/test@1.63.0)(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(pg@8.23.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(vitest@4.1.11(@opentelemetry/api@1.9.1)(@types/node@26.5.0)(@vitest/coverage-v8@5.0.0(vitest@5.0.0))(jsdom@30.1.0(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@26.5.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.0)))
       dset: 3.1.4
 
-  better-auth@1.7.3(@opentelemetry/api@1.9.1)(next@15.5.25(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(@playwright/test@1.63.0)(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(pg@8.23.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(vitest@5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.5.0)(@vitest/coverage-v8@5.0.0)(jsdom@30.1.0(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@26.5.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.0))):
+  better-auth-mikro-orm@1.0.0-next.2(@mikro-orm/core@7.2.1(dataloader@2.2.3))(better-auth@1.7.3(@opentelemetry/api@1.9.1)(next@15.5.25(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(@playwright/test@1.63.0)(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(pg@8.23.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(vitest@5.0.0)):
+    dependencies:
+      '@mikro-orm/core': 7.2.1(dataloader@2.2.3)
+      better-auth: 1.7.3(@opentelemetry/api@1.9.1)(next@15.5.25(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(@playwright/test@1.63.0)(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(pg@8.23.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(vitest@5.0.0)
+      dset: 3.1.4
+
+  better-auth@1.7.3(@opentelemetry/api@1.9.1)(next@15.5.25(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(@playwright/test@1.63.0)(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(pg@8.23.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(vitest@4.1.11(@opentelemetry/api@1.9.1)(@types/node@26.5.0)(@vitest/coverage-v8@5.0.0(vitest@5.0.0))(jsdom@30.1.0(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@26.5.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.0))):
+    dependencies:
+      '@better-auth/core': 1.7.3(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(@opentelemetry/api@1.9.1)(better-call@1.4.0(zod@4.5.4))(jose@6.2.12)(kysely@0.29.6)(nanostores@1.5.3)
+      '@better-auth/drizzle-adapter': 1.7.3(@better-auth/core@1.7.3(@better-auth/utils@0.5.0)(@better-fetch/fetch@1.3.1)(@opentelemetry/api@1.9.1)(better-call@1.4.0(zod@4.5.4))(jose@6.2.12)(kysely@0.29.6)(nanostores@1.5.3))(@better-auth/utils@0.4.2)
+      '@better-auth/kysely-adapter': 1.7.3(@better-auth/core@1.7.3(@better-auth/utils@0.5.0)(@better-fetch/fetch@1.3.1)(@opentelemetry/api@1.9.1)(better-call@1.4.0(zod@4.5.4))(jose@6.2.12)(kysely@0.29.6)(nanostores@1.5.3))(@better-auth/utils@0.4.2)(kysely@0.29.6)
+      '@better-auth/memory-adapter': 1.7.3(@better-auth/core@1.7.3(@better-auth/utils@0.5.0)(@better-fetch/fetch@1.3.1)(@opentelemetry/api@1.9.1)(better-call@1.4.0(zod@4.5.4))(jose@6.2.12)(kysely@0.29.6)(nanostores@1.5.3))(@better-auth/utils@0.4.2)
+      '@better-auth/mongo-adapter': 1.7.3(@better-auth/core@1.7.3(@better-auth/utils@0.5.0)(@better-fetch/fetch@1.3.1)(@opentelemetry/api@1.9.1)(better-call@1.4.0(zod@4.5.4))(jose@6.2.12)(kysely@0.29.6)(nanostores@1.5.3))(@better-auth/utils@0.4.2)
+      '@better-auth/prisma-adapter': 1.7.3(@better-auth/core@1.7.3(@better-auth/utils@0.5.0)(@better-fetch/fetch@1.3.1)(@opentelemetry/api@1.9.1)(better-call@1.4.0(zod@4.5.4))(jose@6.2.12)(kysely@0.29.6)(nanostores@1.5.3))(@better-auth/utils@0.4.2)
+      '@better-auth/telemetry': 1.7.3(@better-auth/core@1.7.3(@better-auth/utils@0.5.0)(@better-fetch/fetch@1.3.1)(@opentelemetry/api@1.9.1)(better-call@1.4.0(zod@4.5.4))(jose@6.2.12)(kysely@0.29.6)(nanostores@1.5.3))(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)
+      '@better-auth/utils': 0.4.2
+      '@better-fetch/fetch': 1.3.1
+      '@noble/ciphers': 2.4.0
+      '@noble/hashes': 2.4.0
+      better-call: 1.4.0(zod@4.5.4)
+      defu: 6.1.7
+      jose: 6.2.12
+      kysely: 0.29.6
+      nanostores: 1.5.3
+      zod: 4.5.4
+    optionalDependencies:
+      next: 15.5.25(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(@playwright/test@1.63.0)(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
+      pg: 8.23.0
+      react: 19.1.0
+      react-dom: 19.1.0(react@19.1.0)
+      vitest: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@26.5.0)(@vitest/coverage-v8@5.0.0(vitest@5.0.0))(jsdom@30.1.0(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@26.5.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.0))
+    transitivePeerDependencies:
+      - '@cloudflare/workers-types'
+      - '@opentelemetry/api'
+
+  better-auth@1.7.3(@opentelemetry/api@1.9.1)(next@15.5.25(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(@playwright/test@1.63.0)(@types/node@26.5.0)(babel-plugin-macros@3.1.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(pg@8.23.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(vitest@5.0.0):
     dependencies:
       '@better-auth/core': 1.7.3(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(@opentelemetry/api@1.9.1)(better-call@1.4.0(zod@4.5.4))(jose@6.2.12)(kysely@0.29.6)(nanostores@1.5.3)
       '@better-auth/drizzle-adapter': 1.7.3(@better-auth/core@1.7.3(@better-auth/utils@0.5.0)(@better-fetch/fetch@1.3.1)(@opentelemetry/api@1.9.1)(better-call@1.4.0(zod@4.5.4))(jose@6.2.12)(kysely@0.29.6)(nanostores@1.5.3))(@better-auth/utils@0.4.2)
@@ -16575,14 +16781,14 @@ snapshots:
 
   cookie@1.1.1: {}
 
-  copy-webpack-plugin@14.0.0(webpack@5.111.1(@swc/core@1.16.2)(esbuild@0.28.2)):
+  copy-webpack-plugin@14.0.0(webpack@5.111.1(@swc/core@1.16.2(@swc/helpers@0.5.23))(esbuild@0.28.2)):
     dependencies:
       glob-parent: 6.0.2
       normalize-path: 3.0.0
       schema-utils: 4.5.0
       serialize-javascript: 7.1.1
       tinyglobby: 0.2.17
-      webpack: 5.111.1(@swc/core@1.16.2)(esbuild@0.28.2)
+      webpack: 5.111.1(@swc/core@1.16.2(@swc/helpers@0.5.23))(esbuild@0.28.2)
 
   core-js-compat@3.50.0:
     dependencies:
@@ -19067,15 +19273,15 @@ snapshots:
 
   minimist@1.2.8: {}
 
-  minimizer-webpack-plugin@5.11.0(@swc/core@1.16.2)(esbuild@0.28.2)(webpack@5.111.1(@swc/core@1.16.2)(esbuild@0.28.2)):
+  minimizer-webpack-plugin@5.11.0(@swc/core@1.16.2(@swc/helpers@0.5.23))(esbuild@0.28.2)(webpack@5.111.1(@swc/core@1.16.2(@swc/helpers@0.5.23))(esbuild@0.28.2)):
     dependencies:
       '@jridgewell/trace-mapping': 0.3.31
       jest-worker: 27.5.1
       schema-utils: 4.5.0
       terser: 5.51.2
-      webpack: 5.111.1(@swc/core@1.16.2)(esbuild@0.28.2)
+      webpack: 5.111.1(@swc/core@1.16.2(@swc/helpers@0.5.23))(esbuild@0.28.2)
     optionalDependencies:
-      '@swc/core': 1.16.2
+      '@swc/core': 1.16.2(@swc/helpers@0.5.23)
       esbuild: 0.28.2
 
   minipass-collect@2.0.1:
@@ -19237,7 +19443,7 @@ snapshots:
       path-key: 4.0.0
       unicorn-magic: 0.3.0
 
-  nx@23.2.1(@swc/core@1.16.2):
+  nx@23.2.1(@swc/core@1.16.2(@swc/helpers@0.5.23)):
     dependencies:
       '@clack/core': 1.4.3
       '@clack/prompts': 1.7.0
@@ -19374,7 +19580,7 @@ snapshots:
       '@nx/nx-linux-x64-musl': 23.2.1
       '@nx/nx-win32-arm64-msvc': 23.2.1
       '@nx/nx-win32-x64-msvc': 23.2.1
-      '@swc/core': 1.16.2
+      '@swc/core': 1.16.2(@swc/helpers@0.5.23)
 
   object-assign@4.1.1: {}
 
@@ -19451,7 +19657,7 @@ snapshots:
 
   open@10.1.0:
     dependencies:
-      default-browser: 5.2.1
+      default-browser: 5.5.1
       define-lazy-prop: 3.0.0
       is-inside-container: 1.0.0
       is-wsl: 3.1.0
@@ -19501,7 +19707,7 @@ snapshots:
       bl: 4.1.0
       chalk: 4.1.2
       cli-cursor: 3.1.0
-      cli-spinners: 2.6.1
+      cli-spinners: 2.9.2
       is-interactive: 1.0.0
       is-unicode-supported: 0.1.0
       log-symbols: 4.1.0
@@ -19620,6 +19826,9 @@ snapshots:
   path-to-regexp@8.4.2: {}
 
   path-type@4.0.0: {}
+
+  pathe@2.0.3:
+    optional: true
 
   pg-cloudflare@1.4.0:
     optional: true
@@ -20825,6 +21034,9 @@ snapshots:
 
   tiny-invariant@1.3.3: {}
 
+  tinybench@2.9.0:
+    optional: true
+
   tinybench@6.1.4: {}
 
   tinyexec@1.3.0: {}
@@ -21037,12 +21249,12 @@ snapshots:
 
   unpipe@1.0.0: {}
 
-  unplugin-swc@1.6.0(@swc/core@1.16.2)(esbuild@0.28.2)(rolldown@1.2.7)(rollup@4.63.4)(vite@8.3.0(@types/node@26.5.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.0))(webpack@5.111.1(@swc/core@1.16.2)(esbuild@0.28.2)):
+  unplugin-swc@1.6.0(@swc/core@1.16.2(@swc/helpers@0.5.23))(esbuild@0.28.2)(rolldown@1.2.7)(rollup@4.63.4)(vite@8.3.0(@types/node@26.5.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.0))(webpack@5.111.1(@swc/core@1.16.2(@swc/helpers@0.5.23))(esbuild@0.28.2)):
     dependencies:
       '@rollup/pluginutils': 5.4.0(rollup@4.63.4)
-      '@swc/core': 1.16.2
+      '@swc/core': 1.16.2(@swc/helpers@0.5.23)
       load-tsconfig: 0.2.5
-      unplugin: 3.3.0(esbuild@0.28.2)(rolldown@1.2.7)(rollup@4.63.4)(vite@8.3.0(@types/node@26.5.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.0))(webpack@5.111.1(@swc/core@1.16.2)(esbuild@0.28.2))
+      unplugin: 3.3.0(esbuild@0.28.2)(rolldown@1.2.7)(rollup@4.63.4)(vite@8.3.0(@types/node@26.5.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.0))(webpack@5.111.1(@swc/core@1.16.2(@swc/helpers@0.5.23))(esbuild@0.28.2))
     transitivePeerDependencies:
       - '@farmfe/core'
       - '@rspack/core'
@@ -21054,7 +21266,7 @@ snapshots:
       - vite
       - webpack
 
-  unplugin@3.3.0(esbuild@0.28.2)(rolldown@1.2.7)(rollup@4.63.4)(vite@8.3.0(@types/node@26.5.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.0))(webpack@5.111.1(@swc/core@1.16.2)(esbuild@0.28.2)):
+  unplugin@3.3.0(esbuild@0.28.2)(rolldown@1.2.7)(rollup@4.63.4)(vite@8.3.0(@types/node@26.5.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.0))(webpack@5.111.1(@swc/core@1.16.2(@swc/helpers@0.5.23))(esbuild@0.28.2)):
     dependencies:
       '@jridgewell/remapping': 2.3.5
       picomatch: 4.0.7
@@ -21064,7 +21276,7 @@ snapshots:
       rolldown: 1.2.7
       rollup: 4.63.4
       vite: 8.3.0(@types/node@26.5.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.0)
-      webpack: 5.111.1(@swc/core@1.16.2)(esbuild@0.28.2)
+      webpack: 5.111.1(@swc/core@1.16.2(@swc/helpers@0.5.23))(esbuild@0.28.2)
 
   unrs-resolver@1.12.2:
     dependencies:
@@ -21150,6 +21362,37 @@ snapshots:
       terser: 5.51.2
       yaml: 2.9.0
 
+  vitest@4.1.11(@opentelemetry/api@1.9.1)(@types/node@26.5.0)(@vitest/coverage-v8@5.0.0(vitest@5.0.0))(jsdom@30.1.0(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@26.5.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.0)):
+    dependencies:
+      '@vitest/expect': 4.1.11
+      '@vitest/mocker': 4.1.11(vite@8.3.0(@types/node@26.5.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.0))
+      '@vitest/pretty-format': 4.1.11
+      '@vitest/runner': 4.1.11
+      '@vitest/snapshot': 4.1.11
+      '@vitest/spy': 4.1.11
+      '@vitest/utils': 4.1.11
+      es-module-lexer: 2.3.2
+      expect-type: 1.4.0
+      magic-string: 0.30.21
+      obug: 2.1.4
+      pathe: 2.0.3
+      picomatch: 4.0.7
+      std-env: 4.2.0
+      tinybench: 2.9.0
+      tinyexec: 1.3.0
+      tinyglobby: 0.2.17
+      tinyrainbow: 3.1.1
+      vite: 8.3.0(@types/node@26.5.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.0)
+      why-is-node-running: 2.3.0
+    optionalDependencies:
+      '@opentelemetry/api': 1.9.1
+      '@types/node': 26.5.0
+      '@vitest/coverage-v8': 5.0.0(vitest@5.0.0)
+      jsdom: 30.1.0(@noble/hashes@2.4.0)
+    transitivePeerDependencies:
+      - msw
+    optional: true
+
   vitest@5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.5.0)(@vitest/coverage-v8@5.0.0)(jsdom@30.1.0(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@26.5.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.0)):
     dependencies:
       '@types/chai': 5.2.3
@@ -21202,7 +21445,7 @@ snapshots:
 
   webpack-virtual-modules@0.6.2: {}
 
-  webpack@5.111.1(@swc/core@1.16.2)(esbuild@0.28.2):
+  webpack@5.111.1(@swc/core@1.16.2(@swc/helpers@0.5.23))(esbuild@0.28.2):
     dependencies:
       '@types/estree': 1.0.9
       '@types/json-schema': 7.0.15
@@ -21216,7 +21459,7 @@ snapshots:
       events: 3.3.0
       graceful-fs: 4.2.11
       mime-db: 1.54.0
-      minimizer-webpack-plugin: 5.11.0(@swc/core@1.16.2)(esbuild@0.28.2)(webpack@5.111.1(@swc/core@1.16.2)(esbuild@0.28.2))
+      minimizer-webpack-plugin: 5.11.0(@swc/core@1.16.2(@swc/helpers@0.5.23))(esbuild@0.28.2)(webpack@5.111.1(@swc/core@1.16.2(@swc/helpers@0.5.23))(esbuild@0.28.2))
       schema-utils: 4.5.0
       tapable: 2.3.3
       watchpack: 2.5.2

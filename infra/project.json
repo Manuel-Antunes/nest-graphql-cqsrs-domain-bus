@@ -2,5 +2,65 @@
   "name": "@nestposts/infra",
   "$schema": "../node_modules/nx/schemas/project-schema.json",
   "projectType": "application",
-  "sourceRoot": "infra/aws"
+  "sourceRoot": "infra/aws",
+  "targets": {
+    "deploy": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "pnpm sst deploy",
+        "cwd": "."
+      },
+      "configurations": {
+        "production": {
+          "command": "pnpm sst deploy --stage production"
+        },
+        "dev": {
+          "command": "pnpm sst deploy --stage dev"
+        }
+      },
+      "dependsOn": ["^build"]
+    },
+    "dev": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "pnpm sst dev",
+        "cwd": "."
+      }
+    },
+    "diff": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "pnpm sst diff",
+        "cwd": "."
+      }
+    },
+    "remove": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "pnpm sst remove",
+        "cwd": "."
+      }
+    },
+    "unlock": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "pnpm sst unlock",
+        "cwd": "."
+      }
+    },
+    "graph": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "./infra/scripts/stack-graph.sh",
+        "cwd": "."
+      }
+    },
+    "discover": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "./infra/scripts/discover.sh",
+        "cwd": "."
+      }
+    }
+  }
 }
