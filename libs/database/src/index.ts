@@ -1,3 +1,5 @@
+// biome-ignore-all assist/source/organizeImports: the local modules load BEFORE the `@mikro-orm/core` re-export. Sorted, that re-export is hoisted, this barrel requires the ESM package while Next is still import()-ing it, and `apps/web` dies on ERR_REQUIRE_ESM_RACE_CONDITION at page-data collection.
+
 /**
  * The one door to MikroORM in this repository.
  *

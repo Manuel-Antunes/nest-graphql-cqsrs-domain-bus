@@ -1,21 +1,20 @@
+import { MikroORM } from '@mikro-orm/core';
 import type { ModuleMetadata } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
+import { AsyncContext, CqrsModule } from '@nestjs/cqrs';
 import type { ClientProxy } from '@nestjs/microservices';
 import type { TestingModule } from '@nestjs/testing';
-import type { DomainEvent } from '@nestposts/platform/domain/shared/domain-event';
-import { MikroORM } from '@mikro-orm/core';
-import { Inject, Injectable } from '@nestjs/common';
-import { AsyncContext, CqrsModule } from '@nestjs/cqrs';
 import { Test } from '@nestjs/testing';
 import { DatabaseModule, inRequestContext } from '@nestposts/database';
 import {
-  testDatabaseConfig,
   TestSchemaModule,
+  testDatabaseConfig,
 } from '@nestposts/database/testing';
 import { AggregateRoot } from '@nestposts/platform/domain/shared/aggregate-root';
 import { BaseEntity } from '@nestposts/platform/domain/shared/base-entity';
+import type { DomainEvent } from '@nestposts/platform/domain/shared/domain-event';
 import { EventType } from '@nestposts/platform/domain/shared/event-type';
 
-import type { Ingestion } from './outbound/transport-metadata';
 import {
   TRANSPORT_EVENT_BUS_PUBLISHER,
   TRANSPORT_EVENT_BUS_SERVICE,
@@ -24,6 +23,7 @@ import { Publisher } from './decorators/publisher.decorator';
 import { EventIngestion } from './inbound/event-ingestion';
 import { IncomingRequest } from './inbound/incoming-request';
 import { OutboxRouting } from './outbound/outbox-routing';
+import type { Ingestion } from './outbound/transport-metadata';
 import { EventLog } from './persistence/event-log/event-log';
 import { EventSourcedRepository } from './persistence/event-log/event-sourced.repository';
 import {

@@ -1,13 +1,13 @@
-import type { Identity } from '@nestposts/users/domain/user/identity.provider';
-import type { CredentialId } from '@nestposts/users/domain/user/vo/credential-id';
 import { Injectable, Logger } from '@nestjs/common';
 import { EventPublisher } from '@nestjs/cqrs';
 import { AUTHOR_ROLE } from '@nestposts/users/domain/user/author.entity';
 import { AuthorRepository } from '@nestposts/users/domain/user/author.repository';
 import { UnknownIdentityException } from '@nestposts/users/domain/user/exception/unknown-identity.exception';
+import type { Identity } from '@nestposts/users/domain/user/identity.provider';
 import { IdentityProvider } from '@nestposts/users/domain/user/identity.provider';
 import { User } from '@nestposts/users/domain/user/user.entity';
 import { UserRepository } from '@nestposts/users/domain/user/user.repository';
+import type { CredentialId } from '@nestposts/users/domain/user/vo/credential-id';
 import { UserId } from '@nestposts/users/domain/user/vo/user-id';
 
 @Injectable()

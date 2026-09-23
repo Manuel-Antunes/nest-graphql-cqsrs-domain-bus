@@ -1,6 +1,5 @@
-import type { EnvelopeMetadata } from '../outbound/event-envelope';
-import type { AwsEnvelopeMessage } from './aws-message';
 import { SqsEventEnvelopeDeserializer } from '../inbound/deserializers/sqs-event-envelope.deserializer';
+import type { EnvelopeMetadata } from '../outbound/event-envelope';
 import {
   EventEnvelope,
   TRANSPORT_IDENTIFIER,
@@ -10,6 +9,7 @@ import {
 } from '../outbound/event-envelope';
 import { AwsEventEnvelopeSerializer } from '../outbound/serializers/aws-event-envelope.serializer';
 import { CORRELATION_ID } from '../request-context';
+import type { AwsEnvelopeMessage } from './aws-message';
 import {
   AWS_MESSAGE_TYPE_ATTRIBUTE,
   AWS_NAMESPACE_ATTRIBUTE,

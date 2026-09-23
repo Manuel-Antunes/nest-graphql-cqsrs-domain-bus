@@ -1,5 +1,6 @@
-import type { User } from '@nestposts/users/domain/user/user.entity';
 import { MikroORM } from '@mikro-orm/core';
+import { Logger } from '@nestjs/common';
+import type { User } from '@nestposts/users/domain/user/user.entity';
 import { CredentialId } from '@nestposts/users/domain/user/vo/credential-id';
 
 import type { UserProvisioning } from '../../application/user/user-provisioning.service';
@@ -44,7 +45,14 @@ describe('UserProvisioningHooks', () => {
   it('uma falha ao provisionar não derruba o que o provedor estava fazendo', async () => {
     fail = new Error('banco fora do ar');
     const error = vi
-      .spyOn((hooks as any).logger, 'error')
+      .spyOn(
+        (
+          hooks as unknown as {
+            logger: Logger;
+          }
+        ).logger,
+        'error',
+      )
       .mockImplementation(() => undefined);
 
     await expect(
@@ -56,7 +64,7 @@ describe('UserProvisioningHooks', () => {
 
   it('um id de credencial inválido é recusado na borda', async () => {
     const warn = vi
-      .spyOn((hooks as any).logger, 'warn')
+      .spyOn((hooks as unknown as { logger: Logger }).logger, 'warn')
       .mockImplementation(() => undefined);
 
     await hooks.onCredentialCreated({ id: '  ' });

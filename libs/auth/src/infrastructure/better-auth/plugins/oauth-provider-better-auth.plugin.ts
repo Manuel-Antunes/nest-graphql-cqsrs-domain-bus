@@ -1,6 +1,6 @@
+import { oauthProvider } from '@better-auth/oauth-provider';
 import type { FactoryProvider } from '@nestjs/common';
 import type { BetterAuthPlugin } from 'better-auth';
-import { oauthProvider } from '@better-auth/oauth-provider';
 
 import type { AuthConfig } from '../config';
 import { BETTER_AUTH_CONFIG } from '../tokens';

@@ -1,7 +1,7 @@
-import type { Identity } from '@nestposts/users/domain/user/identity.provider';
 import { MikroORM } from '@mikro-orm/core';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { inRequestContext } from '@nestposts/database';
+import type { Identity } from '@nestposts/users/domain/user/identity.provider';
 import { IdentityProvider } from '@nestposts/users/domain/user/identity.provider';
 import { CredentialId } from '@nestposts/users/domain/user/vo/credential-id';
 import { Email } from '@nestposts/users/domain/user/vo/email';

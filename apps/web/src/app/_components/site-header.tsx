@@ -57,7 +57,7 @@ export function SiteHeader() {
           </Badge>
           {session ? (
             <>
-              <span className="text-xs text-muted-foreground">
+              <span className="text-muted-foreground text-xs">
                 {session.user.email}
                 {isAuthor ? (
                   <Badge variant="secondary" className="ms-2 text-[10px]">

@@ -136,7 +136,7 @@ export function LiveConsole() {
                   </Link>
                   <span className="flex items-center gap-3">
                     <VersionBadge version={post.version} />
-                    <span className="text-xs text-muted-foreground">
+                    <span className="text-muted-foreground text-xs">
                       <RelativeTime iso={post.updatedAt} />
                     </span>
                   </span>
@@ -147,7 +147,7 @@ export function LiveConsole() {
         </CardContent>
       </Card>
 
-      <p className="text-xs text-muted-foreground">
+      <p className="text-muted-foreground text-xs">
         Para ver funcionando: deixe esta página aberta e crie um post em{' '}
         <Link href="/posts/new" className="underline">
           Escrever
@@ -181,7 +181,7 @@ function EventList({
 }) {
   if (rows.length === 0) {
     return (
-      <p className="rounded-md border border-dashed p-4 text-xs text-muted-foreground">
+      <p className="rounded-md border border-dashed p-4 text-muted-foreground text-xs">
         {empty}
       </p>
     );

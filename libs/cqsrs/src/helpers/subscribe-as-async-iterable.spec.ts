@@ -1,7 +1,7 @@
 import { Subject } from 'rxjs';
 
-import type { ISubscriptionBus } from '../interfaces/subscription-bus.interface';
 import { Subscription } from '../classes/subscription';
+import type { ISubscriptionBus } from '../interfaces/subscription-bus.interface';
 import { subscribeAsAsyncIterable } from './subscribe-as-async-iterable';
 
 describe('subscribeAsAsyncIterable', () => {

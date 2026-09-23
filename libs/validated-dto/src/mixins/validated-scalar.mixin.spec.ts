@@ -4,7 +4,7 @@ import { inspect } from 'node:util';
 import { instanceToPlain, plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { describe, expect, it } from 'vitest';
-import { z } from 'zod';
+import { $brand, z } from 'zod';
 
 import {
   createDecoratorRegistry,
@@ -105,8 +105,8 @@ describe('ValidatedDto.Scalar', () => {
     it('participa de comparações e concatenações como o valor cru', () => {
       const title = new PostTitle('Olá');
 
-      expect(title == ('Olá' as any)).toBe(true);
-      expect(title + '!').toBe('Olá!');
+      expect(title.toString() === 'Olá').toBe(true);
+      expect(`${title}!`).toBe('Olá!');
     });
 
     it('converte números pelo hint numérico', () => {
@@ -114,8 +114,8 @@ describe('ValidatedDto.Scalar', () => {
       const score = new Score(42);
 
       expect(Number(score)).toBe(42);
-      expect((score as any) + 1).toBe(43);
-      expect(score > (41 as any)).toBe(true);
+      expect((score as unknown as number) + 1).toBe(43);
+      expect((score as unknown as number) > 41).toBe(true);
     });
 
     it('serializa datas como ISO no toString e mantém o Date no valor', () => {
@@ -201,6 +201,7 @@ describe('ValidatedDto.Scalar', () => {
     it('reavalia depois de o valor mudar', () => {
       const title = new PostTitle('Olá');
 
+      // biome-ignore lint/suspicious/noExplicitAny: add as any to bypass readonly
       (title as any).value = '';
 
       expect(title.isValid()).toBe(false);
@@ -289,7 +290,7 @@ describe('ValidatedDto.Scalar', () => {
     });
 
     it('wrap envolve um valor já validado', () => {
-      const title = PostTitle.wrap('Olá' as any);
+      const title = PostTitle.wrap('Olá' as string & $brand<'PostTitle'>);
 
       expect(title).toBeInstanceOf(PostTitle);
       expect(title.value).toBe('Olá');
@@ -518,7 +519,7 @@ describe('ValidatedDto.Scalar', () => {
 
   describe('Rejeições', () => {
     it('recusa um schema de objeto e aponta o mixin certo', () => {
-      expect(() => ValidatedScalar(z.object({ a: z.string() }) as any)).toThrow(
+      expect(() => ValidatedScalar(z.object({ a: z.string() }))).toThrow(
         /ValidatedDto.Embeddable/,
       );
     });
@@ -572,6 +573,7 @@ describe('ValidatedDto.Scalar', () => {
     });
 
     it('o design:type do campo value acompanha o tipo do schema', () => {
+      // biome-ignore lint/suspicious/noExplicitAny: any but is a prototype
       const designTypeOf = (target: any) =>
         Reflect.getMetadata('design:type', target.prototype, 'value');
 
@@ -584,8 +586,11 @@ describe('ValidatedDto.Scalar', () => {
     });
 
     it('optional, nullable e default não escondem o tipo de baixo', () => {
+      // biome-ignore lint/suspicious/noExplicitAny: scalars any for test
       class Talvez extends ValidatedScalar(z.number().optional() as any) {}
+      // biome-ignore lint/suspicious/noExplicitAny: scalars any for test
       class Nulo extends ValidatedScalar(z.number().nullable() as any) {}
+      // biome-ignore lint/suspicious/noExplicitAny: scalars any for test
       class ComPadrao extends ValidatedScalar(z.number().default(0) as any) {}
 
       expect(
@@ -601,11 +606,11 @@ describe('ValidatedDto.Scalar', () => {
   });
 
   describe('bordas de impressão e de validação', () => {
-    class Opcional extends ValidatedScalar(z.string().nullish() as any) {}
+    class Opcional extends ValidatedScalar(z.string().nullish()) {}
 
     it('um valor ausente imprime como string vazia, não como "null"', () => {
-      expect(String(new Opcional(null as any))).toBe('');
-      expect(String(new Opcional(undefined as any))).toBe('');
+      expect(String(new Opcional(null))).toBe('');
+      expect(String(new Opcional(undefined))).toBe('');
     });
 
     it('plainToInstance mantém o valor inválido para a validação recusar depois', async () => {
@@ -622,14 +627,13 @@ describe('ValidatedDto.Scalar', () => {
 
     it('a mensagem padrão do validador cobre o caso em que não há falha a relatar', () => {
       const validator = new ZodScalarValidator();
-      const args = (value: unknown, schema: z.ZodType) =>
-        ({
-          value,
-          constraints: [schema],
-          object: {},
-          property: 'value',
-          targetName: 'X',
-        }) as any;
+      const args = (value: unknown, schema: z.ZodType) => ({
+        value,
+        constraints: [schema],
+        object: {},
+        property: 'value',
+        targetName: 'X',
+      });
 
       expect(validator.defaultMessage(args('ok', z.string().min(1)))).toBe(
         'Validation failed',

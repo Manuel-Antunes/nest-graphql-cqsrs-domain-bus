@@ -15,15 +15,15 @@ services:
     ports:
       # RABBITMQ_PORT exists for the same reason POSTGRES_PORT does: another project on the machine
       # may already hold the default. Whoever moves it moves RABBITMQ_URL with it.
-      - '${RABBITMQ_PORT:-5672}:5672'
+      - "${RABBITMQ_PORT:-5672}:5672"
       # A API de management, que o teste da saga usa para republicar uma mensagem na mão — é assim que
       # ele prova a idempotência do inbox, e de passagem valida o formato de fio.
-      - '${RABBITMQ_MANAGEMENT_PORT:-15672}:15672'
+      - "${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-guest}
     healthcheck:
-      test: ['CMD', 'rabbitmq-diagnostics', '-q', 'check_running']
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_running"]
       interval: 5s
       timeout: 5s
       retries: 20
@@ -34,7 +34,7 @@ services:
     ports:
       # POSTGRES_PORT existe porque 5432 costuma já estar ocupado por outro projeto na máquina. Quem
       # o mudar muda também a POSTGRES_URL — o padrão dos dois é 5432.
-      - '${POSTGRES_PORT:-5432}:5432'
+      - "${POSTGRES_PORT:-5432}:5432"
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-nestposts}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-nestposts}
@@ -42,8 +42,8 @@ services:
     healthcheck:
       test:
         [
-          'CMD-SHELL',
-          'pg_isready -U ${POSTGRES_USER:-nestposts} -d ${POSTGRES_DB:-nestposts}',
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-nestposts} -d ${POSTGRES_DB:-nestposts}",
         ]
       interval: 5s
       timeout: 5s
@@ -63,32 +63,32 @@ services:
   # applications talk to `postgres:5432` and `rabbitmq:5672`, never to a published one. Only what the
   # host has to reach is published.
   migrator:
-    profiles: ['apps']
+    profiles: ["apps"]
     image: nestposts/migrator:dev
     build:
       context: .
       dockerfile: apps/migrator/Dockerfile
     container_name: nestposts-migrator
-    command: ['setup']
+    command: ["setup"]
     environment:
       POSTGRES_URL: postgresql://${POSTGRES_USER:-nestposts}:${POSTGRES_PASSWORD:-nestposts}@postgres:5432/${POSTGRES_DB:-nestposts}
       AUTH_SECRET: ${AUTH_SECRET:-nestposts-compose-secret}
     depends_on:
       postgres:
         condition: service_healthy
-    restart: 'no'
+    restart: "no"
 
   posts-api:
-    profiles: ['apps']
+    profiles: ["apps"]
     image: nestposts/posts-api:dev
     build:
       context: .
       dockerfile: apps/posts-api/Dockerfile
     container_name: nestposts-posts-api
     ports:
-      - '${API_PORT:-3000}:3000'
+      - "${API_PORT:-3000}:3000"
     environment:
-      PORT: '3000'
+      PORT: "3000"
       POSTGRES_URL: postgresql://${POSTGRES_USER:-nestposts}:${POSTGRES_PASSWORD:-nestposts}@postgres:5432/${POSTGRES_DB:-nestposts}
       RABBITMQ_URL: amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672
       POSTS_TRANSPORT: ${POSTS_TRANSPORT:-inngest}
@@ -107,7 +107,7 @@ services:
         condition: service_completed_successfully
 
   tagging:
-    profiles: ['apps']
+    profiles: ["apps"]
     image: nestposts/tagging:dev
     build:
       context: .
@@ -119,7 +119,7 @@ services:
       TAGGING_TRANSPORT: ${TAGGING_TRANSPORT:-inngest}
       INNGEST_BASE_URL: http://inngest:8288
       INNGEST_SERVE_ORIGIN: http://tagging:3001
-      TAGGING_PORT: '3001'
+      TAGGING_PORT: "3001"
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -132,16 +132,16 @@ services:
   # is read by server components and by the `/api/graphql` route, never by the browser — the browser
   # only ever talks to this origin.
   web:
-    profiles: ['apps']
+    profiles: ["apps"]
     image: nestposts/web:dev
     build:
       context: .
       dockerfile: apps/web/Dockerfile
     container_name: nestposts-web
     ports:
-      - '${WEB_PORT:-4300}:3000'
+      - "${WEB_PORT:-4300}:3000"
     environment:
-      PORT: '3000'
+      PORT: "3000"
       POSTGRES_URL: postgresql://${POSTGRES_USER:-nestposts}:${POSTGRES_PASSWORD:-nestposts}@postgres:5432/${POSTGRES_DB:-nestposts}
       AUTH_SECRET: ${AUTH_SECRET:-nestposts-compose-secret}
       WEB_URL: http://localhost:${WEB_PORT:-4300}
@@ -167,7 +167,7 @@ services:
       - -u
       - http://tagging:3001/api/inngest
     ports:
-      - '${INNGEST_PORT:-8288}:8288'
+      - "${INNGEST_PORT:-8288}:8288"
 
   # SNS and SQS, locally. The AWS transport is the same code path as the RabbitMQ one — the topic is
   # the exchange, a queue subscribed with a filter policy is a binding — so this is what makes
@@ -182,7 +182,7 @@ services:
     image: localstack/localstack:4
     container_name: nestposts-localstack
     ports:
-      - '${LOCALSTACK_PORT:-4566}:4566'
+      - "${LOCALSTACK_PORT:-4566}:4566"
     environment:
       SERVICES: sns,sqs
       DEBUG: ${LOCALSTACK_DEBUG:-0}
@@ -191,7 +191,7 @@ services:
       - ./docker/localstack/init:/etc/localstack/init/ready.d:ro
     healthcheck:
       test:
-        ['CMD-SHELL', 'awslocal sqs list-queues && awslocal sns list-topics']
+        ["CMD-SHELL", "awslocal sqs list-queues && awslocal sns list-topics"]
       interval: 5s
       timeout: 10s
       retries: 20

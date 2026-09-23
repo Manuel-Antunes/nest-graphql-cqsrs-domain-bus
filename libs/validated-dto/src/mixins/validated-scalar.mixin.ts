@@ -1,16 +1,18 @@
+/** biome-ignore-all lint/suspicious/noExplicitAny: ignore anys in file */
+/** biome-ignore-all lint/complexity/noThisInStatic: accept using this in static because of the class transformations */
 import 'reflect-metadata';
 
+import { Expose, Transform } from 'class-transformer';
 import type {
   ValidationArguments,
   ValidatorConstraintInterface,
 } from 'class-validator';
-import { Expose, Transform } from 'class-transformer';
 import { Validate, ValidatorConstraint } from 'class-validator';
 import { z } from 'zod';
 
 import type { DECORATOR_REGISTRY_TYPE } from '../schemas/registries/decorators.registry';
-import type { EMBEDDED_REGISTRY_TYPE } from '../schemas/registries/embedded.registry';
 import { DECORATOR_REGISTRY as GLOBAL_DECORATOR_REGISTRY } from '../schemas/registries/decorators.registry';
+import type { EMBEDDED_REGISTRY_TYPE } from '../schemas/registries/embedded.registry';
 import { EMBEDDED_REGISTRY } from '../schemas/registries/embedded.registry';
 
 /**
@@ -36,7 +38,11 @@ export function isScalarValueObject(
   return (
     typeof value === 'object' &&
     value !== null &&
-    (value as any)[SCALAR_VALUE_OBJECT] === true
+    (
+      value as unknown as {
+        [SCALAR_VALUE_OBJECT]: true;
+      }
+    )[SCALAR_VALUE_OBJECT] === true
   );
 }
 
@@ -547,15 +553,13 @@ export function ValidatedScalar<Schema extends z.ZodType<any, any>>(
           return cached;
         }
       }
-
-      const VO = this;
       const fieldSchema = z
         .unknown()
         .transform((value) => rawScalarValue(value))
-        .pipe(VO.schema)
-        .transform((parsed) => VO.wrap(parsed)) as unknown as z.ZodType;
+        .pipe(this.schema)
+        .transform((parsed) => this.wrap(parsed)) as unknown as z.ZodType;
 
-      embeddedRegistry.add(fieldSchema, { kind: 'scalar', target: VO });
+      embeddedRegistry.add(fieldSchema, { kind: 'scalar', target: this });
 
       if (decorators.length > 0) {
         (fieldOptions?.DECORATOR_REGISTRY ?? DECORATOR_REGISTRY).add(

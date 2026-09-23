@@ -132,7 +132,7 @@ export function CreatePostForm() {
 
       {created ? (
         <div className="space-y-3 rounded-lg border p-4">
-          <p className="text-sm font-medium">
+          <p className="font-medium text-sm">
             Resposta da mutation — versão {created.version}
           </p>
           <PostCard post={created} />

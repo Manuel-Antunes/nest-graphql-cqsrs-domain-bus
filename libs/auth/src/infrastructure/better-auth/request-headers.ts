@@ -34,7 +34,9 @@ export class RequestHeaders {
       raw as Record<string, unknown>,
     )) {
       if (Array.isArray(value)) {
-        value.forEach((entry) => headers.append(name, String(entry)));
+        value.forEach((entry) => {
+          headers.append(name, String(entry));
+        });
       } else if (value !== undefined && value !== null) {
         headers.set(name, String(value));
       }

@@ -1,8 +1,8 @@
-import type { NestMiddleware } from '@nestjs/common';
 import { RequestContext } from '@mikro-orm/core';
+import type { NestMiddleware } from '@nestjs/common';
 import { Injectable } from '@nestjs/common';
 
-import { Tenant, TENANT_HEADER } from './tenant';
+import { TENANT_HEADER, Tenant } from './tenant';
 import { TenantEntityManagers } from './tenant-entity-managers';
 
 interface TenantRequest {

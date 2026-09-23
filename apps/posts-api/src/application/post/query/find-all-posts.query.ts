@@ -1,7 +1,7 @@
-import type { IQueryHandler } from '@nestjs/cqrs';
-import type { Post } from '@nestposts/posts/domain/post/post.entity';
 import { type Cursor } from '@mikro-orm/core';
+import type { IQueryHandler } from '@nestjs/cqrs';
 import { Query, QueryHandler } from '@nestjs/cqrs';
+import type { Post } from '@nestposts/posts/domain/post/post.entity';
 import { PostRepository } from '@nestposts/posts/domain/post/post.repository';
 
 export namespace FindAllPostsQuery {

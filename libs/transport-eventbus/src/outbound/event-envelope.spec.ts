@@ -1,7 +1,7 @@
 import {
   decodeTags,
-  encodeTags,
   EventEnvelope,
+  encodeTags,
   TRANSPORT_IDENTIFIER,
   TRANSPORT_MESSAGE_TYPE,
   TRANSPORT_ORIGIN,

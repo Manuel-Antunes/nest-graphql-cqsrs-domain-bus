@@ -64,7 +64,7 @@ export function observableToAsyncIterable<T>(
   subscription = source.subscribe({
     next: (value) =>
       waiting.length
-        ? waiting.shift()!.resolve({ value, done: false })
+        ? waiting.shift()?.resolve({ value, done: false })
         : buffered.push(value),
     error: (error) => {
       failure = { error };

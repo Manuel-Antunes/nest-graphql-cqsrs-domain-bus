@@ -7,7 +7,9 @@ function resolve(delegate: object): object {
   const delegation = delegationOf(delegate.constructor);
   if (!delegation) {
     throw BrokenDelegationException.notDelegated(
-      delegate.constructor as new (...args: any[]) => object,
+      delegate.constructor as new (
+        ...args: any[]
+      ) => object,
     );
   }
   return delegation.resolve(delegate);

@@ -1,5 +1,5 @@
-import type { TestingModule } from '@nestjs/testing';
 import { QueryBus } from '@nestjs/cqrs';
+import type { TestingModule } from '@nestjs/testing';
 import { Post } from '@nestposts/posts/domain/post/post.entity';
 import { PostId } from '@nestposts/posts/domain/post/vo/post-id';
 
@@ -33,7 +33,9 @@ describe('FindPostQuery.Handler', () => {
     const found = await execute(post.id);
 
     expect(found).toBeInstanceOf(Post);
+    // biome-ignore lint/style/noNonNullAssertion: just for testing, we know it exists
     expect(found!.id.equals(post.id)).toBe(true);
+    // biome-ignore lint/style/noNonNullAssertion: just for testing, we know it exists
     expect(found!.title.value).toBe('Nest + GraphQL');
   });
 
@@ -42,11 +44,13 @@ describe('FindPostQuery.Handler', () => {
     const post = await givenAPost(module, { tags: [tag] });
 
     const found = await execute(post.id);
-
+    // biome-ignore lint/style/noNonNullAssertion: just for testing, we know it exists
     expect(found!.tags.isInitialized()).toBe(true);
+    // biome-ignore lint/style/noNonNullAssertion: just for testing, we know it exists
     expect(found!.tags.getItems().map((each) => each.name.value)).toEqual([
       'dev',
     ]);
+    // biome-ignore lint/style/noNonNullAssertion: just for testing, we know it exists
     expect(found!.author.delegated().name.value).toBe('manuel');
   });
 
@@ -69,7 +73,7 @@ describe('FindPostQuery.Handler', () => {
     const post = await givenAPost(module);
 
     const found = await execute(post.id);
-
+    // biome-ignore lint/style/noNonNullAssertion: just for testing, we know it exists
     expect(found!.getUncommittedEvents()).toEqual([]);
   });
 });

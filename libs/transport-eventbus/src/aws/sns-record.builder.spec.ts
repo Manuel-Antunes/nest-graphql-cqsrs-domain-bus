@@ -1,11 +1,11 @@
 import type { EnvelopeMetadata } from '../outbound/event-envelope';
-import type { AwsMessageBody } from './aws-message';
 import {
   EventEnvelope,
   TRANSPORT_IDENTIFIER,
   TRANSPORT_MESSAGE_TYPE,
 } from '../outbound/event-envelope';
 import { AwsEventEnvelopeSerializer } from '../outbound/serializers/aws-event-envelope.serializer';
+import type { AwsMessageBody } from './aws-message';
 import { SnsClientProxy } from './sns-client.proxy';
 import { SnsRecordBuilder } from './sns-record.builder';
 

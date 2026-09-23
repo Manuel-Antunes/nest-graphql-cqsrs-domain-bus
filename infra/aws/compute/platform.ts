@@ -1,7 +1,7 @@
 /// <reference path="../../../.sst/platform/config.d.ts" />
 
-import type { LambdaPlatform } from '../support';
 import { vpc } from '../network';
+import type { LambdaPlatform } from '../support';
 import { build } from './build';
 import {
   links,

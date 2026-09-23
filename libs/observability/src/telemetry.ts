@@ -1,7 +1,7 @@
-import type { Instrumentation } from '@opentelemetry/instrumentation';
 import { trace } from '@opentelemetry/api';
 import { OTLPLogExporter } from '@opentelemetry/exporter-logs-otlp-http';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
+import type { Instrumentation } from '@opentelemetry/instrumentation';
 import { AmqplibInstrumentation } from '@opentelemetry/instrumentation-amqplib';
 import { AwsInstrumentation } from '@opentelemetry/instrumentation-aws-sdk';
 import { GraphQLInstrumentation } from '@opentelemetry/instrumentation-graphql';
@@ -172,6 +172,6 @@ const isEnabled = (options: TelemetryOptions): boolean => {
   }
   return Boolean(
     process.env.OTEL_EXPORTER_OTLP_ENDPOINT ??
-    process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT,
+      process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT,
   );
 };

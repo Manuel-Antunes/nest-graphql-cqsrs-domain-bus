@@ -1,8 +1,6 @@
-import type { IEvent, IEventPublisher } from '@nestjs/cqrs';
-import type { TestingModule } from '@nestjs/testing';
-import type { Observable } from 'rxjs';
 import { Global, Inject, Injectable, Module, Scope } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
+import type { IEvent, IEventPublisher } from '@nestjs/cqrs';
 import {
   CommandBus,
   EventBus,
@@ -10,17 +8,19 @@ import {
   ofType,
   QueryBus,
 } from '@nestjs/cqrs';
+import type { TestingModule } from '@nestjs/testing';
 import { Test } from '@nestjs/testing';
+import type { Observable } from 'rxjs';
 
+import { Subscription } from './classes/subscription';
+import { CqsrsModule } from './cqsrs.module';
+import type { CqsrsModuleOptionsFactory } from './cqsrs.module-definition';
+import { SubscriptionHandler } from './decorators/subscription-handler.decorator';
 import type {
   CqsrsModuleOptions,
-  CqsrsModuleOptionsFactory,
   ISubscriptionHandler,
   ISubscriptionPublisher,
 } from './interfaces/index';
-import { Subscription } from './classes/subscription';
-import { CqsrsModule } from './cqsrs.module';
-import { SubscriptionHandler } from './decorators/subscription-handler.decorator';
 import { SubscriptionBus } from './subscription-bus';
 
 class Pinged {

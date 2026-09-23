@@ -42,7 +42,9 @@ export class SoftDeletion extends ValidatedDto(SoftDeletionSchema) {
 }
 
 export function WithSoftDelete<
-  TBase extends abstract new (...args: any[]) => object,
+  TBase extends abstract new (
+    ...args: any[]
+  ) => object,
 >(Base: TBase) {
   abstract class SoftDeletable extends Base {
     deleted: SoftDeletion = SoftDeletion.alive();

@@ -1,6 +1,6 @@
 import type { EntitySchema } from '@nestposts/database';
-import type { BetterAuthOptions } from 'better-auth';
 import { defineEntity, p, UnderscoreNamingStrategy } from '@nestposts/database';
+import type { BetterAuthOptions } from 'better-auth';
 import { getAuthTables } from 'better-auth/db';
 
 interface AuthField {

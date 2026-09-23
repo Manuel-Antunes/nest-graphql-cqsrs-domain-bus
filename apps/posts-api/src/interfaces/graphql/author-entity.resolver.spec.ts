@@ -1,7 +1,7 @@
 import type { QueryBus } from '@nestjs/cqrs';
 import {
-  Author,
   AUTHOR_ROLE,
+  Author,
   Authorship,
 } from '@nestposts/users/domain/user/author.entity';
 import { User } from '@nestposts/users/domain/user/user.entity';

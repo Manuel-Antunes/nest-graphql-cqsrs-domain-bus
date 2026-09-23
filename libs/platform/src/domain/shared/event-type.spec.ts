@@ -1,7 +1,7 @@
 import {
   DEFAULT_EVENT_VERSION,
-  eventTagsOf,
   EventType,
+  eventTagsOf,
   eventTypeFor,
   eventTypeOf,
   namespaceIn,

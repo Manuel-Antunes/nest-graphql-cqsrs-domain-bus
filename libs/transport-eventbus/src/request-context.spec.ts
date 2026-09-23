@@ -3,8 +3,8 @@ import { AsyncContext } from '@nestjs/cqrs';
 import type { Ingestion } from './outbound/transport-metadata';
 import {
   CAUSATION_ID,
-  CorrelatedRequestContext,
   CORRELATION_ID,
+  CorrelatedRequestContext,
   correlationIdOf,
   TransportRequestContext,
 } from './request-context';

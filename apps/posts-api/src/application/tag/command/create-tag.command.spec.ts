@@ -1,5 +1,5 @@
-import type { TestingModule } from '@nestjs/testing';
 import { CommandBus } from '@nestjs/cqrs';
+import type { TestingModule } from '@nestjs/testing';
 import { PostId } from '@nestposts/posts/domain/post/vo/post-id';
 import { TagCreatedEvent } from '@nestposts/posts/domain/tag/event/tag-created.event';
 import { InvalidTagException } from '@nestposts/posts/domain/tag/exception/invalid-tag.exception';

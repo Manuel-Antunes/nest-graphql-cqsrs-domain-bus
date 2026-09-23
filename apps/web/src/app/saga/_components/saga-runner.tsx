@@ -34,9 +34,9 @@ export function SagaRunner() {
   const { session, isAuthor } = useSession();
   const { status, events, postId, elapsed, run, watch, stop } = useSagaRun();
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: watch is recreated per render; re-running on it would restart the stream
   useEffect(() => {
     if (watching) void watch(watching);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [watching]);
 
   const running = status === 'creating' || status === 'waiting';
@@ -108,16 +108,17 @@ export function SagaRunner() {
             <ol className="space-y-2">
               {events.map((event, index) => (
                 <li
+                  // biome-ignore lint/suspicious/noArrayIndexKey: events is an append-only log, so the index is stable
                   key={index}
                   className={cn('rounded-md border p-3', tones[event.tone])}
                 >
                   <div className="flex items-baseline justify-between gap-3">
-                    <span className="text-sm font-medium">{event.label}</span>
-                    <span className="font-mono text-xs text-muted-foreground">
+                    <span className="font-medium text-sm">{event.label}</span>
+                    <span className="font-mono text-muted-foreground text-xs">
                       +{(event.at / 1000).toFixed(1)}s
                     </span>
                   </div>
-                  <p className="mt-1 text-xs text-muted-foreground">
+                  <p className="mt-1 text-muted-foreground text-xs">
                     {event.detail}
                   </p>
                 </li>
@@ -126,7 +127,7 @@ export function SagaRunner() {
           ) : null}
 
           {status === 'closed' ? (
-            <p className="text-sm text-emerald-600 dark:text-emerald-400">
+            <p className="text-emerald-600 text-sm dark:text-emerald-400">
               Saga fechada. O tempo acima inclui o cold start das funções — rode
               de novo com elas quentes para separar as duas coisas.
             </p>

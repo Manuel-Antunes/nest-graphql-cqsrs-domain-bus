@@ -1,4 +1,5 @@
-import { MikroORM, ref } from '@mikro-orm/core';
+/** biome-ignore-all lint/style/noNonNullAssertion: non null assertions allow in test */
+import { MikroORM } from '@mikro-orm/core';
 import { closeTestDatabase, testDatabase } from '@nestposts/database/testing';
 import { delegateRef } from '@nestposts/platform/domain/shared/delegation/delegate';
 import { Post } from '@nestposts/posts/domain/post/post.entity';
@@ -6,8 +7,8 @@ import { PostId } from '@nestposts/posts/domain/post/vo/post-id';
 import { PostEntitySchema } from '@nestposts/posts/infrastructure/persistence/entities/post-orm.entity';
 import { TagSchema } from '@nestposts/posts/infrastructure/persistence/entities/tag-orm.entity';
 import {
-  Author,
   AUTHOR_ROLE,
+  Author,
   Authorship,
 } from '@nestposts/users/domain/user/author.entity';
 import { User } from '@nestposts/users/domain/user/user.entity';
@@ -72,7 +73,7 @@ describe('Author: the user, cast over its authorship', () => {
     return id;
   };
 
-  const loadAuthor = async (id: UserId): Promise<Author> =>
+  async (id: UserId): Promise<Author> =>
     delegateRef(
       Author,
       await orm.em.fork().findOneOrFail(Authorship, { user: id }),

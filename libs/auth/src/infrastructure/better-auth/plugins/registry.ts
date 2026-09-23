@@ -1,5 +1,3 @@
-import type { BetterAuthPlugin } from 'better-auth';
-
 import { AdminBetterAuthPluginProvider } from './admin-better-auth.plugin';
 import { JwtBetterAuthPluginProvider } from './jwt-better-auth.plugin';
 import { OAuthProviderBetterAuthPluginProvider } from './oauth-provider-better-auth.plugin';

@@ -1,12 +1,12 @@
 import type { Mapper } from '@automapper/core';
-import type { PostId } from '@nestposts/posts/domain/post/vo/post-id';
-import type { Author } from '@nestposts/users/domain/user/author.entity';
 import { InjectMapper, MapInterceptor, MapPipe } from '@automapper/nestjs';
 import { UseFilters, UseInterceptors } from '@nestjs/common';
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import { Args, Mutation, Resolver } from '@nestjs/graphql';
 import { PostNotFoundException } from '@nestposts/posts/domain/post/exception/post-not-found.exception';
 import { Post } from '@nestposts/posts/domain/post/post.entity';
+import type { PostId } from '@nestposts/posts/domain/post/vo/post-id';
+import type { Author } from '@nestposts/users/domain/user/author.entity';
 import { AUTHOR_ROLE } from '@nestposts/users/domain/user/author.entity';
 import { Roles } from '@thallesp/nestjs-better-auth';
 

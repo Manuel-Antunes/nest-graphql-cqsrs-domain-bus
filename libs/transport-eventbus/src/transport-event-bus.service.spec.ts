@@ -1,8 +1,6 @@
-import type { ICommandHandler, IEvent, IEventHandler } from '@nestjs/cqrs';
-import type { TestingModule } from '@nestjs/testing';
-import type { Observable } from 'rxjs';
 import { Inject, Injectable } from '@nestjs/common';
 import { DiscoveryModule } from '@nestjs/core';
+import type { ICommandHandler, IEvent, IEventHandler } from '@nestjs/cqrs';
 import {
   AggregateRoot,
   CommandBus,
@@ -14,11 +12,12 @@ import {
   Saga,
 } from '@nestjs/cqrs';
 import { ClientProxy } from '@nestjs/microservices';
+import type { TestingModule } from '@nestjs/testing';
 import { Test } from '@nestjs/testing';
 import { EventType } from '@nestposts/platform/domain/shared/event-type';
+import type { Observable } from 'rxjs';
 import { map } from 'rxjs';
 
-import type { TransportEventBusService } from './transport-event-bus.service';
 import {
   TRANSPORT_EVENT_BUS_PUBLISHER,
   TRANSPORT_EVENT_BUS_SERVICE,
@@ -35,6 +34,7 @@ import {
 } from './request-context';
 import { RecordingClient } from './testing/recording-client';
 import { transportEventBusProviders } from './transport-event-bus.providers';
+import type { TransportEventBusService } from './transport-event-bus.service';
 import { TransportIdentity } from './transport-identity';
 
 /**
@@ -156,7 +156,9 @@ class InternalEventHandler implements IEventHandler<InternalEvent> {
 }
 
 @EventsHandler(TryAggregateRootEvent)
-class TryAggregateRootEventHandler implements IEventHandler<TryAggregateRootEvent> {
+class TryAggregateRootEventHandler
+  implements IEventHandler<TryAggregateRootEvent>
+{
   constructor(private readonly storage: Storage) {}
 
   handle(event: TryAggregateRootEvent): void {
@@ -198,7 +200,9 @@ class TryAggregateRootCommand {
 }
 
 @CommandHandler(TryAggregateRootCommand)
-class TryAggregateRootCommandHandler implements ICommandHandler<TryAggregateRootCommand> {
+class TryAggregateRootCommandHandler
+  implements ICommandHandler<TryAggregateRootCommand>
+{
   constructor(
     @Inject(TRANSPORT_EVENT_BUS_PUBLISHER)
     private readonly publisher: EventPublisher,

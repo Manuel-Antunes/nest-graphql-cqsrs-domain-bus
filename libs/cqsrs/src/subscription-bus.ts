@@ -1,20 +1,12 @@
 import type { Type } from '@nestjs/common';
-import type { InstanceWrapper } from '@nestjs/core/injector/instance-wrapper';
-import type { Observable } from 'rxjs';
 import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
+import type { InstanceWrapper } from '@nestjs/core/injector/instance-wrapper';
 import { AsyncContext } from '@nestjs/cqrs';
-import { defer, filter, finalize, mergeMap, share, Subject } from 'rxjs';
+import type { Observable } from 'rxjs';
+import { defer, filter, finalize, mergeMap, Subject, share } from 'rxjs';
 
 import type { Subscription } from './classes/subscription';
-import type {
-  CqsrsModuleOptions,
-  ISubscription,
-  ISubscriptionBus,
-  ISubscriptionHandler,
-  ISubscriptionPublisher,
-  SubscriptionMetadata,
-} from './interfaces/index';
 import { CQSRS_MODULE_OPTIONS } from './constants';
 import {
   SUBSCRIPTION_HANDLER_METADATA,
@@ -26,6 +18,14 @@ import {
 } from './exceptions/index';
 import { DefaultSubscriptionPubSub } from './helpers/default-subscription-pubsub';
 import { subscriptionKey } from './helpers/subscription-key';
+import type {
+  CqsrsModuleOptions,
+  ISubscription,
+  ISubscriptionBus,
+  ISubscriptionHandler,
+  ISubscriptionPublisher,
+  SubscriptionMetadata,
+} from './interfaces/index';
 
 export type SubscriptionHandlerType<
   SubscriptionBase extends ISubscription = ISubscription,
@@ -81,7 +81,8 @@ type BoundSubscriptionHandler = (
 @Injectable()
 export class SubscriptionBus<
   SubscriptionBase extends ISubscription = ISubscription,
-> implements ISubscriptionBus<SubscriptionBase> {
+> implements ISubscriptionBus<SubscriptionBase>
+{
   private readonly logger = new Logger(SubscriptionBus.name);
   private readonly subject$ = new Subject<SubscriptionBase>();
   /** subscription id → resolved handler. */
@@ -214,8 +215,10 @@ export class SubscriptionBus<
       if (!instance?.subscribe) {
         throw new InvalidSubscriptionHandlerException();
       }
-      this.handlers.set(subscriptionId, (subscription) =>
-        instance.subscribe!(subscription as T),
+      this.handlers.set(
+        subscriptionId,
+        (subscription) =>
+          instance.subscribe?.(subscription as T) as Observable<TEvent>,
       );
       return;
     }
@@ -237,7 +240,9 @@ export class SubscriptionBus<
   }
 
   register(handlers: InstanceWrapper<ISubscriptionHandler<any>>[] = []): void {
-    handlers.forEach((handler) => this.registerHandler(handler));
+    handlers.forEach((handler) => {
+      this.registerHandler(handler);
+    });
   }
 
   protected registerHandler(
@@ -298,8 +303,8 @@ export class SubscriptionBus<
   }
 
   private getSubscriptionName(subscription: ISubscription): string {
-    const { constructor } = Object.getPrototypeOf(subscription);
-    return constructor.name;
+    const prototype = Object.getPrototypeOf(subscription);
+    return prototype.constructor.name;
   }
 
   private useDefaultPublisher(): void {

@@ -51,6 +51,7 @@ export class GraphqlClient {
     this.cookie = '';
   }
 
+  // biome-ignore lint/suspicious/noExplicitAny: ExecutionResult is generic, but we don't need to specify the type here
   async execute<T = Record<string, any>>(
     query: string,
     variables?: Record<string, unknown>,
@@ -66,6 +67,7 @@ export class GraphqlClient {
     return (await response.json()) as ExecutionResult<T>;
   }
 
+  // biome-ignore lint/suspicious/noExplicitAny: ExecutionResult is generic, but we don't need to specify the type here
   subscribe<T = Record<string, any>>(
     query: string,
     variables?: Record<string, unknown>,
@@ -90,7 +92,9 @@ export class SubscriptionCollector<T> {
       {
         next: (result) => {
           this.received.push(result.data as T);
-          this.waiters.splice(0).forEach((wake) => wake());
+          this.waiters.splice(0).forEach((wake) => {
+            wake();
+          });
         },
         error: (error) => this.errors.push(error),
         complete: () => {},

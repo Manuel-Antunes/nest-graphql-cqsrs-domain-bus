@@ -1,12 +1,12 @@
-import type { QueryBus } from '@nestjs/cqrs';
 import { MikroORM } from '@mikro-orm/core';
+import type { QueryBus } from '@nestjs/cqrs';
 import { closeTestDatabase, testDatabase } from '@nestposts/database/testing';
 import { PostId } from '@nestposts/posts/domain/post/vo/post-id';
 import { PostEntitySchema } from '@nestposts/posts/infrastructure/persistence/entities/post-orm.entity';
 import { TagSchema } from '@nestposts/posts/infrastructure/persistence/entities/tag-orm.entity';
 import {
-  Author,
   AUTHOR_ROLE,
+  Author,
   Authorship,
 } from '@nestposts/users/domain/user/author.entity';
 import { NotAnAuthorException } from '@nestposts/users/domain/user/exception/not-an-author.exception';
@@ -19,7 +19,6 @@ import {
 
 import { FindAuthorQuery } from '../../application/user/query/find-author.query';
 import { PostView } from '../../dto/graphql/post.view';
-import { AuthorView } from '../../dto/graphql/user.view';
 import { PostAuthorResolver } from './post-author.resolver';
 
 describe('PostAuthorResolver', () => {

@@ -30,8 +30,8 @@ describe('FindUserQuery.Handler', () => {
       handler.execute(new FindUserQuery.FindUser(reader.id)),
     );
 
-    expect(found!.email.value).toBe('reader@example.com');
-    expect(found!.hasRole(AUTHOR_ROLE)).toBe(false);
+    expect(found?.email.value).toBe('reader@example.com');
+    expect(found?.hasRole(AUTHOR_ROLE)).toBe(false);
   });
 
   it('an author is a user too — the roles travel with the row, and the type is decided above', async () => {
@@ -41,7 +41,7 @@ describe('FindUserQuery.Handler', () => {
       handler.execute(new FindUserQuery.FindUser(author.id)),
     );
 
-    expect(found!.hasRole(AUTHOR_ROLE)).toBe(true);
+    expect(found?.hasRole(AUTHOR_ROLE)).toBe(true);
   });
 
   it('an unknown id is null, and not an error', async () => {

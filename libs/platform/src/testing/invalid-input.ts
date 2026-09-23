@@ -1,4 +1,4 @@
-import { z, ZodError } from 'zod';
+import { ZodError, z } from 'zod';
 
 export function issuesOf(fn: () => unknown): string {
   try {

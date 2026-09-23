@@ -3,8 +3,8 @@ import { EventsHandler } from '@nestjs/cqrs';
 import { EventType } from '@nestposts/platform/domain/shared/event-type';
 
 import {
-  encodeData,
   EventEnvelope,
+  encodeData,
   TRANSPORT_IDENTIFIER,
   TRANSPORT_MESSAGE_TYPE,
   TRANSPORT_ORIGIN,

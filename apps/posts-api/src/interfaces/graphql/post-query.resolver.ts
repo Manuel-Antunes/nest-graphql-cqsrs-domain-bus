@@ -1,5 +1,5 @@
-import type { Cursor } from '@mikro-orm/core';
 import { MapInterceptor } from '@automapper/nestjs';
+import type { Cursor } from '@mikro-orm/core';
 import { UseInterceptors } from '@nestjs/common';
 import { QueryBus } from '@nestjs/cqrs';
 import { Args, Query, Resolver } from '@nestjs/graphql';

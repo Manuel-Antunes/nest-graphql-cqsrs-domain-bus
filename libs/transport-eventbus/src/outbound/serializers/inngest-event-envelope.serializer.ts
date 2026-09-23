@@ -1,8 +1,8 @@
 import type { ReadPacket } from '@nestjs/microservices';
 import { qualifiedNameIn } from '@nestposts/platform/domain/shared/event-type';
 
-import type { EnvelopeMetadata } from '../event-envelope';
 import { CORRELATION_ID } from '../../request-context';
+import type { EnvelopeMetadata } from '../event-envelope';
 import { EventEnvelope, TRANSPORT_MESSAGE_TYPE } from '../event-envelope';
 import { EventEnvelopeSerializer } from './event-envelope.serializer';
 

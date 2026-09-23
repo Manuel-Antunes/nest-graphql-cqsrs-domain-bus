@@ -1,18 +1,18 @@
 import type { SQSClientConfig } from '@aws-sdk/client-sqs';
+import { SendMessageCommand, SQSClient } from '@aws-sdk/client-sqs';
+import { Logger } from '@nestjs/common';
 import type {
   ProducerSerializer,
   ReadPacket,
   WritePacket,
 } from '@nestjs/microservices';
-import { SendMessageCommand, SQSClient } from '@aws-sdk/client-sqs';
-import { Logger } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
 
-import type { AwsEnvelopeMessage } from './aws-message';
-import type { SqsRecordOptions } from './sqs-record.builder';
 import { TRANSPORT_IDENTIFIER } from '../outbound/event-envelope';
 import { awsClientConfig, queueNameOf } from './aws-client.config';
+import type { AwsEnvelopeMessage } from './aws-message';
 import { asMessageAttributes, orderingKeyIn } from './aws-message';
+import type { SqsRecordOptions } from './sqs-record.builder';
 import { isSqsRecord } from './sqs-record.builder';
 
 /** SQS's own limit on how long a single message may be held back. */

@@ -1,10 +1,10 @@
 import { join } from 'node:path';
-import type { DatabaseEntities, PostgresOptions } from '@nestposts/database';
 import { Migrator } from '@mikro-orm/migrations';
 import { SeedManager } from '@mikro-orm/seeder';
+import type { DatabaseEntities, PostgresOptions } from '@nestposts/database';
 import {
-  postgresDatabase,
   POSTS_SCHEMA,
+  postgresDatabase,
   TAGGING_SCHEMA,
 } from '@nestposts/database';
 import { OrganizationEntities } from '@nestposts/organizations/infrastructure/persistence/organization-entities';

@@ -1,13 +1,13 @@
-import type { CredentialId } from '@nestposts/users/domain/user/vo/credential-id';
 import { EntityManager } from '@mikro-orm/core';
 import { Injectable } from '@nestjs/common';
 import { inRequestContext } from '@nestposts/database';
+import type { CredentialId } from '@nestposts/users/domain/user/vo/credential-id';
 
-import type { OrganizationId } from '../../../domain/organization/vo/organization-id';
-import type { OrganizationSlug } from '../../../domain/organization/vo/organization-slug';
 import { Member } from '../../../domain/organization/member.entity';
 import { Organization } from '../../../domain/organization/organization.entity';
 import { OrganizationRepository } from '../../../domain/organization/organization.repository';
+import type { OrganizationId } from '../../../domain/organization/vo/organization-id';
+import type { OrganizationSlug } from '../../../domain/organization/vo/organization-slug';
 
 @Injectable()
 export class MikroOrmOrganizationRepository extends OrganizationRepository {

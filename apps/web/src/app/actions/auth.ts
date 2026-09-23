@@ -2,8 +2,8 @@
 
 import { z } from 'zod';
 
-import type { Session } from '@/lib/auth/session';
 import { WebAuth } from '@/lib/auth/server';
+import type { Session } from '@/lib/auth/session';
 
 export interface SignInState {
   status: 'idle' | 'error' | 'ok';

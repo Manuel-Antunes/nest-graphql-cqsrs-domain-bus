@@ -10,10 +10,10 @@ import type {
   PermissionRequest,
   SignedIn,
 } from '../../../domain/auth/auth.service';
-import type { Session } from '../../../domain/auth/session';
-import type { BetterAuth } from '../init-auth';
 import { AuthService } from '../../../domain/auth/auth.service';
 import { SessionNotAuthenticatedException } from '../../../domain/auth/exception/session-not-authenticated.exception';
+import type { Session } from '../../../domain/auth/session';
+import type { BetterAuth } from '../init-auth';
 import { RequestHeaders } from '../request-headers';
 import { BETTER_AUTH } from '../tokens';
 

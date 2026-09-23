@@ -1,19 +1,19 @@
 import type { Message, SQSClient } from '@aws-sdk/client-sqs';
-import type { MessageHandler } from '@nestjs/microservices';
-import type { SQSEvent, SQSRecord } from 'aws-lambda';
 import {
   DeleteMessageBatchCommand,
   ReceiveMessageCommand,
 } from '@aws-sdk/client-sqs';
+import type { MessageHandler } from '@nestjs/microservices';
+import type { SQSEvent, SQSRecord } from 'aws-lambda';
 
-import type { EventEnvelope } from '../outbound/event-envelope';
-import type { SqsStrategyOptions } from './sqs.strategy';
 import { SqsEventEnvelopeDeserializer } from '../inbound/deserializers/sqs-event-envelope.deserializer';
+import type { EventEnvelope } from '../outbound/event-envelope';
 import {
   TRANSPORT_IDENTIFIER,
   TRANSPORT_MESSAGE_TYPE,
 } from '../outbound/event-envelope';
 import { SqsContext } from './sqs.context';
+import type { SqsStrategyOptions } from './sqs.strategy';
 import { SqsStrategy } from './sqs.strategy';
 
 const QUEUE_ARN = 'arn:aws:sqs:us-east-1:000000000000:nestposts-tagging';

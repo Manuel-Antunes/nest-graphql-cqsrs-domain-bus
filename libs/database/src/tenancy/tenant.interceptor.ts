@@ -1,15 +1,15 @@
+import { RequestContext } from '@mikro-orm/core';
 import type {
   CallHandler,
   ExecutionContext,
   NestInterceptor,
 } from '@nestjs/common';
-import { RequestContext } from '@mikro-orm/core';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Observable } from 'rxjs';
 
 import type { TenantResolver } from './tenant.resolver';
-import { TenantEntityManagers } from './tenant-entity-managers';
 import { TENANT_RESOLVER } from './tenant.resolver';
+import { TenantEntityManagers } from './tenant-entity-managers';
 
 /**
  * **The tenant's context for everything that is not an Express request.**

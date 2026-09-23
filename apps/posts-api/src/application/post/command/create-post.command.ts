@@ -1,7 +1,7 @@
-import type { AsyncContext, ICommandHandler } from '@nestjs/cqrs';
 import { AutoMap } from '@automapper/classes';
 import { Inject, Scope } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
+import type { AsyncContext, ICommandHandler } from '@nestjs/cqrs';
 import { Command, CommandHandler, EventPublisher } from '@nestjs/cqrs';
 import { delegateRef } from '@nestposts/platform/domain/shared/delegation/delegate';
 import { PostAlreadyExistsException } from '@nestposts/posts/domain/post/exception/post-already-exists.exception';

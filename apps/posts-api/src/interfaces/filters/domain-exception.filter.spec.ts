@@ -51,6 +51,7 @@ describe('DomainExceptionFilter', () => {
   it('turns a ZodError from the edge into BAD_USER_INPUT with the pretty message', () => {
     const { error } = z.uuid().safeParse('nao-existe');
 
+    // biome-ignore lint/style/noNonNullAssertion: we know it exists, we just want to test the filter
     const translated = filter.catch(error!, host);
 
     expect(translated.extensions.code).toBe('BAD_USER_INPUT');

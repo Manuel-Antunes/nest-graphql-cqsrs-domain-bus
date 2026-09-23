@@ -1,6 +1,6 @@
 import type { EnvelopeMetadata } from '../../outbound/event-envelope';
-import type { IncomingEnvelope } from './event-envelope.deserializer';
 import { EventEnvelope } from '../../outbound/event-envelope';
+import type { IncomingEnvelope } from './event-envelope.deserializer';
 import { EventEnvelopeDeserializer } from './event-envelope.deserializer';
 
 /**
@@ -21,7 +21,7 @@ export class RmqEventEnvelopeDeserializer extends EventEnvelopeDeserializer {
     options?: Record<string, unknown>,
   ): IncomingEnvelope {
     const message = (value ?? {}) as { pattern?: unknown; data?: unknown };
-    const headers = (options?.['headers'] ?? {}) as Record<string, unknown>;
+    const headers = (options?.headers ?? {}) as Record<string, unknown>;
 
     return {
       pattern: String(message.pattern ?? ''),

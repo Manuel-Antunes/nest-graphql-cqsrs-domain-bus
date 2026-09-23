@@ -1,15 +1,8 @@
 import type { DynamicModule, Provider } from '@nestjs/common';
 import { Module } from '@nestjs/common';
 import { DiscoveryModule } from '@nestjs/core';
-import { EventBus } from '@nestjs/cqrs';
 import { DatabaseModule } from '@nestposts/database';
 
-import type {
-  DeclaredIdentity,
-  TransportEventBusIdentity,
-  TransportEventBusModuleAsyncOptions,
-  TransportEventBusModuleOptions,
-} from './transport-event-bus.options';
 import {
   TRANSPORT_EVENT_BUS_PUBLISHER,
   TRANSPORT_EVENT_BUS_SERVICE,
@@ -30,6 +23,12 @@ import {
   RequestContextCodec,
 } from './request-context';
 import { EventSourcedEventBus } from './subscriptions/event-sourced-event-bus';
+import type {
+  DeclaredIdentity,
+  TransportEventBusIdentity,
+  TransportEventBusModuleAsyncOptions,
+  TransportEventBusModuleOptions,
+} from './transport-event-bus.options';
 import {
   eventIngestionProviders,
   transportEventBusProviders,
@@ -205,4 +204,4 @@ const identityFrom = (
     ? identityOf(answer)
     : identityOf(answer.identity, answer.publishes);
 
-const refuseAmbiguity = (options: Composed): void => {};
+const refuseAmbiguity = (_options: Composed): void => {};

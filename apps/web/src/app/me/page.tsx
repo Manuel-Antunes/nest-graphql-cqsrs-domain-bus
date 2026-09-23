@@ -19,8 +19,8 @@ export default async function MePage() {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Identidade</h1>
-        <p className="text-sm text-muted-foreground">
+        <h1 className="font-semibold text-2xl tracking-tight">Identidade</h1>
+        <p className="text-muted-foreground text-sm">
           Nenhum usuário é cadastrado nesta aplicação: o perfil nasce na
           primeira requisição com um token novo, ou se liga a um existente pelo
           e-mail.

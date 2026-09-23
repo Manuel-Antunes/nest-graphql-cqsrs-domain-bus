@@ -1,5 +1,5 @@
-import type { Observable } from 'rxjs';
 import { Injectable, Logger } from '@nestjs/common';
+import type { Observable } from 'rxjs';
 import { EMPTY, from, map, mergeMap, tap } from 'rxjs';
 
 import { TransportIdentity } from '../transport-identity';

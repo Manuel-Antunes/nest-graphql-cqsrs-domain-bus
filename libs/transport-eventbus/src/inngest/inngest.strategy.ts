@@ -1,25 +1,25 @@
 import type { HttpServer } from '@nestjs/common';
+import { Logger } from '@nestjs/common';
 import type {
   ConsumerDeserializer,
   ConsumerSerializer,
   CustomTransportStrategy,
   TransportId,
 } from '@nestjs/microservices';
+import { Server } from '@nestjs/microservices';
 import type { FastifyInstance } from 'fastify';
 import type { EventPayload, Inngest, InngestFunction } from 'inngest';
-import { Logger } from '@nestjs/common';
-import { Server } from '@nestjs/microservices';
 import { fastifyPlugin } from 'inngest/fastify';
 
 import type { InngestStepTools } from './inngest.context';
+import { InngestContext } from './inngest.context';
 import type { InngestEvents } from './inngest.events';
+import { InngestEventsMap, InngestStatus } from './inngest.events';
 import {
   inngestFunctionId,
   inngestTriggers,
   MAX_TRIGGERS,
 } from './inngest-triggers';
-import { InngestContext } from './inngest.context';
-import { InngestEventsMap, InngestStatus } from './inngest.events';
 
 export const INNGEST_DEFAULT_SERVE_PATH = '/api/inngest';
 

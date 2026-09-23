@@ -1,9 +1,9 @@
-import type { ArgumentsHost } from '@nestjs/common';
 import {
   ForeignKeyConstraintViolationException,
   NotFoundError,
   UniqueConstraintViolationException,
 } from '@mikro-orm/core';
+import type { ArgumentsHost } from '@nestjs/common';
 
 import { MikroOrmExceptionFilter } from './mikro-orm-exception.filter';
 

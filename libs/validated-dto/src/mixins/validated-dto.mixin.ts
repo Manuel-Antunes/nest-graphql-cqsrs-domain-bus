@@ -1,9 +1,7 @@
+/** biome-ignore-all lint/suspicious/noExplicitAny: allow anys */
+/** biome-ignore-all lint/style/noNonNullAssertion: allow non null assetion */
 import 'reflect-metadata';
 
-import type {
-  ValidationArguments,
-  ValidatorConstraintInterface,
-} from 'class-validator';
 import {
   Expose,
   instanceToPlain,
@@ -11,24 +9,28 @@ import {
   TransformationType,
   Type,
 } from 'class-transformer';
+import type {
+  ValidationArguments,
+  ValidatorConstraintInterface,
+} from 'class-validator';
 import { Validate, ValidatorConstraint } from 'class-validator';
 import { z } from 'zod';
 
 import type { DECORATOR_REGISTRY_TYPE } from '../schemas/registries/decorators.registry';
+import { DECORATOR_REGISTRY as GLOBAL_DECORATOR_REGISTRY } from '../schemas/registries/decorators.registry';
 import type {
   EMBEDDED_REGISTRY_TYPE,
   EmbeddedBinding,
+} from '../schemas/registries/embedded.registry';
+import {
+  EMBEDDED_REGISTRY,
+  getEmbedded,
 } from '../schemas/registries/embedded.registry';
 import type {
   ScalarFieldOptions,
   ScalarValueObjectStatic,
   ValidatedScalarOptions,
 } from './validated-scalar.mixin';
-import { DECORATOR_REGISTRY as GLOBAL_DECORATOR_REGISTRY } from '../schemas/registries/decorators.registry';
-import {
-  EMBEDDED_REGISTRY,
-  getEmbedded,
-} from '../schemas/registries/embedded.registry';
 import { rawScalarValue, ValidatedScalar } from './validated-scalar.mixin';
 
 /**
@@ -43,7 +45,7 @@ import { rawScalarValue, ValidatedScalar } from './validated-scalar.mixin';
  * ```
  */
 export function InheritValidatedMetadata(): ClassDecorator {
-  return function (target: any) {
+  return (target: any) => {
     const parentClass = Object.getPrototypeOf(target);
     if (
       parentClass &&
@@ -150,6 +152,7 @@ function getDesignType(schema: z.ZodType<any>): any {
 
   if (unwrapped instanceof z.ZodDiscriminatedUnion) {
     const firstOption = Array.from(unwrapped.options.values())[0];
+
     return firstOption ? getDesignType(firstOption as z.ZodType<any>) : Object;
   }
 
@@ -295,7 +298,7 @@ const createObjectClass = <T extends z.ZodRawShape>(
       }
 
       for (const key of Object.keys(shape)) {
-        if ((this as any)[key] === undefined) {
+        if (this[key as keyof this] === undefined) {
           const fieldSchema = shape[key] as z.ZodType;
           const result = fieldSchema.safeParse(undefined);
           if (result.success && result.data !== undefined) {
@@ -455,7 +458,7 @@ const createObjectClass = <T extends z.ZodRawShape>(
   });
 
   const OriginalClass = GeneratedDto;
-  (OriginalClass as any).__copyMetadataToChild = function (childClass: any) {
+  (OriginalClass as any).__copyMetadataToChild = (childClass: any) => {
     const childProto = childClass.prototype;
     const parentProto = OriginalClass.prototype;
 
@@ -536,7 +539,7 @@ type DistributiveOmit<T, K extends PropertyKey> = T extends any
  * - ZodDiscriminatedUnion schemas (optimized)
  * - ZodUnion schemas (fallback)
  */
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type
+// biome-ignore lint/complexity/noBannedTypes: `object` would stop a top-level union DTO from accepting a scalar
 export function ValidatedDto<Schema extends z.ZodType<any>, Extras = {}>(
   schema: Schema,
   options?: ValidatedDtoOptions,
@@ -609,6 +612,7 @@ export function ValidatedDto<Schema extends z.ZodType<any>, Extras = {}>(
           const instance = new TargetClass(data);
           Object.assign(this, instance);
           Object.setPrototypeOf(this, TargetClass.prototype);
+          // biome-ignore lint/correctness/noConstructorReturn: the factory resolves the union member and substitutes the instance
           return this as any;
         }
 
@@ -648,9 +652,9 @@ export function ValidatedDto<Schema extends z.ZodType<any>, Extras = {}>(
     (DiscriminatedUnionFactory as any).__registry = DECORATOR_REGISTRY;
     (DiscriminatedUnionFactory as any).__allProperties = allProperties;
 
-    (DiscriminatedUnionFactory as any).__copyMetadataToChild = function (
+    (DiscriminatedUnionFactory as any).__copyMetadataToChild = (
       childClass: any,
-    ) {
+    ) => {
       const childProto = childClass.prototype;
       const parentProto = DiscriminatedUnionFactory.prototype;
 
@@ -727,12 +731,7 @@ export function ValidatedDto<Schema extends z.ZodType<any>, Extras = {}>(
         configurable: true,
       });
 
-      if (
-        !Object.prototype.hasOwnProperty.call(
-          PrimitiveUnionWrapper.prototype,
-          'value',
-        )
-      ) {
+      if (!Object.hasOwn(PrimitiveUnionWrapper.prototype, 'value')) {
         Object.defineProperty(PrimitiveUnionWrapper.prototype, 'value', {
           value: undefined,
           writable: true,
@@ -752,7 +751,7 @@ export function ValidatedDto<Schema extends z.ZodType<any>, Extras = {}>(
       WrapperClass.__schema = schema;
       WrapperClass.__registry = DECORATOR_REGISTRY;
 
-      WrapperClass.__copyMetadataToChild = function (childClass: any) {
+      WrapperClass.__copyMetadataToChild = (childClass: any) => {
         const childProto = childClass.prototype;
         const parentProto = PrimitiveUnionWrapper.prototype;
 
@@ -842,6 +841,7 @@ export function ValidatedDto<Schema extends z.ZodType<any>, Extras = {}>(
             const instance = new TargetClass(data);
             Object.assign(this, instance);
             Object.setPrototypeOf(this, TargetClass.prototype);
+            // biome-ignore lint/correctness/noConstructorReturn: the factory resolves the union member and substitutes the instance
             return this as any;
           }
         }
@@ -891,7 +891,7 @@ export function ValidatedDto<Schema extends z.ZodType<any>, Extras = {}>(
     UnionFactory.__intersectionKeys = intersectionKeys;
     UnionFactory.__firstShape = firstShape;
 
-    UnionFactory.__copyMetadataToChild = function (childClass: any) {
+    UnionFactory.__copyMetadataToChild = (childClass: any) => {
       const childProto = childClass.prototype;
       const parentProto = UnionBase.prototype;
 
@@ -1159,13 +1159,12 @@ export function Embeddable<Schema extends z.ZodObject<any>>(
         return cached;
       }
     }
-    const VO = this;
     const fieldSchema = z
       .unknown()
       .pipe(schema)
-      .transform((parsed) => new VO(parsed)) as unknown as z.ZodType;
+      .transform((parsed) => new this(parsed)) as unknown as z.ZodType;
 
-    EMBEDDED_REGISTRY.add(fieldSchema, { kind: 'object', target: VO });
+    EMBEDDED_REGISTRY.add(fieldSchema, { kind: 'object', target: this });
 
     if (decorators.length > 0) {
       (fieldOptions?.DECORATOR_REGISTRY ?? DECORATOR_REGISTRY).add(

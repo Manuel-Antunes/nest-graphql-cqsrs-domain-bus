@@ -1,11 +1,11 @@
-import type { QueryBus } from '@nestjs/cqrs';
 import { MikroORM } from '@mikro-orm/core';
+import type { QueryBus } from '@nestjs/cqrs';
 import { closeTestDatabase, testDatabase } from '@nestposts/database/testing';
 import { PostEntitySchema } from '@nestposts/posts/infrastructure/persistence/entities/post-orm.entity';
 import { TagSchema } from '@nestposts/posts/infrastructure/persistence/entities/tag-orm.entity';
 import {
-  Author,
   AUTHOR_ROLE,
+  Author,
   Authorship,
 } from '@nestposts/users/domain/user/author.entity';
 import { NotAnAuthorException } from '@nestposts/users/domain/user/exception/not-an-author.exception';

@@ -1,6 +1,6 @@
 import type { ExecutionContext } from '@nestjs/common';
-import type { AsyncContext } from '@nestjs/cqrs';
 import { Injectable } from '@nestjs/common';
+import type { AsyncContext } from '@nestjs/cqrs';
 
 import { RequestContextCodec } from '../request-context';
 import { envelopeFrom } from './event-reconstruction';

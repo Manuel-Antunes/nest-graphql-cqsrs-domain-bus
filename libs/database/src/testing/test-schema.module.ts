@@ -1,9 +1,9 @@
+import { MikroORM } from '@mikro-orm/core';
 import type {
   BeforeApplicationShutdown,
   DynamicModule,
   OnModuleInit,
 } from '@nestjs/common';
-import { MikroORM } from '@mikro-orm/core';
 import { Inject, Injectable, Module } from '@nestjs/common';
 
 import type { AnyMikroORM } from './test-database';

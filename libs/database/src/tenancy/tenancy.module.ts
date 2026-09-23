@@ -8,12 +8,12 @@ import type {
 import { Inject, Module } from '@nestjs/common';
 import { APP_INTERCEPTOR } from '@nestjs/core';
 
-import type { TenantResolverLike } from './tenant.resolver';
-import { TenantEntityManagers } from './tenant-entity-managers';
-import { SharedSchemaTenants, TenantSchemas } from './tenant-schemas';
 import { TenantInterceptor } from './tenant.interceptor';
 import { TenantMiddleware } from './tenant.middleware';
+import type { TenantResolverLike } from './tenant.resolver';
 import { TENANT_RESOLVER, TenantResolverProviders } from './tenant.resolver';
+import { TenantEntityManagers } from './tenant-entity-managers';
+import { SharedSchemaTenants, TenantSchemas } from './tenant-schemas';
 
 export interface TenancyOptions {
   /** Where a tenant's rows live. Default: {@link SharedSchemaTenants} — the connection's own schema. */

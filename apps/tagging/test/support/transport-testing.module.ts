@@ -1,6 +1,6 @@
 import { type DynamicModule } from '@nestjs/common';
 import { DatabaseModule } from '@nestposts/database';
-import { testSchema, TestSchemaModule } from '@nestposts/database/testing';
+import { TestSchemaModule, testSchema } from '@nestposts/database/testing';
 import { Post } from '@nestposts/posts/domain/post/post.entity';
 import { postsEntities } from '@nestposts/posts/infrastructure/posts-infrastructure.module';
 import {

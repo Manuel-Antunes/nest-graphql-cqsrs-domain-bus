@@ -55,7 +55,9 @@ describe('valueObjectType', () => {
     const em = orm.em.fork();
 
     const byValueObject = await em.findOne(Tag, { id });
-    const byRawText = await orm.em.fork().findOne(Tag, { id: id.value as any });
+    const byRawText = await orm.em
+      .fork()
+      .findOne(Tag, { id: id.value as unknown as TagId });
 
     expect(byValueObject?.id.equals(id)).toBe(true);
     expect(byRawText?.id.equals(id)).toBe(true);
@@ -102,6 +104,7 @@ describe('valueObjectType', () => {
     });
     const next = await orm.em.fork().findByCursor(Tag, {
       first: 1,
+      // biome-ignore lint/style/noNonNullAssertion: end cursor is guaranteed to exist because we just got a page with one item
       after: page.endCursor!,
       orderBy: { name: 'asc', id: 'asc' },
     });
@@ -129,15 +132,21 @@ describe('valueObjectType', () => {
     const TagIdType = valueObjectType(TagId, { columnType: 'varchar(36)' });
     const type = new TagIdType();
     const uuid = '5f7a1c7e-4d0b-4b7a-9e3c-1a2b3c4d5e6f';
+    // biome-ignore lint/suspicious/noExplicitAny: fix for test
     const platform = {} as any;
+    // biome-ignore lint/suspicious/noExplicitAny: fix for test
     const prop = {} as any;
 
     it('a coluna nula atravessa como nula nos dois sentidos', () => {
+      // biome-ignore lint/suspicious/noExplicitAny: it can be any type
       expect(type.convertToDatabaseValue(null as any, platform)).toBeNull();
       expect(type.convertToDatabaseValue(undefined, platform)).toBeUndefined();
+      // biome-ignore lint/suspicious/noExplicitAny: it can be any type
       expect(type.convertToJSValue(null as any, platform)).toBeNull();
       expect(type.convertToJSValue(undefined, platform)).toBeUndefined();
+      // biome-ignore lint/suspicious/noExplicitAny: it can be any type
       expect(type.toJSON(null as any, platform)).toBeNull();
+      // biome-ignore lint/suspicious/noExplicitAny: it can be any type
       expect((type as any).fromJSON(null, platform)).toBeNull();
     });
 
@@ -145,6 +154,7 @@ describe('valueObjectType', () => {
       expect(type.convertToDatabaseValue(TagId.parse(uuid), platform)).toBe(
         uuid,
       );
+      // biome-ignore lint/suspicious/noExplicitAny: fix for test
       expect(type.convertToDatabaseValue(uuid as any, platform)).toBe(uuid);
     });
 
@@ -152,7 +162,9 @@ describe('valueObjectType', () => {
       const already = TagId.parse(uuid);
 
       expect(type.convertToJSValue(uuid, platform)).toBeInstanceOf(TagId);
-      expect(type.convertToJSValue(already as any, platform)).toBe(already);
+      expect(
+        type.convertToJSValue(already as unknown as string, platform),
+      ).toBe(already);
     });
 
     it('hidratar não valida — é a escolha, não um descuido', () => {
@@ -160,12 +172,12 @@ describe('valueObjectType', () => {
     });
 
     it('o cursor de volta valida, ao contrário da hidratação', () => {
-      expect((type as any).fromJSON(uuid, platform)).toBeInstanceOf(TagId);
-      expect(() => (type as any).fromJSON('não é uuid', platform)).toThrow();
+      expect(type?.fromJSON?.(uuid, platform)).toBeInstanceOf(TagId);
+      expect(() => type?.fromJSON?.('não é uuid', platform)).toThrow();
     });
 
     it('serializar entrega o texto cru, e não o objeto', () => {
-      expect(type.toJSON(TagId.parse(uuid) as any, platform)).toBe(uuid);
+      expect(type.toJSON(TagId.parse(uuid), platform)).toBe(uuid);
     });
 
     it('o tipo da coluna e o modo de comparação vêm das opções', () => {

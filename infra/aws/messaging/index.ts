@@ -2,5 +2,5 @@
 
 import './routing';
 
-export { postEvents } from './topic';
 export { completed, taggingEvents } from './queues';
+export { postEvents } from './topic';

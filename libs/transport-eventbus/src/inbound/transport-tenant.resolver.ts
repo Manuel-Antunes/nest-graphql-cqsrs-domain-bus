@@ -1,10 +1,10 @@
 import type { ExecutionContext } from '@nestjs/common';
-import type { AsyncContext } from '@nestjs/cqrs';
 import { Injectable } from '@nestjs/common';
+import type { AsyncContext } from '@nestjs/cqrs';
 import {
   HeaderTenantResolver,
-  Tenant,
   TENANT_HEADER,
+  Tenant,
 } from '@nestposts/database';
 
 import type { ContextAttributes } from '../request-context';

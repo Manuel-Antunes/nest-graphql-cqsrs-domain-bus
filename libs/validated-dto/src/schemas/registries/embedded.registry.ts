@@ -13,7 +13,9 @@ import { z } from 'zod';
 export interface EmbeddedBinding {
   kind: 'scalar' | 'object';
   /** The concrete class — the one `field()` was called on, not the base the mixin generated. */
-  target: abstract new (...args: any[]) => any;
+  target: abstract new <Args extends unknown[], T>(
+    ...args: Args
+  ) => T;
 }
 
 export type EMBEDDED_REGISTRY_TYPE = z.core.$ZodRegistry<

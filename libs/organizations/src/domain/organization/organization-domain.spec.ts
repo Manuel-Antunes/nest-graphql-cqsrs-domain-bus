@@ -1,6 +1,6 @@
-import type { AnyMikroORM } from '@nestposts/database/testing';
 import { ref } from '@mikro-orm/core';
 import { AuthUser } from '@nestposts/auth/domain/auth/auth-user.entity';
+import type { AnyMikroORM } from '@nestposts/database/testing';
 import { metadataOnly } from '@nestposts/database/testing';
 import { CredentialId } from '@nestposts/users/domain/user/vo/credential-id';
 import { Email } from '@nestposts/users/domain/user/vo/email';

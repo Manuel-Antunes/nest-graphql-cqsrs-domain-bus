@@ -1,10 +1,10 @@
 import 'reflect-metadata';
 import 'server-only';
 
-import type { EntityManager } from '@mikro-orm/core';
-import type { INestApplicationContext, Type } from '@nestjs/common';
 import { headers } from 'next/headers';
+import type { EntityManager } from '@mikro-orm/core';
 import { MikroORM } from '@mikro-orm/core';
+import type { INestApplicationContext, Type } from '@nestjs/common';
 import { ContextIdFactory, NestFactory } from '@nestjs/core';
 import { inRequestContext } from '@nestposts/database';
 
@@ -16,14 +16,19 @@ import { WebAppModule } from './app.module';
  * constructor, so the abstract shape is spelled out here rather than cast at each call site.
  */
 type Token<T> =
-  Type<T> | (abstract new (...args: never[]) => T) | string | symbol;
+  | Type<T>
+  | (abstract new (
+      ...args: never[]
+    ) => T)
+  | string
+  | symbol;
 
 const cache = globalThis as unknown as {
-  __nestposts_web?: Promise<INestApplicationContext>;
+  __nestposts_web?: WeakMap<object, Promise<INestApplicationContext>>;
 };
 
 /**
- * **The Nest container, booted once and kept on `globalThis`.**
+ * **The Nest container, booted once per copy of Nest and kept on `globalThis`.**
  *
  * Once, because building it opens a database connection and constructs Better Auth; and on
  * `globalThis` rather than a module-level slot because Next re-evaluates modules on every change in
@@ -31,14 +36,16 @@ const cache = globalThis as unknown as {
  */
 export class Nest {
   static context(): Promise<INestApplicationContext> {
-    cache.__nestposts_web ??= NestFactory.createApplicationContext(
-      WebAppModule,
-      {
+    cache.__nestposts_web ??= new WeakMap();
+    let context = cache.__nestposts_web.get(NestFactory);
+    if (!context) {
+      context = NestFactory.createApplicationContext(WebAppModule, {
         logger: ['error', 'warn'],
         abortOnError: false,
-      },
-    );
-    return cache.__nestposts_web;
+      });
+      cache.__nestposts_web.set(NestFactory, context);
+    }
+    return context;
   }
 
   /** A singleton provider, for what does not belong to a request — the Better Auth instance itself. */

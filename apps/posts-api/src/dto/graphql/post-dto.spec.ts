@@ -109,7 +109,7 @@ describe('DTOs do protocolo', () => {
 
   describe('CreatePostInput', () => {
     it('materializa os args crus que o Nest entrega', () => {
-      const args = { title: '  Nest + GraphQL  ', content: 'oi' } as any;
+      const args = { title: '  Nest + GraphQL  ', content: 'oi' };
 
       const input = new CreatePostInput(args);
 
@@ -119,14 +119,14 @@ describe('DTOs do protocolo', () => {
     });
 
     it('não lança num valor inválido — quem valida é o domínio', () => {
-      const input = new CreatePostInput({ title: '   ', content: 'oi' } as any);
+      const input = new CreatePostInput({ title: '   ', content: 'oi' });
 
       expect(input.title.isValid()).toBe(false);
       expect(input.title.value).toBe('   ');
     });
 
     it('reconstruir um DTO já montado é idempotente', () => {
-      const input = new CreatePostInput({ title: 'Olá', content: 'oi' } as any);
+      const input = new CreatePostInput({ title: 'Olá', content: 'oi' });
 
       const again = new CreatePostInput(input);
 
@@ -136,7 +136,7 @@ describe('DTOs do protocolo', () => {
 
   describe('UpdatePostInput', () => {
     it('deixa passar os campos ausentes como "manter o valor atual"', () => {
-      const input = new UpdatePostInput({ id } as any);
+      const input = new UpdatePostInput({ id });
 
       expect(input.id).toBeInstanceOf(PostId);
       expect(input.title).toBeUndefined();
@@ -148,14 +148,14 @@ describe('DTOs do protocolo', () => {
         id,
         title: null,
         content: 'novo',
-      } as any);
+      });
 
       expect(input.title).toBeNull();
       expect(input.content).toBeInstanceOf(PostContent);
     });
 
     it('um id que não é uuid não passa do assertValid', () => {
-      const input = new UpdatePostInput({ id: 'não é uuid' } as any);
+      const input = new UpdatePostInput({ id: 'não é uuid' });
 
       expect(() => input.id.assertValid()).toThrow();
     });

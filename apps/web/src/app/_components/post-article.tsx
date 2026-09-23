@@ -1,9 +1,9 @@
-import type { FragmentType } from '@/gql';
 import { AuthorByline } from '@/app/_components/author-byline';
 import { RelativeTime } from '@/app/_components/relative-time';
 import { TagList } from '@/app/_components/tag-list';
 import { VersionBadge } from '@/app/_components/version-badge';
 import { Separator } from '@/components/ui/separator';
+import type { FragmentType } from '@/gql';
 import { getFragmentData, graphql } from '@/gql';
 
 export const PostArticle_post = graphql(`
@@ -33,16 +33,16 @@ export function PostArticle({
       <header className="space-y-3">
         <div className="flex flex-wrap items-center gap-3">
           <VersionBadge version={data.version} />
-          <span className="font-mono text-xs text-muted-foreground">
+          <span className="font-mono text-muted-foreground text-xs">
             {data.id}
           </span>
         </div>
-        <h1 className="text-2xl font-semibold tracking-tight text-balance">
+        <h1 className="text-balance font-semibold text-2xl tracking-tight">
           {data.title}
         </h1>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <AuthorByline author={data.author} />
-          <div className="text-xs text-muted-foreground">
+          <div className="text-muted-foreground text-xs">
             criado <RelativeTime iso={data.createdAt} /> · atualizado{' '}
             <RelativeTime iso={data.updatedAt} />
           </div>
@@ -52,7 +52,7 @@ export function PostArticle({
 
       <Separator />
 
-      <div className="text-sm leading-relaxed whitespace-pre-wrap">
+      <div className="whitespace-pre-wrap text-sm leading-relaxed">
         {data.content}
       </div>
     </article>

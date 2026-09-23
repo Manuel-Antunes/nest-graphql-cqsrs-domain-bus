@@ -1,8 +1,8 @@
 import type { ReadPacket } from '@nestjs/microservices';
 
 import type { AwsEnvelopeMessage } from '../../aws/aws-message';
-import type { EventEnvelope } from '../event-envelope';
 import { routingAttributesOf } from '../../aws/aws-message';
+import type { EventEnvelope } from '../event-envelope';
 import { EventEnvelopeSerializer } from './event-envelope.serializer';
 
 /**

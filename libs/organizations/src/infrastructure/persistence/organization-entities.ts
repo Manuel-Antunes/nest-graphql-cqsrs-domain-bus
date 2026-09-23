@@ -1,5 +1,5 @@
-import type { EntitySchema } from '@nestposts/database';
 import { BetterAuthEntities } from '@nestposts/auth/infrastructure/persistence/auth-entities';
+import type { EntitySchema } from '@nestposts/database';
 
 import { InvitationNotifier } from '../../domain/organization/invitation.notifier';
 import { organizationAuthPluginProviders } from '../better-auth/organization-better-auth.plugin';

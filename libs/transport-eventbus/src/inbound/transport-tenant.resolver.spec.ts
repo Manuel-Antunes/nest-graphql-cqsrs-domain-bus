@@ -8,8 +8,8 @@ import {
   TRANSPORT_ORIGIN,
 } from '../outbound/event-envelope';
 import {
-  CorrelatedRequestContext,
   CORRELATION_ID,
+  CorrelatedRequestContext,
   TransportRequestContext,
 } from '../request-context';
 import { IncomingRequest } from './incoming-request';

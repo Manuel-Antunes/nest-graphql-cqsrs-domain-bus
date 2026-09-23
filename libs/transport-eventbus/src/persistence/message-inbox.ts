@@ -143,7 +143,6 @@ const rowsIn = (result: unknown): number => {
     (Array.isArray(result)
       ? (result[0] as Record<string, unknown>)
       : (result as Record<string, unknown>)) ?? {};
-  const affected =
-    outcome['affectedRows'] ?? outcome['changes'] ?? outcome['rowCount'];
+  const affected = outcome.affectedRows ?? outcome.changes ?? outcome.rowCount;
   return typeof affected === 'number' ? affected : 0;
 };

@@ -1,5 +1,5 @@
-import type { Context as LambdaContext, SQSRecord } from 'aws-lambda';
 import { BaseRpcContext } from '@nestjs/microservices';
+import type { Context as LambdaContext, SQSRecord } from 'aws-lambda';
 
 import type { EnvelopeMetadata } from '../outbound/event-envelope';
 

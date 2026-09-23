@@ -1,11 +1,10 @@
 import type { EntityManager } from '@mikro-orm/core';
-import type { IEvent } from '@nestjs/cqrs';
-import type { Observable } from 'rxjs';
 import { MikroORM, RequestContext } from '@mikro-orm/core';
+import type { IEvent } from '@nestjs/cqrs';
 import { EventBus, ofType, Saga } from '@nestjs/cqrs';
-import { inRequestContext } from '@nestposts/database';
 import { closeTestDatabase, testDatabase } from '@nestposts/database/testing';
 import { EventType } from '@nestposts/platform/domain/shared/event-type';
+import type { Observable } from 'rxjs';
 import { EMPTY, firstValueFrom, map, timeout } from 'rxjs';
 
 import { EventEnvelopeFactory } from '../outbound/event-envelope.factory';
@@ -36,12 +35,12 @@ class UserRegisteredEvent {
 describe('the EventBus, event sourced', () => {
   let orm: MikroORM;
   let log: MikroOrmEventLog;
-  let envelopes: EventEnvelopeFactory;
+  let _envelopes: EventEnvelopeFactory;
 
   beforeAll(async () => {
     orm = await testDatabase({ entities: [...eventLogEntities] });
     log = new MikroOrmEventLog(orm.em);
-    envelopes = new EventEnvelopeFactory(
+    _envelopes = new EventEnvelopeFactory(
       TransportIdentity.named('posts-api'),
       new CorrelatedRequestContext(),
     );
@@ -181,8 +180,7 @@ describe('the EventBus, event sourced', () => {
       const executed: unknown[] = [];
       const commandBus = {
         execute: (command: unknown) => (
-          executed.push(command),
-          Promise.resolve()
+          executed.push(command), Promise.resolve()
         ),
       };
 

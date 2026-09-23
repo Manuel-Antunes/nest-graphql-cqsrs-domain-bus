@@ -1,7 +1,7 @@
-import type { AsyncContext, ICommandHandler } from '@nestjs/cqrs';
 import { AutoMap } from '@automapper/classes';
 import { Inject, Scope } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
+import type { AsyncContext, ICommandHandler } from '@nestjs/cqrs';
 import { Command, CommandHandler, EventPublisher } from '@nestjs/cqrs';
 import { PostNotFoundException } from '@nestposts/posts/domain/post/exception/post-not-found.exception';
 import { PostRepository } from '@nestposts/posts/domain/post/post.repository';

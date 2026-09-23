@@ -14,7 +14,9 @@ import type { ISubscription } from './subscription.interface';
  * When the message extends `Subscription<TEvent>`, the event type is inferred from it and the returned
  * `Observable<TEvent>` is checked by the compiler.
  */
+// biome-ignore lint/suspicious/noExplicitAny: subscriptions can be of any type
 export type ISubscriptionHandler<T extends ISubscription = any, TEvent = any> =
+  // biome-ignore lint/suspicious/noExplicitAny: subscriptions can be of any type
   T extends Subscription<infer InferredEvent, any>
     ? {
         /**

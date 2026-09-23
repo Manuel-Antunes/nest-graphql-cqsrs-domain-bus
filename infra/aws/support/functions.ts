@@ -424,7 +424,9 @@ export class Migrator extends NodeFunction {
 class Fingerprint {
   static of(paths: readonly string[]): string {
     const digest = createHash('sha256');
-    [...paths].sort().forEach((path) => Fingerprint.absorb(digest, path));
+    [...paths].sort().forEach((path) => {
+      Fingerprint.absorb(digest, path);
+    });
     return digest.digest('hex').slice(0, 32);
   }
 

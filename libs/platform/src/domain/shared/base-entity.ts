@@ -1,7 +1,7 @@
 import {
   BaseEntity as OrmBaseEntity,
-  ref,
   ReferenceKind,
+  ref,
   rel,
   Utils,
 } from '@mikro-orm/core';

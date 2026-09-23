@@ -9,8 +9,8 @@ import { AuthorshipEntitySchema } from '@nestposts/users/infrastructure/persiste
 
 import { InvalidPostException } from '../../../domain/post/exception/invalid-post.exception';
 import { Post } from '../../../domain/post/post.entity';
-import { POST_TITLE_MAX_LENGTH } from '../../../domain/post/schemas/post-title.schema';
 import { PostSchema } from '../../../domain/post/schemas/post.schema';
+import { POST_TITLE_MAX_LENGTH } from '../../../domain/post/schemas/post-title.schema';
 import { PostContent } from '../../../domain/post/vo/post-content';
 import { PostId } from '../../../domain/post/vo/post-id';
 import { PostTitle } from '../../../domain/post/vo/post-title';

@@ -21,7 +21,7 @@ export function ErrorNotice({
       <TriangleAlertIcon />
       <AlertTitle>{title}</AlertTitle>
       <AlertDescription>
-        <span className="font-mono text-xs break-all">{message}</span>
+        <span className="break-all font-mono text-xs">{message}</span>
       </AlertDescription>
     </Alert>
   );

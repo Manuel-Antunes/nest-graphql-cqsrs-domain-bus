@@ -1,9 +1,9 @@
-import type { ICommand, IEvent } from '@nestjs/cqrs';
-import type { Observable } from 'rxjs';
 import { Injectable, Logger } from '@nestjs/common';
-import { AsyncContext, CommandBus, ofType, Saga } from '@nestjs/cqrs';
+import type { ICommand, IEvent } from '@nestjs/cqrs';
+import { AsyncContext, ofType, Saga } from '@nestjs/cqrs';
 import { PostPreCreatedEvent } from '@nestposts/posts/domain/post/event/post-pre-created.event';
 import { PostId } from '@nestposts/posts/domain/post/vo/post-id';
+import type { Observable } from 'rxjs';
 import { map } from 'rxjs';
 
 import { CompletePostWithDefaultTagCommand } from './complete-post-with-default-tag.command';
@@ -11,8 +11,6 @@ import { CompletePostWithDefaultTagCommand } from './complete-post-with-default-
 @Injectable()
 export class CompleteOnPostPreCreated {
   private readonly logger = new Logger(CompleteOnPostPreCreated.name);
-
-  constructor(private readonly commandBus: CommandBus) {}
 
   @Saga()
   completeOnPostPreCreated = (

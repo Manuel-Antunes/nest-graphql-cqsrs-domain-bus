@@ -34,7 +34,9 @@ export interface IncomingEnvelope {
  * The pattern is left exactly as it arrived — on RabbitMQ the routing key — so `@EventPattern` and its
  * wildcards keep matching as the transporter intends.
  */
-export abstract class EventEnvelopeDeserializer implements ConsumerDeserializer {
+export abstract class EventEnvelopeDeserializer
+  implements ConsumerDeserializer
+{
   deserialize(
     value: unknown,
     options?: Record<string, unknown>,

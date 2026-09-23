@@ -1,5 +1,5 @@
-import { InMemoryCache } from '@apollo/client-integration-nextjs';
 import { relayStylePagination } from '@apollo/client/utilities';
+import { InMemoryCache } from '@apollo/client-integration-nextjs';
 
 import generatedIntrospection from '@/gql/possible-types';
 

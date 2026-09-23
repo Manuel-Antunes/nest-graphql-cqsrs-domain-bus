@@ -9,8 +9,8 @@ import {
   useState,
 } from 'react';
 
-import type { Session } from '@/lib/auth/session';
 import { refreshSession } from '@/app/actions/auth';
+import type { Session } from '@/lib/auth/session';
 import { isAuthor as hasAuthorRole } from '@/lib/auth/session';
 
 interface SessionContextValue {

@@ -1,12 +1,12 @@
 import type { EntitySchema } from '@nestposts/database';
 import type { BetterAuthPlugin } from 'better-auth';
 
+import { AuthConfiguration } from '../better-auth/config';
+import { BetterAuthInstance } from '../better-auth/init-auth';
 import type {
   BetterAuthPluginProvider,
   PluginDependencies,
 } from '../better-auth/plugins/registry';
-import { AuthConfiguration } from '../better-auth/config';
-import { BetterAuthInstance } from '../better-auth/init-auth';
 import { BetterAuthPlugins } from '../better-auth/plugins/registry';
 import { BetterAuthSchema } from '../better-auth/schema';
 import { BETTER_AUTH_CONFIG } from '../better-auth/tokens';

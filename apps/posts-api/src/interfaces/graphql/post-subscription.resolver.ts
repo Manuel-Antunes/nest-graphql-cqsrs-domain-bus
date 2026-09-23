@@ -1,6 +1,6 @@
 import { UseInterceptors } from '@nestjs/common';
 import { Args, Resolver, Subscription } from '@nestjs/graphql';
-import { subscribeAsAsyncIterable, SubscriptionBus } from '@nestposts/cqsrs';
+import { SubscriptionBus, subscribeAsAsyncIterable } from '@nestposts/cqsrs';
 import { PostCreatedEvent } from '@nestposts/posts/domain/post/event/post-created.event';
 import { PostUpdatedEvent } from '@nestposts/posts/domain/post/event/post-updated.event';
 import { AllowAnonymous } from '@thallesp/nestjs-better-auth';

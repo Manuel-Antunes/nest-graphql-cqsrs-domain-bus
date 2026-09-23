@@ -1,6 +1,6 @@
 import type { EnvelopeMetadata } from '../../outbound/event-envelope';
-import type { IncomingEnvelope } from './event-envelope.deserializer';
 import { EventEnvelope } from '../../outbound/event-envelope';
+import type { IncomingEnvelope } from './event-envelope.deserializer';
 import { EventEnvelopeDeserializer } from './event-envelope.deserializer';
 
 /**
@@ -23,7 +23,7 @@ export class MemoryEventEnvelopeDeserializer extends EventEnvelopeDeserializer {
     const body = message.data ?? {};
 
     return {
-      pattern: String(message.pattern ?? options?.['channel'] ?? ''),
+      pattern: String(message.pattern ?? options?.channel ?? ''),
       envelope: new EventEnvelope(body.data ?? {}, body.metadata ?? {}),
     };
   }

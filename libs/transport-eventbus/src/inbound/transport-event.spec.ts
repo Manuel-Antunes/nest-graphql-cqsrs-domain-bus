@@ -1,6 +1,6 @@
-import type { ICommandHandler } from '@nestjs/cqrs';
 import { Controller, Inject, Injectable, Scope } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
+import type { ICommandHandler } from '@nestjs/cqrs';
 import {
   AsyncContext,
   Command,

@@ -59,7 +59,8 @@ export const publisherNamespacesOf = (
   const target =
     typeof publisher === 'function' ? publisher : publisher.constructor;
   const declared = Reflect.getMetadata(Publisher.KEY, target) as
-    PublishedNamespaces | undefined;
+    | PublishedNamespaces
+    | undefined;
   return declared === undefined ? undefined : namespacesIn(declared);
 };
 

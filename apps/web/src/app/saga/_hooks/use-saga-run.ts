@@ -13,7 +13,12 @@ export interface SagaEvent {
 }
 
 export type SagaStatus =
-  'idle' | 'creating' | 'waiting' | 'closed' | 'timeout' | 'error';
+  | 'idle'
+  | 'creating'
+  | 'waiting'
+  | 'closed'
+  | 'timeout'
+  | 'error';
 
 const POLL_INTERVAL_MS = 1_000;
 const TIMEOUT_MS = 180_000;
@@ -27,7 +32,12 @@ export function useSagaRun() {
   const startedAt = useRef<number>(0);
   const cancelled = useRef(false);
 
-  useEffect(() => () => void (cancelled.current = true), []);
+  useEffect(
+    () => () => {
+      cancelled.current = true;
+    },
+    [],
+  );
 
   const push = useCallback((event: Omit<SagaEvent, 'at'>) => {
     setEvents((current) => [

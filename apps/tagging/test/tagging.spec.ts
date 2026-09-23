@@ -1,4 +1,3 @@
-import type { InProcessService } from '@nestposts/transport-eventbus/testing';
 import { MikroORM } from '@mikro-orm/core';
 import { Test } from '@nestjs/testing';
 import { inRequestContext } from '@nestposts/database';
@@ -11,9 +10,9 @@ import {
   DEFAULT_TAG_NAME,
 } from '@nestposts/posts/domain/tag/tag.entity';
 import {
-  envelopeFrom,
   EventEnvelope,
   EventSourcedRepository,
+  envelopeFrom,
   MemoryClient,
   MemoryEventEnvelopeSerializer,
   MessageInbox,
@@ -24,6 +23,7 @@ import {
   TRANSPORT_TAGS,
   TRANSPORT_TIMESTAMP,
 } from '@nestposts/transport-eventbus';
+import type { InProcessService } from '@nestposts/transport-eventbus/testing';
 import {
   RecordingClient,
   startInProcessService,

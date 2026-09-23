@@ -3,7 +3,7 @@ import { inRequestContext } from '@nestposts/database';
 import { closeTestDatabase, testDatabase } from '@nestposts/database/testing';
 
 import { MikroOrmMessageInbox } from './message-inbox';
-import { transportEntities, TransportMessage } from './message-inbox.entity';
+import { TransportMessage, transportEntities } from './message-inbox.entity';
 
 describe('MessageInbox', () => {
   let orm: MikroORM;

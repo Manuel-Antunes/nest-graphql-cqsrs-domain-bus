@@ -1,19 +1,19 @@
-import type { Observable } from 'rxjs';
 import { Injectable, Logger } from '@nestjs/common';
 import { DiscoveryService } from '@nestjs/core';
 import { ClientProxy } from '@nestjs/microservices';
+import type { Observable } from 'rxjs';
 import { defer, from, map } from 'rxjs';
 
 import type { PublishedNamespaces } from '../decorators/publisher.decorator';
-import type { ITransportPublisherEventBus } from '../interfaces/transport-publisher.interface';
-import type { EventAddress } from './event-address';
-import type { EventEnvelope } from './event-envelope';
 import {
   EVERY_NAMESPACE,
   namespacesIn,
   Publisher,
   publisherNamespacesOf,
 } from '../decorators/publisher.decorator';
+import type { ITransportPublisherEventBus } from '../interfaces/transport-publisher.interface';
+import type { EventAddress } from './event-address';
+import type { EventEnvelope } from './event-envelope';
 
 /** A destination already resolved: what it is called, what it takes, and the client it sends on. */
 export class Route {
@@ -140,8 +140,8 @@ export class OutboxRouting {
           String(wrapper.name ?? 'a publisher');
         const namespaces =
           (this.discovery.getMetadataByDecorator(Publisher, wrapper) as
-            PublishedNamespaces | undefined) ??
-          publisherNamespacesOf(wrapper.instance as object);
+            | PublishedNamespaces
+            | undefined) ?? publisherNamespacesOf(wrapper.instance as object);
 
         if (namespaces === undefined || namespacesIn(namespaces).length === 0) {
           throw new Error(

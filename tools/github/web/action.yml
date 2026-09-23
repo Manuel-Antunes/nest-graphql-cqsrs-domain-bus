@@ -3,12 +3,12 @@ description: 'The STATIC checks of every project, plus the build of the Next.js 
 runs:
   using: composite
   steps:
-    - name: Check formatting
-      run: pnpm format:check
+    - name: Format and lint the whole repository
+      run: pnpm lint
       shell: bash
 
-    - name: Lint and typecheck every project
-      run: npx nx run-many -t lint typecheck
+    - name: Typecheck every project
+      run: npx nx run-many -t typecheck
       shell: bash
 
     - name: Build the web client

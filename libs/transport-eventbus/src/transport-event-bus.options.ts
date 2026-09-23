@@ -18,10 +18,8 @@ export type DeclaredIdentity = TransportIdentity | string;
  * that has no sensible default — it is the mark of authorship every message carries, and the inbound
  * half's answer to "did I send this?".
  */
-export interface TransportEventBusModuleOptions extends Pick<
-  ModuleMetadata,
-  'imports' | 'providers' | 'exports'
-> {
+export interface TransportEventBusModuleOptions
+  extends Pick<ModuleMetadata, 'imports' | 'providers' | 'exports'> {
   /**
    * `'posts-api'`, or a {@link TransportIdentity} of its own
    * (`TransportIdentity.silent('posts-api-spec')` for a suite).
@@ -89,10 +87,8 @@ export interface TransportEventBusIdentity {
  * `ConfigService` is an ordinary `useFactory`). What cannot wait is module metadata, which Nest reads
  * before anything is instantiated.
  */
-export interface TransportEventBusModuleAsyncOptions extends Omit<
-  TransportEventBusModuleOptions,
-  'identity' | 'publishes'
-> {
+export interface TransportEventBusModuleAsyncOptions
+  extends Omit<TransportEventBusModuleOptions, 'identity' | 'publishes'> {
   readonly inject?: any[];
   readonly useFactory: (
     ...args: any[]

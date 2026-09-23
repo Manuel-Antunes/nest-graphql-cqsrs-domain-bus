@@ -1,17 +1,19 @@
 import type { Mapper, ModelIdentifier } from '@automapper/core';
+import { InjectMapper } from '@automapper/nestjs';
 import type {
   CallHandler,
   ExecutionContext,
   NestInterceptor,
   Type,
 } from '@nestjs/common';
-import type { Observable } from 'rxjs';
-import { InjectMapper } from '@automapper/nestjs';
 import { mixin } from '@nestjs/common';
+import type { Observable } from 'rxjs';
 import { map } from 'rxjs';
 
 export const MapSubscriptionInterceptor = <
+  // biome-ignore lint/suspicious/noExplicitAny: it can be in any type
   TSource extends Record<string, any>,
+  // biome-ignore lint/suspicious/noExplicitAny: it can be in any type
   TDestination extends Record<string, any>,
 >(
   from: ModelIdentifier<TSource>,

@@ -1,19 +1,17 @@
 import { test as base, expect } from '@playwright/test';
 
 import type { Account, Accounts } from '../support/accounts';
-import type { ExecuteGraphql } from '../support/graphql';
-import type { Messages } from '../support/messages';
 import { Broker } from '../support/broker';
 import { ServiceDatabase } from '../support/database';
+import type { ExecuteGraphql } from '../support/graphql';
 import { graphqlExecutor } from '../support/graphql';
+import type { Messages } from '../support/messages';
 import { messagesOf } from '../support/messages';
 import { PostsApi } from '../support/posts-api';
 import { RunningStack } from '../support/running-stack';
 import { POSTS_SCHEMA, TAGGING_SCHEMA } from '../support/stack';
 
-export interface SignIn {
-  (account: Account): Promise<void>;
-}
+export type SignIn = (account: Account) => Promise<void>;
 
 export type { ExecuteGraphql, GraphQlAnswer } from '../support/graphql';
 

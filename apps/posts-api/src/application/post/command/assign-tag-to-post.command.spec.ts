@@ -1,5 +1,5 @@
-import type { TestingModule } from '@nestjs/testing';
 import { CommandBus } from '@nestjs/cqrs';
+import type { TestingModule } from '@nestjs/testing';
 import { PostUpdatedEvent } from '@nestposts/posts/domain/post/event/post-updated.event';
 import { InvalidPostException } from '@nestposts/posts/domain/post/exception/invalid-post.exception';
 import { PostNotFoundException } from '@nestposts/posts/domain/post/exception/post-not-found.exception';

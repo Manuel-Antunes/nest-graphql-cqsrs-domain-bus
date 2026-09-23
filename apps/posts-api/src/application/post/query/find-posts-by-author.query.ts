@@ -1,9 +1,9 @@
-import type { IQueryHandler } from '@nestjs/cqrs';
-import type { Post } from '@nestposts/posts/domain/post/post.entity';
-import type { UserId } from '@nestposts/users/domain/user/vo/user-id';
 import { type Cursor } from '@mikro-orm/core';
+import type { IQueryHandler } from '@nestjs/cqrs';
 import { Query, QueryHandler } from '@nestjs/cqrs';
+import type { Post } from '@nestposts/posts/domain/post/post.entity';
 import { PostRepository } from '@nestposts/posts/domain/post/post.repository';
+import type { UserId } from '@nestposts/users/domain/user/vo/user-id';
 
 import { FindAllPostsQuery } from './find-all-posts.query';
 

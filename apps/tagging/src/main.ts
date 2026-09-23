@@ -1,9 +1,9 @@
 import './telemetry';
 
-import type { MicroserviceOptions } from '@nestjs/microservices';
-import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import type { MicroserviceOptions } from '@nestjs/microservices';
+import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { FastifyAdapter } from '@nestjs/platform-fastify';
 import { Logger as PinoLogger } from 'nestjs-pino';
 

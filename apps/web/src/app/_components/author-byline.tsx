@@ -1,5 +1,5 @@
-import type { FragmentType } from '@/gql';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import type { FragmentType } from '@/gql';
 import { getFragmentData, graphql } from '@/gql';
 
 export const AuthorByline_author = graphql(`
@@ -33,8 +33,8 @@ export function AuthorByline({
           </AvatarFallback>
         </Avatar>
         <div className="leading-tight">
-          <div className="text-sm font-medium">{name}</div>
-          <div className="text-xs text-muted-foreground">{email}</div>
+          <div className="font-medium text-sm">{name}</div>
+          <div className="text-muted-foreground text-xs">{email}</div>
         </div>
       </div>
     </div>

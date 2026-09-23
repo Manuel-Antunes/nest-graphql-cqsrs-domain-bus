@@ -1,25 +1,22 @@
 import type { Mapper } from '@automapper/core';
-import type { Ref } from '@mikro-orm/core';
-import type { DelegatedRef } from '@nestposts/platform/domain/shared/delegation/delegate';
 import { createMapper } from '@automapper/core';
-import { MikroORM, ref } from '@mikro-orm/core';
+import { MikroORM } from '@mikro-orm/core';
 import { closeTestDatabase, testDatabase } from '@nestposts/database/testing';
+import type { DelegatedRef } from '@nestposts/platform/domain/shared/delegation/delegate';
 import { delegateRef } from '@nestposts/platform/domain/shared/delegation/delegate';
 import { PostCreatedEvent } from '@nestposts/posts/domain/post/event/post-created.event';
 import { PostPreCreatedEvent } from '@nestposts/posts/domain/post/event/post-pre-created.event';
 import { PostUpdatedEvent } from '@nestposts/posts/domain/post/event/post-updated.event';
 import { Post } from '@nestposts/posts/domain/post/post.entity';
-import { PostContent } from '@nestposts/posts/domain/post/vo/post-content';
 import { PostId } from '@nestposts/posts/domain/post/vo/post-id';
 import { PostTitle } from '@nestposts/posts/domain/post/vo/post-title';
 import { Tag } from '@nestposts/posts/domain/tag/tag.entity';
 import { TagId } from '@nestposts/posts/domain/tag/vo/tag-id';
-import { TagName } from '@nestposts/posts/domain/tag/vo/tag-name';
 import { PostEntitySchema } from '@nestposts/posts/infrastructure/persistence/entities/post-orm.entity';
 import { TagSchema } from '@nestposts/posts/infrastructure/persistence/entities/tag-orm.entity';
 import {
-  Author,
   AUTHOR_ROLE,
+  Author,
   Authorship,
 } from '@nestposts/users/domain/user/author.entity';
 import { User } from '@nestposts/users/domain/user/user.entity';

@@ -1,5 +1,5 @@
-import type { DomainEvent } from '@nestposts/platform/domain/shared/domain-event';
 import { AutoMap } from '@automapper/classes';
+import type { DomainEvent } from '@nestposts/platform/domain/shared/domain-event';
 import { EventType } from '@nestposts/platform/domain/shared/event-type';
 
 import type { AssignedTag } from './assigned-tag';

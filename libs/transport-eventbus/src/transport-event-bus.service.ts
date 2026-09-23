@@ -1,4 +1,5 @@
 import type { OnModuleDestroy } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import type { InstanceWrapper } from '@nestjs/core/injector/instance-wrapper';
 import type {
   IEvent,
@@ -6,7 +7,6 @@ import type {
   IEventHandler,
   IEventPublisher,
 } from '@nestjs/cqrs';
-import { Injectable, Logger, Optional } from '@nestjs/common';
 import { AsyncContext, EventBus } from '@nestjs/cqrs';
 import { UnitOfWork } from '@nestposts/cqsrs';
 import { lastValueFrom, merge } from 'rxjs';
@@ -99,7 +99,9 @@ export class TransportEventBusService implements IEventBus, OnModuleDestroy {
      * given has been cleared — the command succeeds, appends nothing and tells nobody.
      */
     const staged = [...(events ?? [])];
-    staged.forEach((event) => this.attach(event as object, context));
+    staged.forEach((event) => {
+      this.attach(event as object, context);
+    });
 
     const unit = UnitOfWork.current();
     if (unit?.staging) {

@@ -1,6 +1,6 @@
 import { join } from 'node:path';
-import type { YogaFederationDriverConfig } from '@graphql-yoga/nestjs-federation';
 import { AutomapperModule } from '@automapper/nestjs';
+import type { YogaFederationDriverConfig } from '@graphql-yoga/nestjs-federation';
 import { YogaFederationDriver } from '@graphql-yoga/nestjs-federation';
 import { Module } from '@nestjs/common';
 import { GraphQLISODateTime, GraphQLModule } from '@nestjs/graphql';

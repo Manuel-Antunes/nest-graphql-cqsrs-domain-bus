@@ -62,7 +62,7 @@ export default async function LoginPage() {
             <LoginForm />
           </Suspense>
 
-          <p className="text-[11px] break-all text-muted-foreground">
+          <p className="break-all text-[11px] text-muted-foreground">
             sessão do Better Auth, na{' '}
             <span className="font-mono">{API_URL}</span>
           </p>

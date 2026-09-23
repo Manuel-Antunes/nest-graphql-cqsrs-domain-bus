@@ -1,14 +1,14 @@
 import type { Mapper } from '@automapper/core';
+import { InjectMapper } from '@automapper/nestjs';
 import type {
   CallHandler,
   ExecutionContext,
   NestInterceptor,
 } from '@nestjs/common';
-import type { Observable } from 'rxjs';
-import { InjectMapper } from '@automapper/nestjs';
 import { Injectable } from '@nestjs/common';
 import { AUTHOR_ROLE } from '@nestposts/users/domain/user/author.entity';
 import { User } from '@nestposts/users/domain/user/user.entity';
+import type { Observable } from 'rxjs';
 import { concatMap } from 'rxjs';
 
 import type { IUserView } from '../../dto/graphql/user.view';

@@ -1,8 +1,8 @@
-import type { AsyncContext } from '@nestjs/cqrs';
-import type { Ingestion } from '@nestposts/transport-eventbus';
 import { Injectable } from '@nestjs/common';
+import type { AsyncContext } from '@nestjs/cqrs';
 import { Tenant } from '@nestposts/database';
 import { PostId } from '@nestposts/posts/domain/post/vo/post-id';
+import type { Ingestion } from '@nestposts/transport-eventbus';
 import { CorrelatedRequestContext } from '@nestposts/transport-eventbus';
 
 import {

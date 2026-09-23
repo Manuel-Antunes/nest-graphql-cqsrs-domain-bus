@@ -1,6 +1,6 @@
-import type { DomainEvent } from '@nestposts/platform/domain/shared/domain-event';
 import { Controller } from '@nestjs/common';
 import { EventPattern } from '@nestjs/microservices';
+import type { DomainEvent } from '@nestposts/platform/domain/shared/domain-event';
 import { POSTS_NAMESPACE } from '@nestposts/posts/domain/post/event/posts.namespace';
 import {
   EventAddress,

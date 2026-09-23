@@ -1,5 +1,5 @@
-import type { FactoryProvider } from '@nestjs/common';
 import { MikroORM } from '@mikro-orm/core';
+import type { FactoryProvider } from '@nestjs/common';
 import { mikroOrmAdapter } from 'better-auth-mikro-orm';
 
 import { BETTER_AUTH_ADAPTER } from '../tokens';

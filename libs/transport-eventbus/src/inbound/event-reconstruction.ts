@@ -76,8 +76,8 @@ export const envelopeFrom = (message: unknown): EventEnvelope => {
   }
   if (isEnvelopeShape(raw)) {
     return new EventEnvelope(
-      decodeData(raw['data']),
-      raw['metadata'] as EnvelopeMetadata,
+      decodeData(raw.data),
+      raw.metadata as EnvelopeMetadata,
     );
   }
   throw new TypeError(
@@ -97,12 +97,12 @@ const parse = (message: unknown): Record<string, unknown> =>
     : ((message ?? {}) as Record<string, unknown>);
 
 const isUpstreamShape = (raw: Record<string, unknown>): boolean =>
-  typeof raw['eventName'] === 'string' && raw['payload'] !== undefined;
+  typeof raw.eventName === 'string' && raw.payload !== undefined;
 
 const isEnvelopeShape = (raw: Record<string, unknown>): boolean =>
-  typeof raw['metadata'] === 'object' &&
-  raw['metadata'] !== null &&
-  typeof (raw['metadata'] as EnvelopeMetadata)[TRANSPORT_MESSAGE_TYPE] ===
+  typeof raw.metadata === 'object' &&
+  raw.metadata !== null &&
+  typeof (raw.metadata as EnvelopeMetadata)[TRANSPORT_MESSAGE_TYPE] ===
     'string';
 
 const upstreamEnvelope = (raw: Record<string, unknown>): EventEnvelope => {

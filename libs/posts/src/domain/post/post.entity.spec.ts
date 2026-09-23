@@ -1,14 +1,13 @@
-import type { Ref } from '@mikro-orm/core';
-import type { DelegatedRef } from '@nestposts/platform/domain/shared/delegation/delegate';
-import { MikroORM, ref } from '@mikro-orm/core';
+import { MikroORM } from '@mikro-orm/core';
 import { metadataOnly } from '@nestposts/database/testing';
+import type { DelegatedRef } from '@nestposts/platform/domain/shared/delegation/delegate';
 import { delegateRef } from '@nestposts/platform/domain/shared/delegation/delegate';
 import { AlreadyDeletedException } from '@nestposts/platform/domain/shared/soft-delete/already-deleted.exception';
 import { NotDeletedException } from '@nestposts/platform/domain/shared/soft-delete/not-deleted.exception';
 import { issuesOf } from '@nestposts/platform/testing/invalid-input';
 import {
-  Author,
   AUTHOR_ROLE,
+  Author,
   Authorship,
 } from '@nestposts/users/domain/user/author.entity';
 import { User } from '@nestposts/users/domain/user/user.entity';

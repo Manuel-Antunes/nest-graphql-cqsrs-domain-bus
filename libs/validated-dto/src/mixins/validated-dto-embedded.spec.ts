@@ -111,7 +111,7 @@ describe('ValidatedDto — value objects embutidos', () => {
       ]);
       expect(
         Object.values(
-          errors.find((e) => e.property === 'title')!.constraints ?? {},
+          errors.find((e) => e.property === 'title')?.constraints ?? {},
         ),
       ).toContain('title não pode ser vazio');
     });

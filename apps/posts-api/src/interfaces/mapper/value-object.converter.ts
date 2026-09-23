@@ -1,16 +1,19 @@
 import type { MappingConfiguration } from '@automapper/core';
-import type { ScalarValueObject } from '@nestposts/validated-dto/mixins';
 import { typeConverter } from '@automapper/core';
+import type { ScalarValueObject } from '@nestposts/validated-dto/mixins';
 
 type RawConstructor =
-  StringConstructor | NumberConstructor | BooleanConstructor | DateConstructor;
+  | StringConstructor
+  | NumberConstructor
+  | BooleanConstructor
+  | DateConstructor;
 
 type RawValue<R extends RawConstructor> = R extends DateConstructor
   ? Date
   : ReturnType<
       Extract<R, StringConstructor | NumberConstructor | BooleanConstructor>
     >;
-
+// biome-ignore lint/suspicious/noExplicitAny: source and destination can be of any type
 type ScalarValueObjectClass<Raw> = new (raw: any) => ScalarValueObject<Raw>;
 
 export function valueObjectConverter<R extends RawConstructor>(

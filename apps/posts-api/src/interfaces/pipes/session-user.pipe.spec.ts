@@ -1,6 +1,6 @@
 import type { User } from '@nestposts/users/domain/user/user.entity';
-import type { UserSession } from '@thallesp/nestjs-better-auth';
 import { CredentialId } from '@nestposts/users/domain/user/vo/credential-id';
+import type { UserSession } from '@thallesp/nestjs-better-auth';
 
 import type { UserProvisioning } from '../../application/user/user-provisioning.service';
 import { SessionUserPipe } from './session-user.pipe';

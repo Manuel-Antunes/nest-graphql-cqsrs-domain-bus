@@ -3279,7 +3279,7 @@ describe('ValidatedDto Mixin', () => {
       });
 
       const AddressDto = (instance.address as any).constructor;
-      if (AddressDto && AddressDto.prototype) {
+      if (AddressDto?.prototype) {
         const metadata = Reflect.getMetadata(
           metadataKey,
           AddressDto.prototype,
@@ -3320,7 +3320,7 @@ describe('ValidatedDto Mixin', () => {
       @InheritValidatedMetadata()
       class UnionDto extends BaseDto {}
 
-      const instance = new UnionDto({ common: 'test', typeA: 'value' });
+      const _instance = new UnionDto({ common: 'test', typeA: 'value' });
 
       const metadata = Reflect.getMetadata(
         metadataKey,
@@ -3365,7 +3365,7 @@ describe('ValidatedDto Mixin', () => {
       @InheritValidatedMetadata()
       class DiscUnionDto extends BaseDto {}
 
-      const instance = new DiscUnionDto({
+      const _instance = new DiscUnionDto({
         type: 'a',
         shared: 'test',
         valueA: 'value',
@@ -3421,7 +3421,7 @@ describe('ValidatedDto Mixin', () => {
       @InheritValidatedMetadata()
       class GlobalDto extends BaseGlobalDto {}
 
-      const globalInstance = new GlobalDto({ field: 'test' });
+      const _globalInstance = new GlobalDto({ field: 'test' });
 
       const BaseIsolatedDto = ValidatedDto(isolatedSchema, {
         DECORATOR_REGISTRY: isolatedRegistry,
@@ -3430,7 +3430,7 @@ describe('ValidatedDto Mixin', () => {
       @InheritValidatedMetadata()
       class IsolatedDto extends BaseIsolatedDto {}
 
-      const isolatedInstance = new IsolatedDto({ field: 'test' });
+      const _isolatedInstance = new IsolatedDto({ field: 'test' });
 
       expect(Reflect.getMetadata(globalKey, GlobalDto.prototype, 'field')).toBe(
         'global-value',
@@ -3492,7 +3492,7 @@ describe('ValidatedDto Mixin', () => {
       @InheritValidatedMetadata()
       class ComposedDto extends BaseDto {}
 
-      const instance = new ComposedDto({ field: 'test' });
+      const _instance = new ComposedDto({ field: 'test' });
 
       expect(
         Reflect.getMetadata(globalKey, ComposedDto.prototype, 'field'),
@@ -3536,7 +3536,7 @@ describe('ValidatedDto Mixin', () => {
       @InheritValidatedMetadata()
       class ComposedDto extends BaseDto {}
 
-      const instance = new ComposedDto({ field: 'test' });
+      const _instance = new ComposedDto({ field: 'test' });
 
       expect(callCount).toBe(1);
       expect(
@@ -3593,7 +3593,7 @@ describe('ValidatedDto Mixin', () => {
       @InheritValidatedMetadata()
       class ComposedDto extends BaseDto {}
 
-      const instance = new ComposedDto({ field: 'test' });
+      const _instance = new ComposedDto({ field: 'test' });
 
       expect(Reflect.getMetadata(key1, ComposedDto.prototype, 'field')).toBe(
         'value-1',
@@ -3647,7 +3647,7 @@ describe('ValidatedDto Mixin', () => {
       @InheritValidatedMetadata()
       class ComposedDto extends BaseDto {}
 
-      const instance = new ComposedDto({ field: 'test' });
+      const _instance = new ComposedDto({ field: 'test' });
 
       expect(Reflect.getMetadata(globalClassKey, ComposedDto)).toBe(
         'global-class-value',
@@ -3685,7 +3685,7 @@ describe('ValidatedDto Mixin', () => {
       @InheritValidatedMetadata()
       class ComposedDto extends BaseDto {}
 
-      const instance = new ComposedDto({ field: 'test' });
+      const _instance = new ComposedDto({ field: 'test' });
 
       expect(
         Reflect.getMetadata(globalKey, ComposedDto.prototype, 'field'),
@@ -3750,7 +3750,7 @@ describe('ValidatedDto Mixin', () => {
     });
 
     it('should apply class decorators to top-level discriminated union classes', () => {
-      const isolatedRegistry = createDecoratorRegistry();
+      const _isolatedRegistry = createDecoratorRegistry();
       const classKey = Symbol('class-decorator');
 
       function ClassDecorator(): ClassDecorator {
@@ -3777,7 +3777,7 @@ describe('ValidatedDto Mixin', () => {
     });
 
     it('should apply class decorators to top-level standard union classes', () => {
-      const isolatedRegistry = createDecoratorRegistry();
+      const _isolatedRegistry = createDecoratorRegistry();
       const classKey = Symbol('union-class-decorator');
 
       function ClassDecorator(): ClassDecorator {
@@ -3806,7 +3806,7 @@ describe('ValidatedDto Mixin', () => {
     });
 
     it('should apply class decorators to top-level primitive union classes', () => {
-      const isolatedRegistry = createDecoratorRegistry();
+      const _isolatedRegistry = createDecoratorRegistry();
       const classKey = Symbol('primitive-class-decorator');
 
       function ClassDecorator(): ClassDecorator {

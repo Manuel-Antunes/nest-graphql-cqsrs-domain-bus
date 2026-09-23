@@ -1,4 +1,4 @@
-import { bootOnce, BootTimeoutError } from './boot';
+import { BootTimeoutError, bootOnce } from './boot';
 
 const never = new Promise<string>(() => undefined);
 

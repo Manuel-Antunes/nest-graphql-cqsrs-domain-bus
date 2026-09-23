@@ -1,6 +1,6 @@
-import type { TestingModule } from '@nestjs/testing';
 import { ForeignKeyConstraintViolationException } from '@mikro-orm/core';
 import { CommandBus } from '@nestjs/cqrs';
+import type { TestingModule } from '@nestjs/testing';
 import { PostPreCreatedEvent } from '@nestposts/posts/domain/post/event/post-pre-created.event';
 import { InvalidPostException } from '@nestposts/posts/domain/post/exception/invalid-post.exception';
 import { PostAlreadyExistsException } from '@nestposts/posts/domain/post/exception/post-already-exists.exception';

@@ -1,7 +1,8 @@
+/** biome-ignore-all lint/style/noNonNullAssertion: allow non null */
 import { createServer } from 'node:net';
 import type { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
-import type { StartedNetwork, StartedTestContainer } from 'testcontainers';
 import { PostgreSqlContainer } from '@testcontainers/postgresql';
+import type { StartedNetwork, StartedTestContainer } from 'testcontainers';
 import { GenericContainer, Network, Wait } from 'testcontainers';
 
 import type { E2eTransport } from './transport';
@@ -94,7 +95,7 @@ export class ContainerStack {
       await this.startInngest();
       await this.register(`http://localhost:${options.apiPort}`);
       await this.register(
-        `http://${this.tagging!.getHost()}:${this.tagging!.getMappedPort(TAGGING_PORT)}`,
+        `http://${this.tagging?.getHost()}:${this.tagging?.getMappedPort(TAGGING_PORT)}`,
       );
     }
     return this.endpoints(options.apiPort);

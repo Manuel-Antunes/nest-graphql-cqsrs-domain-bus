@@ -84,7 +84,8 @@ export class UnitOfWorkCommands implements OnApplicationBootstrap {
     for (const moduleRef of this.modulesContainer.values()) {
       for (const wrapper of moduleRef.providers.values()) {
         const classRef = (wrapper.instance?.constructor ?? wrapper.metatype) as
-          Type | undefined;
+          | Type
+          | undefined;
         const instance = wrapper.instance as EventHandlerInstance | undefined;
         if (
           !classRef ||

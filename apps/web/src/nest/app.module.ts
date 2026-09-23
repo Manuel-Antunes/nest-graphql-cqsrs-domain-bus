@@ -1,9 +1,11 @@
+import 'server-only';
+
 import { Module } from '@nestjs/common';
 import { BetterAuthModule } from '@nestposts/auth/infrastructure/better-auth/better-auth.module';
 import {
   DatabaseModule,
-  postgresDatabase,
   POSTS_SCHEMA,
+  postgresDatabase,
 } from '@nestposts/database';
 import { organizationAuthPluginProviders } from '@nestposts/organizations/infrastructure/better-auth/organization-better-auth.plugin';
 import { OrganizationsInfrastructureModule } from '@nestposts/organizations/infrastructure/organizations-infrastructure.module';

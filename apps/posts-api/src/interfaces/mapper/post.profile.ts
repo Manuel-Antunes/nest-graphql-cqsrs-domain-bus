@@ -3,7 +3,6 @@ import type {
   MappingConfiguration,
   MappingProfile,
 } from '@automapper/core';
-import type { Author } from '@nestposts/users/domain/user/author.entity';
 import {
   createMap,
   forMember,
@@ -22,6 +21,7 @@ import { PostContent } from '@nestposts/posts/domain/post/vo/post-content';
 import { PostId } from '@nestposts/posts/domain/post/vo/post-id';
 import { PostTitle } from '@nestposts/posts/domain/post/vo/post-title';
 import { Tag } from '@nestposts/posts/domain/tag/tag.entity';
+import type { Author } from '@nestposts/users/domain/user/author.entity';
 import { UserId } from '@nestposts/users/domain/user/vo/user-id';
 
 import { CreatePostCommand } from '../../application/post/command/create-post.command';

@@ -1,14 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { AsyncContext } from '@nestjs/cqrs';
 
-import type { EventAddress } from './event-address';
-import type { EnvelopeMetadata } from './event-envelope';
 import { RequestContextCodec } from '../request-context';
 import { injectTraceContext } from '../tracing';
 import { TransportIdentity } from '../transport-identity';
+import type { EventAddress } from './event-address';
+import type { EnvelopeMetadata } from './event-envelope';
 import {
-  encodeTags,
   EventEnvelope,
+  encodeTags,
   TRANSPORT_IDENTIFIER,
   TRANSPORT_MESSAGE_TYPE,
   TRANSPORT_ORIGIN,

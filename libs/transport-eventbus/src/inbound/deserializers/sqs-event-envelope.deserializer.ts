@@ -1,8 +1,8 @@
 import type { AwsMessageBody } from '../../aws/aws-message';
-import type { EnvelopeMetadata } from '../../outbound/event-envelope';
-import type { IncomingEnvelope } from './event-envelope.deserializer';
 import { AWS_ROUTING_KEY_ATTRIBUTE } from '../../aws/aws-message';
+import type { EnvelopeMetadata } from '../../outbound/event-envelope';
 import { EventEnvelope } from '../../outbound/event-envelope';
+import type { IncomingEnvelope } from './event-envelope.deserializer';
 import { EventEnvelopeDeserializer } from './event-envelope.deserializer';
 
 /** What SNS delivers when a subscription does **not** have raw message delivery turned on. */
@@ -44,7 +44,7 @@ export class SqsEventEnvelopeDeserializer extends EventEnvelopeDeserializer {
     const notification = asNotification(value);
     const attributes = notification
       ? fromNotificationAttributes(notification.MessageAttributes)
-      : ((options?.['attributes'] as EnvelopeMetadata | undefined) ?? {});
+      : ((options?.attributes as EnvelopeMetadata | undefined) ?? {});
     const body = (
       notification ? parse(notification.Message) : value
     ) as Partial<AwsMessageBody>;
@@ -56,7 +56,7 @@ export class SqsEventEnvelopeDeserializer extends EventEnvelopeDeserializer {
       attributes[AWS_ROUTING_KEY_ATTRIBUTE];
 
     return {
-      pattern: String(pattern ?? options?.['channel'] ?? ''),
+      pattern: String(pattern ?? options?.channel ?? ''),
       envelope: new EventEnvelope(body?.data ?? body ?? {}, metadata),
     };
   }

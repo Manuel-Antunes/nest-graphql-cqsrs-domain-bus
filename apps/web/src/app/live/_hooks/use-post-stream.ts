@@ -49,7 +49,9 @@ export function usePostStream(active: boolean) {
 
   const record = useCallback((source: StreamEvent['source'], post: unknown) => {
     const value = post as
-      { id?: string; title?: string; version?: number } | null | undefined;
+      | { id?: string; title?: string; version?: number }
+      | null
+      | undefined;
     const postId = value?.id;
     if (!postId) return;
 

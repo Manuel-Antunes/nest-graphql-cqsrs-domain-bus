@@ -1,8 +1,8 @@
 import '../telemetry';
 
 import type { INestMicroservice } from '@nestjs/common';
-import type { MicroserviceOptions } from '@nestjs/microservices';
 import { NestFactory } from '@nestjs/core';
+import type { MicroserviceOptions } from '@nestjs/microservices';
 import { bootOnce } from '@nestposts/lambda';
 import { Logger as PinoLogger } from 'nestjs-pino';
 

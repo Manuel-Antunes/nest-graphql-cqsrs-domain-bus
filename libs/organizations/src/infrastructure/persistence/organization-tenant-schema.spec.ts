@@ -1,5 +1,5 @@
-import type { AnyMikroORM } from '@nestposts/database/testing';
 import { inRequestContext } from '@nestposts/database';
+import type { AnyMikroORM } from '@nestposts/database/testing';
 import { closeTestDatabase, testDatabase } from '@nestposts/database/testing';
 
 import { Organization } from '../../domain/organization/organization.entity';

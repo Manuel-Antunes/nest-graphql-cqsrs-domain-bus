@@ -1,6 +1,6 @@
-import type { Client } from 'graphql-sse';
 import { ApolloLink } from '@apollo/client/link';
 import { print } from 'graphql';
+import type { Client } from 'graphql-sse';
 import { createClient } from 'graphql-sse';
 import { Observable } from 'rxjs';
 

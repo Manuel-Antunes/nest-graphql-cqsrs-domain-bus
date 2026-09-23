@@ -1,10 +1,10 @@
-import type { AnyMikroORM } from '@nestposts/database/testing';
 import { AuthUser } from '@nestposts/auth/domain/auth/auth-user.entity';
 import { AuthConfiguration } from '@nestposts/auth/infrastructure/better-auth/config';
 import { BetterAuthInstance } from '@nestposts/auth/infrastructure/better-auth/init-auth';
 import { BetterAuthPlugins } from '@nestposts/auth/infrastructure/better-auth/plugins/registry';
 import { BETTER_AUTH_CONFIG } from '@nestposts/auth/infrastructure/better-auth/tokens';
 import { inRequestContext } from '@nestposts/database';
+import type { AnyMikroORM } from '@nestposts/database/testing';
 import { closeTestDatabase, testDatabase } from '@nestposts/database/testing';
 import { CredentialId } from '@nestposts/users/domain/user/vo/credential-id';
 import { mikroOrmAdapter } from 'better-auth-mikro-orm';

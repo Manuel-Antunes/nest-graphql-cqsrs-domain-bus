@@ -1,5 +1,5 @@
-import type { TestingModule } from '@nestjs/testing';
 import { MikroORM } from '@mikro-orm/core';
+import type { TestingModule } from '@nestjs/testing';
 import { Author } from '@nestposts/users/domain/user/author.entity';
 import { UserId } from '@nestposts/users/domain/user/vo/user-id';
 
@@ -33,7 +33,12 @@ describe('FindAuthorQuery.Handler', () => {
       }
       return original(...args);
     };
-    return { selects, restore: () => void (connection.execute = original) };
+    return {
+      selects,
+      restore: () => {
+        connection.execute = original;
+      },
+    };
   };
 
   beforeEach(async () => {
@@ -55,8 +60,8 @@ describe('FindAuthorQuery.Handler', () => {
     );
 
     expect(found).toBeInstanceOf(Author);
-    expect(found!.name.value).toBe('manuel');
-    expect(found!.email.value).toBe('autora@example.com');
+    expect(found?.name.value).toBe('manuel');
+    expect(found?.email.value).toBe('autora@example.com');
   });
 
   it('um user sem o papel de autor e um id desconhecido são o mesmo null', async () => {
@@ -120,6 +125,6 @@ describe('FindAuthorQuery.Handler', () => {
     );
 
     expect(found).toBeInstanceOf(Author);
-    expect(found!.id.equals(author.id)).toBe(true);
+    expect(found?.id.equals(author.id)).toBe(true);
   });
 });

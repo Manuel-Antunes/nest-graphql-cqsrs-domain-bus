@@ -1,16 +1,14 @@
+import { EntityManager, MikroORM, RequestContext } from '@mikro-orm/core';
 import type { Provider } from '@nestjs/common';
 import type { IEvent } from '@nestjs/cqrs';
-import type { TestingModule } from '@nestjs/testing';
-import { EntityManager, MikroORM, RequestContext } from '@mikro-orm/core';
-import { MikroOrmModule } from '@mikro-orm/nestjs';
 import { EventBus } from '@nestjs/cqrs';
+import type { TestingModule } from '@nestjs/testing';
 import { Test } from '@nestjs/testing';
 import { CqsrsModule } from '@nestposts/cqsrs';
 import { PostsInfrastructureModule } from '@nestposts/posts/infrastructure/posts-infrastructure.module';
 import { TRANSPORT_EVENT_BUS_PUBLISHER } from '@nestposts/transport-eventbus';
 import { UsersInfrastructureModule } from '@nestposts/users/infrastructure/users-infrastructure.module';
 
-import { mikroOrmConfig } from '../../src/infrastructure/persistence/mikro-orm.config';
 import {
   persistenceTesting,
   transportTesting,
@@ -53,7 +51,9 @@ export class RecordingEvents {
   constructor(module: TestingModule) {
     module.get(EventBus).subscribe((event) => {
       this.events.push(event);
-      this.waiters.splice(0).forEach((wake) => wake());
+      this.waiters.splice(0).forEach((wake) => {
+        wake();
+      });
     });
   }
 

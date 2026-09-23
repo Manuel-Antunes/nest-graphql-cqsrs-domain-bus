@@ -83,7 +83,7 @@ export default function Home() {
         <Badge variant="outline" className="font-mono text-[10px]">
           cliente de teste
         </Badge>
-        <h1 className="text-3xl font-semibold tracking-tight text-balance">
+        <h1 className="text-balance font-semibold text-3xl tracking-tight">
           Sete fluxos, e o que cada um prova
         </h1>
         <p className="max-w-2xl text-muted-foreground">
@@ -93,14 +93,14 @@ export default function Home() {
           o resultado como ele é — inclusive quando o resultado é que alguma
           coisa não atravessa.
         </p>
-        <dl className="grid gap-2 pt-2 text-xs text-muted-foreground sm:grid-cols-2">
+        <dl className="grid gap-2 pt-2 text-muted-foreground text-xs sm:grid-cols-2">
           <div>
             <dt className="font-medium text-foreground">Subgraph</dt>
-            <dd className="font-mono break-all">{GRAPHQL_UPSTREAM}</dd>
+            <dd className="break-all font-mono">{GRAPHQL_UPSTREAM}</dd>
           </div>
           <div>
             <dt className="font-medium text-foreground">Sessão</dt>
-            <dd className="font-mono break-all">{API_URL}/api/auth</dd>
+            <dd className="break-all font-mono">{API_URL}/api/auth</dd>
           </div>
         </dl>
       </section>
@@ -122,7 +122,7 @@ export default function Home() {
                   {flow.what}
                 </CardDescription>
               </CardHeader>
-              <CardContent className="text-sm text-muted-foreground">
+              <CardContent className="text-muted-foreground text-sm">
                 {flow.proves}
               </CardContent>
             </Card>

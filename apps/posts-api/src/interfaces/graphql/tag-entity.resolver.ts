@@ -1,14 +1,14 @@
 import { MapInterceptor } from '@automapper/nestjs';
 import { UseInterceptors } from '@nestjs/common';
 import { QueryBus } from '@nestjs/cqrs';
-import { Resolver, ResolveReference } from '@nestjs/graphql';
+import { ResolveReference, Resolver } from '@nestjs/graphql';
 import { Tag } from '@nestposts/posts/domain/tag/tag.entity';
 import { TagId } from '@nestposts/posts/domain/tag/vo/tag-id';
 import { AllowAnonymous } from '@thallesp/nestjs-better-auth';
 
-import type { EntityReference } from './entity-reference';
 import { FindTagQuery } from '../../application/tag/query/find-tag.query';
 import { TagView } from '../../dto/graphql/tag.view';
+import type { EntityReference } from './entity-reference';
 
 @AllowAnonymous()
 @Resolver('Tag')

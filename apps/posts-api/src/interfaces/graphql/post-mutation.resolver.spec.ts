@@ -1,17 +1,17 @@
 import type { Mapper } from '@automapper/core';
-import type { CommandBus, QueryBus } from '@nestjs/cqrs';
-import type { Post } from '@nestposts/posts/domain/post/post.entity';
 import { createMapper } from '@automapper/core';
 import { MikroORM } from '@mikro-orm/core';
+import type { CommandBus, QueryBus } from '@nestjs/cqrs';
 import { ROOT_TENANT } from '@nestposts/database';
 import { closeTestDatabase, testDatabase } from '@nestposts/database/testing';
 import { PostNotFoundException } from '@nestposts/posts/domain/post/exception/post-not-found.exception';
+import type { Post } from '@nestposts/posts/domain/post/post.entity';
 import { PostId } from '@nestposts/posts/domain/post/vo/post-id';
 import { PostEntitySchema } from '@nestposts/posts/infrastructure/persistence/entities/post-orm.entity';
 import { TagSchema } from '@nestposts/posts/infrastructure/persistence/entities/tag-orm.entity';
 import {
-  Author,
   AUTHOR_ROLE,
+  Author,
   Authorship,
 } from '@nestposts/users/domain/user/author.entity';
 import { User } from '@nestposts/users/domain/user/user.entity';
@@ -21,11 +21,11 @@ import {
   UserEntitySchema,
 } from '@nestposts/users/infrastructure/persistence/entities/user-orm.entity';
 
-import type { CreatePostInput } from '../../dto/graphql/create-post.input';
 import { CreatePostCommand } from '../../application/post/command/create-post.command';
 import { UpdatePostCommand } from '../../application/post/command/update-post.command';
 import { FindPostQuery } from '../../application/post/query/find-post.query';
 import { PostRequest } from '../../application/shared/post-request';
+import type { CreatePostInput } from '../../dto/graphql/create-post.input';
 import { PostProfile } from '../mapper/post.profile';
 import { validatedDtoClasses } from '../mapper/validated-dto.strategy';
 import { PostMutationResolver } from './post-mutation.resolver';
@@ -81,9 +81,11 @@ describe('PostMutationResolver', () => {
     new UpdatePostCommand.UpdatePost(postId, 'editado');
 
   const fixture = (found: Post | null = {} as Post) => {
+    // biome-ignore lint/suspicious/noExplicitAny: resolve command
     const commands: Array<{ command: any; context: unknown }> = [];
     const queries: unknown[] = [];
     const commandBus = {
+      // biome-ignore lint/suspicious/noExplicitAny: resolve command
       execute: (command: any, context: unknown) => {
         commands.push({ command, context });
         return Promise.resolve(command.postId);

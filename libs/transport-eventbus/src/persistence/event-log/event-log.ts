@@ -6,12 +6,12 @@ import {
   eventTypeOf,
 } from '@nestposts/platform/domain/shared/event-type';
 
-import type { EnvelopeMetadata } from '../../outbound/event-envelope';
 import { reconstruct } from '../../inbound/event-reconstruction';
+import type { EnvelopeMetadata } from '../../outbound/event-envelope';
 import {
   decodeData,
-  encodeData,
   EventEnvelope,
+  encodeData,
   TRANSPORT_IDENTIFIER,
   TRANSPORT_MESSAGE_TYPE,
   TRANSPORT_TIMESTAMP,

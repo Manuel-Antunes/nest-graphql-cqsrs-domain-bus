@@ -1,13 +1,12 @@
 import type { DynamicModule } from '@nestjs/common';
-import type { DatabaseEntities } from '@nestposts/database';
 import { Module, Scope } from '@nestjs/common';
+import type { DatabaseEntities } from '@nestposts/database';
 import { DatabaseModule } from '@nestposts/database';
 import { IdentityProvider } from '@nestposts/users/domain/user/identity.provider';
 
-import type { AuthConfig } from './config';
-import type { BetterAuthPluginProvider } from './plugins/registry';
 import { AuthService } from '../../domain/auth/auth.service';
 import { authEntities } from '../persistence/auth-entities';
+import type { AuthConfig } from './config';
 import {
   BetterAuthAdapterFactory,
   BetterAuthConfigFactory,
@@ -15,6 +14,7 @@ import {
   BetterAuthPluginsFactory,
 } from './factories';
 import { BetterAuthIdentityProvider } from './identity/better-auth-identity.provider';
+import type { BetterAuthPluginProvider } from './plugins/registry';
 import { BetterAuthPlugins } from './plugins/registry';
 import { BetterAuthService } from './services/better-auth.service';
 import { BETTER_AUTH, BETTER_AUTH_CONFIG } from './tokens';

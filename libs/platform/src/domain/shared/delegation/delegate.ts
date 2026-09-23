@@ -1,6 +1,6 @@
 import type { Ref } from '@mikro-orm/core';
+import { Reference, ref, rel } from '@mikro-orm/core';
 import type { Type } from '@nestjs/common';
-import { ref, Reference, rel } from '@mikro-orm/core';
 
 import { BrokenDelegationException } from './broken-delegation.exception';
 

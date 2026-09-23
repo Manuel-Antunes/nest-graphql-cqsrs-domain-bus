@@ -1,5 +1,5 @@
-import type { Context as LambdaContext, SQSEvent } from 'aws-lambda';
 import { Logger } from '@nestjs/common';
+import type { Context as LambdaContext, SQSEvent } from 'aws-lambda';
 
 import type { SqsConsumer } from './sqs.strategy';
 

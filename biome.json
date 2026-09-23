@@ -1,0 +1,207 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.14/schema.json",
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
+  "files": {
+    "ignoreUnknown": true,
+    "includes": [
+      "**",
+      "!**/.next",
+      "!**/.open-next",
+      "!**/vite.config.*.timestamp*",
+      "!**/vitest.config.*.timestamp*",
+      "!**/next-env.d.ts",
+      "!apps/web/public",
+      "!apps/web/src/gql",
+      "!apps/web-e2e/src/gql",
+      "!apps/web/schema.graphql",
+      "!schema.graphql",
+      "!apps/migrator/src/migrations"
+    ]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 80
+  },
+  "javascript": {
+    "parser": {
+      "unsafeParameterDecoratorsEnabled": true
+    },
+    "experimentalEmbeddedSnippetsEnabled": true,
+    "formatter": {
+      "quoteStyle": "single",
+      "quoteProperties": "preserve"
+    }
+  },
+  "css": {
+    "parser": {
+      "tailwindDirectives": true
+    },
+    "formatter": {
+      "quoteStyle": "single"
+    }
+  },
+  "graphql": {
+    "formatter": {
+      "enabled": true,
+      "indentStyle": "space",
+      "indentWidth": 2,
+      "quoteStyle": "single"
+    }
+  },
+  "linter": {
+    "enabled": true,
+    "domains": {
+      "test": "recommended"
+    },
+    "rules": {
+      "preset": "recommended",
+      "complexity": {
+        "noStaticOnlyClass": "off"
+      },
+      "style": {
+        "useImportType": "off",
+        "noRestrictedImports": {
+          "level": "error",
+          "options": {
+            "patterns": [
+              {
+                "group": [
+                  "@nestposts/*/src/**",
+                  "@nestposts/*/dist/**"
+                ],
+                "message": "Import a workspace package through its exports map (@nestposts/<pkg>/<path>), not through src/ or dist/."
+              }
+            ]
+          }
+        }
+      }
+    }
+  },
+  "assist": {
+    "enabled": true,
+    "actions": {
+      "source": {
+        "organizeImports": {
+          "level": "on",
+          "options": {
+            "groups": [
+              ":BUN:",
+              ":NODE:",
+              [
+                "react",
+                "react-dom",
+                "react/**",
+                "react-dom/**"
+              ],
+              [
+                "next",
+                "next/**"
+              ],
+              ":PACKAGE:",
+              ":BLANK_LINE:",
+              [
+                "@/**"
+              ],
+              ":BLANK_LINE:",
+              [
+                ":PATH:"
+              ]
+            ],
+            "sortBareImports": false
+          }
+        }
+      }
+    }
+  },
+  "overrides": [
+    {
+      "includes": [
+        "apps/web/**",
+        "apps/web-e2e/**"
+      ],
+      "linter": {
+        "domains": {
+          "next": "recommended",
+          "react": "recommended",
+          "test": "recommended"
+        }
+      }
+    },
+    {
+      "includes": [
+        "apps/web/src/**/*.{ts,tsx}",
+        "!apps/web/src/nest/**"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "useImportType": "warn"
+          },
+          "nursery": {
+            "useSortedClasses": {
+              "level": "warn",
+              "options": {
+                "functions": [
+                  "cn",
+                  "cva",
+                  "clsx",
+                  "twMerge"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "apps/web-e2e/**/*.ts",
+        "infra/**/*.ts"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "useImportType": "warn"
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "apps/web-e2e/src/fixtures/**/*.ts"
+      ],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "noEmptyPattern": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "apps/web-e2e/src/specs/**/*.spec.ts"
+      ],
+      "plugins": [
+        "./tools/biome/playwright.grit"
+      ]
+    },
+    {
+      "includes": [
+        "apps/web/src/**/*.ts",
+        "apps/web/src/**/*.tsx",
+        "!apps/web/src/gql/**"
+      ],
+      "plugins": [
+        "./tools/biome/graphql-operations.grit",
+        "./tools/biome/tailwind.grit"
+      ]
+    }
+  ]
+}

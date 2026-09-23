@@ -88,7 +88,7 @@ test.describe('autorização', () => {
     const posts = await executeGraphql(FeedTotalCount);
 
     expect(posts.errors, JSON.stringify(posts.errors)).toBeUndefined();
-    expect(typeof posts.data!.posts.totalCount).toBe('number');
+    expect(typeof posts.data?.posts.totalCount).toBe('number');
   });
 
   test('me é polimórfico: o autor casa com ... on Author, o leitor não', async ({
@@ -98,7 +98,7 @@ test.describe('autorização', () => {
     executeGraphql,
   }) => {
     const typeOfMe = async () =>
-      (await executeGraphql(WhoAmI)).data!.me.__typename;
+      (await executeGraphql(WhoAmI)).data?.me.__typename;
 
     await signIn(accounts.reader);
     expect(await typeOfMe()).toBe('User');

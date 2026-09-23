@@ -1,14 +1,14 @@
 import type { TestingModule } from '@nestjs/testing';
-import type { CredentialId } from '@nestposts/users/domain/user/vo/credential-id';
 import {
-  Author,
   AUTHOR_ROLE,
+  Author,
   Authorship,
 } from '@nestposts/users/domain/user/author.entity';
 import { AuthorRepository } from '@nestposts/users/domain/user/author.repository';
 import { UnknownIdentityException } from '@nestposts/users/domain/user/exception/unknown-identity.exception';
 import { IdentityProvider } from '@nestposts/users/domain/user/identity.provider';
 import { User } from '@nestposts/users/domain/user/user.entity';
+import type { CredentialId } from '@nestposts/users/domain/user/vo/credential-id';
 
 import {
   createCqrsTestingModule,
@@ -122,8 +122,8 @@ describe('UserProvisioning', () => {
       );
 
       expect(author).toBeInstanceOf(Author);
-      expect(author!.authorship.id.equals(promoted.id)).toBe(true);
-      expect(author!.hasRole(AUTHOR_ROLE)).toBe(true);
+      expect(author?.authorship.id.equals(promoted.id)).toBe(true);
+      expect(author?.hasRole(AUTHOR_ROLE)).toBe(true);
     });
 
     it('provisioning again after the promotion changes nothing', async () => {

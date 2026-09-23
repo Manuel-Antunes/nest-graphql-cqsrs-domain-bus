@@ -1,8 +1,8 @@
 import { SeedManager } from '@mikro-orm/seeder';
 import {
   DataloaderType,
-  postgresDatabase,
   POSTS_SCHEMA,
+  postgresDatabase,
 } from '@nestposts/database';
 import { SoftDeleteSubscriber } from '@nestposts/platform/infrastructure/persistence/soft-delete/soft-delete.subscriber';
 

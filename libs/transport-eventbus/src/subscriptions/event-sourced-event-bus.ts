@@ -1,10 +1,10 @@
-import type { OnApplicationBootstrap } from '@nestjs/common';
-import type { Observable } from 'rxjs';
 import { EntityManager } from '@mikro-orm/core';
+import type { OnApplicationBootstrap } from '@nestjs/common';
 import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import { EventBus } from '@nestjs/cqrs';
 import { inRequestContext } from '@nestposts/database';
+import type { Observable } from 'rxjs';
 import {
   concatMap,
   defer,

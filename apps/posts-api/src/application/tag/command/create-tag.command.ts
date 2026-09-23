@@ -1,11 +1,11 @@
-import type { AsyncContext, ICommandHandler } from '@nestjs/cqrs';
-import type { TagId } from '@nestposts/posts/domain/tag/vo/tag-id';
 import { Inject, Scope } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
+import type { AsyncContext, ICommandHandler } from '@nestjs/cqrs';
 import { Command, CommandHandler, EventPublisher } from '@nestjs/cqrs';
 import { TagAlreadyExistsException } from '@nestposts/posts/domain/tag/exception/tag-already-exists.exception';
 import { Tag } from '@nestposts/posts/domain/tag/tag.entity';
 import { TagRepository } from '@nestposts/posts/domain/tag/tag.repository';
+import type { TagId } from '@nestposts/posts/domain/tag/vo/tag-id';
 
 export namespace CreateTagCommand {
   export class CreateTag extends Command<TagId> {

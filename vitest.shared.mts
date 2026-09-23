@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { ViteUserConfig } from 'vitest/config';
 import swc from 'unplugin-swc';
+import type { ViteUserConfig } from 'vitest/config';
 import { defineConfig } from 'vitest/config';
 
 /**

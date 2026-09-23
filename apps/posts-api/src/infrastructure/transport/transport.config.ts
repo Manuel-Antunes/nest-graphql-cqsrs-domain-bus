@@ -1,15 +1,14 @@
+import { MemoryServer } from '@camcima/nestjs-memory-microservices';
 import type { HttpServer } from '@nestjs/common';
 import type { ClientProxy, MicroserviceOptions } from '@nestjs/microservices';
-import type { Inngest } from 'inngest';
-import { MemoryServer } from '@camcima/nestjs-memory-microservices';
 import { ClientProxyFactory, Transport } from '@nestjs/microservices';
 import {
   AwsEventEnvelopeSerializer,
-  inngestApp,
   InngestClientProxy,
   InngestEventEnvelopeDeserializer,
   InngestEventEnvelopeSerializer,
   InngestStrategy,
+  inngestApp,
   localQueueUrl,
   localTopicArn,
   MemoryClient,
@@ -21,6 +20,7 @@ import {
   SqsStrategy,
   TransportIdentity,
 } from '@nestposts/transport-eventbus';
+import type { Inngest } from 'inngest';
 
 export const POST_EVENTS_CLIENT = 'POST_EVENTS_CLIENT';
 

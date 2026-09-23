@@ -1,5 +1,5 @@
-import type { StoredEvent } from './database';
 import { Broker, EXCHANGE, republished } from './broker';
+import type { StoredEvent } from './database';
 import { until } from './posts-api';
 import { e2eTransport } from './transport';
 
@@ -94,7 +94,7 @@ class InngestMessages implements Messages {
     const seen = new Map<string, PublishedMessage>();
     await until(async () => {
       for (const event of await this.events()) {
-        if (event.data?.['postId'] !== aggregateId) {
+        if (event.data?.postId !== aggregateId) {
           continue;
         }
         seen.set(shortNameOf(event.name), {

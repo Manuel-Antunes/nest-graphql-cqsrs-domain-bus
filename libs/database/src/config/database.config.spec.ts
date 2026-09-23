@@ -1,6 +1,6 @@
 import {
-  databaseConfig,
   DEFAULT_POSTGRES_URL,
+  databaseConfig,
   postgresDatabase,
   postgresUrl,
 } from './database.config';

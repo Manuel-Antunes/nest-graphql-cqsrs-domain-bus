@@ -1,10 +1,10 @@
-export const enum InngestStatus {
+export enum InngestStatus {
   STARTING = 'starting',
   CONNECTED = 'connected',
   DISCONNECTED = 'disconnected',
 }
 
-export const enum InngestEventsMap {
+export enum InngestEventsMap {
   ERROR = 'error',
   LISTENING = 'listening',
   CLOSE = 'close',

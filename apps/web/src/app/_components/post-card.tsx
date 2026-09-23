@@ -1,6 +1,5 @@
 import Link from 'next/link';
 
-import type { FragmentType } from '@/gql';
 import { AuthorByline } from '@/app/_components/author-byline';
 import { RelativeTime } from '@/app/_components/relative-time';
 import { TagList } from '@/app/_components/tag-list';
@@ -12,6 +11,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import type { FragmentType } from '@/gql';
 import { getFragmentData, graphql } from '@/gql';
 
 export const PostCard_post = graphql(`
@@ -51,7 +51,7 @@ export function PostCard({
         <AuthorByline author={data.author} />
         <TagList post={data} />
       </CardContent>
-      <CardFooter className="justify-between text-xs text-muted-foreground">
+      <CardFooter className="justify-between text-muted-foreground text-xs">
         <span>
           criado <RelativeTime iso={data.createdAt} />
         </span>

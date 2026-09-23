@@ -2,10 +2,10 @@
 
 import { FileTextIcon, Loader2Icon } from 'lucide-react';
 
-import type { FragmentType } from '@/gql';
 import { EmptyState } from '@/app/_components/empty-state';
 import { PostCard } from '@/app/_components/post-card';
 import { Button } from '@/components/ui/button';
+import type { FragmentType } from '@/gql';
 import { getFragmentData, graphql } from '@/gql';
 
 export const PostList_connection = graphql(`

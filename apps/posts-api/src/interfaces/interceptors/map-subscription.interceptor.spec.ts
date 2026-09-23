@@ -24,7 +24,10 @@ describe('MapSubscriptionInterceptor', () => {
     const Interceptor = MapSubscriptionInterceptor(
       {} as ModelIdentifier<Event>,
       {} as never,
-    ) as unknown as new (mapper: Mapper) => {
+    ) as unknown as new (
+      mapper: Mapper,
+    ) => {
+      // biome-ignore lint/suspicious/noExplicitAny: it can be in any type
       intercept: (c: ExecutionContext, n: CallHandler) => any;
     };
     const next: CallHandler = { handle: () => of(stream) };

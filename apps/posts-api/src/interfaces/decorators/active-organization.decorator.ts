@@ -2,8 +2,8 @@ import type { PipeTransform, Type } from '@nestjs/common';
 import { Session } from '@thallesp/nestjs-better-auth';
 
 import { ActiveMemberPipe } from '../pipes/active-member.pipe';
-import { ActiveOrganizationIdPipe } from '../pipes/active-organization-id.pipe';
 import { ActiveOrganizationPipe } from '../pipes/active-organization.pipe';
+import { ActiveOrganizationIdPipe } from '../pipes/active-organization-id.pipe';
 
 type ExtraPipes = (Type<PipeTransform> | PipeTransform)[];
 

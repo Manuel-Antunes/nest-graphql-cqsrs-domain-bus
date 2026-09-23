@@ -1,13 +1,13 @@
-import type { TestingModule } from '@nestjs/testing';
-import type { Observable } from 'rxjs';
 import { EventBus, ofType } from '@nestjs/cqrs';
+import type { TestingModule } from '@nestjs/testing';
 import { Test } from '@nestjs/testing';
+import type { Observable } from 'rxjs';
 
-import type { ISubscriptionHandler } from './interfaces/index';
 import { Subscription } from './classes/subscription';
 import { CqsrsModule } from './cqsrs.module';
 import { SubscriptionHandler } from './decorators/subscription-handler.decorator';
 import { SubscriptionHandlerNotFoundException } from './exceptions/index';
+import type { ISubscriptionHandler } from './interfaces/index';
 import { SubscriptionBus } from './subscription-bus';
 
 class CounterEvent {
@@ -29,7 +29,9 @@ class OnCounterSubscription extends Subscription<
 class UnhandledSubscription extends Subscription<CounterEvent> {}
 
 @SubscriptionHandler(OnCounterSubscription)
-class OnCounterSubscriptionHandler implements ISubscriptionHandler<OnCounterSubscription> {
+class OnCounterSubscriptionHandler
+  implements ISubscriptionHandler<OnCounterSubscription>
+{
   static opened = 0;
 
   constructor(private readonly eventBus: EventBus) {}
@@ -66,9 +68,11 @@ describe('SubscriptionBus', () => {
     eventBus = module.get(EventBus);
   });
 
-  afterEach(() =>
-    active.splice(0).forEach((subscription) => subscription.unsubscribe()),
-  );
+  afterEach(() => {
+    active.splice(0).forEach((subscription) => {
+      subscription.unsubscribe();
+    });
+  });
   afterAll(async () => module.close());
 
   it('routes the message to its @SubscriptionHandler and streams what the handler wired up', () => {

@@ -14,12 +14,25 @@ describe('ConnectionInterceptor', () => {
 
   const aPost = (postId: PostId) => ({ postId }) as unknown as Post;
   const aView = (post: Post) =>
-    ({ id: (post as any).postId }) as unknown as PostView;
+    ({
+      id: (
+        post as unknown as {
+          postId: PostId;
+        }
+      ).postId,
+    }) as unknown as PostView;
 
   const aPage = (overrides: Partial<Record<string, unknown>> = {}) =>
     ({
       items: [aPost(id), aPost(otherId)],
-      from: (post: Post) => `cursor:${(post as any).postId.value}`,
+      from: (post: Post) =>
+        `cursor:${
+          (
+            post as unknown as {
+              postId: PostId;
+            }
+          ).postId.value
+        }`,
       hasNextPage: true,
       hasPrevPage: false,
       startCursor: 'inicio',
@@ -44,7 +57,10 @@ describe('ConnectionInterceptor', () => {
     const Interceptor = ConnectionInterceptor(
       {} as never,
       {} as never,
-    ) as unknown as new (mapper: Mapper) => {
+    ) as unknown as new (
+      mapper: Mapper,
+    ) => {
+      // biome-ignore lint/suspicious/noExplicitAny: it can be in any type
       intercept: (c: ExecutionContext, n: CallHandler) => any;
     };
     const next: CallHandler = { handle: () => of(page) };
@@ -66,10 +82,7 @@ describe('ConnectionInterceptor', () => {
   it('casa cada nó com o item que o originou', async () => {
     const { connection } = await intercept(aPage());
 
-    expect(connection.edges.map((edge) => (edge.node as any).id)).toEqual([
-      id,
-      otherId,
-    ]);
+    expect(connection.edges.map((edge) => edge.node.id)).toEqual([id, otherId]);
   });
 
   it('traduz a página inteira numa passada, e não uma vez por edge', async () => {
@@ -118,6 +131,7 @@ describe('ConnectionInterceptor', () => {
       const Interceptor = ConnectionInterceptor() as unknown as new (
         mapper: Mapper,
       ) => {
+        // biome-ignore lint/suspicious/noExplicitAny: it can be in any type
         intercept: (c: ExecutionContext, n: CallHandler) => any;
       };
       const { mapper } = mapperSpy();

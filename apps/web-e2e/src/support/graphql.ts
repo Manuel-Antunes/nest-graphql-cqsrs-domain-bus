@@ -9,16 +9,15 @@ export interface GraphQlAnswer<TResult> {
 export type OperationVariables<TVariables> =
   TVariables extends Record<string, never> ? [] : [variables: TVariables];
 
-export interface GraphQlTransport {
-  (query: string, variables: Record<string, unknown>): Promise<unknown>;
-}
+export type GraphQlTransport = (
+  query: string,
+  variables: Record<string, unknown>,
+) => Promise<unknown>;
 
-export interface ExecuteGraphql {
-  <TResult, TVariables>(
-    document: TypedDocumentNode<TResult, TVariables>,
-    ...[variables]: OperationVariables<TVariables>
-  ): Promise<GraphQlAnswer<TResult>>;
-}
+export type ExecuteGraphql = <TResult, TVariables>(
+  document: TypedDocumentNode<TResult, TVariables>,
+  ...[variables]: OperationVariables<TVariables>
+) => Promise<GraphQlAnswer<TResult>>;
 
 /**
  * Turns a way of sending a GraphQL request into the typed `executeGraphql` the specs call.

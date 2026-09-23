@@ -1,6 +1,6 @@
 import type { IEvent } from '@nestjs/cqrs';
-import type { Observable } from 'rxjs';
 import { EventBus, ofType, Saga } from '@nestjs/cqrs';
+import type { Observable } from 'rxjs';
 import { map } from 'rxjs';
 
 import { UnitOfWork } from './unit-of-work';

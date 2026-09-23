@@ -1,8 +1,7 @@
-import type { IEvent } from '@nestjs/cqrs';
-import type { TestingModule } from '@nestjs/testing';
 import { MikroORM } from '@mikro-orm/core';
-import { MikroOrmModule } from '@mikro-orm/nestjs';
+import type { IEvent } from '@nestjs/cqrs';
 import { CommandBus, EventBus } from '@nestjs/cqrs';
+import type { TestingModule } from '@nestjs/testing';
 import { Test } from '@nestjs/testing';
 import { CqsrsModule } from '@nestposts/cqsrs';
 import { inRequestContext } from '@nestposts/database';
@@ -26,7 +25,6 @@ import {
   persistenceTesting,
   transportTesting,
 } from '../../test/support/transport-testing.module';
-import { mikroOrmConfig } from '../infrastructure/persistence/mikro-orm.config';
 import { CompletePostWithDefaultTagCommand } from './complete-post-with-default-tag.command';
 
 describe('CompletePostWithDefaultTagCommand.Handler', () => {

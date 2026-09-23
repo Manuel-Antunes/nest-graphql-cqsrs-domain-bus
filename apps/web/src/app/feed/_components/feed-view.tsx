@@ -16,8 +16,8 @@ export function FeedView() {
     <div className="space-y-5">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Feed</h1>
-          <p className="text-sm text-muted-foreground">
+          <h1 className="font-semibold text-2xl tracking-tight">Feed</h1>
+          <p className="text-muted-foreground text-sm">
             Buscado no servidor pelo{' '}
             <span className="font-mono">PreloadQuery</span> e paginado no
             cliente pelo cache. Os cards não carregam o corpo dos posts.

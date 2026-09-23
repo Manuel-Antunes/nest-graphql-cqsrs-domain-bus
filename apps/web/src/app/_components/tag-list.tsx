@@ -1,5 +1,5 @@
-import type { FragmentType } from '@/gql';
 import { TagChip } from '@/app/_components/tag-chip';
+import type { FragmentType } from '@/gql';
 import { getFragmentData, graphql } from '@/gql';
 
 export const TagList_post = graphql(`
@@ -22,7 +22,7 @@ export function TagList({ post }: { post: FragmentType<typeof TagList_post> }) {
 
   if (edges.length === 0) {
     return (
-      <span className="text-xs text-muted-foreground italic">
+      <span className="text-muted-foreground text-xs italic">
         sem tag — o post ainda está na versão 1
       </span>
     );

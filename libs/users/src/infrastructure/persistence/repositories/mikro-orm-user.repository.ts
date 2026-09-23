@@ -3,10 +3,10 @@ import { Injectable } from '@nestjs/common';
 import { inRequestContext } from '@nestposts/database';
 import { ACTIVE_FILTER } from '@nestposts/platform/infrastructure/persistence/soft-delete/soft-delete-orm.entity';
 
-import type { Email } from '../../../domain/user/vo/email';
-import type { UserId } from '../../../domain/user/vo/user-id';
 import { User } from '../../../domain/user/user.entity';
 import { UserRepository } from '../../../domain/user/user.repository';
+import type { Email } from '../../../domain/user/vo/email';
+import type { UserId } from '../../../domain/user/vo/user-id';
 
 @Injectable()
 export class MikroOrmUserRepository extends UserRepository {

@@ -1,5 +1,5 @@
-import type { TestingModule } from '@nestjs/testing';
 import { EventBus } from '@nestjs/cqrs';
+import type { TestingModule } from '@nestjs/testing';
 import { Test } from '@nestjs/testing';
 import { SubscriptionBus } from '@nestposts/cqsrs';
 import { CqsrsModule } from '@nestposts/cqsrs/cqsrs.module';
@@ -51,7 +51,9 @@ describe('OnPostCreatedSubscription', () => {
   });
 
   afterEach(async () => {
-    active.splice(0).forEach((subscription) => subscription.unsubscribe());
+    active.splice(0).forEach((subscription) => {
+      subscription.unsubscribe();
+    });
     await module.close();
   });
 

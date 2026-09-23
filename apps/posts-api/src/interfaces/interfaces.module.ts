@@ -22,8 +22,8 @@ import { PostProfile } from './mapper/post.profile';
 import { UserProfile } from './mapper/user.profile';
 import { PostCompletionController } from './messaging/post-completion.controller';
 import { ActiveMemberPipe } from './pipes/active-member.pipe';
-import { ActiveOrganizationIdPipe } from './pipes/active-organization-id.pipe';
 import { ActiveOrganizationPipe } from './pipes/active-organization.pipe';
+import { ActiveOrganizationIdPipe } from './pipes/active-organization-id.pipe';
 import { AuthorPipe } from './pipes/author.pipe';
 import { SessionUserPipe } from './pipes/session-user.pipe';
 

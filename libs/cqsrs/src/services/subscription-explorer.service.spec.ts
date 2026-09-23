@@ -1,11 +1,11 @@
-import type { Observable } from 'rxjs';
 import { Injectable } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import type { Observable } from 'rxjs';
 import { EMPTY } from 'rxjs';
 
-import type { ISubscriptionHandler } from '../interfaces/subscription-handler.interface';
 import { Subscription } from '../classes/subscription';
 import { SubscriptionHandler } from '../decorators/subscription-handler.decorator';
+import type { ISubscriptionHandler } from '../interfaces/subscription-handler.interface';
 import { SubscriptionExplorerService } from './subscription-explorer.service';
 
 describe('SubscriptionExplorerService', () => {
@@ -56,9 +56,9 @@ describe('SubscriptionExplorerService', () => {
 
     const wrapper = found.find(
       (candidate) => candidate.metatype === AnnotatedHandler,
-    )!;
-    expect(wrapper.isDependencyTreeStatic).toBeTypeOf('function');
-    expect(wrapper.instance).toBeInstanceOf(AnnotatedHandler);
+    );
+    expect(wrapper?.isDependencyTreeStatic).toBeTypeOf('function');
+    expect(wrapper?.instance).toBeInstanceOf(AnnotatedHandler);
     await close();
   });
 

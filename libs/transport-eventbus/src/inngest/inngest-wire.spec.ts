@@ -1,8 +1,7 @@
 import { EventType } from '@nestposts/platform/domain/shared/event-type';
 
-import type { EnvelopeMetadata } from '../outbound/event-envelope';
-import type { InngestEventMessage } from '../outbound/serializers/inngest-event-envelope.serializer';
 import { InngestEventEnvelopeDeserializer } from '../inbound/deserializers/inngest-event-envelope.deserializer';
+import type { EnvelopeMetadata } from '../outbound/event-envelope';
 import {
   EventEnvelope,
   TRANSPORT_IDENTIFIER,
@@ -10,6 +9,7 @@ import {
   TRANSPORT_ORIGIN,
   TRANSPORT_TAGS,
 } from '../outbound/event-envelope';
+import type { InngestEventMessage } from '../outbound/serializers/inngest-event-envelope.serializer';
 import {
   CORRELATION_SESSION,
   InngestEventEnvelopeSerializer,

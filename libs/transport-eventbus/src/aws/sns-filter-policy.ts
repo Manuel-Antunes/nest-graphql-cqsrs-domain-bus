@@ -9,7 +9,8 @@ import {
 
 /** One clause of a policy: a value to match, or one of SNS's operators. */
 export type SnsFilterTerm =
-  string | { readonly 'anything-but': readonly string[] };
+  | string
+  | { readonly 'anything-but': readonly string[] };
 
 /**
  * A subscription's filter policy, in the shape SNS takes it: **OR within an attribute, AND across

@@ -10,8 +10,8 @@ export default function FederationPage() {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Federação</h1>
-        <p className="text-sm text-muted-foreground">
+        <h1 className="font-semibold text-2xl tracking-tight">Federação</h1>
+        <p className="text-muted-foreground text-sm">
           Esta aplicação é um subgraph. Aqui a chamada que o roteador faria é
           feita direto.
         </p>

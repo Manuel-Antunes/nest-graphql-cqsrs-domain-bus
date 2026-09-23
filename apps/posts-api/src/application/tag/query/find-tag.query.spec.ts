@@ -26,8 +26,8 @@ describe('FindTagQuery.Handler', () => {
       handler.execute(new FindTagQuery.FindTag(tag.id)),
     );
 
-    expect(found!.id.equals(tag.id)).toBe(true);
-    expect(found!.name.value).toBe('Untagged');
+    expect(found?.id.equals(tag.id)).toBe(true);
+    expect(found?.name.value).toBe('Untagged');
   });
 
   it('an unknown id is null, and not an error', async () => {

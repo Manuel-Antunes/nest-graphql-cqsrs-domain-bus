@@ -1,5 +1,5 @@
-import type { TestingModule } from '@nestjs/testing';
 import { AsyncContext, CommandBus } from '@nestjs/cqrs';
+import type { TestingModule } from '@nestjs/testing';
 import { PostCreatedEvent } from '@nestposts/posts/domain/post/event/post-created.event';
 import { PostPreCreatedEvent } from '@nestposts/posts/domain/post/event/post-pre-created.event';
 import { PostId } from '@nestposts/posts/domain/post/vo/post-id';

@@ -1,18 +1,18 @@
-import type { BetterAuthWith } from '@nestposts/auth/infrastructure/better-auth/init-auth';
 import { Inject, Injectable, Scope } from '@nestjs/common';
 import { AuthService } from '@nestposts/auth/domain/auth/auth.service';
+import type { BetterAuthWith } from '@nestposts/auth/infrastructure/better-auth/init-auth';
 import { BETTER_AUTH } from '@nestposts/auth/infrastructure/better-auth/tokens';
 
-import type { Member } from '../../domain/organization/member.entity';
-import type { Organization } from '../../domain/organization/organization.entity';
-import type { OrganizationPermissionRequest } from '../../domain/organization/organization.service';
-import type { OrganizationAuthPlugins } from './organization-better-auth.plugin';
 import { ActiveMemberNotFoundException } from '../../domain/organization/exception/active-member-not-found.exception';
 import { OrganizationNotSelectedException } from '../../domain/organization/exception/organization-not-selected.exception';
+import type { Member } from '../../domain/organization/member.entity';
 import { MemberRepository } from '../../domain/organization/member.repository';
+import type { Organization } from '../../domain/organization/organization.entity';
 import { OrganizationRepository } from '../../domain/organization/organization.repository';
+import type { OrganizationPermissionRequest } from '../../domain/organization/organization.service';
 import { OrganizationService } from '../../domain/organization/organization.service';
 import { OrganizationId } from '../../domain/organization/vo/organization-id';
+import type { OrganizationAuthPlugins } from './organization-better-auth.plugin';
 
 /**
  * The instance as THIS module knows it: the core plugins plus the organization one, which is the

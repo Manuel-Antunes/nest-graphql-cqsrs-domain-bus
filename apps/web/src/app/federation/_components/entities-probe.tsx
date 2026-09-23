@@ -18,7 +18,6 @@ import {
 
 import { EntitiesQuery, FederationSeedQuery } from '../query';
 
-// eslint-disable-next-line @typescript-eslint/consistent-type-definitions
 type Representation = { __typename: string; id: string };
 
 const NO_SUCH_POST = '00000000-0000-4000-8000-000000000000';
@@ -93,8 +92,10 @@ export function EntitiesProbe() {
           {representations ? (
             <div className="grid gap-3 md:grid-cols-2">
               <div>
-                <p className="mb-1 text-xs font-medium">Enviado</p>
+                <p className="mb-1 font-medium text-xs">Enviado</p>
+                {/* biome-ignore lint/a11y/useSemanticElements: the labelled element has to be the <pre> the e2e reads */}
                 <pre
+                  role="region"
                   aria-label="Representações enviadas"
                   className="max-h-72 overflow-auto rounded-md border bg-muted/40 p-3 font-mono text-[11px]"
                 >
@@ -102,14 +103,16 @@ export function EntitiesProbe() {
                 </pre>
               </div>
               <div>
-                <p className="mb-1 text-xs font-medium">Recebido</p>
+                <p className="mb-1 font-medium text-xs">Recebido</p>
                 {entities.error ? (
                   <ErrorNotice
                     title="_entities falhou"
                     error={entities.error}
                   />
                 ) : (
+                  /* biome-ignore lint/a11y/useSemanticElements: the labelled element has to be the <pre> the e2e reads */
                   <pre
+                    role="region"
                     aria-label="Entidades recebidas"
                     className="max-h-72 overflow-auto rounded-md border bg-muted/40 p-3 font-mono text-[11px]"
                   >
@@ -126,6 +129,7 @@ export function EntitiesProbe() {
               className="flex flex-wrap gap-2"
             >
               {entities.data._entities.map((entity, index) => (
+                // biome-ignore lint/suspicious/noArrayIndexKey: _entities is positional — the position is what the badge reports
                 <li key={index}>
                   <Badge
                     variant={entity ? 'secondary' : 'outline'}

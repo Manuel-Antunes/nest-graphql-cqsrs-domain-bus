@@ -1,11 +1,11 @@
-import type { DynamicModule } from '@nestjs/common';
 import { MikroORM, RequestContext } from '@mikro-orm/core';
+import type { DynamicModule } from '@nestjs/common';
 import { Module } from '@nestjs/common';
 import { AuthModule as NestBetterAuthModule } from '@thallesp/nestjs-better-auth';
 
 import type { BetterAuthModuleOptions } from './better-auth/better-auth.module';
-import type { BetterAuth } from './better-auth/init-auth';
 import { BetterAuthModule } from './better-auth/better-auth.module';
+import type { BetterAuth } from './better-auth/init-auth';
 import { BETTER_AUTH } from './better-auth/tokens';
 
 /**

@@ -138,7 +138,7 @@
           "build"
         ],
         "options": {
-          "command": "pnpm exec mikro-orm seeder:run --config ./apps/migrator/dist/posts-mikro-orm.config.js"
+          "command": "pnpm exec mikro-orm seeder:run --config ./apps/migrator/dist/posts-mikro-orm.config.js --class DatabaseSeeder"
         }
       },
       "setup": {

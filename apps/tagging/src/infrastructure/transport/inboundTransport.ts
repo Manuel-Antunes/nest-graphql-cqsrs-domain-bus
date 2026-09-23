@@ -1,6 +1,6 @@
+import { MemoryServer } from '@camcima/nestjs-memory-microservices';
 import type { HttpServer } from '@nestjs/common';
 import type { MicroserviceOptions } from '@nestjs/microservices';
-import { MemoryServer } from '@camcima/nestjs-memory-microservices';
 import { Transport } from '@nestjs/microservices';
 import {
   InngestEventEnvelopeDeserializer,

@@ -1,7 +1,7 @@
-import type { PostId } from '@nestposts/posts/domain/post/vo/post-id';
-import type { ContextAttributes } from '@nestposts/transport-eventbus';
 import { AsyncContext } from '@nestjs/cqrs';
 import { ROOT_TENANT, TENANT_HEADER } from '@nestposts/database';
+import type { PostId } from '@nestposts/posts/domain/post/vo/post-id';
+import type { ContextAttributes } from '@nestposts/transport-eventbus';
 
 export const POST_ID_ATTRIBUTE = 'post-request-post-id';
 

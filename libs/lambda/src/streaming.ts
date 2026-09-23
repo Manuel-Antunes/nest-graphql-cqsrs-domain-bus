@@ -3,14 +3,14 @@ import type {
   LambdaResponseStreamed,
   PromiseHandler,
 } from '@fastify/aws-lambda';
-import type { StreamifyHandler } from 'aws-lambda';
-import type { FastifyInstance } from 'fastify';
 import awsLambdaFastify from '@fastify/aws-lambda';
 import { Logger } from '@nestjs/common';
+import type { StreamifyHandler } from 'aws-lambda';
+import type { FastifyInstance } from 'fastify';
 
-import type { HandlerOptions } from './settle';
 import { BootTimeoutError } from './boot';
 import { lambdaRuntime } from './runtime';
+import type { HandlerOptions } from './settle';
 import { settle } from './settle';
 
 /** What {@link streamingHandler} needs from a booted application: the Fastify underneath it. */
@@ -71,10 +71,11 @@ export const streamingHandler = (
         return;
       }
 
-      const dispatch = (proxy ??= awsLambdaFastify<
-        unknown,
-        typeof PROXY_OPTIONS
-      >(application.instance, PROXY_OPTIONS));
+      proxy ??= awsLambdaFastify<unknown, typeof PROXY_OPTIONS>(
+        application.instance,
+        PROXY_OPTIONS,
+      );
+      const dispatch = proxy;
 
       const { meta, stream } = await dispatch(event, context);
       await pipeline(

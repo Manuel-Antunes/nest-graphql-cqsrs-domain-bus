@@ -1,7 +1,7 @@
 import type { ExecutionContext, Provider, Type } from '@nestjs/common';
 import { Injectable } from '@nestjs/common';
 
-import { ROOT_TENANT, Tenant, TENANT_HEADER } from './tenant';
+import { ROOT_TENANT, TENANT_HEADER, Tenant } from './tenant';
 
 /**
  * **Where the tenant is read from, per transport.**
@@ -24,7 +24,9 @@ export type TenantResolverFn = (context: ExecutionContext) => string;
 
 /** Every shape {@link TenancyModule} accepts: a class, an instance, or a function. */
 export type TenantResolverLike =
-  Type<TenantResolver> | TenantResolver | TenantResolverFn;
+  | Type<TenantResolver>
+  | TenantResolver
+  | TenantResolverFn;
 
 type HeaderBag = Record<string, string | string[] | undefined>;
 

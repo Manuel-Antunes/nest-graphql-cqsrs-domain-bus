@@ -1,7 +1,7 @@
 import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import type { TestingModule } from '@nestjs/testing';
 import { ModulesContainer } from '@nestjs/core';
+import type { TestingModule } from '@nestjs/testing';
 import { Test } from '@nestjs/testing';
 import { TestSchemaModule } from '@nestposts/database/testing';
 import { registeredEventTypes } from '@nestposts/platform/domain/shared/event-type';

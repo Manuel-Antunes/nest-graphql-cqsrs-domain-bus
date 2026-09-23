@@ -4,7 +4,9 @@ import { BaseEntity } from './base-entity';
 import { DomainEvent } from './domain-event';
 
 export function AggregateRoot<
-  TBase extends abstract new (...args: any[]) => BaseEntity,
+  TBase extends abstract new (
+    ...args: any[]
+  ) => BaseEntity,
 >(Base: TBase) {
   const NewBase = WithAggregateRoot<DomainEvent, TBase>(Base) as abstract new (
     ...args: any[]

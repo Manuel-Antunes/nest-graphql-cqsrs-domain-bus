@@ -1,4 +1,10 @@
 import type { Message, SQSClientConfig } from '@aws-sdk/client-sqs';
+import {
+  DeleteMessageBatchCommand,
+  ReceiveMessageCommand,
+  SQSClient,
+} from '@aws-sdk/client-sqs';
+import { Logger } from '@nestjs/common';
 import type {
   ConsumerDeserializer,
   ConsumerSerializer,
@@ -6,16 +12,9 @@ import type {
   MessageHandler,
   TransportId,
 } from '@nestjs/microservices';
-import type { Context as LambdaContext, SQSEvent, SQSRecord } from 'aws-lambda';
-import {
-  DeleteMessageBatchCommand,
-  ReceiveMessageCommand,
-  SQSClient,
-} from '@aws-sdk/client-sqs';
-import { Logger } from '@nestjs/common';
 import { Server } from '@nestjs/microservices';
+import type { Context as LambdaContext, SQSEvent, SQSRecord } from 'aws-lambda';
 
-import type { SqsEvents } from './sqs.events';
 import { topicMatches } from '../in-memory/topic-pattern';
 import {
   awsClientConfig,
@@ -24,6 +23,7 @@ import {
 } from './aws-client.config';
 import { fromRecordAttributes } from './aws-message';
 import { SqsContext } from './sqs.context';
+import type { SqsEvents } from './sqs.events';
 import { SqsEventsMap, SqsStatus } from './sqs.events';
 
 /** How many messages one `ReceiveMessage` may bring back, and SQS's own ceiling. */

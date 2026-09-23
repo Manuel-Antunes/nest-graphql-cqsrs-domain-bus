@@ -1,6 +1,6 @@
-import type { AsyncContext } from '@nestjs/cqrs';
 import { EntityManager } from '@mikro-orm/core';
 import { Injectable, Logger, Optional } from '@nestjs/common';
+import type { AsyncContext } from '@nestjs/cqrs';
 import { EventBus } from '@nestjs/cqrs';
 import { UnitOfWork } from '@nestposts/cqsrs';
 import { inRequestContext } from '@nestposts/database';

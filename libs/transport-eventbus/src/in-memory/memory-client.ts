@@ -1,11 +1,11 @@
 import type { MemoryServer } from '@camcima/nestjs-memory-microservices';
+import { MEMORY_TRANSPORT } from '@camcima/nestjs-memory-microservices';
 import type {
   ConsumerDeserializer,
   ProducerSerializer,
   ReadPacket,
   WritePacket,
 } from '@nestjs/microservices';
-import { MEMORY_TRANSPORT } from '@camcima/nestjs-memory-microservices';
 import { ClientProxy } from '@nestjs/microservices';
 
 import { MemoryEventEnvelopeDeserializer } from '../inbound/deserializers/memory-event-envelope.deserializer';

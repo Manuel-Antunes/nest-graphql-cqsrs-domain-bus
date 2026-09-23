@@ -1,0 +1,78 @@
+// What `eslint-plugin-playwright` covered and Biome's `test` domain does not.
+//
+// Biome already has `noFocusedTests` and `noSkippedTests`, which are `no-focused-test` and
+// `no-skipped-test`. What is left is the rule that actually caught bugs — `missing-playwright-await`,
+// from the plugin's `flat/recommended` — plus `no-conditional-expect`.
+//
+// Scoped to `apps/web-e2e/src/specs/**` by `biome.json`, which is the scope the ESLint config had:
+// a helper under `src/support/**` may legitimately assert outside a test block.
+
+language js
+
+// Every web-first assertion Playwright returns a Promise from. A matcher missing here is a matcher
+// this rule does not check, so it is the list to extend — `expect(locator).toBeVisible()` without
+// `await` passes, asserts nothing, and the test is green while the page never rendered.
+pattern playwright_async_matcher() {
+  or {
+    `toBeAttached`,
+    `toBeChecked`,
+    `toBeDisabled`,
+    `toBeEditable`,
+    `toBeEmpty`,
+    `toBeEnabled`,
+    `toBeFocused`,
+    `toBeHidden`,
+    `toBeInViewport`,
+    `toBeVisible`,
+    `toContainText`,
+    `toContainClass`,
+    `toHaveAccessibleDescription`,
+    `toHaveAccessibleErrorMessage`,
+    `toHaveAccessibleName`,
+    `toHaveAttribute`,
+    `toHaveClass`,
+    `toHaveCount`,
+    `toHaveCSS`,
+    `toHaveId`,
+    `toHaveJSProperty`,
+    `toHaveRole`,
+    `toHaveScreenshot`,
+    `toHaveText`,
+    `toHaveTitle`,
+    `toHaveURL`,
+    `toHaveValue`,
+    `toHaveValues`,
+    `toMatchAriaSnapshot`,
+    `toBeOK`,
+    `toPass`
+  }
+}
+
+pattern awaited_or_returned() {
+  or {
+    within `await $_` ,
+    within `return $_` ,
+    within `Promise.all($_)` ,
+    within `$_.then($_)`
+  }
+}
+
+or {
+  `expect($...).$matcher($...)` as $call where {
+    $matcher <: playwright_async_matcher(),
+    $call <: not awaited_or_returned(),
+    register_diagnostic(span=$call, message="This Playwright matcher returns a Promise. Without `await` it asserts nothing and the test passes whatever the page did.", severity="error")
+  },
+  `expect($...).not.$matcher($...)` as $call where {
+    $matcher <: playwright_async_matcher(),
+    $call <: not awaited_or_returned(),
+    register_diagnostic(span=$call, message="This Playwright matcher returns a Promise. Without `await` it asserts nothing and the test passes whatever the page did.", severity="error")
+  },
+  `expect($...)` as $call where {
+    $call <: within or {
+      `if ($_) { $_ }`,
+      `try { $_ } catch($_) { $_ }`
+    } ,
+    register_diagnostic(span=$call, message="An assertion inside a conditional is an assertion the test may never reach. Assert unconditionally, or split the branches into their own tests.", severity="error")
+  }
+}

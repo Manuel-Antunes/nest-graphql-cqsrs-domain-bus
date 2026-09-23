@@ -21,7 +21,7 @@ export function StatusDot({
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-2 text-xs text-muted-foreground',
+        'inline-flex items-center gap-2 text-muted-foreground text-xs',
         className,
       )}
     >

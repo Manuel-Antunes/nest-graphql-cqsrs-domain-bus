@@ -1,10 +1,10 @@
+import { MemoryServer } from '@camcima/nestjs-memory-microservices';
+import { MikroORM } from '@mikro-orm/core';
 import type { INestMicroservice, ModuleMetadata } from '@nestjs/common';
 import type { MicroserviceOptions } from '@nestjs/microservices';
 import type { TestingModule } from '@nestjs/testing';
-import type { AnyMikroORM } from '@nestposts/database/testing';
-import { MemoryServer } from '@camcima/nestjs-memory-microservices';
-import { MikroORM } from '@mikro-orm/core';
 import { Test } from '@nestjs/testing';
+import type { AnyMikroORM } from '@nestposts/database/testing';
 import { dropTestSchema, ensureTestSchema } from '@nestposts/database/testing';
 
 /** A microservice running in this process, and the server a {@link MemoryClient} delivers to. */

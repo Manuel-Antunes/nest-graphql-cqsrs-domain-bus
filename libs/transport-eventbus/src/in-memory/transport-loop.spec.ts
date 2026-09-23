@@ -1,27 +1,21 @@
 import type { MemoryServer } from '@camcima/nestjs-memory-microservices';
-import type { IEventHandler } from '@nestjs/cqrs';
 import { MikroOrmModule } from '@mikro-orm/nestjs';
 import { Controller, Injectable } from '@nestjs/common';
 import { DiscoveryModule } from '@nestjs/core';
+import type { IEventHandler } from '@nestjs/cqrs';
 import { AsyncContext, CqrsModule, EventsHandler } from '@nestjs/cqrs';
 import { EventPattern } from '@nestjs/microservices';
-import { ROOT_TENANT, Tenant, TENANT_HEADER } from '@nestposts/database';
-import {
-  dropTestSchema,
-  ensureTestSchema,
-  testDatabaseConfig,
-} from '@nestposts/database/testing';
+import { ROOT_TENANT, TENANT_HEADER, Tenant } from '@nestposts/database';
+import { testDatabaseConfig } from '@nestposts/database/testing';
 import { EventType } from '@nestposts/platform/domain/shared/event-type';
 
-import type { Ingestion } from '../outbound/transport-metadata';
-import type { InProcessService } from '../testing';
-import type { TransportEventBusService } from '../transport-event-bus.service';
 import { TRANSPORT_EVENT_BUS_SERVICE } from '../constants';
 import { Publisher } from '../decorators/publisher.decorator';
 import { TransportEvent } from '../decorators/transport-event.decorator';
 import { EventIngestion } from '../inbound/event-ingestion';
 import { TRANSPORT_ORIGIN } from '../outbound/event-envelope';
 import { MemoryEventEnvelopeSerializer } from '../outbound/serializers/memory-event-envelope.serializer';
+import type { Ingestion } from '../outbound/transport-metadata';
 import { ingestionOf } from '../outbound/transport-metadata';
 import {
   MessageInbox,
@@ -33,11 +27,13 @@ import {
   RequestContextCodec,
   TransportRequestContext,
 } from '../request-context';
+import type { InProcessService } from '../testing';
 import { startInProcessService } from '../testing';
 import {
   eventIngestionProviders,
   transportEventBusProviders,
 } from '../transport-event-bus.providers';
+import type { TransportEventBusService } from '../transport-event-bus.service';
 import { TransportIdentity } from '../transport-identity';
 import { MemoryClient } from './memory-client';
 

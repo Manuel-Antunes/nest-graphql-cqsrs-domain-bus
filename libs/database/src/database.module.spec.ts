@@ -1,10 +1,10 @@
-import type { TestingModule } from '@nestjs/testing';
 import { defineEntity, EntityManager, MikroORM, p } from '@mikro-orm/core';
 import { Module } from '@nestjs/common';
+import type { TestingModule } from '@nestjs/testing';
 import { Test } from '@nestjs/testing';
 
 import { DatabaseModule } from './database.module';
-import { testDatabaseConfig, TestSchemaModule } from './testing/index';
+import { TestSchemaModule, testDatabaseConfig } from './testing/index';
 
 class Ledger {
   id!: string;

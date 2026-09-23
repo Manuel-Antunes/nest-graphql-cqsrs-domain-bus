@@ -49,6 +49,7 @@ export function pageOf<E extends object>(
 
   return {
     items: slice,
+    // biome-ignore lint/style/noNonNullAssertion: after is validated to be a valid cursor, so the item must exist in the slice
     from: (item) => cursors.get(item)!,
     hasNextPage: start + limit < items.length,
     hasPrevPage: start > 0,

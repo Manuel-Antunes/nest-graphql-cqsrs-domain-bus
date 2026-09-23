@@ -1,11 +1,11 @@
+import { Logger } from '@nestjs/common';
 import type {
   ProducerSerializer,
   ReadPacket,
   WritePacket,
 } from '@nestjs/microservices';
-import type { Inngest } from 'inngest';
-import { Logger } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
+import type { Inngest } from 'inngest';
 
 import type { InngestEventMessage } from '../outbound/serializers/inngest-event-envelope.serializer';
 import type { InngestRecordOptions } from './inngest-record.builder';

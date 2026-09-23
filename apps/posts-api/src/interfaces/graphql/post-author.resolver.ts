@@ -1,13 +1,13 @@
-import type { Author } from '@nestposts/users/domain/user/author.entity';
 import { MapInterceptor } from '@automapper/nestjs';
 import { UseInterceptors } from '@nestjs/common';
 import { QueryBus } from '@nestjs/cqrs';
 import { Parent, ResolveField, Resolver } from '@nestjs/graphql';
+import type { Author } from '@nestposts/users/domain/user/author.entity';
 import { NotAnAuthorException } from '@nestposts/users/domain/user/exception/not-an-author.exception';
 import { User } from '@nestposts/users/domain/user/user.entity';
 
-import type { PostView } from '../../dto/graphql/post.view';
 import { FindAuthorQuery } from '../../application/user/query/find-author.query';
+import type { PostView } from '../../dto/graphql/post.view';
 import { AuthorView } from '../../dto/graphql/user.view';
 
 @Resolver('Post')

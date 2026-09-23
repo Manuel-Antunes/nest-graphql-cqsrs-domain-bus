@@ -4,8 +4,8 @@ import { useState, useTransition } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { KeyRoundIcon, Loader2Icon } from 'lucide-react';
 
-import type { SignInState } from '@/app/actions/auth';
 import { ErrorNotice } from '@/app/_components/error-notice';
+import type { SignInState } from '@/app/actions/auth';
 import { signIn } from '@/app/actions/auth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -95,7 +95,7 @@ export function LoginForm() {
       </form>
 
       <div className="space-y-2 rounded-lg border bg-muted/30 p-3">
-        <p className="text-xs font-medium">Usuários semeados</p>
+        <p className="font-medium text-xs">Usuários semeados</p>
         <div className="flex flex-wrap gap-2">
           {seeded.map((user) => (
             <Button

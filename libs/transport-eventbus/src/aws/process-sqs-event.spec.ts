@@ -1,7 +1,7 @@
 import type { Context as LambdaContext, SQSEvent, SQSRecord } from 'aws-lambda';
 
-import type { SqsProcessResult } from './sqs.strategy';
 import { processSqsEvent } from './process-sqs-event';
+import type { SqsProcessResult } from './sqs.strategy';
 
 const record = (messageId: string): SQSRecord => ({
   messageId,

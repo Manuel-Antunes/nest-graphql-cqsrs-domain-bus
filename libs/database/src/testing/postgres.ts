@@ -1,5 +1,5 @@
-import type { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { MikroORM } from '@mikro-orm/postgresql';
+import type { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { PostgreSqlContainer } from '@testcontainers/postgresql';
 
 import { DEFAULT_POSTGRES_URL, postgresUrl } from '../config/database.config';
@@ -14,11 +14,11 @@ export type PostgresForTests = {
 class TestPostgres {
   static async start(): Promise<PostgresForTests> {
     const clientUrl = postgresUrl();
-    if (await this.answers(clientUrl)) {
+    if (await TestPostgres.answers(clientUrl)) {
       return { clientUrl, stop: async () => {} };
     }
 
-    const { database, username, password } = this.credentials();
+    const { database, username, password } = TestPostgres.credentials();
     const container: StartedPostgreSqlContainer = await new PostgreSqlContainer(
       POSTGRES_IMAGE,
     )

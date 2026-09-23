@@ -3,10 +3,6 @@ import type { InstanceWrapper } from '@nestjs/core/injector/instance-wrapper';
 import { AsyncContext } from '@nestjs/cqrs';
 import { Observable, of, Subject } from 'rxjs';
 
-import type {
-  ISubscriptionHandler,
-  ISubscriptionPublisher,
-} from './interfaces/index';
 import { Subscription } from './classes/subscription';
 import {
   SUBSCRIPTION_HANDLER_METADATA,
@@ -17,6 +13,10 @@ import {
   InvalidSubscriptionHandlerException,
   SubscriptionHandlerNotFoundException,
 } from './exceptions/index';
+import type {
+  ISubscriptionHandler,
+  ISubscriptionPublisher,
+} from './interfaces/index';
 import { SubscriptionBus } from './subscription-bus';
 
 describe('SubscriptionBus: registro e ligação', () => {

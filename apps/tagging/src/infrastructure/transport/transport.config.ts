@@ -1,5 +1,4 @@
 import type { MicroserviceOptions } from '@nestjs/microservices';
-import type { Inngest } from 'inngest';
 import {
   inngestApp,
   localQueueUrl,
@@ -8,6 +7,7 @@ import {
   SqsStrategy,
   TransportIdentity,
 } from '@nestposts/transport-eventbus';
+import type { Inngest } from 'inngest';
 
 export const POST_EVENTS_CLIENT = 'POST_EVENTS_CLIENT';
 

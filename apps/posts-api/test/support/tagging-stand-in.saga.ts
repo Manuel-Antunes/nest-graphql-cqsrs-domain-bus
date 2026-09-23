@@ -1,12 +1,12 @@
-import type { ICommand, IEvent } from '@nestjs/cqrs';
-import type { Observable } from 'rxjs';
 import { Injectable, Logger } from '@nestjs/common';
-import { CommandBus, ofType, Saga } from '@nestjs/cqrs';
+import type { ICommand, IEvent } from '@nestjs/cqrs';
+import { ofType, Saga } from '@nestjs/cqrs';
 import { PostPreCreatedEvent } from '@nestposts/posts/domain/post/event/post-pre-created.event';
 import { PostId } from '@nestposts/posts/domain/post/vo/post-id';
 import { DEFAULT_TAG_ID } from '@nestposts/posts/domain/tag/tag.entity';
 import { TagId } from '@nestposts/posts/domain/tag/vo/tag-id';
 import { isIngested } from '@nestposts/transport-eventbus';
+import type { Observable } from 'rxjs';
 import { catchError, concatMap, EMPTY, map, of } from 'rxjs';
 
 import { CompletePostCommand } from '../../src/application/post/command/complete-post.command';
@@ -15,8 +15,6 @@ import { PostRequest } from '../../src/application/shared/post-request';
 @Injectable()
 export class TaggingStandIn {
   private readonly logger = new Logger(TaggingStandIn.name);
-
-  constructor(private readonly commandBus: CommandBus) {}
 
   @Saga()
   completeTheCreation = (events$: Observable<IEvent>): Observable<ICommand> =>

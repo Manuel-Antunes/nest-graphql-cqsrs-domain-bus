@@ -8,8 +8,8 @@ import {
   requireEventTypeOf,
 } from '@nestposts/platform/domain/shared/event-type';
 
-import type { WireTag } from './event-envelope';
 import { TRANSPORT_EVENT_BUS_PATTERN } from '../constants';
+import type { WireTag } from './event-envelope';
 import { identifierOf, wireTagsOf } from './transport-metadata';
 
 /**

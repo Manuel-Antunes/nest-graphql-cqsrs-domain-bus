@@ -15,6 +15,7 @@
 export * from './classes/index';
 export * from './constants';
 export * from './cqsrs.module';
+export * from './cqsrs.module-definition';
 export * from './decorators/index';
 export * from './exceptions/index';
 export * from './helpers/index';

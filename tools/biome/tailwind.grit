@@ -1,0 +1,40 @@
+// The half of `eslint-plugin-better-tailwindcss` that does not need the stylesheet.
+//
+// `no-unknown-classes` was the rule worth having and it is the one that cannot be written here: it
+// resolves every class against `globals.css`, and a GritQL plugin reads the file it is given and
+// nothing else. `no-duplicate-classes` needs a backreference, which the regex engine Biome compiles
+// these against does not have. Sorting is Biome's own `nursery/useSortedClasses`.
+//
+// So what is left is the two that are pure text, over both places a class list is written here: the
+// `className` attribute and the `cn()` call.
+
+language js
+
+// Removed in Tailwind v4 — not renamed, removed. Each one is silently inert: the class is emitted
+// into the HTML, matches no rule, and the element renders unstyled.
+pattern tailwind_deprecated_class() {
+  r"(?:.*\b(?:flex-shrink|flex-grow|overflow-ellipsis|decoration-slice|decoration-clone)\b.*|.*-opacity-[0-9]+.*)"
+}
+
+// A leading space, a trailing space, or two in a row. Harmless to the browser, and the reason two
+// class lists that are the same read as different in a diff.
+pattern tailwind_loose_whitespace() { r"(?:.*\s\s.*|\s.*|.*\s)" }
+
+or {
+  JsxAttribute(name=$name, initializer=$value) where {
+    $name <: `className`,
+    $value <: r"[^\"]*\"([^\"]*)\""($classes),
+    or {
+      $classes <: tailwind_deprecated_class() where {
+        register_diagnostic(span=$value, message="This utility was removed in Tailwind v4. It is still emitted into the HTML, matches no rule, and the element renders unstyled.", severity="error")
+      },
+      $classes <: tailwind_loose_whitespace() where {
+        register_diagnostic(span=$value, message="A leading, trailing or doubled space in a class list. Two lists that are the same then read as different.", severity="warn")
+      }
+    }
+  },
+  `cn($args)` as $call where {
+    $call <: tailwind_deprecated_class(),
+    register_diagnostic(span=$call, message="This utility was removed in Tailwind v4. It is still emitted into the HTML, matches no rule, and the element renders unstyled.", severity="error")
+  }
+}

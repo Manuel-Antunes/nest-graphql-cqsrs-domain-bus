@@ -41,17 +41,17 @@ export async function setup(): Promise<void> {
   await seed();
 }
 
+export { bootstrap, withPosts, withTagging } from './app/bootstrap';
+export { postsSchema, taggingSchema } from './app/connections';
+export { PostsMigratorModule } from './app/posts.module';
+export { TaggingMigratorModule } from './app/tagging.module';
 export { DatabaseSeeder } from './seeders/database.seeder';
 export { DefaultTagSeeder } from './seeders/default-tag.seeder';
 export {
-  TestUsersSeeder,
   SEED_PASSWORD,
   seededUsers,
+  TestUsersSeeder,
 } from './seeders/test-users.seeder';
-export { PostsMigratorModule } from './app/posts.module';
-export { TaggingMigratorModule } from './app/tagging.module';
-export { bootstrap, withPosts, withTagging } from './app/bootstrap';
-export { postsSchema, taggingSchema } from './app/connections';
 
 const commands: Record<string, () => Promise<unknown>> = {
   migrate,

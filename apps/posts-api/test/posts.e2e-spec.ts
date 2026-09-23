@@ -1,8 +1,9 @@
+/** biome-ignore-all lint/style/noNonNullAssertion: remove non null assertion */
+import { MikroORM } from '@mikro-orm/core';
 import type { INestApplication } from '@nestjs/common';
 import type { IEvent } from '@nestjs/cqrs';
-import type { NestFastifyApplication } from '@nestjs/platform-fastify';
-import { MikroORM } from '@mikro-orm/core';
 import { EventBus } from '@nestjs/cqrs';
+import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { FastifyAdapter } from '@nestjs/platform-fastify';
 import { Test } from '@nestjs/testing';
 import { SubscriptionBus } from '@nestposts/cqsrs';
@@ -59,7 +60,7 @@ describe('posts (e2e)', () => {
   };
   const subscribeCreated = async () => {
     const before = subscribers();
-    const collector = client.subscribe<{ onPostCreated: any }>(
+    const collector = client.subscribe(
       `subscription { onPostCreated { ${POST_FIELDS} } }`,
     );
     await until(() => subscribers() === before + 1);
@@ -80,7 +81,7 @@ describe('posts (e2e)', () => {
     );
   const subscribeUpdates = async (postId?: string) => {
     const before = subscribers();
-    const collector = client.subscribe<{ onPostUpdated: any }>(
+    const collector = client.subscribe(
       `subscription($postId: ID) { onPostUpdated(postId: $postId) { ${POST_FIELDS} } }`,
       { postId },
     );
@@ -322,12 +323,12 @@ describe('posts (e2e)', () => {
       const askedBefore = asked.length;
       const query = `subscription($postId: ID) { onPostUpdated(postId: $postId) { ${POST_FIELDS} } }`;
 
-      const first = client.subscribe<{ onPostUpdated: any }>(query, {
+      const first = client.subscribe(query, {
         postId: post.id,
       });
       await until(() => asked.length === askedBefore + 1);
       expect(subscribers()).toBe(before + 1);
-      const second = client.subscribe<{ onPostUpdated: any }>(query, {
+      const second = client.subscribe(query, {
         postId: post.id,
       });
       await until(() => asked.length === askedBefore + 2);
@@ -374,8 +375,8 @@ describe('posts (e2e)', () => {
       const { data: page1 } = await client.execute(
         `{ posts(first: 1) { edges { cursor node { id } } pageInfo { hasNextPage hasPreviousPage endCursor } totalCount } }`,
       );
-      expect(page1!.posts.edges).toHaveLength(1);
-      expect(page1!.posts.pageInfo).toMatchObject({
+      expect(page1?.posts.edges).toHaveLength(1);
+      expect(page1?.posts.pageInfo).toMatchObject({
         hasNextPage: true,
         hasPreviousPage: false,
       });
@@ -430,12 +431,12 @@ describe('posts (e2e)', () => {
       const { data, errors } = await client.execute(`{ me { ${ME} } }`);
 
       expect(errors).toBeUndefined();
-      expect(data!.me).toMatchObject({
+      expect(data?.me).toMatchObject({
         name: 'manuel',
         email: 'manuel@example.com',
         __typename: 'Author',
       });
-      expect(data!.me.id).toEqual(expect.any(String));
+      expect(data?.me.id).toEqual(expect.any(String));
     });
 
     it('o id é o do perfil ativo de quem está logado', async () => {

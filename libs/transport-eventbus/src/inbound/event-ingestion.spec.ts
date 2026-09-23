@@ -1,11 +1,11 @@
-import type { Provider } from '@nestjs/common';
-import type { IEventHandler } from '@nestjs/cqrs';
-import type { TestingModule } from '@nestjs/testing';
 import { MikroORM } from '@mikro-orm/core';
 import { MikroOrmModule } from '@mikro-orm/nestjs';
+import type { Provider } from '@nestjs/common';
 import { Injectable } from '@nestjs/common';
 import { DiscoveryModule } from '@nestjs/core';
+import type { IEventHandler } from '@nestjs/cqrs';
 import { AsyncContext, CqrsModule, EventsHandler } from '@nestjs/cqrs';
+import type { TestingModule } from '@nestjs/testing';
 import { Test } from '@nestjs/testing';
 import {
   dropTestSchema,
@@ -30,8 +30,8 @@ import {
 } from '../persistence/message-inbox';
 import { transportEntities } from '../persistence/message-inbox.entity';
 import {
-  CorrelatedRequestContext,
   CORRELATION_ID,
+  CorrelatedRequestContext,
   RequestContextCodec,
   TransportRequestContext,
 } from '../request-context';

@@ -4,10 +4,8 @@ import Link from 'next/link';
 import { skipToken, useSuspenseQuery } from '@apollo/client/react';
 import { ShieldCheckIcon, UserIcon } from 'lucide-react';
 
-import type { FragmentType } from '@/gql';
 import { ErrorNotice } from '@/app/_components/error-notice';
 import { PostList } from '@/app/_components/post-list';
-import { RelativeTime } from '@/app/_components/relative-time';
 import { useSession } from '@/app/_providers/session-provider';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -19,14 +17,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
+import type { FragmentType } from '@/gql';
 import { getFragmentData, graphql } from '@/gql';
 import { cn } from '@/lib/utils';
 
@@ -102,7 +93,7 @@ function IdentityCard({
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <p className="flex items-center gap-2 text-sm text-muted-foreground">
+          <p className="flex items-center gap-2 text-muted-foreground text-sm">
             <ShieldCheckIcon className="size-4" aria-hidden />A credencial é do
             Better Auth; o que este perfil é — leitor ou autor — sai do
             <span className="font-mono"> __typename</span>, e não de um papel
@@ -113,7 +104,7 @@ function IdentityCard({
 
       {isAuthor ? (
         <section className="space-y-3">
-          <h2 className="text-lg font-semibold tracking-tight">Meus posts</h2>
+          <h2 className="font-semibold text-lg tracking-tight">Meus posts</h2>
           <PostList
             connection={me.posts}
             emptyTitle="Este autor ainda não publicou"

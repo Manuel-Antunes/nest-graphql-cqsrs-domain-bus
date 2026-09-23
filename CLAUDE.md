@@ -14,14 +14,22 @@ The only exceptions:
 1. **The developer explicitly asks** for a given field, function or block to be commented. Comment
    that thing only — do not take the request as licence to annotate the surrounding code.
 2. **The comment is load-bearing**, i.e. removing it changes behaviour: `@ts-expect-error`,
-   `@ts-ignore`, `@ts-nocheck`, linter directives, bundler hints. There are currently five
-   hand-written ones (the `/* eslint-disable */` in every `sst-env.d.ts` is generated and does not
-   count): two `@ts-expect-error` in `libs/validated-dto/src/mixins/validated-dto.mixin.spec.ts`,
-   `react-hooks/exhaustive-deps` in `saga-runner.tsx`, and two where the rule is right in general and
-   wrong here — `no-empty-object-type` on `ValidatedDto`'s `Extras = {}` default, which as `object`
-   stops a top-level union DTO from accepting a scalar, and `consistent-type-definitions` on
-   `entities-probe.tsx`, where an `interface` has no implicit index signature and stops satisfying the
-   codegen'd `_Any`. The last two were tried the other way first and `typecheck` caught both.
+   `@ts-ignore`, `@ts-nocheck`, linter directives, bundler hints. A Biome directive is
+   `// biome-ignore <group>/<rule>: <reason>` — the reason is **required**, and a suppression that
+   suppresses nothing is itself an error (`suppressions/unused`), so a stale one cannot survive.
+   `// biome-ignore-all` at the top of a file covers the whole file. The hand-written ones (the
+   `/* eslint-disable */` in every `sst-env.d.ts` is generated and does not count) are: two
+   `@ts-expect-error` in `libs/validated-dto/src/mixins/validated-dto.mixin.spec.ts`;
+   `useExhaustiveDependencies` in `saga-runner.tsx`; `noBannedTypes` on `ValidatedDto`'s
+   `Extras = {}` default, which as `object` stops a top-level union DTO from accepting a scalar;
+   `noConstructorReturn` twice in `validated-dto.mixin.ts`, where the union factory resolves the
+   member and substitutes the instance; `noThisInStatic` twice in `cqsrs.module.ts`, where
+   `super.forRoot`/`super.forRootAsync` must keep `this` so the builder names `CqsrsModule` as the
+   module; `noEmptyInterface` on `ISubscription`, a marker interface;
+   `noDoubleEquals` in `validated-scalar.mixin.spec.ts`, where the coercion is what is under test;
+   `noArrayIndexKey` in `saga-runner.tsx` and `entities-probe.tsx`, whose lists are append-only and
+   positional; `noLabelWithoutControl` and `useSemanticElements` in `apps/web`; and the
+   `biome-ignore-all` on `libs/database/src/index.ts` described under **Linting** below.
 3. **The in-house libraries** — `libs/cqsrs`, `libs/database`, `libs/validated-dto` and
    `libs/transport-eventbus` — may carry **JSDoc**, and only JSDoc (`/** … */`), as usage
    documentation of their public API. These are
@@ -44,7 +52,9 @@ The shell scripts and the JavaScript under `docker/` are the exception to the ex
 test harness, they are read by whoever is debugging a broker at 2am, and they carry comments. So is
 everything under `infra/lambda/` — `collector.yaml` and `otel-preload.cjs` are deployment bootstrap,
 not application code: they run before anything this repository wrote, nothing imports them, and what
-they are for cannot be read off a call site because there is no call site.
+they are for cannot be read off a call site because there is no call site. The `.grit` plugins under
+`tools/biome/` are the same case for the same reason, and they carry one more thing a call site could
+never hold: which rule was deliberately **not** written, and what it would have needed.
 
 When a piece of code seems to need an explanation, prefer, in this order: a better name, a smaller
 function, a type that makes the invalid state unrepresentable, a test that demonstrates the
@@ -61,36 +71,88 @@ messages, log lines, GraphQL descriptions and test names. Do not mass-translate 
 separate, explicit task. Follow the English rule for anything you add or substantially rewrite, and
 leave surrounding Portuguese alone unless asked.
 
-### Linting: one config per project, and one rule that is load-bearing
+### Linting and formatting: one Biome, one config, run from the root
 
-`eslint.base.config.mjs` is the shared half and `eslint.nest.config.mjs` is what the NestJS projects
-add to it. **Every project carries its own `eslint.config.mjs`**, even when it is three lines
-re-exporting the shared one, because `@nx/eslint/plugin` infers a `lint` target from the presence of
-that file and from nothing else — the root config ignores `apps/**`, `libs/**`, `infra/**`. A project
-without one is a project that is silently never linted. `nx.json`'s `targetDefaults.lint` is what
-gives every one of them the `fix` configuration, so the block is written once rather than seventeen
-times.
+**Biome is the formatter and the linter**, for TypeScript, JavaScript, JSON, CSS and GraphQL. There
+is one `biome.json` at the root and **no per-project config**: `pnpm lint` is `biome check .` over
+the whole repository — 735 files in about 100ms, which is less than Nx's own per-task overhead, so
+there is no `lint` target to run through `nx run-many` and no way for a project to be silently
+skipped. `pnpm lint:fix` is the same with `--write`. `biome.json` is in `nx.json`'s `sharedGlobals`,
+so a change to it invalidates every cached task that depends on it.
 
-- **`@typescript-eslint/consistent-type-imports` is OFF for the NestJS projects, and that is not
-  taste.** These projects compile with `emitDecoratorMetadata`, and Nest's DI reads the
-  `design:paramtypes` it emits. Turn the rule on and `pnpm lint:fix` rewrites
-  `constructor(private readonly repo: PostRepository)`'s import to `import type` — the metadata then
-  says `Object`, the provider resolves to `undefined`, the build still succeeds and the failure is at
-  runtime, far from the edit. `eslint.nest.config.mjs` turns it off for exactly that reason, and the
-  proof it works is that `lint:fix` changes **nothing** across the fourteen Nest projects.
-- **Generated code is not linted**: `src/gql/**` (codegen) in `apps/web` and `apps/web-e2e`, and
-  `apps/migrator`'s `src/migrations/**`, which MikroORM writes.
-- **`graphql.config.yml` is what `@graphql-eslint` reads**, and the `web` project's `schema` there
-  deliberately **excludes** `apps/posts-api/src/graphql/federation.graphql`. That file is the
-  `extend schema @link(...)` line, and with it the plugin takes the federation path and hands the
-  document to `buildSubgraphSchema`; without it the schema builds plainly. The federation directives
-  the rest of the SDL uses (`@key`, `@shareable`) are declared in `apps/web/federation.graphql`,
-  beside the `_Any`/`_Entity`/`_entities` that are already there for the same reason: they exist at
-  runtime and codegen cannot see them.
+The per-area rules that used to be separate ESLint configs are `overrides` entries in that one file,
+matched by path. Warnings do not fail the run; errors do.
+
+- **`style/useImportType` is OFF by default, and that is not taste.** The NestJS projects compile
+  with `emitDecoratorMetadata`, and Nest's DI reads the `design:paramtypes` it emits. Turn the rule
+  on and `pnpm lint:fix` rewrites `constructor(private readonly repo: PostRepository)`'s import to
+  `import type` — the metadata then says `Object`, the provider resolves to `undefined`, the build
+  still succeeds and the failure is at runtime, far from the edit. It is off **globally** and turned
+  back on only for the three places that carry no decorators (`apps/web` outside `src/nest/**`,
+  `apps/web-e2e`, `infra`), because that way round a new library inherits the safe default instead of
+  the dangerous one.
+- **`assist/source/organizeImports` sorts EXPORTS as well as imports, and in a barrel that is a
+  load-bearing order.** Sorted, `libs/database/src/index.ts` hoists its `export * from
+  '@mikro-orm/core'` above the local `export *` lines; the CommonJS barrel then requires the ESM
+  package while Next is still `import()`-ing it, and `apps/web` dies with
+  `ERR_REQUIRE_ESM_RACE_CONDITION` at page-data collection — a green `biome check`, a green
+  `typecheck`, a green test run and a broken `next build`. Biome has no option to sort imports
+  without sorting exports, so that file carries a `biome-ignore-all`. **A barrel that re-exports an
+  ESM-only package beside its own modules needs the same.** Side-effect imports are safe:
+  `sortBareImports` is `false`, so `import './telemetry'` stays the first statement of every entry
+  point, which is what the Observability section requires.
+- **`style/noRestrictedImports` is what replaced `@nx/enforce-module-boundaries`**: it refuses
+  `@nestposts/*/src/**` and `@nestposts/*/dist/**`, so a workspace package is reached through its
+  `exports` map or not at all. `correctness/noUndeclaredDependencies` was tried first and does not
+  fit — no application here declares a third-party dependency of its own, they all resolve from the
+  root `package.json`, so it reported 613 violations of a deliberate design.
+- **Generated code is not linted**: `src/gql/**` (codegen) in `apps/web` and `apps/web-e2e`,
+  `apps/migrator`'s `src/migrations/**`, which MikroORM writes, and `apps/web/public/**`.
+- **What ESLint had and Biome does not ship is `tools/biome`**, three GritQL plugins wired by path
+  in `biome.json` — `playwright.grit`, `graphql-operations.grit`, `tailwind.grit`.
+  `tools/biome/README.md` is the guide: what each checks, and, at least as important, the four things
+  that **could not** be written and are therefore no longer checked anywhere. A plugin is a pattern
+  plus `register_diagnostic`; it reads the file it is handed and nothing else — no schema, no
+  stylesheet, no configuration, no type information, and no autofix — and that one constraint decides
+  every rule in there. The short version: the un-awaited Playwright matcher is caught (it returns a
+  Promise, and without `await` the test asserts nothing and passes), the fragment naming convention
+  and anonymous operations are caught, Tailwind's v4-removed utilities are caught; `no-unknown-classes`
+  and `no-duplicate-classes` are gone for good. Biome's own `test` domain already covers
+  `test.only`/`test.skip`, and `nursery/useSortedClasses` replaces `prettier-plugin-tailwindcss` and
+  is explicitly unstable.
+  - **Prettier formatted the GraphQL inside a `` graphql(`…`) `` template literal and Biome does
+    not** — it formats standalone `.graphql` files only, so that indentation is kept by hand.
+    `graphql-operations.grit` refuses the drift instead of fixing it, BETWEEN lines and along them.
+    Between: column zero, an odd number of leading spaces, a tab, a field at the definition's own
+    depth, indentation growing after a line that opened nothing, growing by more than one level, a
+    line that opens a block and is not followed by one exactly a level deeper, and a dedent onto a
+    line that does not close one. Along: two spaces in a row outside the indentation, a spread carrying a space (only the
+    inline fragment `... on Post {` is legal), a space around the parentheses or before a colon, a
+    colon with no space after, a brace that does not open at the end of its line or close alone on
+    its own, a blank line inside the document, a line ending in whitespace. A comma is **not** a rule
+    — `print` writes `(first: $first, after: $after)`. What is left is a wrong-but-even depth, which
+    needs brace counting, which is parsing. **Nothing autofixes**: a Grit rewrite (`$doc => `…``)
+    compiles and does nothing, under `--write` and `--write --unsafe` alike. The one path to a real
+    fix-on-save is a document that lives in a `.graphql` FILE, which Biome does format —
+    `graphql.formatter` is enabled for exactly that reason, and because it was off the SDL in
+    `apps/posts-api/src/graphql` was never being formatted at all.
+  - **`<:` anchors a regex to the WHOLE node**, so "contains" is `r"(?s).*…*"`. This is the third
+    GritQL trap that fails silently and the worst of them: without the wrapping the rule compiles,
+    loads, matches nothing, and reads exactly like a rule that works.
+  - Two GritQL behaviours fail **silently** and cost an afternoon each: `$...name` binds nothing
+    (`cn($...args)` matches no call, `cn($args)` binds the whole argument list), and a regex with a
+    capture group and no variable for it reports an *info* and stops. A plugin that fails to compile
+    does say so — `Error(s) during loading of plugins` — rather than failing open.
+- **`graphql.config.yml` is now only for the editor** (`graphql.vscode-graphql`) — `apps/web`'s
+  codegen carries its own schema and documents in `codegen.ts`. The `web` project's `schema` there
+  deliberately **excludes** `apps/posts-api/src/graphql/federation.graphql`, the
+  `extend schema @link(...)` line. The federation directives the rest of the SDL uses (`@key`,
+  `@shareable`) are declared in `apps/web/federation.graphql`, beside the `_Any`/`_Entity`/`_entities`
+  that are already there for the same reason: they exist at runtime and codegen cannot see them.
 - **CI is `tools/github/*`**, composite actions called by `.github/workflows/ci.yml` — one job per
   check (`test`, `test-e2e`, `web`) through a single `ci` action, so the environment is prepared in
-  one place. `web` is the static one: `format:check`, then `lint` and `typecheck` for every project,
-  then the Next build.
+  one place. `web` is the static one: `pnpm lint`, then `typecheck` for every project, then the Next
+  build.
 
 ## Commands
 
@@ -106,9 +168,9 @@ pnpm test                      # nx run-many -t test: every project's Vitest sui
 pnpm test:e2e                  # EVERY app's test-e2e, one at a time: posts-api, then the browser
 pnpm test:web                  # apps/web-e2e alone: Playwright, THREE PROCESSES over real RabbitMQ
 pnpm test:all                  # the unit suites, then both e2e levels
-pnpm lint                      # nx run-many -t lint, then prettier --check .
-pnpm lint:fix                  # the same with `-c fix` (eslint --fix), then prettier --write .
-pnpm format / format:check     # prettier alone
+pnpm lint                      # biome check . — format, lint and import order, whole repo
+pnpm lint:fix                  # the same with --write
+pnpm format / format:check     # biome format, alone
 pnpm graph                     # the project graph, which is also the layer graph
 
 docker compose up -d localstack   # SNS + SQS, with the topology docker/localstack/init creates
@@ -1056,11 +1118,26 @@ plugin writes the cookie.
 - Every resolved provider is wrapped so each call runs inside `inRequestContext`: nothing opens a
   MikroORM context here, because Next owns the request and there is no middleware or interceptor.
 
-**The auth stack is external to the Next bundle, as CommonJS.** `next.config.ts` matches those
-packages by *request* and returns `commonjs`, and deliberately does **not** also list them in
-`serverExternalPackages`. Doing both is what broke it: they are ESM-only, so Next emitted an
-`import()` for them while the CommonJS libraries emitted a `require()`, and Node refused the second
-while the first was still evaluating — `ERR_REQUIRE_ESM_RACE_CONDITION`, on every request. One
-mechanism means one plain `require`, loaded in order, exactly as `apps/posts-api` does.
+**Under Turbopack the auth stack is BUNDLED — Nest, MikroORM and `pg` included — and never
+external.** Turbopack externalizes only what resolves inside `node_modules`, so the `@nestposts/*`
+libraries (symlinked into `libs/`) are always bundled, and from their CommonJS `require` it refuses
+to externalize an ESM-only package ("can't be external") and bundles it. Listing Nest or MikroORM
+in `serverExternalPackages` therefore gives TWO copies — external for an ESM `import`, bundled for a
+`require` — and the external one makes every ESM module above it async, so a library's `require`
+receives an empty namespace: `WithAggregateRoot is not a function`, `defineConfig is not a
+function`. `next.config.ts` keeps them out of that list and puts `@mikro-orm/core`,
+`@mikro-orm/postgresql` and `pg` in `transpilePackages`, which is what takes a package off Next's
+default external list. Three more things follow from bundling:
+
+- **`turbopackMinify: false`.** Minification renames classes, and `@EventType` and MikroORM identify
+  things by class name: `EventTypeConflictException: users.g is declared by g and by g`.
+  `serverMinification` is webpack's switch and does nothing here.
+- **`resolveAlias` points `@nestjs/websockets/socket-module.js` at an empty module.** `@nestjs/core`
+  loads it through an optional `import()` that it catches at runtime, but Turbopack fails the build
+  on any literal import it cannot resolve.
+- **One container per server LAYER.** Server Components and Route Handlers each get their own copy
+  of the bundle, so a container booted by one holds that layer's classes as tokens and the other
+  layer's `MikroORM` is not one of them: `Nest could not find MikroORM element`, on whichever
+  route is hit second. `container.ts` keys its `globalThis` cache by the layer's `NestFactory`.
 
 **`apps/web/tsconfig.json` turns `experimentalDecorators` on**, or Next's SWC cannot parse `@Module`.

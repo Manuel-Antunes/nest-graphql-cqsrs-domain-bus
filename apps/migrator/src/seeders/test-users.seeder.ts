@@ -1,7 +1,7 @@
 import type { EntityManager } from '@mikro-orm/postgresql';
-import type { BetterAuth } from '@nestposts/auth/infrastructure/better-auth/init-auth';
 import { Seeder } from '@mikro-orm/seeder';
 import { AuthUser } from '@nestposts/auth/domain/auth/auth-user.entity';
+import type { BetterAuth } from '@nestposts/auth/infrastructure/better-auth/init-auth';
 import { BETTER_AUTH } from '@nestposts/auth/infrastructure/better-auth/tokens';
 import { inRequestContext } from '@nestposts/database';
 import { AUTHOR_ROLE } from '@nestposts/users/domain/user/author.entity';

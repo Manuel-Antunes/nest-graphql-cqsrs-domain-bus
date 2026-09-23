@@ -1,4 +1,4 @@
-import { MikroORM, ref } from '@mikro-orm/core';
+import { MikroORM } from '@mikro-orm/core';
 import {
   closeTestDatabase,
   tableIn,
@@ -6,15 +6,15 @@ import {
 } from '@nestposts/database/testing';
 import { delegateRef } from '@nestposts/platform/domain/shared/delegation/delegate';
 import { SoftDeletion } from '@nestposts/platform/domain/shared/soft-delete/soft-delete';
-import { ACTIVE_FILTER } from '@nestposts/platform/infrastructure/persistence/soft-delete/soft-delete-orm.entity';
 import { SoftDeleteSubscriber } from '@nestposts/platform/infrastructure/persistence/soft-delete/soft-delete.subscriber';
+import { ACTIVE_FILTER } from '@nestposts/platform/infrastructure/persistence/soft-delete/soft-delete-orm.entity';
 import { Post } from '@nestposts/posts/domain/post/post.entity';
 import { PostId } from '@nestposts/posts/domain/post/vo/post-id';
 import { PostEntitySchema } from '@nestposts/posts/infrastructure/persistence/entities/post-orm.entity';
 import { TagSchema } from '@nestposts/posts/infrastructure/persistence/entities/tag-orm.entity';
 import {
-  Author,
   AUTHOR_ROLE,
+  Author,
   Authorship,
 } from '@nestposts/users/domain/user/author.entity';
 import { User } from '@nestposts/users/domain/user/user.entity';

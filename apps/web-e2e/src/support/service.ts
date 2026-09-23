@@ -1,3 +1,4 @@
+import type { ChildProcess } from 'node:child_process';
 import { spawn } from 'node:child_process';
 import {
   appendFileSync,
@@ -6,7 +7,6 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { join } from 'node:path';
-import type { ChildProcess } from 'node:child_process';
 
 import { WORKSPACE_ROOT } from './docker';
 import { sleep } from './posts-api';

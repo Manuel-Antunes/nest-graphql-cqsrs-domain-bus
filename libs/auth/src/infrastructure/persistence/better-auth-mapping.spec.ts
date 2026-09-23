@@ -1,5 +1,5 @@
-import type { AnyMikroORM } from '@nestposts/database/testing';
 import { inRequestContext } from '@nestposts/database';
+import type { AnyMikroORM } from '@nestposts/database/testing';
 import { closeTestDatabase, testDatabase } from '@nestposts/database/testing';
 import { CredentialId } from '@nestposts/users/domain/user/vo/credential-id';
 import { Email } from '@nestposts/users/domain/user/vo/email';

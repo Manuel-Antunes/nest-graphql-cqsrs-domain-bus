@@ -1,22 +1,22 @@
-import type { CallHandler, ExecutionContext } from '@nestjs/common';
 import { defineEntity, MikroORM, p, RequestContext } from '@mikro-orm/core';
+import type { CallHandler, ExecutionContext } from '@nestjs/common';
 import { Global, Injectable, Module } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { firstValueFrom, of } from 'rxjs';
 
 import type { AnyMikroORM } from '../testing/test-database';
-import type { TenantResolver } from './tenant.resolver';
 import { metadataOnly } from '../testing/test-database';
 import { TenancyModule } from './tenancy.module';
 import { ROOT_TENANT, TENANT_HEADER } from './tenant';
-import { TenantEntityManagers } from './tenant-entity-managers';
-import { SchemaPerTenant, SharedSchemaTenants } from './tenant-schemas';
 import { TenantInterceptor } from './tenant.interceptor';
+import type { TenantResolver } from './tenant.resolver';
 import {
   HeaderTenantResolver,
   TENANT_RESOLVER,
   TenantResolverProviders,
 } from './tenant.resolver';
+import { TenantEntityManagers } from './tenant-entity-managers';
+import { SchemaPerTenant, SharedSchemaTenants } from './tenant-schemas';
 
 type Headers = Record<string, string | string[] | undefined>;
 
@@ -181,7 +181,7 @@ describe('putting a request inside its tenant', () => {
   });
 
   describe('the interceptor', () => {
-    const handler = (): CallHandler => ({ handle: () => of('answered') });
+    const _handler = (): CallHandler => ({ handle: () => of('answered') });
 
     const interceptorFor = (tenantId: string) =>
       new TenantInterceptor(

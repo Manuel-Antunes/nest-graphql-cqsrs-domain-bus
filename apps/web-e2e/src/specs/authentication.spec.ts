@@ -34,7 +34,7 @@ test.describe('autenticação pelo navegador', () => {
     );
 
     expect(session, 'nenhum cookie de sessão').toBeDefined();
-    expect(session!.httpOnly, 'a sessão não pode ser legível por script').toBe(
+    expect(session?.httpOnly, 'a sessão não pode ser legível por script').toBe(
       true,
     );
     expect(
@@ -72,9 +72,9 @@ test.describe('autenticação pelo navegador', () => {
       ResultOf<typeof MeAtTheApi>
     >;
     expect(answer.errors, JSON.stringify(answer.errors)).toBeUndefined();
-    expect(answer.data!.me.email).toBe(accounts.author.email);
+    expect(answer.data?.me.email).toBe(accounts.author.email);
     expect(
-      answer.data!.me.__typename,
+      answer.data?.me.__typename,
       'o perfil de domínio foi provisionado na primeira leitura',
     ).toBe('Author');
   });
@@ -103,7 +103,7 @@ test.describe('autenticação pelo navegador', () => {
     await expect(
       page.getByText(/INVALID_EMAIL_OR_PASSWORD|Credenciais inválidas/i),
     ).toBeVisible();
-    await expect(page.getByText(accounts.author.email + ' ')).toHaveCount(0);
+    await expect(page.getByText(`${accounts.author.email} `)).toHaveCount(0);
   });
 
   test('quem já entrou é reconhecido ao voltar ao login', async ({

@@ -1,5 +1,5 @@
-import type { FragmentType } from '@/gql';
 import { Badge } from '@/components/ui/badge';
+import type { FragmentType } from '@/gql';
 import { getFragmentData, graphql } from '@/gql';
 
 export const TagChip_tag = graphql(`
