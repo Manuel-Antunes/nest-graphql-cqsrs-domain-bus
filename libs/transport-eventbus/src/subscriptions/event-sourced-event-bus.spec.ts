@@ -1,6 +1,7 @@
+import type { EntityManager } from '@mikro-orm/core';
 import type { IEvent } from '@nestjs/cqrs';
 import type { Observable } from 'rxjs';
-import { MikroORM } from '@mikro-orm/core';
+import { MikroORM, RequestContext } from '@mikro-orm/core';
 import { EventBus, ofType, Saga } from '@nestjs/cqrs';
 import { inRequestContext } from '@nestposts/database';
 import { closeTestDatabase, testDatabase } from '@nestposts/database/testing';
@@ -227,6 +228,47 @@ describe('the EventBus, event sourced', () => {
 
       expect(executed).toEqual([{ dispatchedFor: 'local' }]);
       publishing.stop();
+    });
+  });
+  describe('an event whose transaction commits late', () => {
+    const appendInOpenTransaction = async (
+      event: object,
+    ): Promise<EntityManager> => {
+      let em!: EntityManager;
+      await RequestContext.create(orm.em, async () => {
+        em = RequestContext.getEntityManager() as EntityManager;
+        await em.begin();
+        await new MikroOrmEventLog(em).append([event]);
+      });
+      return em;
+    };
+
+    it('is not skipped by a subscriber that already read past its position', async () => {
+      const source = containerThatSubscribes();
+      const seen: string[] = [];
+      source
+        .pipe(ofType(PostCompletedEvent))
+        .subscribe((event) => void seen.push(event.postId));
+      await settle();
+
+      const slow = await appendInOpenTransaction(
+        new PostCompletedEvent('slow', 'took its position first', new Date()),
+      );
+      const fast = await appendInOpenTransaction(
+        new PostCompletedEvent('fast', 'committed first', new Date()),
+      );
+      await fast.commit();
+
+      await settle();
+      await settle();
+
+      await slow.commit();
+
+      await settle();
+      await settle();
+
+      expect(seen).toContain('fast');
+      expect(seen).toContain('slow');
     });
   });
 });

@@ -96,6 +96,34 @@ describe('the event log', () => {
       );
     });
 
+    it('asks again for a position a previous read did not see', async () => {
+      await at(() =>
+        log.append([
+          new PostCreatedEvent('p-1', 'one'),
+          new PostCreatedEvent('p-2', 'two'),
+        ]),
+      );
+      const all = await at(() => log.readAfter('0', 10));
+      const [missed, seen] = all;
+
+      const past = await at(() => log.readAfter(seen.position, 10));
+      expect(past).toEqual([]);
+
+      const revisited = await at(() =>
+        log.readAfter(seen.position, 10, [missed.position]),
+      );
+
+      expect(
+        revisited.map((record) => (record.event as PostCreatedEvent).postId),
+      ).toEqual(['p-1']);
+    });
+
+    it('takes no gaps and behaves as it always did', async () => {
+      await at(() => log.append([new PostCreatedEvent('p-1', 'one')]));
+
+      await expect(at(() => log.readAfter('0', 10))).resolves.toHaveLength(1);
+    });
+
     it('answers 0 for an empty log, which is where a first subscriber starts', async () => {
       await expect(at(() => log.head())).resolves.toBe('0');
     });

@@ -58,7 +58,11 @@ export abstract class EventLog {
   abstract readStream(streamId: string): Promise<object[]>;
 
   /** Everything after this position, oldest first — the service's own order. */
-  abstract readAfter(position: string, limit: number): Promise<LoggedRecord[]>;
+  abstract readAfter(
+    position: string,
+    limit: number,
+    gaps?: readonly string[],
+  ): Promise<LoggedRecord[]>;
 
   /** The last position written, or `'0'` for an empty log — where a new subscriber starts. */
   abstract head(): Promise<string>;
@@ -114,7 +118,11 @@ export class MikroOrmEventLog extends EventLog {
     });
   }
 
-  readAfter(position: string, limit: number): Promise<LoggedRecord[]> {
+  readAfter(
+    position: string,
+    limit: number,
+    gaps: readonly string[] = [],
+  ): Promise<LoggedRecord[]> {
     return this.at(async () => {
       const em = this.em.getContext();
       const rows = await em
@@ -123,10 +131,10 @@ export class MikroOrmEventLog extends EventLog {
           `select position, identifier, message_type as "messageType", payload,
                 occurred_at as "occurredAt"
            from ${table(em)}
-          where position > ?
+          where position > ? or position = any(?::bigint[])
           order by position asc
           limit ?`,
-          [position, limit],
+          [position, `{${gaps.join(',')}}`, limit],
           'all',
           em.getTransactionContext(),
         );
