@@ -16,9 +16,9 @@ import { CompleteOnPostPreCreated } from './application/complete-on-post-pre-cre
 import { CompletePostWithDefaultTagCommand } from './application/complete-post-with-default-tag.command';
 import { PostEventsPublisher } from './infrastructure/outbox/post-events.publisher';
 import { mikroOrmConfig } from './infrastructure/persistence/mikro-orm.config';
+import { postEventsClient } from './infrastructure/transport/postEventsClient';
 import {
   POST_EVENTS_CLIENT,
-  postEventsClient,
   taggingIdentity,
 } from './infrastructure/transport/transport.config';
 import { PostEventsController } from './interfaces/messaging/post-events.controller';

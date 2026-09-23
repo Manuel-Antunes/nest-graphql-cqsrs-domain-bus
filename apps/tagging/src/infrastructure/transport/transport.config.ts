@@ -1,22 +1,9 @@
-import type { HttpServer } from '@nestjs/common';
-import type { ClientProxy, MicroserviceOptions } from '@nestjs/microservices';
+import type { MicroserviceOptions } from '@nestjs/microservices';
 import type { Inngest } from 'inngest';
-import { MemoryServer } from '@camcima/nestjs-memory-microservices';
-import { ClientProxyFactory, Transport } from '@nestjs/microservices';
 import {
-  AwsEventEnvelopeSerializer,
   inngestApp,
-  InngestClientProxy,
-  InngestEventEnvelopeDeserializer,
-  InngestEventEnvelopeSerializer,
-  InngestStrategy,
   localQueueUrl,
   localTopicArn,
-  MemoryClient,
-  MemoryEventEnvelopeSerializer,
-  RmqEventEnvelopeDeserializer,
-  RmqEventEnvelopeSerializer,
-  SnsClientProxy,
   SqsEventEnvelopeDeserializer,
   SqsStrategy,
   TransportIdentity,
@@ -74,89 +61,12 @@ export const inboundDestination = (): string =>
     memory: 'in process',
   })[transportMode()];
 
-const urls = (): string[] => [
+export const urls = (): string[] => [
   process.env.RABBITMQ_URL ?? 'amqp://localhost:5672',
 ];
-
-export const postEventsClient = (): ClientProxy => {
-  switch (transportMode()) {
-    case 'inngest':
-      return new InngestClientProxy({
-        inngest: inngest(),
-        serializer: new InngestEventEnvelopeSerializer(),
-      });
-    case 'aws':
-      return new SnsClientProxy({
-        topicArn: EVENTS_TOPIC_ARN,
-        serializer: new AwsEventEnvelopeSerializer(),
-      });
-    case 'memory':
-      return new MemoryClient({
-        servers: [],
-        serializer: new MemoryEventEnvelopeSerializer(),
-      });
-    default:
-      return ClientProxyFactory.create({
-        transport: Transport.RMQ,
-        options: {
-          urls: urls(),
-          exchange: EXCHANGE,
-          exchangeType: 'topic',
-          wildcards: true,
-          persistent: true,
-          serializer: new RmqEventEnvelopeSerializer(),
-        },
-      });
-  }
-};
 
 export const lambdaTransport = (): MicroserviceOptions => ({
   strategy: new SqsStrategy({
     deserializer: new SqsEventEnvelopeDeserializer(),
   }),
 });
-
-/**
- * One queue for this service, bound to the routing keys its controllers declare.
- *
- * A queue per SERVICE is not optional on RabbitMQ: a copy is made per bound queue, not per consumer,
- * so two applications sharing a queue would compete for the messages instead of each receiving one —
- * and whichever discards it acknowledges it, killing it for the other.
- */
-export const inboundTransport = (
-  httpAdapter?: HttpServer,
-): MicroserviceOptions => {
-  switch (transportMode()) {
-    case 'inngest':
-      return {
-        strategy: new InngestStrategy({
-          inngest: inngest(),
-          deserializer: new InngestEventEnvelopeDeserializer(),
-          httpAdapter,
-        }),
-      };
-    case 'aws':
-      return {
-        strategy: new SqsStrategy({
-          queueUrl: INBOUND_QUEUE_URLS,
-          deserializer: new SqsEventEnvelopeDeserializer(),
-        }),
-      };
-    case 'memory':
-      return { strategy: new MemoryServer() };
-    default:
-      return {
-        transport: Transport.RMQ,
-        options: {
-          urls: urls(),
-          queue: INBOUND_QUEUE,
-          queueOptions: { durable: true },
-          exchange: EXCHANGE,
-          exchangeType: 'topic',
-          wildcards: true,
-          noAck: false,
-          deserializer: new RmqEventEnvelopeDeserializer(),
-        },
-      };
-  }
-};

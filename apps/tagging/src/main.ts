@@ -8,9 +8,9 @@ import { FastifyAdapter } from '@nestjs/platform-fastify';
 import { Logger as PinoLogger } from 'nestjs-pino';
 
 import { AppModule } from './app.module';
+import { inboundTransport } from './infrastructure/transport/inboundTransport';
 import {
   inboundDestination,
-  inboundTransport,
   transportMode,
 } from './infrastructure/transport/transport.config';
 
