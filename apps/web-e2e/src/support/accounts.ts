@@ -1,4 +1,4 @@
-import { ServiceDatabase } from './database';
+import type { ServiceDatabase } from './database';
 
 export interface Account {
   readonly email: string;
