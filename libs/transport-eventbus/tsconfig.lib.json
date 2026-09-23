@@ -17,6 +17,12 @@
     },
     {
       "path": "../cqsrs/tsconfig.lib.json"
+    },
+    {
+      "path": "../microservices-aws/tsconfig.lib.json"
+    },
+    {
+      "path": "../microservices-inngest/tsconfig.lib.json"
     }
   ]
 }

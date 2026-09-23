@@ -16,6 +16,18 @@ export type UnitOfWorkPhase =
 
 export type UnitOfWorkListener = (unit: UnitOfWork) => Promise<void> | void;
 
+/** How a unit of work that is **started** — not joined — treats the work it tracked. */
+export interface UnitOfWorkOptions {
+  /**
+   * Whether a tracked piece of work that **failed** fails the unit: it rolls back and the first
+   * failure is rethrown by {@link UnitOfWork.run}. Off by default — see {@link UnitOfWork.track}.
+   *
+   * It is for the caller that can do something with the answer: an ingestion whose message is
+   * redelivered when it fails, so a saga's command that threw becomes a retry instead of a log line.
+   */
+  readonly failOnTrackedFailure?: boolean;
+}
+
 const storage = new AsyncLocalStorage<UnitOfWork>();
 
 /**
@@ -61,7 +73,12 @@ export class UnitOfWork {
 
   private readonly pending = new Set<Promise<unknown>>();
 
-  private constructor(readonly request?: object) {}
+  private readonly failures: unknown[] = [];
+
+  private constructor(
+    readonly request?: object,
+    private readonly options: UnitOfWorkOptions = {},
+  ) {}
 
   private current: UnitOfWorkPhase = 'started';
 
@@ -83,15 +100,20 @@ export class UnitOfWork {
    * **joined**, not nested: a saga that dispatches a command with `request.attachTo(command)` commits
    * once, with everything, which is what keeps one request one unit. Joining also {@link track}s the
    * work, so the unit waits for it. One that has started committing is not joined, and neither is one
-   * that belongs to a different request — see {@link covers}.
+   * that belongs to a different request — see {@link covers}. `options` apply to a unit this call
+   * starts; a joined one keeps its own.
    */
-  static async run<T>(work: () => Promise<T>, request?: object): Promise<T> {
+  static async run<T>(
+    work: () => Promise<T>,
+    request?: object,
+    options?: UnitOfWorkOptions,
+  ): Promise<T> {
     const running = storage.getStore();
     if (running?.staging && running.covers(request)) {
       return running.track(work());
     }
 
-    const unit = new UnitOfWork(request);
+    const unit = new UnitOfWork(request, options);
     return storage.run(unit, async () => {
       try {
         const result = await work();
@@ -164,12 +186,16 @@ export class UnitOfWork {
    * whoever dispatches registers, and the unit does not commit until everything registered is done.
    *
    * It waits for work to **finish**, not to succeed. A handler that throws is the bus's business —
-   * it already logs and reports it — and a unit that adjudicated would be deciding twice.
+   * it already logs and reports it — and a unit that adjudicated would be deciding twice. The
+   * exception is a unit started with {@link UnitOfWorkOptions.failOnTrackedFailure}, whose caller has
+   * asked to be told.
    */
   track<T>(work: Promise<T>): Promise<T> {
     const settled = work.then(
       () => undefined,
-      () => undefined,
+      (failure: unknown) => {
+        this.failures.push(failure);
+      },
     );
     this.pending.add(settled);
     void settled.finally(() => this.pending.delete(settled));
@@ -220,6 +246,9 @@ export class UnitOfWork {
         );
       }
       await Promise.all([...this.pending]);
+    }
+    if (this.options.failOnTrackedFailure && this.failures.length > 0) {
+      throw this.failures[0];
     }
   }
 

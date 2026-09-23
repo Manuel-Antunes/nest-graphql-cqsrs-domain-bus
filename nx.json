@@ -60,5 +60,10 @@
     }
   ],
   "analytics": false,
-  "parallel": 8
+  "parallel": 8,
+  "targetDefaults": {
+    "test": {
+      "dependsOn": ["^build"]
+    }
+  }
 }

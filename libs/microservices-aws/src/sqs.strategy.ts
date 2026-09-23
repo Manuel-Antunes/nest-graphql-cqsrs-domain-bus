@@ -15,7 +15,6 @@ import type {
 import { Server } from '@nestjs/microservices';
 import type { Context as LambdaContext, SQSEvent, SQSRecord } from 'aws-lambda';
 
-import { topicMatches } from '../in-memory/topic-pattern';
 import {
   awsClientConfig,
   queueArnFromUrl,
@@ -25,6 +24,7 @@ import { fromRecordAttributes } from './aws-message';
 import { SqsContext } from './sqs.context';
 import type { SqsEvents } from './sqs.events';
 import { SqsEventsMap, SqsStatus } from './sqs.events';
+import { topicMatches } from './topic-pattern';
 
 /** How many messages one `ReceiveMessage` may bring back, and SQS's own ceiling. */
 const MAX_BATCH = 10;
@@ -37,11 +37,13 @@ const RECEIVE_BACKOFF_MS = 1_000;
 
 export interface SqsStrategyOptions {
   /**
-   * **How a message becomes an event**, and it is not optional: this strategy will not choose a wire
-   * format on its caller's behalf. `SqsEventEnvelopeDeserializer` is the one this library ships; a
-   * service consuming messages somebody else publishes passes a deserializer of its own.
+   * **How a record's body becomes a packet.** It is handed the parsed body and `{ attributes, record }`,
+   * and answers `{ pattern, data }`. Left out, Nest's own `IncomingRequestDeserializer` applies, which
+   * reads back exactly what {@link SqsClientProxy} and {@link SnsClientProxy} send without a
+   * serializer. `@nestposts/transport-eventbus`'s `SqsEventEnvelopeDeserializer` is the one a service
+   * receiving domain events wants.
    */
-  readonly deserializer: ConsumerDeserializer;
+  readonly deserializer?: ConsumerDeserializer;
   /**
    * What a handler's **answer** is serialized with, which an event never has. Left out, Nest's own
    * `IdentitySerializer` applies — the default belongs to the base class, not here.
@@ -89,8 +91,8 @@ export interface SqsConsumer {
  * **The receiving half on AWS: an SQS queue as a Nest microservice transport.**
  *
  * It is `ServerRMQ`'s counterpart, and deliberately the same shape from the controller's side: an
- * `@EventPattern` is a routing key with wildcards, `@TransportEvent()` is the domain event, guards
- * and interceptors and filters apply. A service moved from RabbitMQ to SQS changes its bootstrap and
+ * `@EventPattern` is a routing key with wildcards, `@Payload()` is the data, `@Ctx()` is the
+ * {@link SqsContext}, guards and interceptors and filters apply. A service moved from RabbitMQ to SQS changes its bootstrap and
  * nothing else.
  *
  * ## Two ways to be driven, one class
@@ -106,23 +108,23 @@ export interface SqsConsumer {
  * ## Why it matches patterns itself
  * Because a queue has no bindings. On RabbitMQ the exchange decides what reaches the queue and the
  * routing key that arrives is matched against the handler's pattern by `ServerRMQ`; here SNS's filter
- * policy decides what reaches the queue ({@link SnsFilterPolicy}) and nothing has matched the
- * pattern yet. So `posts.#` is matched against `posts.PostCreated.9f1d…` here, with the same
- * {@link topicMatches} the in-process transport uses — one implementation of "what does this binding
- * mean", for every transport that is not a broker.
+ * policy decides what reaches the queue and nothing has matched the pattern yet. So `posts.#` is
+ * matched against `posts.PostCreated.9f1d…` here, with AMQP's own reading of a topic pattern
+ * ({@link topicMatches}).
  *
  * ## What an error does
  * Nothing is acknowledged by hand. A record whose handler threw is left undeleted (polling) or
  * reported in `batchItemFailures` (Lambda), and SQS redelivers it after the visibility timeout.
  * That is the whole of it: this strategy has no opinion about what a particular failure means, and
- * a service that wants one puts it in its own handler, where the failure is understood.
+ * a service that wants one says so in an exception filter — which is what `@nestposts/retry-policy`
+ * is — reading the receive count off the {@link SqsContext}.
  */
 export class SqsStrategy
   extends Server<SqsEvents, SqsStatus>
   implements CustomTransportStrategy
 {
   override transportId: TransportId = Symbol.for(
-    'nestposts.transport-eventbus.sqs',
+    'nestposts.microservices-aws.sqs',
   );
 
   protected override readonly logger = new Logger(SqsStrategy.name);
@@ -226,7 +228,7 @@ export class SqsStrategy
     if (!message.pattern) {
       throw new Error(
         `SQS message ${record.messageId} carries no pattern: neither the body nor its attributes ` +
-          'say what it is. Publish it through a client that declares AwsEventEnvelopeSerializer.',
+          'say what it is. Publish it through a client whose serializer the deserializer here can read.',
       );
     }
 

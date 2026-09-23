@@ -7,9 +7,9 @@ import type {
   WritePacket,
 } from '@nestjs/microservices';
 import { ClientProxy } from '@nestjs/microservices';
+import { topicMatches } from '@nestposts/microservices-aws/topic-pattern';
 
 import { MemoryEventEnvelopeDeserializer } from '../inbound/deserializers/memory-event-envelope.deserializer';
-import { topicMatches } from './topic-pattern';
 
 export interface MemoryClientOptions {
   /**

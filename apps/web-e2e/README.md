@@ -88,6 +88,7 @@ that way, since specs run in worker processes, so they go through a file.
 | `authorization` | the three states of `/posts/new` (anonymous, authenticated without the role, author); that the refusal is the server's and not the screen's; that reading is anonymous on purpose; and that `me` is polymorphic — `User` for the reader, `Author` for the author |
 | `federation` | the subgraph called the way a router calls it: `_entities(representations:)` resolving a `Post`, its `Author` and its `Tag` by key alone, anonymously — and answering `null`, in its own position, both for a key that resolves to nothing and for an author asked for as a `User` |
 | `reading` | a post written by an author reaches someone who never signed in, with `author` and `tags` resolved — the two `@ResolveField`s, seen on the page |
+| `saga-retry` | a failure deciding the tag is retried by the transport: failing twice and then holding closes the saga with one decision and one inbox row; failing every time stops at `@RetryPolicy`'s ceiling — four deliveries, the post left at version 1, nothing remembered as done — and on RabbitMQ the message is parked in `nestposts.tagging.post-events.dead` with why |
 | `saga` | the post is written in the FORM, the mutation answers version 1, and version 2 arrives after the other process decides the tag. Then what the browser cannot see: both services' durable state, both inboxes, a redelivery held by the inbox and the aggregate, the replica channel, one correlation id across two processes, and the `x-tenant` of the **browser** on the headers of both events |
 
 Everything goes through the browser and `/api/graphql` — the proxy the page itself uses, which puts
@@ -99,6 +100,12 @@ the request's cookie and its `x-tenant` on the way out. Two exceptions, both del
   itself on the next request, which is the part worth exercising.
 - **one assertion talks to the posts-api directly**, to show that the cookie the web wrote is accepted
   there. That is the claim, so bypassing the web is the test.
+
+The retry cases break the service without touching it: a Postgres trigger on the tagging schema's
+`event_log` refuses the append of `posts.PostCreated` a given number of times — which is
+`CompletePostWithDefaultTag` failing at `save()` — and counts every attempt in a sequence, which a
+rollback does not undo. The service carries no fault switch for them; `tagging` runs with
+`TAGGING_RETRY_DELAY_MS=1000` so a retry takes a second instead of five.
 
 The redelivery case builds the envelope **by hand** and publishes it through the management API, which
 makes it a test of the wire format as well: the event as the application wrote it in the body, and

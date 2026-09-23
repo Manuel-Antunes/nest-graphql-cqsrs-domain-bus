@@ -1,4 +1,5 @@
 import type { ReadPacket } from '@nestjs/microservices';
+import type { InngestOutgoingEvent } from '@nestposts/microservices-inngest/inngest-client.proxy';
 import { qualifiedNameIn } from '@nestposts/platform/domain/shared/event-type';
 
 import { CORRELATION_ID } from '../../request-context';
@@ -10,11 +11,8 @@ import { EventEnvelopeSerializer } from './event-envelope.serializer';
 export const CORRELATION_SESSION = 'correlation_id';
 
 /** What {@link InngestEventEnvelopeSerializer} hands the client: an Inngest event, ready to send. */
-export interface InngestEventMessage {
-  readonly name: string;
-  readonly data: Record<string, unknown>;
+export interface InngestEventMessage extends InngestOutgoingEvent {
   readonly user: EnvelopeMetadata;
-  readonly meta?: { readonly sessions?: Record<string, string | number> };
 }
 
 /**

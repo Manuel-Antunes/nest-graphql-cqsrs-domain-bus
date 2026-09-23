@@ -19,6 +19,9 @@
       "path": "../../libs/transport-eventbus/tsconfig.lib.json"
     },
     {
+      "path": "../../libs/retry-policy/tsconfig.lib.json"
+    },
+    {
       "path": "../../libs/posts/tsconfig.lib.json"
     },
     {
@@ -26,6 +29,12 @@
     },
     {
       "path": "../../libs/observability/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/microservices-inngest/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/microservices-aws/tsconfig.lib.json"
     },
     {
       "path": "../../libs/lambda/tsconfig.lib.json"

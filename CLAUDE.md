@@ -30,8 +30,9 @@ The only exceptions:
    `noArrayIndexKey` in `saga-runner.tsx` and `entities-probe.tsx`, whose lists are append-only and
    positional; `noLabelWithoutControl` and `useSemanticElements` in `apps/web`; and the
    `biome-ignore-all` on `libs/database/src/index.ts` described under **Linting** below.
-3. **The in-house libraries** — `libs/cqsrs`, `libs/database`, `libs/validated-dto` and
-   `libs/transport-eventbus` — may carry **JSDoc**, and only JSDoc (`/** … */`), as usage
+3. **The in-house libraries** — `libs/cqsrs`, `libs/database`, `libs/validated-dto`,
+   `libs/transport-eventbus`, `libs/microservices-aws` and `libs/microservices-inngest` — may carry
+   **JSDoc**, and only JSDoc (`/** … */`), as usage
    documentation of their public API. These are
    general-purpose libraries that happen to live in this repository: their callers read the signature
    and the doc popup, not the implementation, so documenting what a type, option or method is for
@@ -211,6 +212,7 @@ Environment variables, per application:
 | transport | `POSTS_TRANSPORT` = `inngest` (default) \| `rabbitmq` \| `memory` \| `aws` | `TAGGING_TRANSPORT`, same |
 | inngest | `INNGEST_BASE_URL` (default `http://localhost:8288`), `INNGEST_SERVE_ORIGIN`, `INNGEST_DEV`, `INNGEST_EVENT_KEY`, `INNGEST_SIGNING_KEY` | idem, plus `TAGGING_PORT` (default 3001) |
 | publishing | `POSTS_PUBLISH_EVENTS=false` turns the outbound half off | `TAGGING_PUBLISH_EVENTS` |
+| retries | — | `TAGGING_RETRY_DELAY_MS` (default 5000): the delay between two deliveries of a message whose handler failed — the retry queue's TTL on RabbitMQ, a `RetryAfterError` on Inngest |
 | broker | `RABBITMQ_URL`, `POSTS_EXCHANGE`, `POSTS_COMPLETED_QUEUE` | `RABBITMQ_URL`, `TAGGING_EXCHANGE`, `TAGGING_QUEUE` |
 | aws | `POSTS_TOPIC_ARN`, `POSTS_COMPLETED_QUEUE_URL` — both default to LocalStack | `TAGGING_TOPIC_ARN`, `TAGGING_QUEUE_URL` |
 | | `AWS_ENDPOINT_URL` (LocalStack), `AWS_REGION` and the SDK's own credentials address both | |
@@ -253,7 +255,14 @@ libs/posts               domain/post + domain/tag + their ORM mappings and repos
 libs/cqsrs               the third CQRS message (see below)
 libs/validated-dto       Zod → DTO/value object mixins
 libs/transport-eventbus  the CQRS event bus over Nest's microservice transports (see below),
-                         RabbitMQ / SNS+SQS / in-process
+                         RabbitMQ / SNS+SQS / Inngest / in-process — the envelope's wire on each
+libs/microservices-aws   SNS and SQS as a plain Nest transport: the client proxies, SqsStrategy,
+                         SqsContext, processSqsEvent. No CQRS, no envelope, no @EventType
+libs/microservices-inngest  Inngest as a plain Nest transport: InngestClientProxy, InngestStrategy,
+                         InngestContext. Same rule
+libs/retry-policy        @RetryPolicy for an @EventPattern handler, and one ExceptionProducer per
+                         transport (SQS, Inngest, RabbitMQ with its dead-letter topology) — see its
+                         README
 libs/observability       the one door to observability: startTelemetry (the OTel SDK) and
                          loggingModule (pino, with trace_id on every record). A library depends on
                          @opentelemetry/api; an application depends on this. Import
@@ -404,9 +413,11 @@ before changing the library's shape. The essentials:
   `SqsStrategy` to `SqsEventEnvelopeDeserializer`, which made the transport the one deciding what a
   service is allowed to say to something it did not write. They do not any more: the two clients take
   an **optional** serializer and fall through to Nest's own `IdentitySerializer` when given none, like
-  any plain `ClientProxy`, and the strategy **requires** its deserializer, because that is the whole
-  of how a message becomes an event again. A default wire format is a decision, and it belongs to the
-  composition root like every other one here.
+  any plain `ClientProxy`, and the strategy falls through to Nest's `IncomingRequestDeserializer`,
+  which reads back what a plain proxy sends — and not an event. A default wire format is a decision,
+  and it belongs to the composition root like every other one here. The proxies and strategies
+  themselves live in `libs/microservices-aws` and `libs/microservices-inngest`, which is what that
+  rule bought: nothing in them knows an envelope exists.
 - **A controller's parameter is the event, through `@TransportEvent()`** — a `@Payload()` bound to
   `TransportEventPipe`, which rebuilds the real class from the envelope and marks it as ingested. Extra
   pipes compose (`@TransportEvent(new ValidationPipe())`), and `@TransportRequest()` is the other half:
@@ -1076,6 +1087,19 @@ DTOs count.
   INTERNAL event array and then calls `uncommit()`, which empties it. Publishing straight away never
   noticed; a unit of work holds the events until its commit phase and finds the array cleared — the
   command succeeds, appends nothing and tells nobody.
+- **A saga's command that throws fails the INGESTION, and only the ingestion.** A unit of work
+  waits for tracked work to finish, not to succeed — except one started with
+  `failOnTrackedFailure`, which is how `EventIngestion` opens its own. So a command a saga dispatched
+  from an ingested event rejects the controller's `ingest`, which is what gives a transport's retry
+  (and `@RetryPolicy`) something to act on; and the ingestion forgets the inbox row it had already
+  committed, or the redelivery would be dropped as a duplicate. `pnpm test:web`'s `saga-retry.spec`
+  proves it on both transports, failing the append with a Postgres trigger rather than a code path
+  the service carries for a test.
+- **`ServerRMQ` with `noAck: false` never acknowledges an event.** Nest leaves it to the handler, and
+  for years nothing here did: every message sat unacked until the channel closed. On `apps/tagging`
+  the `@RetryPolicy` interceptor acknowledges a handled message through the `RmqExceptionProducer`,
+  and the producer `nack`s a failed one into the dead-letter delay. `apps/posts-api` still acks
+  nothing.
 - **Publishing after a unit has started committing goes out immediately.** A handler reacting to a
   committed event and dispatching a command of its own is new work, not a late addition to work that
   is already leaving — `UnitOfWork.staging` is the question, and Axon answers it by throwing

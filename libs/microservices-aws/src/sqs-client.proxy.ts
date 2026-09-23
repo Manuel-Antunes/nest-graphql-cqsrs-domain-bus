@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { SQSClientConfig } from '@aws-sdk/client-sqs';
 import { SendMessageCommand, SQSClient } from '@aws-sdk/client-sqs';
 import { Logger } from '@nestjs/common';
@@ -8,10 +9,12 @@ import type {
 } from '@nestjs/microservices';
 import { ClientProxy } from '@nestjs/microservices';
 
-import { TRANSPORT_IDENTIFIER } from '../outbound/event-envelope';
 import { awsClientConfig, queueNameOf } from './aws-client.config';
-import type { AwsEnvelopeMessage } from './aws-message';
-import { asMessageAttributes, orderingKeyIn } from './aws-message';
+import {
+  asMessageAttributes,
+  orderingKeyIn,
+  outgoingMessageOf,
+} from './aws-message';
 import type { SqsRecordOptions } from './sqs-record.builder';
 import { isSqsRecord } from './sqs-record.builder';
 
@@ -92,9 +95,11 @@ export class SqsClientProxy extends ClientProxy {
   protected async dispatchEvent<T = unknown>(packet: ReadPacket): Promise<T> {
     const record = isSqsRecord(packet.data) ? packet.data : undefined;
     const options = record?.options ?? {};
-    const message = (await this.serializer.serialize(
-      record ? { ...packet, data: record.data } : packet,
-    )) as AwsEnvelopeMessage;
+    const unwrapped = record ? { ...packet, data: record.data } : packet;
+    const message = outgoingMessageOf(
+      await this.serializer.serialize(unwrapped, { ...options }),
+      unwrapped,
+    );
 
     await this.client.send(
       new SendMessageCommand({
@@ -108,10 +113,13 @@ export class SqsClientProxy extends ClientProxy {
         ...(this.fifo
           ? {
               MessageGroupId:
-                options.messageGroupId ?? orderingKeyIn(message.pattern),
+                options.messageGroupId ??
+                message.groupId ??
+                orderingKeyIn(message.pattern),
               MessageDeduplicationId:
                 options.messageDeduplicationId ??
-                message.body.metadata[TRANSPORT_IDENTIFIER],
+                message.deduplicationId ??
+                randomUUID(),
             }
           : {}),
       }),

@@ -135,6 +135,19 @@ Everything under `outbound/`, `inbound/` and `persistence/`, none of which upstr
 - **two ways to drive that strategy** — a long-polling receive loop for a process, and
   `processSqsEvent` for a Lambda, which reports `batchItemFailures` rather than throwing on the first
   failure (throwing redrives the records that succeeded; returning deletes the ones that did not);
+- **the AWS and Inngest transports moved out**, to `@nestposts/microservices-aws` and
+  `@nestposts/microservices-inngest`: the client proxies, the strategies, their contexts and record
+  builders, `processSqsEvent` and `topicMatches`. None of it came from upstream, and none of it needed
+  an envelope — a proxy takes whatever its serializer answers and a strategy defaults to Nest's own
+  deserializer — so it is usable by a service that never heard of this library, and by
+  `@nestposts/retry-policy`, which reads the receive count off `SqsContext` and the attempt off
+  `InngestContext`. The envelope's wire on those transports stayed here, and so did the one piece
+  that needs `@EventType`: `inngestTriggers`, now handed to the strategy as its `triggers`;
+- **a failed reaction is a failed ingestion**: `EventIngestion` opens its unit of work with
+  `failOnTrackedFailure`, so a saga's command that throws rejects the message instead of being logged
+  and forgotten, and it forgets the inbox row it had written, so the transport's redelivery is acted
+  on rather than dropped as a duplicate. The event log's append is idempotent by identifier, which is
+  what makes the second ingestion of the same message safe;
 - **a trace on the envelope** (`tracing.ts`): W3C trace context injected where the metadata is built,
   a consumer span around the whole ingestion, and both trace keys excluded from what a service in the
   middle of a chain re-emits — for the same reason the origin mark is. It is `@opentelemetry/api`

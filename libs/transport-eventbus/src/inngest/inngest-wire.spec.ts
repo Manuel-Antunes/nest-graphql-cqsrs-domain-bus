@@ -1,3 +1,9 @@
+import { InngestClientProxy } from '@nestposts/microservices-inngest/inngest-client.proxy';
+import { InngestRecordBuilder } from '@nestposts/microservices-inngest/inngest-record.builder';
+import {
+  inngestFunctionId,
+  MAX_TRIGGERS,
+} from '@nestposts/microservices-inngest/inngest-triggers';
 import { EventType } from '@nestposts/platform/domain/shared/event-type';
 
 import { InngestEventEnvelopeDeserializer } from '../inbound/deserializers/inngest-event-envelope.deserializer';
@@ -15,13 +21,7 @@ import {
   InngestEventEnvelopeSerializer,
 } from '../outbound/serializers/inngest-event-envelope.serializer';
 import { CORRELATION_ID } from '../request-context';
-import { InngestClientProxy } from './inngest-client.proxy';
-import { InngestRecordBuilder } from './inngest-record.builder';
-import {
-  inngestFunctionId,
-  inngestTriggers,
-  MAX_TRIGGERS,
-} from './inngest-triggers';
+import { inngestTriggers } from './inngest-triggers';
 
 const ROUTING_KEY = 'posts.PostCreated.p-1';
 

@@ -211,6 +211,7 @@ export class ContainerStack {
         ...shared,
         TAGGING_TRANSPORT: options.transport,
         TAGGING_PORT: String(TAGGING_PORT),
+        TAGGING_RETRY_DELAY_MS: '1000',
         INNGEST_SERVE_ORIGIN: `http://tagging:${TAGGING_PORT}`,
       })
       .withWaitStrategy(Wait.forLogMessage(/tagging is listening/))

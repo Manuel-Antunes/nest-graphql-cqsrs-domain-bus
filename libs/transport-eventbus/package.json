@@ -28,6 +28,8 @@
   "dependencies": {
     "@nestposts/cqsrs": "workspace:*",
     "@nestposts/database": "workspace:*",
+    "@nestposts/microservices-aws": "workspace:*",
+    "@nestposts/microservices-inngest": "workspace:*",
     "@nestposts/platform": "workspace:*"
   }
 }

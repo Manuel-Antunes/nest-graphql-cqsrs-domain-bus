@@ -53,6 +53,16 @@ export abstract class MessageInbox {
     origin?: string,
   ): Promise<boolean>;
 
+  /**
+   * **Forgets a message it registered**, so its redelivery is new again.
+   *
+   * The row commits before the work the message sets off has finished — the saga and its command run
+   * after the ingestion's transaction, on purpose — so when that work fails the message is still
+   * remembered as done, and the transport's retry would be dropped as a duplicate. The ingestion calls
+   * this when it rethrows, which is what turns a failed reaction into a delivery worth making again.
+   */
+  abstract forget(identifier: string): Promise<void>;
+
   /** What this service has ingested, newest first. */
   abstract received(): Promise<ReceivedMessage[]>;
 }
@@ -70,6 +80,8 @@ export class NoMessageInbox extends MessageInbox {
   async register(): Promise<boolean> {
     return true;
   }
+
+  async forget(): Promise<void> {}
 
   async received(): Promise<ReceivedMessage[]> {
     return [];
@@ -107,6 +119,18 @@ export class MikroOrmMessageInbox extends MessageInbox {
       em.getTransactionContext(),
     );
     return rowsIn(affected) === 1;
+  }
+
+  async forget(identifier: string): Promise<void> {
+    const em = this.em.getContext();
+    await em
+      .getConnection()
+      .execute(
+        `delete from ${table(em)} where identifier = ?`,
+        [identifier],
+        'run',
+        em.getTransactionContext(),
+      );
   }
 
   async received(): Promise<ReceivedMessage[]> {

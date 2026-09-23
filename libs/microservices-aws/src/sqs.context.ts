@@ -1,21 +1,18 @@
 import { BaseRpcContext } from '@nestjs/microservices';
 import type { Context as LambdaContext, SQSRecord } from 'aws-lambda';
 
-import type { EnvelopeMetadata } from '../outbound/event-envelope';
-
 type SqsContextArgs = [
   record: SQSRecord,
   pattern: string,
   lambdaContext: LambdaContext | undefined,
-  attributes: EnvelopeMetadata,
+  attributes: Readonly<Record<string, string>>,
 ];
 
 /**
- * **The delivery itself, for a handler that needs more than the event** — the counterpart of
+ * **The delivery itself, for a handler that needs more than the payload** — the counterpart of
  * `RmqContext`.
  *
- * `@TransportEvent()` answers with the domain event and that is what a controller should want. This
- * is the rest: the raw record (its receipt handle, its receive count, the queue it came from) and,
+ * `@Payload()` answers with the data and that is what a controller usually wants. This is the rest: the raw record (its receipt handle, its receive count, the queue it came from) and,
  * in a Lambda, the invocation it arrived in.
  */
 export class SqsContext extends BaseRpcContext<SqsContextArgs> {
@@ -43,7 +40,7 @@ export class SqsContext extends BaseRpcContext<SqsContextArgs> {
   }
 
   /** The record's message attributes, flattened — the routing facts the subscription filtered on. */
-  getMessageAttributes(): EnvelopeMetadata {
+  getMessageAttributes(): Readonly<Record<string, string>> {
     return this.args[3];
   }
 

@@ -4,6 +4,7 @@ import { DatabaseModule, TenancyModule } from '@nestposts/database';
 import { loggingModule } from '@nestposts/observability';
 import { Post } from '@nestposts/posts/domain/post/post.entity';
 import { postsEntities } from '@nestposts/posts/infrastructure/posts-infrastructure.module';
+import { RetryPolicyModule } from '@nestposts/retry-policy/retry-policy.module';
 import {
   MikroOrmMessageInbox,
   TRANSPORT_EVENT_BUS_PUBLISHER,
@@ -16,9 +17,11 @@ import { CompleteOnPostPreCreated } from './application/complete-on-post-pre-cre
 import { CompletePostWithDefaultTagCommand } from './application/complete-post-with-default-tag.command';
 import { PostEventsPublisher } from './infrastructure/outbox/post-events.publisher';
 import { mikroOrmConfig } from './infrastructure/persistence/mikro-orm.config';
+import { exceptionProducer } from './infrastructure/transport/exceptionProducer';
 import { postEventsClient } from './infrastructure/transport/postEventsClient';
 import {
   POST_EVENTS_CLIENT,
+  POST_EVENTS_MAX_RETRIES,
   taggingIdentity,
 } from './infrastructure/transport/transport.config';
 import { PostEventsController } from './interfaces/messaging/post-events.controller';
@@ -30,6 +33,12 @@ import { PostEventsController } from './interfaces/messaging/post-events.control
     DatabaseModule.forRoot(mikroOrmConfig()),
     DatabaseModule.forFeature([...postsEntities, ...usersEntities]),
     TenancyModule.forRoot({ http: false, resolver: TransportTenantResolver }),
+    RetryPolicyModule.forRootAsync({
+      useFactory: () => ({
+        exceptionProducer: exceptionProducer(),
+        defaultMaxRetries: POST_EVENTS_MAX_RETRIES,
+      }),
+    }),
     TransportEventBusModule.forRoot({
       identity: taggingIdentity(),
       inbox: MikroOrmMessageInbox,

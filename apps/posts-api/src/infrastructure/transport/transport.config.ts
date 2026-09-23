@@ -3,21 +3,26 @@ import type { HttpServer } from '@nestjs/common';
 import type { ClientProxy, MicroserviceOptions } from '@nestjs/microservices';
 import { ClientProxyFactory, Transport } from '@nestjs/microservices';
 import {
-  AwsEventEnvelopeSerializer,
-  InngestClientProxy,
-  InngestEventEnvelopeDeserializer,
-  InngestEventEnvelopeSerializer,
-  InngestStrategy,
-  inngestApp,
   localQueueUrl,
   localTopicArn,
+  SnsClientProxy,
+  SqsStrategy,
+} from '@nestposts/microservices-aws';
+import {
+  InngestClientProxy,
+  InngestStrategy,
+  inngestApp,
+} from '@nestposts/microservices-inngest';
+import {
+  AwsEventEnvelopeSerializer,
+  InngestEventEnvelopeDeserializer,
+  InngestEventEnvelopeSerializer,
+  inngestTriggers,
   MemoryClient,
   MemoryEventEnvelopeSerializer,
   RmqEventEnvelopeDeserializer,
   RmqEventEnvelopeSerializer,
-  SnsClientProxy,
   SqsEventEnvelopeDeserializer,
-  SqsStrategy,
   TransportIdentity,
 } from '@nestposts/transport-eventbus';
 import type { Inngest } from 'inngest';
@@ -123,6 +128,7 @@ export const postCompletedTransport = (
         strategy: new InngestStrategy({
           inngest: inngest(),
           deserializer: new InngestEventEnvelopeDeserializer(),
+          triggers: inngestTriggers,
           httpAdapter,
         }),
       };

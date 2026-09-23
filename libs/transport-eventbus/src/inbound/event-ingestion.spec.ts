@@ -7,6 +7,7 @@ import type { IEventHandler } from '@nestjs/cqrs';
 import { AsyncContext, CqrsModule, EventsHandler } from '@nestjs/cqrs';
 import type { TestingModule } from '@nestjs/testing';
 import { Test } from '@nestjs/testing';
+import { UnitOfWorkCommands } from '@nestposts/cqsrs';
 import {
   dropTestSchema,
   ensureTestSchema,
@@ -56,6 +57,7 @@ class PostCreatedEvent {
 class Received {
   readonly events: PostCreatedEvent[] = [];
   readonly contexts: (AsyncContext | undefined)[] = [];
+  refusals = 0;
 }
 
 @EventsHandler(PostCreatedEvent)
@@ -63,6 +65,10 @@ class PostCreatedHandler implements IEventHandler<PostCreatedEvent> {
   constructor(private readonly received: Received) {}
 
   handle(event: PostCreatedEvent): void {
+    if (this.received.refusals > 0) {
+      this.received.refusals -= 1;
+      throw new Error('the reaction refused');
+    }
     this.received.events.push(event);
     this.received.contexts.push(AsyncContext.of(event));
   }
@@ -126,6 +132,7 @@ const moduleWith = async (
       { provide: MessageInbox, useClass: MikroOrmMessageInbox },
       Received,
       PostCreatedHandler,
+      UnitOfWorkCommands,
       ...overrides,
     ],
   }).compile();
@@ -184,6 +191,20 @@ describe('EventIngestion', () => {
 
     expect(received.events).toHaveLength(0);
     await expect(module.get(MessageInbox).received()).resolves.toHaveLength(0);
+  });
+
+  it('rejects a message whose reaction failed, and forgets it so the redelivery is acted on', async () => {
+    received.refusals = 1;
+
+    await expect(
+      ingestion.ingest(arrivingFrom('tagging', 'evt-refused')),
+    ).rejects.toThrow('the reaction refused');
+    await expect(module.get(MessageInbox).received()).resolves.toHaveLength(0);
+
+    await ingestion.ingest(arrivingFrom('tagging', 'evt-refused'));
+
+    expect(received.events).toHaveLength(1);
+    await expect(module.get(MessageInbox).received()).resolves.toHaveLength(1);
   });
 
   it('remembers what it ingested, and from whom', async () => {

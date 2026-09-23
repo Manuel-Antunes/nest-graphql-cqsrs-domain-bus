@@ -15,9 +15,11 @@ import type { InngestStepTools } from './inngest.context';
 import { InngestContext } from './inngest.context';
 import type { InngestEvents } from './inngest.events';
 import { InngestEventsMap, InngestStatus } from './inngest.events';
+import type { InngestTriggerResolver } from './inngest-triggers';
 import {
+  claimTriggers,
   inngestFunctionId,
-  inngestTriggers,
+  literalTriggers,
   MAX_TRIGGERS,
 } from './inngest-triggers';
 
@@ -27,10 +29,23 @@ export interface InngestStrategyOptions {
   /** The Inngest client the functions are created on — the same one the client proxy sends through. */
   readonly inngest: Inngest.Any;
   /**
-   * **How a message becomes an event**, and it is not optional: this strategy will not choose a wire
-   * format on its caller's behalf. `InngestEventEnvelopeDeserializer` is the one this library ships.
+   * **How an Inngest event becomes a packet.** It is handed the event and `{ channel }`, the pattern
+   * the function was bound for. Left out, Nest's own `IncomingRequestDeserializer` applies and a
+   * handler's `@Payload()` is the event's `data`. `@nestposts/transport-eventbus`'s
+   * `InngestEventEnvelopeDeserializer` is the one a service receiving domain events wants.
    */
-  readonly deserializer: ConsumerDeserializer;
+  readonly deserializer?: ConsumerDeserializer;
+  /**
+   * **What a pattern stands for, as event names** — see {@link InngestTriggerResolver}. Left out,
+   * {@link literalTriggers}: a literal name, or one with its last segment wildcarded.
+   */
+  readonly triggers?: InngestTriggerResolver;
+  /**
+   * How many times Inngest retries a failed run before it gives up — the function's own `retries`.
+   * Left out, Inngest's default. A retry policy that counts attempts wants this to be at least its
+   * own ceiling, or Inngest stops first and the policy's last word is never said.
+   */
+  readonly retries?: number;
   /**
    * What a handler's **answer** is serialized with, which an event never has. Left out, Nest's own
    * `IdentitySerializer` applies — the default belongs to the base class, not here.
@@ -63,15 +78,16 @@ export interface InngestStrategyOptions {
  * **The receiving half on Inngest: a function is the binding, and the invocation is the delivery.**
  *
  * It is `ServerRMQ`'s counterpart and deliberately the same shape from the controller's side: an
- * `@EventPattern` is a binding, `@TransportEvent()` is the domain event, guards and interceptors and
- * filters apply. A service moved from RabbitMQ to Inngest changes its bootstrap and nothing else.
+ * `@EventPattern` is a binding, `@Payload()` is the data, `@Ctx()` is the {@link InngestContext},
+ * guards and interceptors and filters apply. A service moved from RabbitMQ to Inngest changes its
+ * bootstrap and nothing else.
  *
  * ## Why the binding is resolved at boot
  * A queue is bound by a routing key the broker matches at delivery time; an Inngest function
  * **declares** the exact event names that trigger it. So `posts.#` cannot be handed over as it is —
- * it is expanded through {@link inngestTriggers} into one trigger per registered event of that
- * namespace, at the moment the functions are created. The handler is still one, and the message type
- * in the envelope is still what resolves the concrete class.
+ * it is expanded through the `triggers` resolver into the names it stands for, at the moment the
+ * functions are created, and each name is claimed by the most specific pattern that asked for it
+ * ({@link claimTriggers}), so one event is one run, as it is one delivery on a queue.
  *
  * ## Why it mounts and does not listen
  * Inngest invokes a function over HTTP, so a service that receives has to be reachable. This
@@ -84,7 +100,7 @@ export class InngestStrategy
   implements CustomTransportStrategy
 {
   override transportId: TransportId = Symbol.for(
-    'nestposts.transport-eventbus.inngest',
+    'nestposts.microservices-inngest.inngest',
   );
 
   protected override readonly logger = new Logger(InngestStrategy.name);
@@ -93,6 +109,7 @@ export class InngestStrategy
   private readonly servePath: string;
   private readonly serveOrigin?: string;
   private readonly functions = new Map<string, InngestFunction.Any>();
+  private readonly triggers = new Map<string, string[]>();
   private readonly listeners: {
     event: keyof InngestEvents;
     callback: InngestEvents[keyof InngestEvents];
@@ -138,6 +155,7 @@ export class InngestStrategy
 
   async close(): Promise<void> {
     this.functions.clear();
+    this.triggers.clear();
     this.fastify = undefined;
     this._status$.next(InngestStatus.DISCONNECTED);
     this.emitEvent(InngestEventsMap.CLOSE);
@@ -210,12 +228,15 @@ export class InngestStrategy
   }
 
   private createFunctions(): void {
-    for (const pattern of this.getHandlers().keys()) {
-      const triggers = inngestTriggers(pattern);
+    const claimed = claimTriggers(
+      [...this.getHandlers().keys()],
+      this.options.triggers ?? literalTriggers,
+    );
+    for (const [pattern, triggers] of claimed) {
       if (triggers.length === 0) {
         this.logger.warn(
-          `'${pattern}' matches no registered event type, so no Inngest function was created for ` +
-            'it — nothing will ever trigger this handler.',
+          `'${pattern}' stands for no event name another binding has not already claimed, so no ` +
+            'Inngest function was created for it — nothing will ever trigger this handler.',
         );
         continue;
       }
@@ -226,6 +247,7 @@ export class InngestStrategy
             'service actually reacts to, one pattern each, instead of the whole namespace.',
         );
       }
+      this.triggers.set(pattern, triggers);
       this.functions.set(pattern, this.functionFor(pattern, triggers));
     }
   }
@@ -239,6 +261,9 @@ export class InngestStrategy
         id: inngestFunctionId(pattern),
         name: `Handle ${pattern}`,
         triggers: triggers.map((event) => ({ event })),
+        ...(this.options.retries === undefined
+          ? {}
+          : { retries: this.options.retries }),
       } as never,
       (async ({
         event,
@@ -287,7 +312,7 @@ export class InngestStrategy
 
   private triggerSummary(): string {
     return [...this.functions.keys()]
-      .map((pattern) => `${pattern} → ${inngestTriggers(pattern).length}`)
+      .map((pattern) => `${pattern} → ${this.triggers.get(pattern)?.length}`)
       .join(', ');
   }
 

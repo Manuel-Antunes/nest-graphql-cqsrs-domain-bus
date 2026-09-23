@@ -44,6 +44,15 @@
     },
     {
       "path": "./libs/lambda"
+    },
+    {
+      "path": "./libs/retry-policy"
+    },
+    {
+      "path": "./libs/microservices-aws"
+    },
+    {
+      "path": "./libs/microservices-inngest"
     }
   ]
 }

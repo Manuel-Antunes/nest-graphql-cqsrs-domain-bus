@@ -1,10 +1,13 @@
 import type { MicroserviceOptions } from '@nestjs/microservices';
 import {
-  inngestApp,
   localQueueUrl,
   localTopicArn,
-  SqsEventEnvelopeDeserializer,
   SqsStrategy,
+} from '@nestposts/microservices-aws';
+import { inngestApp } from '@nestposts/microservices-inngest';
+import { RmqRetryTopology } from '@nestposts/retry-policy/adapters/rmq-retry.topology';
+import {
+  SqsEventEnvelopeDeserializer,
   TransportIdentity,
 } from '@nestposts/transport-eventbus';
 import type { Inngest } from 'inngest';
@@ -21,6 +24,16 @@ export const EXCHANGE = process.env.TAGGING_EXCHANGE ?? 'nestposts.events';
 
 export const INBOUND_QUEUE =
   process.env.TAGGING_QUEUE ?? 'nestposts.tagging.post-events';
+
+export const POST_EVENTS_MAX_RETRIES = 3;
+
+export const retryDelayMs = (): number => {
+  const declared = Number(process.env.TAGGING_RETRY_DELAY_MS);
+  return Number.isFinite(declared) && declared >= 0 ? declared : 5_000;
+};
+
+export const inboundRetryTopology = (): RmqRetryTopology =>
+  new RmqRetryTopology({ queue: INBOUND_QUEUE, retryDelayMs: retryDelayMs() });
 
 export const EVENTS_TOPIC_ARN =
   process.env.TAGGING_TOPIC_ARN ?? localTopicArn('nestposts-events.fifo');

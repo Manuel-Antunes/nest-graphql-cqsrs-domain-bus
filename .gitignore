@@ -31,3 +31,5 @@ sst-env.d.ts
 .env
 .grit
 _tmp_*
+
+vitest.config.*.timestamp*

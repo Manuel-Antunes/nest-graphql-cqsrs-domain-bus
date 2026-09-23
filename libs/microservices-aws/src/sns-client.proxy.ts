@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { SNSClientConfig } from '@aws-sdk/client-sns';
 import { PublishCommand, SNSClient } from '@aws-sdk/client-sns';
 import { Logger } from '@nestjs/common';
@@ -8,13 +9,11 @@ import type {
 } from '@nestjs/microservices';
 import { ClientProxy } from '@nestjs/microservices';
 
-import { TRANSPORT_IDENTIFIER } from '../outbound/event-envelope';
 import { awsClientConfig } from './aws-client.config';
-import type { AwsEnvelopeMessage } from './aws-message';
 import {
   asMessageAttributes,
   orderingKeyIn,
-  withExtraMetadata,
+  outgoingMessageOf,
 } from './aws-message';
 import type { SnsRecordOptions } from './sns-record.builder';
 import { SnsRecordBuilder } from './sns-record.builder';
@@ -27,11 +26,11 @@ export interface SnsClientProxyOptions {
   /** Passed to the client this proxy builds, over {@link awsClientConfig}'s answer. */
   readonly clientConfig?: SNSClientConfig;
   /**
-   * **How an event becomes a message.** `AwsEventEnvelopeSerializer` is the one this library ships
-   * and the one a service publishing domain events wants; it is not applied by default, because a
-   * proxy that picks a wire format decides, quietly, what a service talking to something it did not
-   * write is allowed to say. Left out, this behaves like any plain `ClientProxy` — Nest's own
-   * `IdentitySerializer`, and the packet goes out as it came in.
+   * **How a packet becomes a message.** It may answer an {@link AwsOutgoingMessage} — a body, the
+   * attributes a subscription filters on, the FIFO ids — and anything else is sent as the body.
+   * `@nestposts/transport-eventbus`'s `AwsEventEnvelopeSerializer` is the one a service publishing
+   * domain events wants. Left out, this behaves like any plain `ClientProxy` — Nest's own
+   * `IdentitySerializer`, and the packet goes out as it came in, `{ pattern, data }`.
    */
   readonly serializer?: ProducerSerializer;
 }
@@ -45,19 +44,17 @@ export interface SnsClientProxyOptions {
  * | RabbitMQ | AWS |
  * |---|---|
  * | topic exchange | SNS topic |
- * | queue bound to `posts.#` | SQS queue subscribed with {@link SnsFilterPolicy.everyEventOf} |
- * | routing key | the `routingKey` message attribute, and `pattern` in the body |
- * | headers | the body's `metadata` (SQS allows ten attributes; the envelope needs more) |
- *
- * A destination is still a `@Publisher` holding this client, and the routing table still picks it by
- * namespace: nothing above this class knows which of the two it is talking to.
+ * | queue bound to `posts.#` | SQS queue subscribed with a filter policy |
+ * | routing key | the pattern, which the serializer decides where to put |
+ * | headers | the message attributes the serializer answers with |
  *
  * ## FIFO, if the topic is one
- * `MessageGroupId` is the event's **aggregate** ({@link orderingKeyIn}), so a FIFO topic orders one
- * post's events against each other and lets different posts proceed in parallel. One group for the
- * whole topic would be ordering by serialising the system. `MessageDeduplicationId` is the
- * envelope's identifier, which is generated once per event instance and remembered on it — so a
- * retry of the same publish is deduplicated by AWS before the inbox on the other side has to.
+ * `MessageGroupId` is, in order: the record's, the serializer's, or the pattern's last segment
+ * ({@link orderingKeyIn}) — the aggregate, for a routing key shaped `namespace.Name.aggregate` — so a
+ * FIFO topic orders one aggregate's messages against each other and lets different ones proceed in
+ * parallel. `MessageDeduplicationId` is the record's, the serializer's, or a fresh one per send: a
+ * serializer that knows an identity for what it sends should answer it, so that a retry of the same
+ * publish is deduplicated by AWS.
  */
 export class SnsClientProxy extends ClientProxy {
   private readonly logger = new Logger(SnsClientProxy.name);
@@ -115,15 +112,16 @@ export class SnsClientProxy extends ClientProxy {
       ? packet.data
       : undefined;
     const options: SnsRecordOptions = record?.options ?? {};
-    const message = (await this.serializer.serialize(
-      record ? { ...packet, data: record.data } : packet,
-    )) as AwsEnvelopeMessage;
-    const body = withExtraMetadata(message.body, options.metadata);
+    const unwrapped = record ? { ...packet, data: record.data } : packet;
+    const message = outgoingMessageOf(
+      await this.serializer.serialize(unwrapped, { ...options }),
+      unwrapped,
+    );
 
     await this.client.send(
       new PublishCommand({
         TopicArn: this.topicArn,
-        Message: JSON.stringify(body),
+        Message: JSON.stringify(message.body),
         MessageAttributes: {
           ...asMessageAttributes(message.attributes),
           ...(options.messageAttributes ?? {}),
@@ -131,10 +129,13 @@ export class SnsClientProxy extends ClientProxy {
         ...(this.fifo
           ? {
               MessageGroupId:
-                options.messageGroupId ?? orderingKeyIn(message.pattern),
+                options.messageGroupId ??
+                message.groupId ??
+                orderingKeyIn(message.pattern),
               MessageDeduplicationId:
                 options.messageDeduplicationId ??
-                body.metadata[TRANSPORT_IDENTIFIER],
+                message.deduplicationId ??
+                randomUUID(),
             }
           : {}),
       }),

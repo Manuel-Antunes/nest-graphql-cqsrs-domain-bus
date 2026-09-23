@@ -103,7 +103,9 @@ export class UnitOfWorkCommands implements OnApplicationBootstrap {
         wrapped.add(instance);
         const handle = instance.handle.bind(instance);
         instance.handle = (event: unknown) => {
-          const work = Promise.resolve(handle(event));
+          const work = new Promise<unknown>((resolve) =>
+            resolve(handle(event)),
+          );
           const unit = UnitOfWork.current();
           return unit?.staging ? unit.track(work) : work;
         };

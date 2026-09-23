@@ -16,6 +16,8 @@
     "@nestposts/cqsrs": "workspace:*",
     "@nestposts/database": "workspace:*",
     "@nestposts/lambda": "workspace:*",
+    "@nestposts/microservices-aws": "workspace:*",
+    "@nestposts/microservices-inngest": "workspace:*",
     "@nestposts/observability": "workspace:*",
     "@nestposts/organizations": "workspace:*",
     "@nestposts/platform": "workspace:*",

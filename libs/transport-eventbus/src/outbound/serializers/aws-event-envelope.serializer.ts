@@ -41,6 +41,7 @@ export class AwsEventEnvelopeSerializer extends EventEnvelopeSerializer {
       pattern,
       body: { pattern, data: envelope.data, metadata: envelope.metadata },
       attributes: routingAttributesOf(pattern, envelope.metadata),
+      deduplicationId: envelope.identifier || undefined,
     };
   }
 }

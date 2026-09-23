@@ -16,7 +16,7 @@ export interface SqsRecordOptions {
   readonly messageDeduplicationId?: string;
 }
 
-const SQS_RECORD = Symbol.for('nestposts.transport-eventbus.sqs-record');
+const SQS_RECORD = Symbol.for('nestposts.microservices-aws.sqs-record');
 
 /** A payload with SQS options attached — the shape {@link SqsRecordBuilder} builds. */
 export interface SqsRecord<TData = unknown> {

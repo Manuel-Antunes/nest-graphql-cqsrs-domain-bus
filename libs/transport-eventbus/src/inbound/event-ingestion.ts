@@ -109,12 +109,27 @@ export class EventIngestion {
        * this service produced went out with no `traceparent`: the next service opened a trace of its
        * own and the saga read as one trace per hop.
        */
-      await ingesting(message, () =>
-        UnitOfWork.run(
-          () => this.ingestMessage(event, message, context),
-          context,
-        ),
-      );
+      const admission = { registered: false };
+      try {
+        await ingesting(message, () =>
+          UnitOfWork.run(
+            async () => {
+              admission.registered = await this.ingestMessage(
+                event,
+                message,
+                context,
+              );
+            },
+            context,
+            { failOnTrackedFailure: true },
+          ),
+        );
+      } catch (failure) {
+        if (admission.registered) {
+          await this.release(message);
+        }
+        throw failure;
+      }
     } catch (failure) {
       this.logger.error(
         `inbox ← failed to ingest ${event?.constructor?.name ?? typeof event}; it will be REJECTED`,
@@ -128,8 +143,8 @@ export class EventIngestion {
     event: object,
     message: Ingestion,
     context?: AsyncContext,
-  ): Promise<void> {
-    await inRequestContext(this.em, async () => {
+  ): Promise<boolean> {
+    return inRequestContext(this.em, async () => {
       const ingested = await this.em.transactional(async () => {
         if (
           !(await this.inbox.register(
@@ -153,7 +168,22 @@ export class EventIngestion {
       if (ingested) {
         this.publish(event, context);
       }
+      return ingested;
     });
+  }
+
+  private async release(message: Ingestion): Promise<void> {
+    try {
+      await inRequestContext(this.em, () =>
+        this.inbox.forget(message.identifier),
+      );
+    } catch (failure) {
+      this.logger.error(
+        `inbox ← could not forget ${message.messageType} (${message.identifier}); its redelivery ` +
+          'will be dropped as a duplicate',
+        failure instanceof Error ? failure.stack : String(failure),
+      );
+    }
   }
 
   /**

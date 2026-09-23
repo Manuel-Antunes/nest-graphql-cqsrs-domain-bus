@@ -6,9 +6,12 @@
     "@nestposts/cqsrs": "workspace:*",
     "@nestposts/database": "workspace:*",
     "@nestposts/lambda": "workspace:*",
+    "@nestposts/microservices-aws": "workspace:*",
+    "@nestposts/microservices-inngest": "workspace:*",
     "@nestposts/observability": "workspace:*",
     "@nestposts/platform": "workspace:*",
     "@nestposts/posts": "workspace:*",
+    "@nestposts/retry-policy": "workspace:*",
     "@nestposts/transport-eventbus": "workspace:*",
     "@nestposts/users": "workspace:*"
   },

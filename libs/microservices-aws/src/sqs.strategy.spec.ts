@@ -6,12 +6,6 @@ import {
 import type { MessageHandler } from '@nestjs/microservices';
 import type { SQSEvent, SQSRecord } from 'aws-lambda';
 
-import { SqsEventEnvelopeDeserializer } from '../inbound/deserializers/sqs-event-envelope.deserializer';
-import type { EventEnvelope } from '../outbound/event-envelope';
-import {
-  TRANSPORT_IDENTIFIER,
-  TRANSPORT_MESSAGE_TYPE,
-} from '../outbound/event-envelope';
 import { SqsContext } from './sqs.context';
 import type { SqsStrategyOptions } from './sqs.strategy';
 import { SqsStrategy } from './sqs.strategy';
@@ -24,10 +18,7 @@ const body = (pattern: string, data: object = { postId: 'p-1' }) =>
   JSON.stringify({
     pattern,
     data,
-    metadata: {
-      [TRANSPORT_MESSAGE_TYPE]: 'posts.PostCreated#2.0.0',
-      [TRANSPORT_IDENTIFIER]: 'evt-1',
-    },
+    metadata: { messageType: 'posts.PostCreated#2.0.0' },
   });
 
 const record = (overrides: Partial<SQSRecord> = {}): SQSRecord => ({
@@ -46,18 +37,13 @@ const record = (overrides: Partial<SQSRecord> = {}): SQSRecord => ({
 const delivery = (...records: SQSRecord[]): SQSEvent => ({ Records: records });
 
 const strategyOf = (options: Partial<SqsStrategyOptions> = {}): SqsStrategy =>
-  new SqsStrategy({
-    deserializer: new SqsEventEnvelopeDeserializer(),
-    ...options,
-  });
+  new SqsStrategy({ ...options });
 
 const handlerOf = (
   implementation: (data: unknown, context: SqsContext) => unknown,
 ): MessageHandler => implementation as unknown as MessageHandler;
 
-const postIdOf = (data: unknown): string =>
-  ((data as EventEnvelope<Record<string, unknown>>).data as { postId: string })
-    .postId;
+const postIdOf = (data: unknown): string => (data as { postId: string }).postId;
 
 class FakeSqs {
   readonly deleted: string[] = [];

@@ -32,7 +32,7 @@ export interface InngestRecordOptions {
 }
 
 const INNGEST_RECORD = Symbol.for(
-  'nestposts.transport-eventbus.inngest-record',
+  'nestposts.microservices-inngest.inngest-record',
 );
 
 /** A payload with Inngest options attached — the shape {@link InngestRecordBuilder} builds. */

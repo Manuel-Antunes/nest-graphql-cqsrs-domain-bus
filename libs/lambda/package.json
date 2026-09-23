@@ -20,7 +20,7 @@
     }
   },
   "dependencies": {
-    "@nestposts/observability": "workspace:*",
-    "@nestposts/transport-eventbus": "workspace:*"
+    "@nestposts/microservices-aws": "workspace:*",
+    "@nestposts/observability": "workspace:*"
   }
 }

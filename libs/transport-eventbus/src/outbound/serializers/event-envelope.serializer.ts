@@ -1,6 +1,6 @@
 import type { ProducerSerializer, ReadPacket } from '@nestjs/microservices';
 
-import type { EventEnvelope } from '../event-envelope';
+import { EventEnvelope } from '../event-envelope';
 
 /**
  * **Where the envelope meets a transport.** One implementation per transport, and the only thing each
@@ -20,11 +20,21 @@ import type { EventEnvelope } from '../event-envelope';
  * The body is encoded here, once, for every transport: {@link EventEnvelope.encoded} turns the event's
  * `Date`s into something JSON keeps. What is left — a map of strings and a plain object — is what
  * every transporter can carry natively.
+ *
+ * A client that sends a record (`SnsRecordBuilder`, …) hands the record's options as the second
+ * argument, and a `metadata` among them is merged into the envelope's own — the transport-agnostic
+ * half of a record, which the far side reads back as the request's attributes.
  */
 export abstract class EventEnvelopeSerializer implements ProducerSerializer {
-  serialize(packet: ReadPacket): unknown {
-    const envelope = packet.data as EventEnvelope<object>;
-    return this.serializeEnvelope(envelope.encoded(), packet);
+  serialize(packet: ReadPacket, options?: Record<string, unknown>): unknown {
+    const envelope = (packet.data as EventEnvelope<object>).encoded();
+    const extra = options?.metadata as Record<string, string> | undefined;
+    return this.serializeEnvelope(
+      extra
+        ? new EventEnvelope(envelope.data, { ...envelope.metadata, ...extra })
+        : envelope,
+      packet,
+    );
   }
 
   /**

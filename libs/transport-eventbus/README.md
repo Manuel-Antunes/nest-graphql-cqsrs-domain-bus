@@ -708,6 +708,14 @@ travels in the body and the routing facts are lifted into attributes: see **On A
 
 ## On AWS: SNS is the exchange, SQS is the queue
 
+The transport itself — `SnsClientProxy`, `SqsClientProxy`, `SqsStrategy`, `SqsContext`,
+`processSqsEvent`, the record builders — is **`@nestposts/microservices-aws`**, a package that knows
+nothing about envelopes, CQRS or this library, the way `@nestjs/microservices` does not. What stays
+here is the envelope's wire on it: `AwsEventEnvelopeSerializer`, `SqsEventEnvelopeDeserializer` and
+`SnsFilterPolicy`. Inngest is split the same way, into **`@nestposts/microservices-inngest`**, with
+`InngestEventEnvelopeSerializer`/`Deserializer` and `inngestTriggers` (the `@EventType` registry as the
+strategy's `triggers`) staying here.
+
 Nothing in a controller, a handler or an event changes. What changes is the bootstrap, and the
 mapping is close enough to read straight across:
 
@@ -740,19 +748,21 @@ memory pair, and now these two.
 It is **optional**, and left out these behave like any plain `ClientProxy`: Nest's own
 `IdentitySerializer`, the packet on the wire as it came in. That is a deliberate nothing rather than
 a helpful guess — but it is nothing, so a client meant to publish envelopes and given no serializer
-publishes something the far side cannot read. `SqsStrategy`'s **deserializer** is the one that stayed
-required, because it is the whole of how a message becomes an event again.
+publishes something the far side cannot read. `SqsStrategy`'s **deserializer** is optional too, now
+that the strategy lives in a package that does not know what an envelope is: left out, Nest's own
+`IncomingRequestDeserializer` reads back what the plain proxies send. A service receiving events names
+`SqsEventEnvelopeDeserializer`, or nothing arrives as an event.
 
 `SqsClientProxy` writes the **same** body, so a queue fed both ways — subscribed to the topic and
 written to directly — needs one consumer and one deserializer. Use it for what is not a fact: a
 command sent to one worker, a delayed sentinel (`new SqsRecordBuilder(payload).setDelaySeconds(40)`),
 a queue somebody else owns.
 
-On a **FIFO** topic or queue the client fills both ordering fields from the event itself:
-`MessageGroupId` is the aggregate (the last segment of the routing key), so one post's events are
-ordered against each other while different posts proceed in parallel; `MessageDeduplicationId` is the
-envelope's identifier, so a retried publish is deduplicated by AWS before the far side's inbox has
-to.
+On a **FIFO** topic or queue the client fills both ordering fields: `MessageGroupId` is the aggregate
+(the last segment of the routing key), so one post's events are ordered against each other while
+different posts proceed in parallel; `MessageDeduplicationId` is the envelope's identifier, which
+`AwsEventEnvelopeSerializer` answers with, so a retried publish is deduplicated by AWS before the far
+side's inbox has to.
 
 ### Receiving
 
@@ -974,10 +984,10 @@ library asks for, which a service composing the provider arrays by hand binds it
 | `RmqEventEnvelopeSerializer` / `RmqEventEnvelopeDeserializer` | the RabbitMQ wire: body and AMQP headers, through `RmqRecordBuilder` |
 | `MemoryEventEnvelopeSerializer` / `MemoryEventEnvelopeDeserializer` | the in-process wire: both halves in the value |
 | `AwsEventEnvelopeSerializer` / `SqsEventEnvelopeDeserializer` | the AWS wire: both halves in the body, the routing facts in the message attributes |
-| `SnsClientProxy` / `SqsClientProxy` | a topic for a fact, a queue for a message addressed to one service |
-| `SqsStrategy` / `processSqsEvent` | the consumer: a polling loop, or a Lambda invocation |
+| `SnsClientProxy` / `SqsClientProxy` (`@nestposts/microservices-aws`) | a topic for a fact, a queue for a message addressed to one service |
+| `SqsStrategy` / `processSqsEvent` (`@nestposts/microservices-aws`) | the consumer: a polling loop, or a Lambda invocation |
 | `SnsFilterPolicy.everyEventOf(...)` / `.exceptFrom(...)` | the binding, for a subscription |
-| `SqsRecordBuilder` | SQS's own options on one message: a delay, a FIFO group |
+| `SqsRecordBuilder` (`@nestposts/microservices-aws`) | SQS's own options on one message: a delay, a FIFO group |
 | `injectTraceContext` / `isTraceContext` | the trace on the envelope, and what must not be re-emitted |
 | `EventLog` / `MikroOrmEventLog` / `eventLogEntities` | the one log: an aggregate's history and the service's order, two reads of one table |
 | `EventSourcedEventBus` | the `EventBus` whose observable side is that log |

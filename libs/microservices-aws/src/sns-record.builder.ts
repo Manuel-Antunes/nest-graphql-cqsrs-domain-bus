@@ -1,22 +1,22 @@
 import type { AwsMessageAttribute } from './aws-message';
 
-/** The per-message knobs a topic has, and the envelope has no reason to know about. */
+/** The per-message knobs a topic has, and the payload has no reason to know about. */
 export interface SnsRecordOptions {
-  /** Extra attributes to send beside the ones the envelope's routing facts already fill. */
+  /** Extra attributes to send beside the ones the serializer already fills. */
   readonly messageAttributes?: Record<string, AwsMessageAttribute>;
   /**
-   * Extra envelope **metadata**, merged into the flat map the far side reads back as the request's
-   * attributes. It is the transport-agnostic half of a record: what is written here survives every
-   * hop, where a message attribute belongs to this one.
+   * Extra **metadata** for the serializer, which is handed the record's options as its second
+   * argument and decides where on the wire they go. The envelope serializer merges them into the flat
+   * map the far side reads back as the request's attributes; Nest's own serializer ignores them.
    */
   readonly metadata?: Record<string, string>;
-  /** FIFO only. Left out, the client uses the event's own ordering key — see {@link SnsClientProxy}. */
+  /** FIFO only. Left out, the serializer's, or the pattern's ordering key — see {@link SnsClientProxy}. */
   readonly messageGroupId?: string;
-  /** FIFO only. Left out, the client uses the envelope's identifier, which is unique per event. */
+  /** FIFO only. Left out, the serializer's, or a fresh one per send. */
   readonly messageDeduplicationId?: string;
 }
 
-const SNS_RECORD = Symbol.for('nestposts.transport-eventbus.sns-record');
+const SNS_RECORD = Symbol.for('nestposts.microservices-aws.sns-record');
 
 /** A payload with SNS options attached — the shape {@link SnsRecordBuilder} builds. */
 export interface SnsRecord<TData = unknown> {

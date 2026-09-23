@@ -1,8 +1,8 @@
 import type {
   SqsBatchResponse,
   SqsDrivenApplication,
-} from '@nestposts/transport-eventbus';
-import { processSqsEvent } from '@nestposts/transport-eventbus';
+} from '@nestposts/microservices-aws';
+import { processSqsEvent } from '@nestposts/microservices-aws';
 import type { Context, SQSEvent } from 'aws-lambda';
 
 import type { HandlerOptions } from './settle';

@@ -14,8 +14,13 @@ import type { Observable } from 'rxjs';
 import { map } from 'rxjs';
 
 import { CqsrsModule } from './cqsrs.module';
+import { UnitOfWork } from './unit-of-work';
 
 class Start {}
+
+class Refuse {}
+
+class Refused {}
 
 class Finish {}
 
@@ -42,6 +47,14 @@ class FinishHandler implements ICommandHandler<Finish> {
   }
 }
 
+@CommandHandler(Refuse)
+class RefuseHandler implements ICommandHandler<Refuse> {
+  async execute(): Promise<void> {
+    await afterATick();
+    throw new Error('the command the saga dispatched refused');
+  }
+}
+
 @EventsHandler(Started)
 @Injectable()
 class SlowProjection implements IEventHandler<Started> {
@@ -59,19 +72,34 @@ class Sagas {
       ofType(Started),
       map(() => new Finish()),
     );
+
+  @Saga()
+  onRefused = (events$: Observable<IEvent>) =>
+    events$.pipe(
+      ofType(Refused),
+      map(() => new Refuse()),
+    );
 }
 
 describe('a unit of work waits for what the publish set off', () => {
   let module: TestingModule;
   let commands: CommandBus;
+  let events: EventBus;
 
   beforeAll(async () => {
     module = await Test.createTestingModule({
       imports: [CqsrsModule.forRoot()],
-      providers: [StartHandler, FinishHandler, SlowProjection, Sagas],
+      providers: [
+        StartHandler,
+        FinishHandler,
+        RefuseHandler,
+        SlowProjection,
+        Sagas,
+      ],
     }).compile();
     await module.init();
     commands = module.get(CommandBus);
+    events = module.get(EventBus);
   });
 
   afterAll(() => module.close());
@@ -90,5 +118,17 @@ describe('a unit of work waits for what the publish set off', () => {
     await commands.execute(new Start());
 
     expect(done).toContain('the command the saga dispatched');
+  });
+
+  it('hands the failure of a command a saga dispatched to a caller that asked to be told', async () => {
+    await expect(
+      UnitOfWork.run(
+        async () => {
+          events.publish(new Refused());
+        },
+        undefined,
+        { failOnTrackedFailure: true },
+      ),
+    ).rejects.toThrow('the command the saga dispatched refused');
   });
 });

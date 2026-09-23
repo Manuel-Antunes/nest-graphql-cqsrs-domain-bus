@@ -2,19 +2,22 @@ import { MemoryServer } from '@camcima/nestjs-memory-microservices';
 import type { HttpServer } from '@nestjs/common';
 import type { MicroserviceOptions } from '@nestjs/microservices';
 import { Transport } from '@nestjs/microservices';
+import { SqsStrategy } from '@nestposts/microservices-aws';
+import { InngestStrategy } from '@nestposts/microservices-inngest';
 import {
   InngestEventEnvelopeDeserializer,
-  InngestStrategy,
+  inngestTriggers,
   RmqEventEnvelopeDeserializer,
   SqsEventEnvelopeDeserializer,
-  SqsStrategy,
 } from '@nestposts/transport-eventbus';
 
 import {
   EXCHANGE,
   INBOUND_QUEUE,
   INBOUND_QUEUE_URLS,
+  inboundRetryTopology,
   inngest,
+  POST_EVENTS_MAX_RETRIES,
   transportMode,
   urls,
 } from './transport.config';
@@ -36,6 +39,8 @@ export const inboundTransport = (
         strategy: new InngestStrategy({
           inngest: inngest(),
           deserializer: new InngestEventEnvelopeDeserializer(),
+          triggers: inngestTriggers,
+          retries: POST_EVENTS_MAX_RETRIES,
           httpAdapter,
         }),
       };
@@ -54,7 +59,7 @@ export const inboundTransport = (
         options: {
           urls: urls(),
           queue: INBOUND_QUEUE,
-          queueOptions: { durable: true },
+          queueOptions: inboundRetryTopology().queueOptions(),
           exchange: EXCHANGE,
           exchangeType: 'topic',
           wildcards: true,

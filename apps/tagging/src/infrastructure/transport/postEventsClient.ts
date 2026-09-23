@@ -1,13 +1,13 @@
 import type { ClientProxy } from '@nestjs/microservices';
 import { ClientProxyFactory, Transport } from '@nestjs/microservices';
+import { SnsClientProxy } from '@nestposts/microservices-aws';
+import { InngestClientProxy } from '@nestposts/microservices-inngest';
 import {
   AwsEventEnvelopeSerializer,
-  InngestClientProxy,
   InngestEventEnvelopeSerializer,
   MemoryClient,
   MemoryEventEnvelopeSerializer,
   RmqEventEnvelopeSerializer,
-  SnsClientProxy,
 } from '@nestposts/transport-eventbus';
 
 import {

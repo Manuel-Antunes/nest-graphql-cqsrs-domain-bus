@@ -47,6 +47,35 @@ describe('a unit of work', () => {
     expect(trace).toEqual(['rollback', 'cleanup']);
   });
 
+  it('commits despite tracked work that failed, which is the bus that dispatched it to report', async () => {
+    await UnitOfWork.run(async () => {
+      UnitOfWork.current()?.on('commit', record('commit'));
+      void UnitOfWork.current()
+        ?.track(Promise.reject(new Error('the saga command refused')))
+        .catch(() => undefined);
+    });
+
+    expect(trace).toEqual(['commit']);
+  });
+
+  it('fails with the tracked work when its caller asked to be told', async () => {
+    await expect(
+      UnitOfWork.run(
+        async () => {
+          UnitOfWork.current()?.on('commit', record('commit'));
+          UnitOfWork.current()?.on('rollback', record('rollback'));
+          void UnitOfWork.current()
+            ?.track(Promise.reject(new Error('the saga command refused')))
+            .catch(() => undefined);
+        },
+        undefined,
+        { failOnTrackedFailure: true },
+      ),
+    ).rejects.toThrow('the saga command refused');
+
+    expect(trace).toEqual(['rollback']);
+  });
+
   it('is joined, not nested: a command dispatched from inside one commits with it', async () => {
     await UnitOfWork.run(async () => {
       const outer = UnitOfWork.current();

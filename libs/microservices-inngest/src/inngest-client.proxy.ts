@@ -7,19 +7,50 @@ import type {
 import { ClientProxy } from '@nestjs/microservices';
 import type { Inngest } from 'inngest';
 
-import type { InngestEventMessage } from '../outbound/serializers/inngest-event-envelope.serializer';
 import type { InngestRecordOptions } from './inngest-record.builder';
 import { isInngestRecord, MAX_SESSIONS } from './inngest-record.builder';
+
+/**
+ * **What a serializer hands {@link InngestClientProxy}**: an Inngest event, ready to send. A serializer
+ * that answers anything else (Nest's own `IdentitySerializer` included) is read as the packet: the
+ * pattern is the name and the data is the data.
+ */
+export interface InngestOutgoingEvent {
+  readonly name: string;
+  readonly data: Record<string, unknown>;
+  readonly user?: Readonly<Record<string, string>>;
+  readonly meta?: { readonly sessions?: Record<string, string | number> };
+}
 
 export interface InngestClientProxyOptions {
   /** The Inngest client this destination sends through — one per application, built by the caller. */
   readonly inngest: Inngest.Any;
   /**
-   * **How an event becomes a message.** `InngestEventEnvelopeSerializer` is the one this library
-   * ships; left out, this behaves like any plain `ClientProxy` — Nest's own `IdentitySerializer`.
+   * **How a packet becomes an event** — see {@link InngestOutgoingEvent}.
+   * `@nestposts/transport-eventbus`'s `InngestEventEnvelopeSerializer` is the one a service publishing
+   * domain events wants; left out, this behaves like any plain `ClientProxy` — Nest's own
+   * `IdentitySerializer`.
    */
   readonly serializer?: ProducerSerializer;
 }
+
+const isOutgoingEvent = (value: unknown): value is InngestOutgoingEvent =>
+  typeof value === 'object' &&
+  value !== null &&
+  typeof (value as { name?: unknown }).name === 'string';
+
+const outgoingEventOf = (
+  serialized: unknown,
+  packet: ReadPacket,
+): InngestOutgoingEvent =>
+  isOutgoingEvent(serialized)
+    ? serialized
+    : {
+        name: String(packet.pattern),
+        data: (typeof packet.data === 'object' && packet.data !== null
+          ? packet.data
+          : { value: packet.data }) as Record<string, unknown>,
+      };
 
 /**
  * **The `ClientProxy` for Inngest: the event is the message, and the function is the binding.**
@@ -83,9 +114,11 @@ export class InngestClientProxy extends ClientProxy {
   protected async dispatchEvent<T = unknown>(packet: ReadPacket): Promise<T> {
     const record = isInngestRecord(packet.data) ? packet.data : undefined;
     const options: InngestRecordOptions = record?.options ?? {};
-    const message = (await this.serializer.serialize(
-      record ? { ...packet, data: record.data } : packet,
-    )) as InngestEventMessage;
+    const unwrapped = record ? { ...packet, data: record.data } : packet;
+    const message = outgoingEventOf(
+      await this.serializer.serialize(unwrapped),
+      unwrapped,
+    );
 
     const sessions = {
       ...(message.meta?.sessions ?? {}),

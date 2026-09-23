@@ -1,3 +1,6 @@
+import { SnsClientProxy } from '@nestposts/microservices-aws/sns-client.proxy';
+import { SnsRecordBuilder } from '@nestposts/microservices-aws/sns-record.builder';
+
 import type { EnvelopeMetadata } from '../outbound/event-envelope';
 import {
   EventEnvelope,
@@ -6,8 +9,6 @@ import {
 } from '../outbound/event-envelope';
 import { AwsEventEnvelopeSerializer } from '../outbound/serializers/aws-event-envelope.serializer';
 import type { AwsMessageBody } from './aws-message';
-import { SnsClientProxy } from './sns-client.proxy';
-import { SnsRecordBuilder } from './sns-record.builder';
 
 const TOPIC_ARN = 'arn:aws:sns:us-east-1:000000000000:nestposts-events';
 

@@ -1,3 +1,4 @@
+import type { AwsOutgoingMessage } from '@nestposts/microservices-aws/aws-message';
 import {
   namespaceIn,
   qualifiedNameIn,
@@ -60,22 +61,9 @@ export interface AwsMessageBody {
 }
 
 /** What {@link AwsEventEnvelopeSerializer} hands a client: the body to send, and what to select it by. */
-export interface AwsEnvelopeMessage {
-  readonly pattern: string;
+export interface AwsEnvelopeMessage extends AwsOutgoingMessage {
   readonly body: AwsMessageBody;
   readonly attributes: EnvelopeMetadata;
-}
-
-/** The shape both SDKs call a `MessageAttributeValue`, for the subset this library sends. */
-export interface AwsMessageAttribute {
-  readonly DataType: string;
-  readonly StringValue: string;
-}
-
-/** The shape an `SQSRecord` carries its attributes in — the same values, named the other way round. */
-export interface SqsRecordAttribute {
-  readonly stringValue?: string;
-  readonly dataType?: string;
 }
 
 /** The five facts of {@link AWS_NAMESPACE_ATTRIBUTE}, read off the envelope the forwarder built. */
@@ -98,52 +86,3 @@ export const routingAttributesOf = (
     Object.entries(attributes).filter(([, value]) => value !== ''),
   );
 };
-
-/**
- * **A body with a record's extra metadata merged in.** Metadata is what survives every hop — the far
- * side reads it back as the request's attributes — where a message attribute belongs to one message
- * on one transport, so a record that says something the chain should carry says it here.
- */
-export const withExtraMetadata = (
-  body: AwsMessageBody,
-  extra: Record<string, string> | undefined,
-): AwsMessageBody =>
-  extra ? { ...body, metadata: { ...body.metadata, ...extra } } : body;
-
-/**
- * Both SDKs reject an attribute whose `StringValue` is empty, with an error naming the parameter and
- * not the value — so a blank one is dropped here rather than at the API boundary.
- */
-export const asMessageAttributes = (
-  attributes: EnvelopeMetadata,
-): Record<string, AwsMessageAttribute> =>
-  Object.fromEntries(
-    Object.entries(attributes)
-      .filter(
-        ([, value]) =>
-          value !== undefined && value !== null && String(value) !== '',
-      )
-      .map(([key, value]) => [
-        key,
-        { DataType: 'String', StringValue: String(value) },
-      ]),
-  );
-
-/** The attributes of a delivered record, flattened back to the map the envelope is made of. */
-export const fromRecordAttributes = (
-  attributes: Record<string, SqsRecordAttribute> | undefined,
-): EnvelopeMetadata =>
-  Object.fromEntries(
-    Object.entries(attributes ?? {})
-      .filter(([, attribute]) => typeof attribute?.stringValue === 'string')
-      .map(([key, attribute]) => [key, attribute.stringValue as string]),
-  );
-
-/**
- * The last segment of a routing key — `posts.PostCreated.9f1d…` → `9f1d…`, the aggregate the event is
- * about. It is what a FIFO queue's `MessageGroupId` should be: FIFO orders **within a group**, so a
- * group per aggregate is per-aggregate ordering with parallelism between aggregates, while one group
- * for the topic would serialise the whole system.
- */
-export const orderingKeyIn = (routingKey: string): string =>
-  routingKey.split('.').pop() ?? routingKey;
