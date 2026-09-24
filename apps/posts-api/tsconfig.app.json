@@ -30,6 +30,9 @@
       "path": "../../libs/core/observability/tsconfig.lib.json"
     },
     {
+      "path": "../../libs/notifications/tsconfig.lib.json"
+    },
+    {
       "path": "../../libs/core/microservices-inngest/tsconfig.lib.json"
     },
     {
@@ -45,10 +48,10 @@
       "path": "../../libs/core/cqsrs/tsconfig.lib.json"
     },
     {
-      "path": "../../libs/asset/tsconfig.lib.json"
+      "path": "../../libs/auth/tsconfig.lib.json"
     },
     {
-      "path": "../../libs/auth/tsconfig.lib.json"
+      "path": "../../libs/asset/tsconfig.lib.json"
     },
     {
       "path": "../migrator/tsconfig.app.json"

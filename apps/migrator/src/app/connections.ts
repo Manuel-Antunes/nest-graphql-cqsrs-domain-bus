@@ -7,6 +7,7 @@ import {
   postgresDatabase,
   TAGGING_SCHEMA,
 } from '@nestposts/database';
+import { notificationsEntities } from '@nestposts/notifications/infrastructure/notifications-infrastructure.module';
 import { OrganizationEntities } from '@nestposts/organizations/infrastructure/persistence/organization-entities';
 import { SoftDeleteSubscriber } from '@nestposts/platform/infrastructure/persistence/soft-delete/soft-delete.subscriber';
 import { postsEntities } from '@nestposts/posts/infrastructure/posts-infrastructure.module';
@@ -41,6 +42,7 @@ export const taggingSchema = (): string =>
 export const postsTables = (): DatabaseEntities => [
   ...postsEntities,
   ...usersEntities,
+  ...notificationsEntities,
   ...OrganizationEntities.withAuth(),
   ...transportEntities,
   ...eventLogEntities,

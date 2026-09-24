@@ -18,15 +18,16 @@
 const APPLICATIONS = [
   '@nestposts/posts-api',
   '@nestposts/tagging',
+  '@nestposts/notificator',
   '@nestposts/migrator',
 ];
 
 /**
- * **The three applications the functions point at, and not the whole workspace.**
+ * **The applications the functions point at, and not the whole workspace.**
  *
  * `pnpm build` would build `apps/web` too — and OpenNext builds it again, itself, from inside the
  * app. Two `next build` runs against one `.next` is a race, and it announces itself as
- * `ENOENT: mkdir .next/export` from whichever one lost. Naming the three keeps this resource to what
+ * `ENOENT: mkdir .next/export` from whichever one lost. Naming them keeps this resource to what
  * it is for: the `dist` the Lambda handlers are bundled from. Nx still builds the libraries they
  * depend on, because their build target declares `^build`.
  */

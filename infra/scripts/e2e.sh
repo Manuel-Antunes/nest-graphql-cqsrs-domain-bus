@@ -193,6 +193,30 @@ echo "$GONE" | jq -e '.data.post == null' >/dev/null || fail "the deleted post i
 rm -f "$GOT"
 echo "    OK: the post is gone, and so is its file"
 
+echo
+echo "==> 10. the author is told: posts-api -> SNS -> SQS -> notificator -> the database, and SES"
+DEADLINE=$((SECONDS + 180))
+NOTIFICATION_ID=''
+while [ $SECONDS -lt $DEADLINE ]; do
+  MINE=$(gql '{ notifications(first: 20) { id type data read } }' '' signed)
+  NOTIFICATION_ID=$(echo "$MINE" | jq -r --arg p "$POST_ID" \
+    '[.data.notifications[]? | select(.type == "posts.PostCreated" and .data.postId == $p)][0].id // empty')
+  [ -n "$NOTIFICATION_ID" ] && break
+  printf '.'
+  sleep 5
+done
+[ -n "$NOTIFICATION_ID" ] || fail "no posts.PostCreated notification for $POST_ID in 180s: $MINE"
+echo "    OK: notification=$NOTIFICATION_ID stored by the database channel, read back by its author"
+: "${NOTIFICATOR_LOGS:?no log group for the notificator — is it deployed?}"
+EMAILED=$(node infra/scripts/notification-delivered.mjs "$NOTIFICATOR_LOGS" "$NOTIFICATION_ID" email 180) \
+  || fail "the notificator never reported the email of $NOTIFICATION_ID as delivered"
+echo "    OK: $EMAILED"
+READ=$(gql 'mutation($id:ID!){ markNotificationAsRead(id:$id){ read } }' \
+  "$(jq -nc --arg id "$NOTIFICATION_ID" '{id:$id}')" signed)
+echo "$READ" | jq -e '.data.markNotificationAsRead.read == true' >/dev/null \
+  || fail "markNotificationAsRead failed: $READ"
+echo "    OK: marked as read"
+
 if aws --version >/dev/null 2>&1; then
   echo
   echo "==> queues"
@@ -206,5 +230,5 @@ fi
 
 echo
 echo "================================================================"
-echo "  THE SAGA CLOSED ON AWS, AND A FILE WENT THE WHOLE WAY. post=$POST_ID"
+echo "  THE SAGA CLOSED ON AWS, A FILE WENT THE WHOLE WAY, AND THE AUTHOR WAS TOLD. post=$POST_ID"
 echo "================================================================"

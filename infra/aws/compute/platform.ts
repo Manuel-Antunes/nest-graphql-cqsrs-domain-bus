@@ -1,5 +1,6 @@
 /// <reference path="../../../.sst/platform/config.d.ts" />
 
+import { email } from '../mail';
 import { vpc } from '../network';
 import { bucket } from '../storage';
 import type { LambdaPlatform } from '../support';
@@ -7,6 +8,7 @@ import { build } from './build';
 import {
   links,
   migratorEnvironment,
+  notificatorEnvironment,
   postsEnvironment,
   taggingEnvironment,
 } from './environment';
@@ -27,6 +29,12 @@ export const posts: LambdaPlatform = {
 export const tagging: LambdaPlatform = {
   ...base,
   environment: taggingEnvironment,
+};
+
+export const notificator: LambdaPlatform = {
+  ...base,
+  link: [...links, email],
+  environment: notificatorEnvironment,
 };
 
 export const migrations: LambdaPlatform = {

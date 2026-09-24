@@ -25,6 +25,18 @@ inputs:
   better-stack-api-key:
     description: 'From `secrets.BETTER_STACK_API_KEY`. Same story.'
     required: true
+  mail-sender:
+    description: >
+      From `secrets.MAIL_SENDER`: the address, or the domain, `apps/notificator` sends email as through
+      SES. `infra/aws/mail/email.ts` fails the deploy without it, for the same reason as the telemetry
+      destination.
+    required: true
+  mail-sender-existing:
+    description: >
+      From `vars.MAIL_SENDER_EXISTING`: `true` when the sender identity is already verified in the
+      account and managed elsewhere, so the stack only grants the permission to send through it.
+    default: 'false'
+    required: false
   args:
     description: 'Passed on to `deploy-sst` — `--target`, `--exclude`, `--continue`, `--verbose`.'
     default: ''
@@ -46,14 +58,18 @@ runs:
         aws-secret-access-key: ${{ inputs.aws-secret-access-key }}
         aws-region: ${{ inputs.aws-region }}
 
-    - name: Export the telemetry destination
+    - name: Export the telemetry destination and the mail sender
       run: |
         echo "BETTER_STACK_URL=$BETTER_STACK_URL" >> "$GITHUB_ENV"
         echo "BETTER_STACK_API_KEY=$BETTER_STACK_API_KEY" >> "$GITHUB_ENV"
+        echo "MAIL_SENDER=$MAIL_SENDER" >> "$GITHUB_ENV"
+        echo "MAIL_SENDER_EXISTING=$MAIL_SENDER_EXISTING" >> "$GITHUB_ENV"
       shell: bash
       env:
         BETTER_STACK_URL: ${{ inputs.better-stack-url }}
         BETTER_STACK_API_KEY: ${{ inputs.better-stack-api-key }}
+        MAIL_SENDER: ${{ inputs.mail-sender }}
+        MAIL_SENDER_EXISTING: ${{ inputs.mail-sender-existing }}
 
     - name: Deploy
       uses: ./tools/github/deploy-sst

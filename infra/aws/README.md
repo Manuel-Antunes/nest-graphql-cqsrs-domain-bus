@@ -1,7 +1,7 @@
 # The same system, on Lambda
 
-Four functions of ours plus the Next server, one FIFO topic, two FIFO queues (and their dead-letter
-queues), one Postgres and one CloudFront router. The domain, application and presentation code is
+Five functions of ours plus the Next server, one FIFO topic, three FIFO queues (and their
+dead-letter queues), one Postgres, one CloudFront router and one SES identity. The domain, application and presentation code is
 **unchanged**: what a handler here does is hand AWS's calling convention to the same container
 `main.ts` starts.
 
@@ -28,6 +28,10 @@ queues), one Postgres and one CloudFront router. The domain, application and pre
        │                  tagging/lambda/sqs   posts-api/lambda/sqs
        │                           │
        │                           └─ posts.PostCreated ─► back to the topic
+       │
+       │   PostsApi / PostsApiInbox ── notifications.NotificationReceived ─► topic
+       │        (whichever saw PostCreated)        qualifiedName filter ─► SQS FIFO NotificatorNotifications
+       │                                                                    └► Notificator ─► SES (Email)
        ▼
   /  ────────────► Web   apps/web, OpenNext, in the VPC (it holds its own Better Auth)
 ```
@@ -107,7 +111,8 @@ projects onto a row instead of appending to that stream.
 ```
 sst.config.ts        at the ROOT because that is where the CLI looks — and it holds no
                      infrastructure: app() plus `await import('./infra/aws')` inside run()
-infra/scripts/       discover.sh, migrate.sh, e2e.sh, stack-graph.sh, object-exists.mjs
+infra/scripts/       discover.sh, migrate.sh, e2e.sh, stack-graph.sh, object-exists.mjs,
+                     log-group.mjs, notification-delivered.mjs
 infra/aws/
   index.ts           the facade: load order and outputs. Creates nothing.
   support/           the DEFINITIONS — classes and types. Nothing here creates a resource on import.
@@ -116,7 +121,8 @@ infra/aws/
   data/              the database — one instance, two schemas
   messaging/         topic.ts, queues.ts, routing.ts — the "exchange", translated
   storage/           the bucket posts keep their files in, served by the router under /files
-  compute/           the four functions
+  mail/              the SES identity the notificator sends email as (MAIL_SENDER, from .env)
+  compute/           the five functions
     platform.ts        where support/ finds the resources: network, links, environment, the build
     build.ts, environment.ts, api.ts, workers.ts, migrations.ts
   edge/              the CloudFront router: router.ts creates it, routes.ts points it
@@ -201,14 +207,34 @@ up. `SEED_AUTHOR_EMAIL`, `SEED_AUTHOR_PASSWORD` and their `SEED_READER_` twins c
 without touching code. They are ordinary credentials in a deployed database: for anything but a demo
 stage, set them.
 
-### The four functions, from three builds
+### The five functions, from four builds
 
 | function | handler | what triggers it |
 |---|---|---|
 | `PostsApi` | `apps/posts-api/dist/lambda/http.handler` | the Function URL, behind the router |
 | `PostsApiInbox` | `apps/posts-api/dist/lambda/sqs.handler` | the `PostsApiCompleted` queue |
 | `Tagging` | `apps/tagging/dist/lambda/sqs.handler` | the `TaggingPostEvents` queue |
+| `Notificator` | `apps/notificator/dist/lambda/sqs.handler` | the `NotificatorNotifications` queue |
 | `Migrate` | `apps/migrator/dist/lambda.handler` | the deploy, and `migrate.sh` |
+
+### Email: an SES identity, linked to the one function that sends
+
+`mail/email.ts` turns `MAIL_SENDER` from the root `.env` into something to link. By default it is an
+`sst.aws.Email` — an address, verified by the link SES mails to it on the first deploy, or a domain,
+verified by its DNS records. With `MAIL_SENDER_EXISTING=true` the identity is one already verified in
+the account and managed elsewhere: the stack does not create it (that fails with
+`AlreadyExistsException`) and does not import it (`sst remove` would then delete an identity other
+things send through); it links an `sst.Linkable` carrying `ses:SendEmail` and `ses:SendRawEmail` on the
+identity's ARN. Only `Notificator` links either, and it sends with `MAIL_TRANSPORT=ses` (nodemailer's
+SESv2 transport, configured in `apps/notificator/src/infrastructure/mail/mail.config.ts`) and
+`MAIL_FROM` derived from the sender.
+
+While the account is in the **SES sandbox**, mail is delivered only to verified addresses. Anything
+else fails at SES, the channel throws, SQS redelivers, and after five deliveries the message lands in
+the dead-letter queue — with the `database` channel already delivered and recorded in the ledger, so
+nothing is stored twice when it is redriven.
+
+Push is not configured here: without `FIREBASE_CREDENTIALS` the `push` channel sends nothing.
 
 The first two are the **same bundle**, one `nest build` with two handlers, sharing one
 `bootOnce`. Nothing in Node forces the split a Quarkus classpath would, and one bundle means the

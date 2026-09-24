@@ -1,0 +1,28 @@
+{
+  "name": "@nestposts/mail",
+  "version": "0.1.0",
+  "private": true,
+  "exports": {
+    "./package.json": "./package.json",
+    "./*": {
+      "@nestposts/source": "./src/*.ts",
+      "types": "./dist/*.d.ts",
+      "require": "./dist/*.js",
+      "default": "./dist/*.js"
+    }
+  },
+  "dependencies": {
+    "@nestjs-modules/mailer": "catalog:",
+    "@react-email/components": "catalog:",
+    "html-to-text": "catalog:",
+    "nodemailer": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:"
+  },
+  "devDependencies": {
+    "@types/html-to-text": "catalog:",
+    "@types/nodemailer": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:"
+  }
+}

@@ -1,5 +1,8 @@
 import { MikroORM } from '@mikro-orm/core';
 import { metadataOnly } from '@nestposts/database/testing';
+import { NotificationReceivedEvent } from '@nestposts/notifications/domain/notification/event/notification-received.event';
+import { Notification } from '@nestposts/notifications/domain/notification/notification';
+import { NotificationType } from '@nestposts/notifications/domain/notification/notification-type';
 import { issuesOf } from '@nestposts/platform/testing/invalid-input';
 
 import {
@@ -12,10 +15,21 @@ import { UserRegisteredEvent } from './event/user-registered.event';
 import { UserRestoredEvent } from './event/user-restored.event';
 import { UserRoleGrantedEvent } from './event/user-role-granted.event';
 import { InvalidUserException } from './exception/invalid-user.exception';
-import { User } from './user.entity';
+import { USER_NOTIFIABLE_TYPE, User } from './user.entity';
 import { Email } from './vo/email';
 import { UserId } from './vo/user-id';
 import { UserName } from './vo/user-name';
+
+@NotificationType('spec.UserWelcome')
+class WelcomeNotification extends Notification {
+  constructor() {
+    super({ greeting: 'welcome' });
+  }
+
+  override via() {
+    return ['database', 'email', 'push'];
+  }
+}
 
 describe('User', () => {
   let orm: MikroORM;
@@ -189,5 +203,38 @@ describe('User', () => {
     const sourced = new User();
     sourced.loadFromHistory(user.getUncommittedEvents());
     expect(sourced.version).toBe(4);
+  });
+
+  describe('a user is notifiable', () => {
+    it('is reached by email at its own address', () => {
+      const user = register();
+
+      expect(user.notifiableType).toBe(USER_NOTIFIABLE_TYPE);
+      expect(user.notifiableId).toBe(id.value);
+      expect(user.notifiableName).toBe('Manuel');
+      expect(user.routeNotificationFor('email')).toBe('manuel@example.com');
+      expect(user.routeNotificationFor('push')).toBeUndefined();
+    });
+
+    it('raises the notification on its own stream, without changing its state', () => {
+      const user = register();
+      user.uncommit();
+
+      user.notify(new WelcomeNotification(), later);
+
+      const [event] = user.getUncommittedEvents();
+      expect(event).toBeInstanceOf(NotificationReceivedEvent);
+      expect(event).toMatchObject({
+        notificationType: 'spec.UserWelcome',
+        notifiableType: USER_NOTIFIABLE_TYPE,
+        notifiableId: id.value,
+        channels: ['database', 'email', 'push'],
+        recipient: {
+          notifiableName: 'Manuel',
+          routes: { email: 'manuel@example.com' },
+        },
+      });
+      expect(user.version).toBe(1);
+    });
   });
 });

@@ -117,14 +117,35 @@ test.describe
      * que este serviço produziu e recebeu de volta é descartado — e o que continua verdade por mais
      * posts que os outros specs escrevam. A contagem "uma linha por mensagem" é do teste de reentrega,
      * que a mede pelo identificador.
+     *
+     * The `posts` schema's inbox is shared with `notificator`, which lives in that schema too, so its
+     * rows are split by namespace: `posts.*` is what posts-api ingested, `notifications.*` is what the
+     * notificator did — and each side only ever ingests what the other produced.
      */
     test('cada serviço só ingere o que o outro produziu: a marca de origem corta o laço', async ({
       postsStore,
       taggingStore,
     }) => {
-      const ingestedHere = await postsStore.inbox();
+      const ingestedInPosts =
+        (await until(async () => {
+          const rows = await postsStore.inbox();
+          return rows.some((row) =>
+            row.message_type.startsWith('notifications.'),
+          )
+            ? rows
+            : undefined;
+        }, 20_000)) ?? (await postsStore.inbox());
+      const ingestedHere = ingestedInPosts.filter((row) =>
+        row.message_type.startsWith('posts.'),
+      );
+      const deliveredByNotificator = ingestedInPosts.filter((row) =>
+        row.message_type.startsWith('notifications.'),
+      );
       const ingestedThere = await taggingStore.inbox();
 
+      expect(ingestedHere.length + deliveredByNotificator.length).toBe(
+        ingestedInPosts.length,
+      );
       expect(
         ingestedHere.length,
         'a posts-api não ingeriu nada',
@@ -134,6 +155,19 @@ test.describe
       ]);
       expect(
         ingestedHere.every((row) => row.message_type.startsWith(CREATED)),
+      ).toBe(true);
+
+      expect(
+        deliveredByNotificator.length,
+        'the notificator ingested nothing',
+      ).toBeGreaterThan(0);
+      expect([
+        ...new Set(deliveredByNotificator.map((row) => row.origin)),
+      ]).toEqual(['posts-api']);
+      expect(
+        deliveredByNotificator.every((row) =>
+          row.message_type.startsWith('notifications.NotificationReceived'),
+        ),
       ).toBe(true);
 
       expect(

@@ -9,6 +9,8 @@ import { Test } from '@nestjs/testing';
 import { SubscriptionBus } from '@nestposts/cqsrs';
 import { TestSchemaModule } from '@nestposts/database/testing';
 import { DefaultTagSeeder } from '@nestposts/migrator/seeders/default-tag.seeder';
+import { Device } from '@nestposts/notifications/domain/device/device.entity';
+import { NotificationRecord } from '@nestposts/notifications/domain/notification/notification-record.entity';
 import {
   AUTHOR_ROLE,
   Authorship,
@@ -191,14 +193,21 @@ describe('posts (e2e)', () => {
 
       const post = await createCompletePost('uma request só');
 
-      const chain = published
-        .slice(from)
-        .filter((event) => requestOf(event)?.postId.equals(post.id));
-      expect(chain.map((event) => event.constructor.name)).toEqual([
+      const chain = () =>
+        published
+          .slice(from)
+          .filter((event) => requestOf(event)?.postId.equals(post.id));
+      await until(() =>
+        chain().some(
+          (event) => event.constructor.name === 'NotificationReceivedEvent',
+        ),
+      );
+      expect(chain().map((event) => event.constructor.name)).toEqual([
         'PostPreCreatedEvent',
         'PostCreatedEvent',
+        'NotificationReceivedEvent',
       ]);
-      expect(new Set(chain.map(requestOf)).size).toBe(1);
+      expect(new Set(chain().map(requestOf)).size).toBe(1);
     });
 
     it('rejects a blank title and a too long title with BAD_USER_INPUT', async () => {
@@ -796,6 +805,146 @@ describe('posts (e2e)', () => {
 
       expect(entities[0]).toMatchObject({ id: post.id, title: 'No session' });
       expect(entities[1]).toMatchObject({ id: post.author.id });
+      await anonymous.dispose();
+    });
+  });
+
+  describe('notifications', () => {
+    const signedIn = () =>
+      app
+        .get(MikroORM)
+        .em.fork()
+        .findOneOrFail(User, { email: Email.parse('manuel@example.com') });
+
+    const givenANotification = async (
+      notifiable: Pick<User, 'notifiableType' | 'notifiableId'>,
+      title: string,
+      at: Date,
+    ) => {
+      const record = NotificationRecord.draft('posts.PostCreated', { title });
+      record.addressTo(
+        {
+          notifiableType: notifiable.notifiableType,
+          notifiableId: notifiable.notifiableId,
+          notifiableName: null,
+          routeNotificationFor: () => undefined,
+        },
+        at,
+      );
+      await app.get(MikroORM).em.fork().persist(record).flush();
+      return record;
+    };
+
+    it('lists the signed-in user’s notifications, newest first, and marks one as read', async () => {
+      const me = await signedIn();
+      const older = await givenANotification(
+        me,
+        'older',
+        new Date('2026-09-01T00:00:00Z'),
+      );
+      const newer = await givenANotification(
+        me,
+        'newer',
+        new Date('2026-09-02T00:00:00Z'),
+      );
+      await givenANotification(
+        { notifiableType: 'users.User', notifiableId: 'somebody-else' },
+        'not mine',
+        new Date(),
+      );
+
+      const listed = await client.execute(
+        '{ notifications { id type data read readAt createdAt } }',
+      );
+      expect(listed.errors).toBeUndefined();
+      expect(listed.data!.notifications).toEqual([
+        expect.objectContaining({
+          id: newer.id.value,
+          type: 'posts.PostCreated',
+          data: { title: 'newer' },
+          read: false,
+          readAt: null,
+        }),
+        expect.objectContaining({
+          id: older.id.value,
+          data: { title: 'older' },
+        }),
+      ]);
+
+      const marked = await client.execute(
+        'mutation($id: ID!) { markNotificationAsRead(id: $id) { id read readAt } }',
+        { id: older.id.value },
+      );
+      expect(marked.errors).toBeUndefined();
+      expect(marked.data!.markNotificationAsRead).toMatchObject({
+        id: older.id.value,
+        read: true,
+      });
+
+      const unread = await client.execute(
+        '{ notifications(unreadOnly: true) { id } }',
+      );
+      expect(unread.data!.notifications).toEqual([{ id: newer.id.value }]);
+    });
+
+    it('answers somebody else’s notification as if it did not exist', async () => {
+      const theirs = await givenANotification(
+        { notifiableType: 'users.User', notifiableId: 'somebody-else' },
+        'not mine',
+        new Date(),
+      );
+
+      const read = await client.execute(
+        'query($id: ID!) { notification(id: $id) { id } }',
+        { id: theirs.id.value },
+      );
+      const marked = await client.execute(
+        'mutation($id: ID!) { markNotificationAsRead(id: $id) { id } }',
+        { id: theirs.id.value },
+      );
+
+      expect(read.data!.notification).toBeNull();
+      expect(marked.errors?.[0].extensions).toEqual({ code: 'NOT_FOUND' });
+    });
+
+    it('registers a push token for the signed-in user, and forgets it', async () => {
+      const me = await signedIn();
+
+      const registered = await client.execute(
+        'mutation($input: RegisterDeviceInput!) { registerDevice(input: $input) { id deviceId platform } }',
+        {
+          input: { token: 'fcm-e2e', deviceId: 'pixel-8', platform: 'android' },
+        },
+      );
+      expect(registered.errors).toBeUndefined();
+      expect(registered.data!.registerDevice).toMatchObject({
+        deviceId: 'pixel-8',
+        platform: 'android',
+      });
+      const stored = await app
+        .get(MikroORM)
+        .em.fork()
+        .findOneOrFail(Device, { token: 'fcm-e2e' });
+      expect(stored.isOwnedBy(me)).toBe(true);
+
+      const removed = await client.execute(
+        'mutation { removeDevice(token: "fcm-e2e") }',
+      );
+      const again = await client.execute(
+        'mutation { removeDevice(token: "fcm-e2e") }',
+      );
+      expect(removed.data!.removeDevice).toBe(true);
+      expect(again.data!.removeDevice).toBe(false);
+    });
+
+    it('requires a session', async () => {
+      const anonymous = await GraphqlClient.for(app);
+
+      const result = await anonymous.execute('{ notifications { id } }');
+
+      expect(result.errors?.[0].extensions).toMatchObject({
+        code: 'UNAUTHENTICATED',
+      });
       await anonymous.dispose();
     });
   });

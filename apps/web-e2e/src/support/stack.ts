@@ -22,7 +22,8 @@ export const AUTH_SECRET =
  * **The whole system, provisioned once**: a browser's worth of it.
  *
  * Everything the browser does not run is a **container**, from the images `apps/<app>/Dockerfile` build —
- * Postgres, RabbitMQ, the migrator as a one-shot, and then `posts-api` and `tagging`. They share a
+ * Postgres, RabbitMQ, Mailpit, the migrator as a one-shot, and then `posts-api`, `tagging` and
+ * `notificator`. They share a
  * network and address each other by alias, so the suite never has to teach one of them a port.
  *
  * `apps/web` is the exception, and deliberately: it is the thing under the browser, it is served by
@@ -85,6 +86,7 @@ export class Stack {
     process.env.POSTGRES_URL = endpoints.postgresUrl;
     process.env.API_URL = endpoints.apiUrl;
     process.env.E2E_STORAGE_URL = endpoints.storageUrl;
+    process.env.E2E_MAILBOX_URL = endpoints.mailboxUrl;
     if (endpoints.managementUrl) {
       process.env.RABBITMQ_MANAGEMENT = endpoints.managementUrl;
     }

@@ -24,6 +24,9 @@
       "path": "../../libs/organizations/tsconfig.lib.json"
     },
     {
+      "path": "../../libs/notifications/tsconfig.lib.json"
+    },
+    {
       "path": "../../libs/database/tsconfig.lib.json"
     },
     {

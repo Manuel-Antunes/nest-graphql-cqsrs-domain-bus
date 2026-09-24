@@ -12,7 +12,7 @@
 #      carry — `MIGRATE` among them, because a function name is derived from an environment holding
 #      a secret and Pulumi therefore marks it secret in the export.
 #
-#   eval "$(./infra/scripts/discover.sh dev)"   # API, STREAM, MIGRATE, BUCKET
+#   eval "$(./infra/scripts/discover.sh dev)"   # API, STREAM, MIGRATE, BUCKET, NOTIFICATOR_LOGS
 set -euo pipefail
 
 APP="${SST_APP:-nestposts}"
@@ -103,6 +103,7 @@ else
   MIGRATE="${MIGRATE:-}"
   SEED="${SEED:-}"
 fi
+NOTIFICATOR_LOGS="$(node infra/scripts/log-group.mjs "$APP-$STAGE-NotificatorFunction-" 2>/dev/null || true)"
 
 echo "export STREAM='$STREAM'"
 echo "export API='$API'"
@@ -110,3 +111,4 @@ echo "export GRAPHQL='${GRAPHQL:-$API/graphql}'"
 echo "export BUCKET='$BUCKET'"
 echo "export MIGRATE='$MIGRATE'"
 echo "export SEED='$SEED'"
+echo "export NOTIFICATOR_LOGS='$NOTIFICATOR_LOGS'"

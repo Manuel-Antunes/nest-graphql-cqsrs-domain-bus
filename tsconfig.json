@@ -56,6 +56,15 @@
     },
     {
       "path": "./libs/asset"
+    },
+    {
+      "path": "./libs/core/mail"
+    },
+    {
+      "path": "./libs/notifications"
+    },
+    {
+      "path": "./apps/notificator"
     }
   ]
 }

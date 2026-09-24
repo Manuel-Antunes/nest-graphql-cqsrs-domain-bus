@@ -432,6 +432,17 @@ class Fingerprint {
     return digest.digest('hex').slice(0, 32);
   }
 
+  static ofValues(values: Readonly<Record<string, string>>): string {
+    const digest = createHash('sha256');
+    for (const key of Object.keys(values).sort()) {
+      digest.update(key);
+      digest.update('\u0000');
+      digest.update(values[key]);
+      digest.update('\u0000');
+    }
+    return digest.digest('hex').slice(0, 32);
+  }
+
   private static absorb(
     digest: ReturnType<typeof createHash>,
     path: string,
@@ -461,12 +472,17 @@ class Fingerprint {
  * worth having: the seeders run when the seeders change. Each one is written to be re-runnable
  * anyway — `TestUsersSeeder` skips an e-mail that already exists — because "changed" includes
  * changing one seeder in a file that holds three.
+ *
+ * `configuration` is the rest of what decides the rows — the `SEED_*` variables — and it enters the
+ * input as a digest, so changing who is seeded runs the seeders again without a password landing in
+ * the state in the clear.
  */
 export class Seeder extends NodeFunction {
   constructor(
     name: string,
     args: NodeFunctionArgs & {
       readonly seeds: readonly string[];
+      readonly configuration?: Readonly<Record<string, string>>;
       readonly after?: Migrator;
     },
     opts?: $util.ComponentResourceOptions,
@@ -481,6 +497,7 @@ export class Seeder extends NodeFunction {
           input: JSON.stringify({
             command: 'seed',
             seeders: Fingerprint.of(args.seeds),
+            configuration: Fingerprint.ofValues(args.configuration ?? {}),
           }),
         },
         {

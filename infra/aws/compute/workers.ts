@@ -1,12 +1,16 @@
 /// <reference path="../../../.sst/platform/config.d.ts" />
 
-import { completed, taggingEvents } from '../messaging';
+import {
+  completed,
+  notificatorNotifications,
+  taggingEvents,
+} from '../messaging';
 import { QueueWorker } from '../support';
 import { GRAPHQL_SDL } from './api';
-import { posts, tagging } from './platform';
+import { notificator, posts, tagging } from './platform';
 
 /**
- * **One function per queue, and there are two queues** — see `messaging/queues.ts` for why
+ * **One function per queue** — see `messaging/queues.ts` for why
  * `apps/tagging` is one and not the two its two jobs would suggest.
  *
  * Which job runs is decided by what arrives: the controller binds the namespace, the saga only fires
@@ -30,4 +34,16 @@ export const postsInbox = new QueueWorker('PostsApiInbox', {
   queue: completed,
   timeout: '2 minutes',
   copyFiles: GRAPHQL_SDL,
+});
+
+/**
+ * Delivers what a notifiable was told — the record, the email through SES — and fails the message
+ * when a channel fails, which is what makes SQS redeliver it; the channels that already delivered are
+ * skipped on the next attempt.
+ */
+export const notificatorWorker = new QueueWorker('Notificator', {
+  platform: notificator,
+  handler: 'apps/notificator/dist/lambda/sqs.handler',
+  queue: notificatorNotifications,
+  timeout: '2 minutes',
 });

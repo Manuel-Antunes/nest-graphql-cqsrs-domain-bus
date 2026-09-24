@@ -1,4 +1,7 @@
 import { AutoMap } from '@automapper/classes';
+import { EMAIL_CHANNEL } from '@nestposts/notifications/domain/channel/channel-names';
+import type { NotificationReceivedEvent } from '@nestposts/notifications/domain/notification/event/notification-received.event';
+import { Notifiable } from '@nestposts/notifications/domain/notification/notifiable';
 import { AggregateRoot } from '@nestposts/platform/domain/shared/aggregate-root';
 import { BaseEntity } from '@nestposts/platform/domain/shared/base-entity';
 import { WithSoftDelete } from '@nestposts/platform/domain/shared/soft-delete/soft-delete';
@@ -19,12 +22,15 @@ export type UserEvent =
   | UserRegisteredEvent
   | UserRoleGrantedEvent
   | UserDeletedEvent
-  | UserRestoredEvent;
+  | UserRestoredEvent
+  | NotificationReceivedEvent;
+
+export const USER_NOTIFIABLE_TYPE = 'users.User';
 
 export type { NewUser };
 
 export class User
-  extends AggregateRoot(WithSoftDelete(BaseEntity))<UserEvent>
+  extends Notifiable(AggregateRoot(WithSoftDelete(BaseEntity))<UserEvent>)
   implements IUser
 {
   @AutoMap(() => UserId)
@@ -61,6 +67,22 @@ export class User
       ),
     );
     return user;
+  }
+
+  override get notifiableType(): string {
+    return USER_NOTIFIABLE_TYPE;
+  }
+
+  override get notifiableId(): string {
+    return this.id.value;
+  }
+
+  override get notifiableName(): string | null {
+    return this.name.value;
+  }
+
+  override routeNotificationFor(channel: string): string | undefined {
+    return channel === EMAIL_CHANNEL ? this.email.value : undefined;
   }
 
   hasRole(role: string): boolean {

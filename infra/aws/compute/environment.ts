@@ -2,7 +2,13 @@
 
 import { postgresUrl } from '../data';
 import { router } from '../edge/router';
-import { completed, postEvents, taggingEvents } from '../messaging';
+import { mailFrom } from '../mail';
+import {
+  completed,
+  notificatorNotifications,
+  postEvents,
+  taggingEvents,
+} from '../messaging';
 import { bucket, filesUrl } from '../storage';
 import { BASE_NODE_OPTIONS } from '../support';
 
@@ -120,6 +126,34 @@ export const taggingEnvironment = {
 };
 
 /**
+ * **The notificator lives in the `posts` schema**, beside the users it notifies and the tables its
+ * notifications are read from — which is the one exception to a schema per service, and why it has no
+ * schema variable of its own. It sends email through SES, in the function's own region, as the
+ * identity `mail/email.ts` creates — with the IAM that identity's link carries.
+ */
+export const notificatorEnvironment = {
+  ...sharedEnvironment,
+  OTEL_SERVICE_NAME: 'notificator',
+  NOTIFICATOR_TRANSPORT: 'aws',
+  NOTIFICATOR_QUEUE_URL: notificatorNotifications.url,
+  POSTS_SCHEMA: 'posts',
+  MAIL_TRANSPORT: 'ses',
+  MAIL_FROM: mailFrom,
+};
+
+/**
+ * **Who the seeders create**, from the root `.env` or the deploy's own environment:
+ * `SEED_AUTHOR_EMAIL`, `SEED_AUTHOR_PASSWORD`, `SEED_AUTHOR_NAME` and the `SEED_PROMOTED_` and
+ * `SEED_READER_` twins that `TestUsersSeeder` reads. Unset, it seeds its defaults.
+ */
+export const seedEnvironment: Record<string, string> = Object.fromEntries(
+  Object.entries(process.env).filter(
+    (entry): entry is [string, string] =>
+      entry[0].startsWith('SEED_') && entry[1] !== undefined,
+  ),
+);
+
+/**
  * The migrator boots a Nest container per database, and the `posts` one carries the **real Better
  * Auth stack** — which is how `TestUsersSeeder` creates a credential instead of inserting a password
  * hash it made up. So it needs the same `AUTH_SECRET` as everything else that reads a session.
@@ -132,7 +166,14 @@ export const migratorEnvironment = {
   AUTH_SECRET: authSecret.value,
   AUTH_URL: router.url,
   WEB_URL: router.url,
+  ...seedEnvironment,
 };
 
 /** What every function is allowed to reach. The queues and the topic carry the IAM with them. */
-export const links = [postEvents, taggingEvents, completed, authSecret];
+export const links = [
+  postEvents,
+  taggingEvents,
+  completed,
+  notificatorNotifications,
+  authSecret,
+];

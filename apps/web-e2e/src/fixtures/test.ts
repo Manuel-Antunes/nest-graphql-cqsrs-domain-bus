@@ -5,6 +5,7 @@ import { Broker } from '../support/broker';
 import { ServiceDatabase } from '../support/database';
 import type { ExecuteGraphql } from '../support/graphql';
 import { graphqlExecutor } from '../support/graphql';
+import { Mailbox } from '../support/mailbox';
 import type { Messages } from '../support/messages';
 import { messagesOf } from '../support/messages';
 import { PostsApi } from '../support/posts-api';
@@ -25,6 +26,8 @@ interface Fixtures {
   taggingStore: ServiceDatabase;
   broker: Broker;
   storage: Storage;
+  /** Every email the stack sent, as Mailpit received it. */
+  mailbox: Mailbox;
   /** What went on the wire, whichever wire this run used — see `support/messages.ts`. */
   messages: (queue: string) => Messages;
 }
@@ -62,6 +65,10 @@ export const test = base.extend<Fixtures>({
     const storage = new Storage();
     await use(storage);
     storage.close();
+  },
+
+  mailbox: async ({}, use) => {
+    await use(new Mailbox());
   },
 
   messages: async ({}, use) => {

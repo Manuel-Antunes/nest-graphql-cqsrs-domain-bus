@@ -38,3 +38,5 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           better-stack-url: ${{ secrets.BETTER_STACK_URL }}
           better-stack-api-key: ${{ secrets.BETTER_STACK_API_KEY }}
+          mail-sender: ${{ secrets.MAIL_SENDER }}
+          mail-sender-existing: ${{ vars.MAIL_SENDER_EXISTING || 'false' }}

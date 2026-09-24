@@ -1,6 +1,7 @@
 /// <reference path="../../../.sst/platform/config.d.ts" />
 
 import { Migrator, Seeder } from '../support';
+import { seedEnvironment } from './environment';
 import { migrations } from './platform';
 
 /**
@@ -22,11 +23,13 @@ export const migrator = new Migrator('Migrate', {
  * It is separate from {@link migrator} because the two answer different questions. A migration is a
  * ledger and re-running it costs one query, so it runs on every deploy; a seeder writes rows a person
  * can edit afterwards, so it runs when the **seeders** change — `Seeder` hashes the sources and lets
- * Pulumi decide. `SEED_*` in the environment is what changes who gets created without touching code.
+ * Pulumi decide. `SEED_*` in the environment is what changes who gets created without touching code,
+ * and changing them runs it again.
  */
 export const seeder = new Seeder('Seed', {
   platform: migrations,
   handler: 'apps/migrator/dist/lambda.seedHandler',
   seeds: ['apps/migrator/src/seeders'],
+  configuration: seedEnvironment,
   after: migrator,
 });

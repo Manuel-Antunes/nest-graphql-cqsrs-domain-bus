@@ -45,3 +45,5 @@ function queue(name: string) {
 export const taggingEvents = queue('TaggingPostEvents');
 
 export const completed = queue('PostsApiCompleted');
+
+export const notificatorNotifications = queue('NotificatorNotifications');

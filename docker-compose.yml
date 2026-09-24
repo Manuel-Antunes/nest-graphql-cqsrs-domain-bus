@@ -169,6 +169,41 @@ services:
       migrator:
         condition: service_completed_successfully
 
+  notificator:
+    profiles: ["apps"]
+    image: nestposts/notificator:dev
+    build:
+      context: .
+      dockerfile: apps/notificator/Dockerfile
+    container_name: nestposts-notificator
+    environment:
+      POSTGRES_URL: postgresql://${POSTGRES_USER:-nestposts}:${POSTGRES_PASSWORD:-nestposts}@postgres:5432/${POSTGRES_DB:-nestposts}
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672
+      NOTIFICATOR_TRANSPORT: ${NOTIFICATOR_TRANSPORT:-inngest}
+      INNGEST_BASE_URL: http://inngest:8288
+      INNGEST_SERVE_ORIGIN: http://notificator:3002
+      NOTIFICATOR_PORT: "3002"
+      MAIL_SMTP_URL: smtp://mailpit:1025
+      MAIL_FROM: ${MAIL_FROM:-Nest Posts <no-reply@nestposts.local>}
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      inngest:
+        condition: service_started
+      mailpit:
+        condition: service_started
+      migrator:
+        condition: service_completed_successfully
+
+  # Every email sent locally lands here: SMTP on 1025, the inbox — a UI and a REST API — on 8025.
+  # `apps/notificator` sends to it by default (`MAIL_SMTP_URL=smtp://localhost:1025`).
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: nestposts-mailpit
+    ports:
+      - "${MAILPIT_SMTP_PORT:-1025}:1025"
+      - "${MAILPIT_PORT:-8025}:8025"
+
   # `NEXT_PUBLIC_API_URL` is the INTERNAL address, and that is not a slip: `apps/web/src/lib/env.ts`
   # is read by server components and by the `/api/graphql` route, never by the browser — the browser
   # only ever talks to this origin.
@@ -207,6 +242,8 @@ services:
       - http://posts-api:3000/api/inngest
       - -u
       - http://tagging:3001/api/inngest
+      - -u
+      - http://notificator:3002/api/inngest
     ports:
       - "${INNGEST_PORT:-8288}:8288"
 

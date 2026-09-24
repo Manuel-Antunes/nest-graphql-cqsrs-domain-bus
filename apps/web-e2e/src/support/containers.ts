@@ -5,6 +5,7 @@ import { PostgreSqlContainer } from '@testcontainers/postgresql';
 import type { StartedNetwork, StartedTestContainer } from 'testcontainers';
 import { GenericContainer, Network, Wait } from 'testcontainers';
 
+import { MAILPIT_API_PORT, MAILPIT_IMAGE, MAILPIT_SMTP_PORT } from './mailbox';
 import {
   MINIO_IMAGE,
   MINIO_PORT,
@@ -21,6 +22,9 @@ export const RABBITMQ_IMAGE = 'rabbitmq:4-management';
 export const INNGEST_IMAGE = 'inngest/inngest:latest';
 
 const TAGGING_PORT = 3001;
+const NOTIFICATOR_PORT = 3002;
+
+export const MAIL_FROM = 'Nest Posts <no-reply@nestposts.test>';
 
 export const POSTGRES_USER = 'nestposts';
 export const POSTGRES_PASSWORD = 'nestposts';
@@ -31,6 +35,8 @@ export interface Endpoints {
   readonly postgresUrl: string;
   readonly apiUrl: string;
   readonly storageUrl: string;
+  /** Mailpit's API: every email the notificator sent. */
+  readonly mailboxUrl: string;
   /** The broker's management API, on the run that has a broker. */
   readonly managementUrl?: string;
   /** The Inngest dev server, on the run that has one — its `/v1/events` is that run's wire. */
@@ -74,7 +80,8 @@ export interface ContainerStackOptions {
 }
 
 /**
- * **Everything but the web, as containers on one network.**
+ * **Everything but the web, as containers on one network** — Postgres, MinIO, Mailpit, the broker or
+ * the Inngest dev server, the migrator, and `posts-api`, `tagging` and `notificator`.
  *
  * The images are the ones `apps/<app>/Dockerfile` build and `nx run <app>:docker:build` tags — the same
  * ones `docker compose --profile apps up` runs — so what this suite drives is what that profile
@@ -95,8 +102,10 @@ export class ContainerStack {
   private minio?: StartedTestContainer;
   private rabbitmq?: StartedTestContainer;
   private inngest?: StartedTestContainer;
+  private mailpit?: StartedTestContainer;
   private postsApi?: StartedTestContainer;
   private tagging?: StartedTestContainer;
+  private notificator?: StartedTestContainer;
 
   async up(options: ContainerStackOptions): Promise<Endpoints> {
     this.network = await new Network().start();
@@ -109,6 +118,9 @@ export class ContainerStack {
       await this.register(
         `http://${this.tagging?.getHost()}:${this.tagging?.getMappedPort(TAGGING_PORT)}`,
       );
+      await this.register(
+        `http://${this.notificator?.getHost()}:${this.notificator?.getMappedPort(NOTIFICATOR_PORT)}`,
+      );
     }
     return this.endpoints(options);
   }
@@ -117,7 +129,9 @@ export class ContainerStack {
     for (const container of [
       this.postsApi,
       this.tagging,
+      this.notificator,
       this.inngest,
+      this.mailpit,
       this.rabbitmq,
       this.minio,
       this.postgres,
@@ -147,6 +161,13 @@ export class ContainerStack {
       .start();
 
     await this.startStorage(options);
+
+    this.mailpit = await new GenericContainer(MAILPIT_IMAGE)
+      .withNetwork(this.network!)
+      .withNetworkAliases('mailpit')
+      .withExposedPorts(MAILPIT_API_PORT)
+      .withWaitStrategy(Wait.forHttp('/livez', MAILPIT_API_PORT))
+      .start();
 
     if (options.transport !== 'rabbitmq') {
       return;
@@ -204,6 +225,8 @@ export class ContainerStack {
         'http://posts-api:3000/api/inngest',
         '-u',
         `http://tagging:${TAGGING_PORT}/api/inngest`,
+        '-u',
+        `http://notificator:${NOTIFICATOR_PORT}/api/inngest`,
       ])
       .withWaitStrategy(Wait.forLogMessage(/starting server/))
       .start();
@@ -257,6 +280,26 @@ export class ContainerStack {
       .withWaitStrategy(Wait.forLogMessage(/tagging is listening/))
       .withLogConsumer((stream) =>
         stream.on('data', (line) => options.logs(`tagging ${line}`)),
+      )
+      .start();
+
+    this.notificator = await new GenericContainer('nestposts/notificator:dev')
+      .withNetwork(this.network!)
+      .withNetworkAliases('notificator')
+      .withExposedPorts(NOTIFICATOR_PORT)
+      .withEnvironment({
+        ...shared,
+        NOTIFICATOR_TRANSPORT: options.transport,
+        NOTIFICATOR_PORT: String(NOTIFICATOR_PORT),
+        NOTIFICATOR_RETRY_DELAY_MS: '1000',
+        INNGEST_SERVE_ORIGIN: `http://notificator:${NOTIFICATOR_PORT}`,
+        MAIL_TRANSPORT: 'smtp',
+        MAIL_SMTP_URL: `smtp://mailpit:${MAILPIT_SMTP_PORT}`,
+        MAIL_FROM,
+      })
+      .withWaitStrategy(Wait.forLogMessage(/notificator is listening/))
+      .withLogConsumer((stream) =>
+        stream.on('data', (line) => options.logs(`notificator ${line}`)),
       )
       .start();
 
@@ -322,6 +365,7 @@ export class ContainerStack {
       postgresUrl: this.postgres!.getConnectionUri(),
       apiUrl: `http://localhost:${options.apiPort}`,
       storageUrl: this.storageUrl(options),
+      mailboxUrl: `http://${this.mailpit!.getHost()}:${this.mailpit!.getMappedPort(MAILPIT_API_PORT)}`,
       ...(this.rabbitmq
         ? {
             managementUrl: `http://${this.rabbitmq.getHost()}:${this.rabbitmq.getMappedPort(15672)}`,

@@ -1,8 +1,9 @@
 /// <reference path="../../../.sst/platform/config.d.ts" />
 
 import { SnsFilterPolicy } from '../../../libs/core/transport-eventbus/src/aws/sns-filter-policy';
+import { NOTIFICATIONS_NAMESPACE } from '../../../libs/notifications/src/domain/notifications.namespace';
 import { POSTS_NAMESPACE } from '../../../libs/posts/src/domain/post/event/posts.namespace';
-import { completed, taggingEvents } from './queues';
+import { completed, notificatorNotifications, taggingEvents } from './queues';
 import { postEvents } from './topic';
 
 /**
@@ -42,5 +43,16 @@ postEvents.subscribeQueue('Completed', completed.arn, {
     ...SnsFilterPolicy.everyEventNamed('posts.PostCreated'),
     ...SnsFilterPolicy.exceptFrom('posts-api'),
   },
+  transform: raw,
+});
+
+/**
+ * What a notifiable was told, for `apps/notificator` to deliver. It publishes nothing, so there is no
+ * echo of its own to exclude.
+ */
+postEvents.subscribeQueue('NotificatorEvents', notificatorNotifications.arn, {
+  filter: SnsFilterPolicy.everyEventNamed(
+    `${NOTIFICATIONS_NAMESPACE}.NotificationReceived`,
+  ),
   transform: raw,
 });

@@ -1,0 +1,51 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "out-tsc/app",
+    "tsBuildInfoFile": "out-tsc/app/tsconfig.app.tsbuildinfo"
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/**/*.spec.ts"],
+  "references": [
+    {
+      "path": "../../libs/core/validated-dto/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/core/transport-eventbus/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/core/retry-policy/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/posts/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/platform/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/core/observability/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/notifications/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/core/microservices-inngest/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/core/microservices-aws/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/core/mail/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/core/lambda/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/database/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/core/cqsrs/tsconfig.lib.json"
+    }
+  ]
+}

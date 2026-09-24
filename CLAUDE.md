@@ -32,7 +32,8 @@ The only exceptions:
    `biome-ignore-all` on `libs/database/src/index.ts` described under **Linting** below.
 3. **The in-house libraries** — `libs/core/cqsrs`, `libs/database`, `libs/core/validated-dto`,
    `libs/core/transport-eventbus`, `libs/core/microservices-aws`,
-   `libs/core/microservices-inngest` and `libs/asset` — may carry **JSDoc**, and only JSDoc
+   `libs/core/microservices-inngest`, `libs/core/mail`, `libs/notifications` and `libs/asset` — may
+   carry **JSDoc**, and only JSDoc
    (`/** … */`), as usage documentation of their public API. These are
    general-purpose libraries that happen to live in this repository: their callers read the signature
    and the doc popup, not the implementation, so documenting what a type, option or method is for
@@ -44,6 +45,7 @@ The only exceptions:
    [nestjs-transport-eventbus](https://github.com/sergey-telpuk/nestjs-transport-eventbus) is
    accounted for: what came from upstream, what the new versions forced, what this repository added.
    Anything that changes that library's relationship to upstream belongs there.
+   **`libs/core/mail/NOTICE.md`** does the same for the port of `@adonisjs/mail`'s class-based mail.
 
 GraphQL `"""descriptions"""` in `apps/posts-api/src/graphql/*.graphql` are **not** comments — they are
 part of the schema and are served through introspection and GraphiQL. Keep them. SDL `#` comments are
@@ -176,6 +178,7 @@ pnpm graph                     # the project graph, which is also the layer grap
 
 docker compose up -d localstack   # SNS + SQS, with the topology docker/localstack/init creates
 docker compose up -d minio createbuckets   # the bucket a post keeps its file in, with its policies
+docker compose up -d mailpit      # SMTP on 1025 and the inbox on http://localhost:8025 — every email sent locally
 docker compose --profile apps up -d --build   # the infrastructure AND the four applications, as images
 npx nx run @nestposts/posts-api:docker:build  # one image; `-t docker:build` builds all four
 npx sst deploy --stage <name>     # the topic, the queues and apps/tagging as a Lambda
@@ -205,24 +208,26 @@ cd apps/web-e2e && npx playwright test -g "o x-tenant do navegador"   # and --ui
 
 Environment variables, per application:
 
-| | posts-api | tagging |
-|---|---|---|
-| database | one Postgres for both: `POSTGRES_URL` (default `postgresql://nestposts:nestposts@localhost:5432/nestposts`) | idem |
-| schema | `POSTS_SCHEMA` (default `posts`) | `TAGGING_SCHEMA` (default `tagging`) |
-| | the same variables address `apps/migrator`, which is what creates those schemas | |
-| transport | `POSTS_TRANSPORT` = `inngest` (default) \| `rabbitmq` \| `memory` \| `aws` | `TAGGING_TRANSPORT`, same |
-| inngest | `INNGEST_BASE_URL` (default `http://localhost:8288`), `INNGEST_SERVE_ORIGIN`, `INNGEST_DEV`, `INNGEST_EVENT_KEY`, `INNGEST_SIGNING_KEY` | idem, plus `TAGGING_PORT` (default 3001) |
-| publishing | `POSTS_PUBLISH_EVENTS=false` turns the outbound half off | `TAGGING_PUBLISH_EVENTS` |
-| retries | — | `TAGGING_RETRY_DELAY_MS` (default 5000): the delay between two deliveries of a message whose handler failed — the retry queue's TTL on RabbitMQ, a `RetryAfterError` on Inngest |
-| broker | `RABBITMQ_URL`, `POSTS_EXCHANGE`, `POSTS_COMPLETED_QUEUE` | `RABBITMQ_URL`, `TAGGING_EXCHANGE`, `TAGGING_QUEUE` |
-| aws | `POSTS_TOPIC_ARN`, `POSTS_COMPLETED_QUEUE_URL` — both default to LocalStack | `TAGGING_TOPIC_ARN`, `TAGGING_QUEUE_URL` |
-| | `AWS_ENDPOINT_URL` (LocalStack), `AWS_REGION` and the SDK's own credentials address both | |
-| subscriptions | `POSTS_SUBSCRIPTION_SOURCE` = `local` (default, this process's `EventBus`) \| `feed` (the shared table, for a service running as several processes) | — |
-| logging | `LOG_LEVEL` (default `info`); pretty when stdout is a terminal, JSON otherwise | idem |
-| telemetry | `OTEL_EXPORTER_OTLP_ENDPOINT` turns tracing **on** — unset, the SDK never starts; `OTEL_SERVICE_NAME`, and the rest of `OTEL_*` | idem |
-| auth | `AUTH_URL`, `AUTH_SECRET`, `AUTH_BASE_PATH` (default `/api/auth`), `WEB_URL`, `AUTH_TRUSTED_ORIGINS`, `AUTH_COOKIE_DOMAIN`, `AUTH_GOOGLE_ID`/`AUTH_GOOGLE_SECRET`, `AUTH_GITHUB_ID`/`AUTH_GITHUB_SECRET` — see `libs/auth/README.md`. **Every process that reads a session shares `AUTH_SECRET`**, `apps/web` included | — |
-| storage | `DRIVE_BUCKET`, `DRIVE_S3_ENDPOINT`, `DRIVE_S3_PUBLIC_ENDPOINT` (where the BROWSER reaches the same storage — signed URLs are bound to it), `DRIVE_S3_FORCE_PATH_STYLE`, `DRIVE_CDN_URL`, `DRIVE_AWS_REGION`, `DRIVE_AWS_ACCESS_KEY_ID`/`DRIVE_AWS_SECRET_ACCESS_KEY` — see `libs/asset/README.md` | — |
-| other | `PORT`, `MIKRO_ORM_DEBUG=true` | `MIKRO_ORM_DEBUG=true` |
+| | posts-api | tagging | notificator |
+|---|---|---|---|
+| database | one Postgres for both: `POSTGRES_URL` (default `postgresql://nestposts:nestposts@localhost:5432/nestposts`) | idem | idem |
+| schema | `POSTS_SCHEMA` (default `posts`) | `TAGGING_SCHEMA` (default `tagging`) | **`POSTS_SCHEMA`** — it lives in the `posts` schema, beside the users it notifies (see Notifications) |
+| | the same variables address `apps/migrator`, which is what creates those schemas | | |
+| transport | `POSTS_TRANSPORT` = `inngest` (default) \| `rabbitmq` \| `memory` \| `aws` | `TAGGING_TRANSPORT`, same | `NOTIFICATOR_TRANSPORT`, same |
+| inngest | `INNGEST_BASE_URL` (default `http://localhost:8288`), `INNGEST_SERVE_ORIGIN`, `INNGEST_DEV`, `INNGEST_EVENT_KEY`, `INNGEST_SIGNING_KEY` | idem, plus `TAGGING_PORT` (default 3001) | idem, plus `NOTIFICATOR_PORT` (default 3002) |
+| publishing | `POSTS_PUBLISH_EVENTS=false` turns the outbound half off | `TAGGING_PUBLISH_EVENTS` | — (it publishes nothing) |
+| retries | — | `TAGGING_RETRY_DELAY_MS` (default 5000): the delay between two deliveries of a message whose handler failed — the retry queue's TTL on RabbitMQ, a `RetryAfterError` on Inngest | `NOTIFICATOR_RETRY_DELAY_MS` (default 5000) |
+| broker | `RABBITMQ_URL`, `POSTS_EXCHANGE`, `POSTS_COMPLETED_QUEUE` | `RABBITMQ_URL`, `TAGGING_EXCHANGE`, `TAGGING_QUEUE` | `RABBITMQ_URL`, `NOTIFICATOR_EXCHANGE`, `NOTIFICATOR_QUEUE` |
+| aws | `POSTS_TOPIC_ARN`, `POSTS_COMPLETED_QUEUE_URL` — both default to LocalStack | `TAGGING_TOPIC_ARN`, `TAGGING_QUEUE_URL` | `NOTIFICATOR_QUEUE_URL` |
+| | `AWS_ENDPOINT_URL` (LocalStack), `AWS_REGION` and the SDK's own credentials address all three | | |
+| subscriptions | `POSTS_SUBSCRIPTION_SOURCE` = `local` (default, this process's `EventBus`) \| `feed` (the shared table, for a service running as several processes) | — | — |
+| logging | `LOG_LEVEL` (default `info`); pretty when stdout is a terminal, JSON otherwise | idem | idem |
+| telemetry | `OTEL_EXPORTER_OTLP_ENDPOINT` turns tracing **on** — unset, the SDK never starts; `OTEL_SERVICE_NAME`, and the rest of `OTEL_*` | idem | idem |
+| auth | `AUTH_URL`, `AUTH_SECRET`, `AUTH_BASE_PATH` (default `/api/auth`), `WEB_URL`, `AUTH_TRUSTED_ORIGINS`, `AUTH_COOKIE_DOMAIN`, `AUTH_GOOGLE_ID`/`AUTH_GOOGLE_SECRET`, `AUTH_GITHUB_ID`/`AUTH_GITHUB_SECRET` — see `libs/auth/README.md`. **Every process that reads a session shares `AUTH_SECRET`**, `apps/web` included | — | — |
+| storage | `DRIVE_BUCKET`, `DRIVE_S3_ENDPOINT`, `DRIVE_S3_PUBLIC_ENDPOINT` (where the BROWSER reaches the same storage — signed URLs are bound to it), `DRIVE_S3_FORCE_PATH_STYLE`, `DRIVE_CDN_URL`, `DRIVE_AWS_REGION`, `DRIVE_AWS_ACCESS_KEY_ID`/`DRIVE_AWS_SECRET_ACCESS_KEY` — see `libs/asset/README.md` | — | — |
+| mail | — | — | `MAIL_TRANSPORT` = `smtp` (default) \| `ses` \| `json`, `MAIL_SMTP_URL` (default Mailpit, `smtp://localhost:1025`), `MAIL_FROM`, `MAIL_SES_REGION` — read by `infrastructure/mail/mail.config.ts`; `libs/core/mail` itself takes the mailer's options and reads no environment |
+| push | — | — | `FIREBASE_CREDENTIALS` (the service account's JSON); unset, the `push` channel sends nothing |
+| other | `PORT`, `MIKRO_ORM_DEBUG=true` | `MIKRO_ORM_DEBUG=true` | `MIKRO_ORM_DEBUG=true` |
 
 ## Architecture
 
@@ -254,11 +259,18 @@ libs/organizations       organizations, members and invitations: the three table
                          CONTRIBUTES to the instance libs/auth builds. Both have READMEs
 libs/posts               domain/post + domain/tag + their ORM mappings and repositories,
                          wired by PostsInfrastructureModule
+libs/notifications       notifications as a domain concept: Notification (via, and the channel
+                         interfaces it implements — MailNotification, PushNotification), the
+                         NotificationRecord it keeps its data in, the Notifiable mixin, devices, the
+                         delivery ledger, and the channels that deliver. It has a README
 libs/asset               files in S3-compatible storage as a value an entity holds: Asset, the
                          attachment() column type and the subscriber that moves, signs and cleans up
                          the objects on flush, and the DiskService port. It has a README
 libs/core/cqsrs          the third CQRS message (see below)
 libs/core/validated-dto  Zod → DTO/value object mixins
+libs/core/mail           class-based email (Mail, Message, MailSender) over @nestjs-modules/mailer,
+                         configured with the mailer's own options; offers a React Email template
+                         resolver and a plain-text plugin, and any other adapter still works. README
 libs/core/transport-eventbus  the CQRS event bus over Nest's microservice transports (see below),
                          RabbitMQ / SNS+SQS / Inngest / in-process — the envelope's wire on each
 libs/core/microservices-aws  SNS and SQS as a plain Nest transport: the client proxies, SqsStrategy,
@@ -278,6 +290,8 @@ libs/core/lambda         how AWS enters a Nest application: bootOnce (one boot p
 apps/posts-api           application + interfaces (GraphQL, messaging), a HYBRID application:
                          HTTP (GraphQL, and subscriptions over SSE) and a microservice, one process
 apps/tagging             one step of the saga, a FULL microservice: no HTTP port at all
+apps/notificator         delivers notifications — the database, email, push — through a command, a
+                         FULL microservice like tagging, in the posts schema (see Notifications)
 apps/migrator            the migrations and the seeders of both schemas — the only thing that
                          writes DDL, and the only thing that seeds (see below)
 infra/aws                the deployed shape: the topic, the queues, the four functions, the bucket
@@ -527,10 +541,48 @@ ProjectPostCompletion        ◀──  posts.PostCreated.<postId>      ◀─�
   deciding a tag the application has no business deciding, and the flag that gated it was set in
   exactly one file in the repository: the e2e's own Vitest config. The real path is covered by
   `pnpm test:web`.
+- **Then the author is told.** `NotifyAuthorOnPostCreated` (a saga in `apps/posts-api`) reacts to
+  `PostCreated` — its own, or ingested from tagging — with `NotifyPostCreatedCommand`, which loads the
+  author and calls `user.notify(new PostCreatedNotification(post, { url }))`. The event it raises,
+  `notifications.NotificationReceived`, goes out through the same publisher, and `apps/notificator`
+  delivers it. See **Notifications**.
 - The default tag's id is a **domain fact** (`DEFAULT_TAG_ID` in `libs/posts`), which is what makes two
   services arrive at the same id instead of keeping two constants in step by hand. The row itself is
   `DefaultTagSeeder` in `apps/migrator`, run by `pnpm db:seed` — and, in the e2e, by an explicit
   `orm.seeder.seed(DefaultTagSeeder)` in `beforeAll`.
+
+### Notifications: the domain notifies, `apps/notificator` delivers
+
+`libs/notifications/README.md` is the guide; the essentials:
+
+- **A notification is domain.** `Notification` is behaviour — `via` answers the channels (`database`
+  unless it says otherwise) — and its data lives in a `NotificationRecord`, which is what the
+  `database` channel stores and what the other process rebuilds it from, by `@NotificationType`. What
+  it can be told as is an interface it implements: `MailNotification` (`toMail` → a `Mail`),
+  `PushNotification` (`toPush`). `PostCreatedNotification`, its `Mail` and its React Email template
+  live in `libs/posts`.
+- **`User` is `Notifiable`**: `Notifiable(AggregateRoot(WithSoftDelete(BaseEntity))<UserEvent>)`.
+  The mixin wraps the aggregate root, so what it asks of the host stays abstract; the host overrides
+  `notifiableType`/`notifiableId`/`notifiableName` and `routeNotificationFor(channel)`. `notify` raises
+  `NotificationReceivedEvent` and changes no state, so the handler commits and saves nothing.
+- **Delivered by a command, in a service of its own.** `apps/notificator` binds
+  `notifications.NotificationReceived.*`, and `SendNotificationCommand` delivers through each channel
+  the event lists, skipping those the `notification_deliveries` ledger already has. A channel that
+  throws fails the ingestion, and the transport's retry (`@RetryPolicy`) delivers only what did not
+  go out. The notification id is derived from its key and its notifiable, so a retried `notify` is the
+  same notification.
+- **The `posts` schema is shared, and that is an exception.** The notification tables are read and
+  written by `apps/posts-api` (the GraphQL `notifications`, `markNotificationAsRead`, `registerDevice`,
+  `removeDevice`) and written by the notificator, so they live beside the users, in `posts`, and the
+  notificator connects there. Its inbox shares `transport_message_inbox` with posts-api's: the rows are
+  keyed by message id and the two services bind different events, so they cannot collide — until one
+  of them binds what the other does.
+- **A `.tsx` in a library** needs `jsx: react-jsx` and `.tsx` in `include` in its tsconfigs, and
+  `vitest.shared.mts` runs two SWC instances — `.ts` as TypeScript, `.tsx` as TSX — because
+  unplugin-swc turns TSX on for a whole project whose tsconfig sets `jsx`, and TSX cannot parse a
+  `<T>value` assertion.
+- **Locally the email lands in Mailpit** (`docker compose up -d mailpit`, http://localhost:8025); on
+  AWS it goes through SES, from the identity `infra/aws/mail/email.ts` creates with `MAIL_SENDER`.
 
 ### A slice is one file, message and handler inside a `namespace`
 
@@ -891,8 +943,9 @@ against one of them would be a test of the transport rather than of the system, 
 port exists to prevent.
 
 It provisions everything itself, through **Testcontainers**: Postgres, MinIO (the bucket and its
-policies included), the broker or the Inngest dev server, the migrator as a one-shot, and then `posts-api` and `tagging` as the images
-`apps/<app>/Dockerfile` build. They share a network and address each other by alias, so nothing has to be taught a port, and
+policies included), Mailpit (where `notifications.spec` reads the author's email), the broker or the
+Inngest dev server, the migrator as a one-shot, and then `posts-api`, `tagging` and `notificator` as
+the images `apps/<app>/Dockerfile` build. They share a network and address each other by alias, so nothing has to be taught a port, and
 what the host reaches is published wherever Docker likes — which is why the suite now needs no
 configuration and does not care what else on the machine is holding 5432 or 5672. The one host port
 chosen up front is the API's, by `FreePort`, because it signs cookies against its own origin and so
@@ -1079,6 +1132,14 @@ DTOs count.
   rather than being committed as part of somebody else's. Unknown on either side means no evidence
   of a difference, and the unit is shared, which is what keeps a command dispatched without a
   context from starting one by accident.
+- **Every reaction to one ingested event shares ONE EntityManager, concurrently.** The ingestion
+  publishes inside its request context, so an `@EventsHandler` and the command a saga dispatches run
+  interleaved on the same identity map. A second `findOne(..., { populate })` of an aggregate another
+  reaction is writing re-hydrates its collection from the database — and the writer's flush then
+  saves the scalar change without the collection. Measured: `NotifyPostCreatedCommand` re-loaded the
+  Post with its tags while `ProjectPostCompletion` projected the completion, and a post reached
+  version 2 with no tag, on Inngest, once in three runs. A reaction reads what the event carries; it
+  does not load the aggregate a projection of the same event is writing.
 - **`EventIngestion` decodes the request ONCE.** Decoding it in `ingest` and again in
   `ingestMessage` would make two `AsyncContext` objects for one message, and the unit would then not
   recognise the command a saga dispatches with the request it received — a unit of its own,

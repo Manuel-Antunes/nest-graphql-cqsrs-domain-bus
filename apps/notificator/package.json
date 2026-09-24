@@ -1,0 +1,73 @@
+{
+  "name": "@nestposts/notificator",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "@aws-sdk/client-sesv2": "catalog:",
+    "@nestposts/cqsrs": "workspace:*",
+    "@nestposts/database": "workspace:*",
+    "@nestposts/lambda": "workspace:*",
+    "@nestposts/mail": "workspace:*",
+    "@nestposts/microservices-aws": "workspace:*",
+    "@nestposts/microservices-inngest": "workspace:*",
+    "@nestposts/notifications": "workspace:*",
+    "@nestposts/observability": "workspace:*",
+    "@nestposts/platform": "workspace:*",
+    "@nestposts/posts": "workspace:*",
+    "@nestposts/retry-policy": "workspace:*",
+    "@nestposts/transport-eventbus": "workspace:*",
+    "@nestposts/validated-dto": "workspace:*",
+    "zod": "catalog:"
+  },
+  "nx": {
+    "targets": {
+      "build": {
+        "executor": "nx:run-commands",
+        "cache": true,
+        "dependsOn": [
+          "^build"
+        ],
+        "inputs": [
+          "production",
+          "^production"
+        ],
+        "outputs": [
+          "{projectRoot}/dist"
+        ],
+        "options": {
+          "cwd": "{projectRoot}",
+          "command": "nest build"
+        }
+      },
+      "serve": {
+        "executor": "nx:run-commands",
+        "continuous": true,
+        "dependsOn": [
+          "^build"
+        ],
+        "options": {
+          "cwd": "{projectRoot}",
+          "command": "nest start --watch"
+        }
+      },
+      "docker:build": {
+        "options": {
+          "args": [
+            "--file apps/notificator/Dockerfile",
+            "--tag nestposts/notificator:dev"
+          ]
+        },
+        "parallelism": false
+      },
+      "docker:run": {
+        "options": {
+          "cwd": ".",
+          "command": "docker run {args} nestposts/notificator:dev"
+        }
+      }
+    }
+  },
+  "devDependencies": {
+    "@camcima/nestjs-memory-microservices": "^0.3.0"
+  }
+}

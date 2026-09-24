@@ -4,6 +4,7 @@ import { Migration20260921235341_organization_tenant_schema } from './Migration2
 import { Migration20260922040710_add_event_feed } from './Migration20260922040710_add_event_feed';
 import { Migration20260922172513_unify_event_log } from './Migration20260922172513_unify_event_log';
 import { Migration20260923200000_add_post_asset } from './Migration20260923200000_add_post_asset';
+import { Migration20260924024220_add_notifications } from './Migration20260924024220_add_notifications';
 
 export const postsMigrations = [
   { name: 'Migration20260921214755_init', class: Migration20260921214755_init },
@@ -26,5 +27,9 @@ export const postsMigrations = [
   {
     name: 'Migration20260923200000_add_post_asset',
     class: Migration20260923200000_add_post_asset,
+  },
+  {
+    name: 'Migration20260924024220_add_notifications',
+    class: Migration20260924024220_add_notifications,
   },
 ];

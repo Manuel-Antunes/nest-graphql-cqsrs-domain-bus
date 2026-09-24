@@ -22,6 +22,18 @@ catalog:
   "@aws-sdk/s3-request-presigner": "3.850.0"
   "@nx/playwright": 23.2.1
   "@nx/workspace": 23.2.1
+  "@types/nodemailer": "8.0.2"
+  "@types/react": "^19"
+  "@types/react-dom": "^19"
+  "@nestjs-modules/mailer": "2.3.7"
+  nodemailer: "8.0.11"
+  "@react-email/components": "^0.3.2"
+  "@aws-sdk/client-sesv2": "3.918.0"
+  firebase-admin: "^13.4.0"
+  html-to-text: "^9.0.5"
+  "@types/html-to-text": "^9.0.4"
+  react: "19.1.0"
+  react-dom: "19.1.0"
   nx: 23.2.1
   typescript: ^6.0.3
   zod: "^4.5.4"
@@ -36,3 +48,8 @@ onlyBuiltDependencies:
 
 overrides:
   "@better-auth/utils": 0.4.2
+
+packageExtensions:
+  "@nestjs-modules/mailer":
+    dependencies:
+      lodash: ^4.17.21

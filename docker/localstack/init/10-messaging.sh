@@ -5,6 +5,7 @@
 #   SNS FIFO topic  nestposts-events.fifo                the exchange: every service publishes here
 #   SQS FIFO queue  nestposts-tagging-post-events.fifo   everything the `posts` namespace states
 #   SQS FIFO queue  nestposts-posts-api-completed.fifo   PostCreated — the saga coming back
+#   SQS FIFO queue  nestposts-notificator-notifications.fifo   NotificationReceived — what to deliver
 #   + a dead-letter queue per consumer, after five deliveries
 #
 # WHY FIFO, AND WHY IT IS NOT TUNING
@@ -101,5 +102,10 @@ subscribe "nestposts-tagging-post-events.fifo" \
 # work — so this is the one subscription where excluding a service's own name changes what arrives.
 subscribe "nestposts-posts-api-completed.fifo" \
   '{"qualifiedName":["posts.PostCreated"],"origin":[{"anything-but":["posts-api"]}]}'
+
+# The notificator delivers what a notifiable was told. It publishes nothing, so there is no echo of
+# its own to exclude.
+subscribe "nestposts-notificator-notifications.fifo" \
+  '{"qualifiedName":["notifications.NotificationReceived"]}'
 
 echo "nestposts: ${TOPIC_ARN} is ready"

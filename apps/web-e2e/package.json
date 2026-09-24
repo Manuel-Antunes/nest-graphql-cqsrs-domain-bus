@@ -51,7 +51,8 @@
             "projects": [
               "@nestposts/migrator",
               "@nestposts/posts-api",
-              "@nestposts/tagging"
+              "@nestposts/tagging",
+              "@nestposts/notificator"
             ],
             "target": "docker:build"
           },

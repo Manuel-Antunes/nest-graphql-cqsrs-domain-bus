@@ -29,6 +29,7 @@ import {
   postsApiIdentity,
   subscriptionsFromFeed,
 } from './infrastructure/transport/transport.config';
+import { GraphQLJSON } from './interfaces/graphql/json.scalar';
 import {
   subscriptionDeadline,
   subscriptionMaxSeconds,
@@ -53,7 +54,7 @@ import { validatedDtoClasses } from './interfaces/mapper/validated-dto.strategy'
     GraphQLModule.forRoot<YogaFederationDriverConfig>({
       driver: YogaFederationDriver,
       typePaths: [join(__dirname, 'graphql', '**/*.graphql')],
-      resolvers: { DateTime: GraphQLISODateTime },
+      resolvers: { DateTime: GraphQLISODateTime, JSON: GraphQLJSON },
       fieldResolverEnhancers: ['interceptors'],
       graphiql: true,
       maskedErrors: false,

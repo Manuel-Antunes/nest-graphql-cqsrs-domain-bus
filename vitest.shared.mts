@@ -68,18 +68,37 @@ const workspaceAliases = (): { find: RegExp; replacement: string }[] => {
   return aliases;
 };
 
-const swcPlugin = () =>
+const decoratorTransform = {
+  legacyDecorator: true,
+  decoratorMetadata: true,
+  useDefineForClassFields: false,
+};
+
+/**
+ * Two instances, split by extension. unplugin-swc turns TSX parsing on for EVERY file of a project
+ * whose tsconfig sets `jsx`, and TSX cannot parse a `<T>value` assertion or an unannotated generic
+ * arrow — so a library that holds one React Email template would have its `.ts` files parsed as
+ * something they are not. Here `.ts` is TypeScript and only `.tsx` is TSX.
+ */
+const swcPlugins = () => [
   swc.vite({
+    exclude: [/node_modules/, /\.tsx$/],
     module: { type: 'es6' },
     jsc: {
-      parser: { syntax: 'typescript', decorators: true },
-      transform: {
-        legacyDecorator: true,
-        decoratorMetadata: true,
-        useDefineForClassFields: false,
-      },
+      parser: { syntax: 'typescript', decorators: true, tsx: false },
+      transform: decoratorTransform,
     },
-  });
+  }),
+  swc.vite({
+    include: /\.tsx$/,
+    exclude: /node_modules/,
+    module: { type: 'es6' },
+    jsc: {
+      parser: { syntax: 'typescript', decorators: true, tsx: true },
+      transform: { ...decoratorTransform, react: { runtime: 'automatic' } },
+    },
+  }),
+];
 
 /**
  * What stays out of the coverage denominator is not "untested code", it is code that is not logic of
@@ -120,12 +139,12 @@ export const testProject = ({
       outputFile: { junit: 'target/test-results/junit.xml' },
       coverage: {
         provider: 'v8',
-        include: ['src/**/*.ts'],
+        include: ['src/**/*.{ts,tsx}'],
         exclude: [...coverageExclude, ...extraExcludes],
         reporter: ['text', 'html', 'json', 'json-summary'],
         reportsDirectory: './coverage',
       },
     },
     resolve: { alias: workspaceAliases() },
-    plugins: [swcPlugin()],
+    plugins: swcPlugins(),
   });

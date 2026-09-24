@@ -10,6 +10,7 @@
  */
 import {
   migrator,
+  notificatorWorker,
   postsInbox,
   seeder,
   streaming,
@@ -17,7 +18,13 @@ import {
 } from './compute';
 import { database } from './data';
 import { router } from './edge';
-import { completed, postEvents, taggingEvents } from './messaging';
+import { mailSender } from './mail';
+import {
+  completed,
+  notificatorNotifications,
+  postEvents,
+  taggingEvents,
+} from './messaging';
 import { bucket, filesUrl } from './storage';
 import { web } from './web';
 
@@ -37,6 +44,7 @@ export const outputs = {
   workers: {
     tagging: taggingWorker.functionName,
     postsInbox: postsInbox.functionName,
+    notificator: notificatorWorker.functionName,
   },
 
   files: filesUrl,
@@ -48,7 +56,10 @@ export const outputs = {
   queues: {
     tagging: taggingEvents.url,
     completed: completed.url,
+    notificator: notificatorNotifications.url,
   },
+
+  mailSender,
 
   database: database.host,
 };

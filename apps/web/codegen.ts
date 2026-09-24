@@ -13,6 +13,7 @@ const config: CodegenConfig = {
       config: {
         scalars: {
           DateTime: 'string',
+          JSON: 'Record<string, unknown>',
           _Any: 'Record<string, unknown>',
         },
         useTypeImports: true,

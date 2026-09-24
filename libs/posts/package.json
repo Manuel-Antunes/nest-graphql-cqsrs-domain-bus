@@ -12,10 +12,17 @@
     }
   },
   "dependencies": {
-    "@nestposts/database": "workspace:*",
     "@nestposts/asset": "workspace:*",
+    "@nestposts/database": "workspace:*",
+    "@nestposts/mail": "workspace:*",
+    "@nestposts/notifications": "workspace:*",
     "@nestposts/platform": "workspace:*",
     "@nestposts/users": "workspace:*",
-    "@nestposts/validated-dto": "workspace:*"
+    "@nestposts/validated-dto": "workspace:*",
+    "@react-email/components": "catalog:",
+    "react": "catalog:"
+  },
+  "devDependencies": {
+    "@types/react": "catalog:"
   }
 }
