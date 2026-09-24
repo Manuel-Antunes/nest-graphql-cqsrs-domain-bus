@@ -1,8 +1,10 @@
 import type { ExecutionContext } from '@nestjs/common';
 import { Injectable } from '@nestjs/common';
 import type { AsyncContext } from '@nestjs/cqrs';
+import type { Context } from '@opentelemetry/api';
 
 import { RequestContextCodec } from '../request-context';
+import { traceContextOf } from '../tracing';
 import { envelopeFrom } from './event-reconstruction';
 
 /**
@@ -43,5 +45,24 @@ export class IncomingRequest {
   /** From what a guard, an interceptor or a filter is looking at. */
   of(context: ExecutionContext): AsyncContext | undefined {
     return this.from(context.switchToRpc().getData());
+  }
+
+  /**
+   * **The trace a delivery belongs to**, read off its envelope — or `undefined` for anything that is
+   * not a message. The handler's `process` span is a child of it, and it has ended by the time an
+   * interceptor or a filter sees the failure; this is how they still reach the trace of the work
+   * that failed (`ErrorReportingModule`'s `traceOf`, in `@nestposts/observability`).
+   */
+  static traceOf(context: ExecutionContext): Context | undefined {
+    if (context.getType() !== 'rpc') {
+      return undefined;
+    }
+    try {
+      return traceContextOf(
+        envelopeFrom(context.switchToRpc().getData()).metadata,
+      );
+    } catch {
+      return undefined;
+    }
   }
 }

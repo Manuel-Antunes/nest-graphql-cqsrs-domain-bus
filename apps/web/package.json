@@ -24,11 +24,13 @@
     "@nestposts/microservices-inngest": "workspace:*",
     "@nestposts/migrator": "workspace:*",
     "@nestposts/notifications": "workspace:*",
+    "@nestposts/observability": "workspace:*",
     "@nestposts/organizations": "workspace:*",
     "@nestposts/transport-eventbus": "workspace:*",
     "@nestposts/ui": "workspace:*",
     "@opentelemetry/api": "^1.9.1",
     "@opentelemetry/instrumentation-graphql": "^0.70.0",
+    "@sentry/nextjs": "catalog:",
     "@tanstack/react-form": "catalog:",
     "@tanstack/react-pacer": "catalog:",
     "@tanstack/react-query": "catalog:",
@@ -128,7 +130,13 @@
         "executor": "nx:run-commands",
         "continuous": true,
         "dependsOn": [
-          "codegen"
+          "codegen",
+          {
+            "projects": [
+              "@nestposts/migrator"
+            ],
+            "target": "setup"
+          }
         ],
         "options": {
           "cwd": "{projectRoot}",

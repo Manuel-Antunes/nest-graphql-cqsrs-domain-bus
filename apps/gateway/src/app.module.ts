@@ -4,6 +4,8 @@ import {
   subgraphEventOrigin,
 } from '@nestposts/federation-gateway';
 import { loggingModule } from '@nestposts/observability';
+import { ErrorReportingModule } from '@nestposts/observability/error-reporting.module';
+import { useGraphQLErrorReporting } from '@nestposts/observability/graphql-error-reporting';
 import { useGraphQLTracing } from '@nestposts/observability/graphql-tracing';
 
 import {
@@ -15,6 +17,7 @@ import {
 @Module({
   imports: [
     loggingModule({ serviceName: process.env.OTEL_SERVICE_NAME ?? 'gateway' }),
+    ErrorReportingModule.forRoot(),
     FederationGatewayModule.forRoot({
       subgraphs: gatewaySubgraphs(),
       tokenVerifier: gatewayTokenVerifier(),
@@ -24,6 +27,7 @@ import {
           resolvers: false,
           originOf: subgraphEventOrigin,
         }),
+        useGraphQLErrorReporting(),
       ],
     }),
   ],

@@ -174,13 +174,13 @@ Package manager is **pnpm** (pinned: `pnpm@10.28.0`), workspace orchestrated by 
 ```bash
 pnpm install
 pnpm db:setup                  # apps/migrator: the system migrations, then every tenant's, then the seeders
-pnpm dev                       # db:setup, then nx run-many -t serve: every app, rebuilt and restarted on any change — libs included
+pnpm dev                       # nx run-many -t serve: every app, rebuilt and restarted on any change — libs included; each serve that needs the database depends on @nestposts/migrator:setup
 pnpm build                     # every project; each Nest app is a webpack bundle (NxAppWebpackPlugin, tsc), the libs compiled in from source
 pnpm typecheck                 # nx run-many -t typecheck: tsc --build per project
 pnpm test                      # nx run-many -t test: every project's Vitest suite
-pnpm test:e2e                  # EVERY app's test-e2e, one at a time: posts-api, then the browser
+pnpm test:e2e                  # EVERY app's test-e2e, one at a time (`parallelism: false` on the target): posts-api, then the browser
 pnpm test:web                  # apps/web-e2e alone: Playwright, THREE PROCESSES over real RabbitMQ
-pnpm test:all                  # the unit suites, then both e2e levels
+pnpm test:all                  # nx run-many -t test test-e2e: the unit suites and both e2e levels; an e2e never runs beside anything (`parallelism: false`)
 pnpm lint                      # biome check . — format, lint and import order, whole repo
 pnpm lint:fix                  # the same with --write
 pnpm format / format:check     # biome format, alone
@@ -236,6 +236,7 @@ Environment variables, per application:
 | subscriptions | `POSTS_SUBSCRIPTION_SOURCE` = `local` (default, this process's `EventBus`) \| `feed` (the shared table, for a service running as several processes) | — | — |
 | logging | `LOG_LEVEL` (default `info`); pretty when stdout is a terminal, JSON otherwise | idem | idem |
 | telemetry | `OTEL_EXPORTER_OTLP_ENDPOINT` turns tracing **on** — unset, the SDK never starts; `OTEL_SERVICE_NAME`, and the rest of `OTEL_*` | idem | idem |
+| errors | `SENTRY_DSN` turns error reporting **on** — unset, every report is a no-op; `SENTRY_ENVIRONMENT`, `SENTRY_RELEASE`. The deploy sets all three from `infra/sentry` | idem | idem |
 | auth | `AUTH_URL`, `AUTH_SECRET`, `AUTH_BASE_PATH` (default `/api/auth`), `WEB_URL`, `AUTH_TRUSTED_ORIGINS`, `AUTH_COOKIE_DOMAIN`, `AUTH_GOOGLE_ID`/`AUTH_GOOGLE_SECRET`, `AUTH_GITHUB_ID`/`AUTH_GITHUB_SECRET`, `AUTH_REQUIRE_EMAIL_VERIFICATION` (default `true`), `AUTH_RATE_LIMIT=false` (the e2e sets it) — see `libs/auth/README.md`. **Every process that reads a session shares `AUTH_SECRET`**, `apps/web` included | — | — |
 | storage | `DRIVE_BUCKET`, `DRIVE_S3_ENDPOINT`, `DRIVE_S3_PUBLIC_ENDPOINT` (where the BROWSER reaches the same storage — signed URLs are bound to it), `DRIVE_S3_FORCE_PATH_STYLE`, `DRIVE_CDN_URL`, `DRIVE_AWS_REGION`, `DRIVE_AWS_ACCESS_KEY_ID`/`DRIVE_AWS_SECRET_ACCESS_KEY` — see `libs/asset/README.md` | — | — |
 | mail | — | — | `MAIL_TRANSPORT` = `smtp` (default) \| `ses` \| `json`, `MAIL_SMTP_URL` (default Mailpit, `smtp://localhost:1025`), `MAIL_FROM`, `MAIL_SES_REGION` — read by `infrastructure/mail/mail.config.ts`; `libs/core/mail` itself takes the mailer's options and reads no environment |
@@ -342,6 +343,8 @@ apps/migrator            the SYSTEM and the TENANT migrations and the seeders �
 infra/aws                the deployed shape: the topic, the queues, the four functions, the bucket
                          and the router, in SST. `infra/aws/README.md` is the guide — read it before
                          touching a filter policy or the bundling options
+infra/sentry             the error tracker (a self-hosted GlitchTip): a project, a key and an alert
+                         per application, owned by the `dev` stage; every function gets its DSN
 apps/web-e2e             the whole system through a BROWSER: Playwright over three processes and a
                          real broker — authentication, authorization, the reading path and the saga
 apps/web                 a Next.js client of the GATEWAY (not part of the saga). It boots a Nest
@@ -1067,10 +1070,55 @@ error at all**: the system works, the trace is just wrong or absent, and only on
   `libs/core/transport-eventbus/src/tracing.ts` wraps `UnitOfWork.run`, not the other way round.
   `injectTraceContext` writes `traceparent` from the **active** context; with no span active it
   writes nothing, and the next service opens a trace of its own.
+- **The Next server's spans leave at the end of each request, or they may never leave.**
+  `@vercel/otel`'s `'auto'` processor is a `BatchSpanProcessor` in the process; on Vercel it is
+  flushed through `waitUntil` when a request ends, and on OpenNext's Lambda nothing flushed it — the
+  function froze with the spans in memory, and they left only if that container was invoked again.
+  Measured: 4 of 36 requests the web made to the gateway had no web span, and each such trace showed
+  "missing root span". `FlushAtRequestEnd` (`apps/web/src/lib`) registers a flush with
+  `Symbol.for('@next/request-context')`'s `waitUntil`, which OpenNext awaits before it returns.
+  **Not** `EMULATE_VERCEL_REQUEST_CONTEXT`: `@vercel/otel` hands that `waitUntil` a function and
+  OpenNext's calls `.then` on it — every span start would throw.
 - **`propagateContextUrls` has to name the URL the application actually calls.**
   `apps/web/src/instrumentation.node.ts` derives it from `API_URL`, which is the router's domain —
   not the function URL. A pattern that matches neither means the Next server never sends
   `traceparent` and the browser's half and the API's half are two unrelated traces.
+- **Errors go to GlitchTip through Sentry's framework SDKs, never through OTLP.** Sentry drops span
+  events at OTLP ingestion — and a recorded exception *is* a span event — while GlitchTip has no
+  OTLP traces endpoint at all (6.2.3 takes `/v1/logs` only). So a collector exporter, the contrib
+  `sentry` one included, can forward spans but never an exception. What reports is the SDK:
+  `@sentry/nestjs` in the Nest applications, `@sentry/nextjs` in the web, both started with
+  `enableOpenTelemetrySetup: false` and `openTelemetryIntegration()` (`errorReportingOptions`,
+  `@nestposts/observability`), so Sentry opens no span and stamps each report with the active
+  OpenTelemetry trace — an issue opens onto the same `trace_id` Better Stack has.
+- **What is reported is what nobody answered.** GraphQL: `useGraphQLErrorReporting`, a Yoga plugin
+  beside `useGraphQLTracing`, reports an error whose `originalError` is not a `GraphQLError` — the
+  one Yoga would mask; whatever an exception filter translated (`BAD_USER_INPUT`, …) and whatever a
+  subgraph answered and the gateway relayed is left out. Messages and HTTP routes:
+  `ErrorReportingModule`'s global interceptor reports and rethrows **the very same** failure, so the
+  transport still retries it — `@sentry/nestjs`'s own `SentryGlobalFilter` is not used because in an
+  `rpc` context it returns instead of rethrowing, which would acknowledge a failed message. It
+  unwraps `RetryPolicyFailure` to its `cause`, skips a 4xx `HttpException`, and opens the report on
+  the trace the message carries (`IncomingRequest.traceOf`), because the handler's own span has
+  ended by then. The migrator reports from `withMigrator`.
+- **In a Lambda a report is delivered before the failure goes any further**, by `reportError`
+  itself (`LAMBDA_TASK_ROOT` → `Sentry.flush`, Sentry's own `flushIfServerless` rule) and by the
+  web's `onRequestError`, which Next awaits. Nothing in `@nestposts/lambda` knows about it, and the
+  cost is paid only by a request or a message that failed.
+- **Better Auth traces itself**, under the instrumentation scope `better-auth`: `POST /route`, the
+  `handler /route` span that records the endpoint's error, each hook and each adapter call
+  (`db findOne session`). In 1.7.3 there is no switch — it imports `@opentelemetry/api` lazily and
+  uses whatever tracer provider is registered — so posts-api's and the web's spans already include
+  it. Its first span per process is a no-op, while that import resolves.
+- **Sentry propagates nothing** (`tracePropagationTargets: []`): left on, the SDK stamps every outgoing
+  request with `sentry-trace` and a `sentry-*` `baggage` carrying a trace id of its own — measured,
+  the web's fetches carried both through the gateway to posts-api, beside a different `traceparent`.
+- **`withSentryConfig` is deliberately not used in `apps/web`.** Under Turbopack it merges `pg`,
+  `graphql`, `kafkajs` and `ioredis` into `serverExternalPackages` — `pg` is transpiled here,
+  `kafkajs`/`ioredis` are aliased to an empty module, and an external `graphql` is the second realm
+  the web already learned not to have. What it would add is source-map upload and a route manifest;
+  the SDK itself only needs `instrumentation.ts`, `sentry.server.config.ts`,
+  `instrumentation-client.ts` and `app/global-error.tsx`.
 
 ## Tests
 
@@ -1421,6 +1469,12 @@ DTOs count.
   redirecting to the loopback registers with `application_type: 'native'`. The consent screen's URL
   carries the redirect URI too, encoded — `waitForURL(/oauth-callback/)` matches the consent page;
   wait for the callback's host instead.
+- **A 401 from Better Auth reads as "Please sign in again", whatever it meant.** better-auth-ui maps
+  every 401 to its `sessionExpired` message, and `@better-auth/oauth-provider` answers a
+  `clientPrivileges` that returns `false` with a message-less `UNAUTHORIZED`. A signed-in non-admin
+  creating an OAuth client saw "sign in again" on AWS; `oauthClientPrivileges` throws a 403 with a
+  message instead. The Better Auth span `handler /oauth2/create-client` is where such a refusal is
+  recorded — the request log does not see `/api/auth/*`.
 - **An invitation notification has no `key`.** Resending an invitation reuses its id, and a keyed
   notification would reuse the notification id too — which the delivery ledger skips as delivered.
 

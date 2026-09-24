@@ -5,7 +5,7 @@ Class-based email — one class per kind of email, composing its own message —
 [React Email](https://react.email) templates. The mail classes are a port of `@adonisjs/mail`'s; see
 `NOTICE.md` for what came from there.
 
-```ts
+```tsx
 export const WelcomeEmail = defineEmailTemplate(
   'users/welcome',
   ({ name }: { name: string }) => (

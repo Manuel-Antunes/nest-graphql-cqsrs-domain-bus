@@ -2,10 +2,12 @@ import { Module } from '@nestjs/common';
 import { CqsrsModule } from '@nestposts/cqsrs';
 import { DatabaseModule, TenancyModule } from '@nestposts/database';
 import { loggingModule } from '@nestposts/observability';
+import { ErrorReportingModule } from '@nestposts/observability/error-reporting.module';
 import { Post } from '@nestposts/posts/domain/post/post.entity';
 import { postsEntities } from '@nestposts/posts/infrastructure/posts-infrastructure.module';
 import { RetryPolicyModule } from '@nestposts/retry-policy/retry-policy.module';
 import {
+  IncomingRequest,
   MikroOrmMessageInbox,
   TRANSPORT_EVENT_BUS_PUBLISHER,
   TransportEventBusModule,
@@ -32,6 +34,7 @@ import { PostEventsController } from './interfaces/messaging/post-events.control
 @Module({
   imports: [
     loggingModule({ serviceName: process.env.OTEL_SERVICE_NAME ?? 'tagging' }),
+    ErrorReportingModule.forRoot({ traceOf: IncomingRequest.traceOf }),
     CqsrsModule.forRoot({ aggregatePublisher: TRANSPORT_EVENT_BUS_PUBLISHER }),
     DatabaseModule.forRoot(mikroOrmConfig()),
     DatabaseModule.forFeature([...postsEntities, ...usersEntities]),

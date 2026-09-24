@@ -28,6 +28,8 @@ catalog:
   '@nx/playwright': 23.2.1
   '@nx/webpack': 23.2.1
   '@nx/workspace': 23.2.1
+  '@sentry/nestjs': ^11.0.0
+  '@sentry/nextjs': ^11.0.0
   '@tailwindcss/postcss': ^4
   '@tanstack/react-form': ^1.33.5
   '@tanstack/react-pacer': ^0.23.0

@@ -1,5 +1,6 @@
 /// <reference path="../../../.sst/platform/config.d.ts" />
 
+import { errorReporting } from '../../sentry';
 import { postgresUrl } from '../data';
 import { router } from '../edge/router';
 import { mailFrom } from '../mail';
@@ -92,6 +93,7 @@ export const gatewayUrl = $interpolate`${router.url}/graphql`;
 export const postsEnvironment = {
   ...sharedEnvironment,
   OTEL_SERVICE_NAME: 'posts-api',
+  ...errorReporting('posts-api'),
   POSTS_TRANSPORT: 'aws',
   POSTS_TOPIC_ARN: postEvents.arn,
   POSTS_COMPLETED_QUEUE_URL: completed.url,
@@ -126,6 +128,7 @@ export const postsEnvironment = {
 export const taggingEnvironment = {
   ...sharedEnvironment,
   OTEL_SERVICE_NAME: 'tagging',
+  ...errorReporting('tagging'),
   TAGGING_TRANSPORT: 'aws',
   TAGGING_TOPIC_ARN: postEvents.arn,
   TAGGING_QUEUE_URL: taggingEvents.url,
@@ -140,6 +143,7 @@ export const taggingEnvironment = {
 export const notificatorEnvironment = {
   ...sharedEnvironment,
   OTEL_SERVICE_NAME: 'notificator',
+  ...errorReporting('notificator'),
   NOTIFICATOR_TRANSPORT: 'aws',
   NOTIFICATOR_QUEUE_URL: notificatorNotifications.url,
   AUTH_SECRET: authSecret.value,
@@ -170,6 +174,7 @@ export const seedEnvironment: Record<string, string> = Object.fromEntries(
 export const migratorEnvironment = {
   ...sharedEnvironment,
   OTEL_SERVICE_NAME: 'migrator',
+  ...errorReporting('migrator'),
   AUTH_SECRET: authSecret.value,
   AUTH_URL: router.url,
   WEB_URL: router.url,
@@ -185,6 +190,7 @@ export const migratorEnvironment = {
 export const gatewayEnvironment = {
   ...sharedEnvironment,
   OTEL_SERVICE_NAME: 'gateway',
+  ...errorReporting('gateway'),
   GATEWAY_URL: gatewayUrl,
   WEB_URL: router.url,
   AUTH_URL: router.url,

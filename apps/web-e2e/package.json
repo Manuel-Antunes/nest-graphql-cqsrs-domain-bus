@@ -54,6 +54,7 @@
       "test-e2e": {
         "executor": "nx:run-commands",
         "cache": false,
+        "parallelism": false,
         "dependsOn": [
           "codegen",
           {

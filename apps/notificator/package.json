@@ -67,6 +67,14 @@
       "serve": {
         "continuous": true,
         "executor": "@nx/js:node",
+        "dependsOn": [
+          {
+            "projects": [
+              "@nestposts/migrator"
+            ],
+            "target": "setup"
+          }
+        ],
         "defaultConfiguration": "development",
         "options": {
           "buildTarget": "@nestposts/notificator:build",

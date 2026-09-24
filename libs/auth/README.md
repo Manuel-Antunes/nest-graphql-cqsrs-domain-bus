@@ -158,6 +158,14 @@ plugin's configuration — which is the boot-time seeding above. Here only a sys
 client (`clientPrivileges`), there is one resource — the gateway — and what a token may do is decided
 by its scopes, so the linkage would restrict nothing that is not already restricted.
 
+**A refusal is a 403, and `oauthClientPrivileges` throws it itself.** Returning `false` leaves the
+answer to the plugin, which throws a message-less `UNAUTHORIZED` — a 401 — and better-auth-ui maps
+every 401 to "Please sign in again to continue". A signed-in non-admin creating a client got exactly
+that, on AWS, with a valid session. It now answers `403 OAUTH_CLIENT_ADMIN_REQUIRED` with
+"Only an admin can create an OAuth client", which the UI shows as a permission error. Nothing seeds an
+`admin`: the deployed stages have one only when somebody sets `auth_user.role` by hand, the way
+`apps/web-e2e` does for its own.
+
 ## Every email is a notification
 
 Better Auth asks for an email through a callback — `sendResetPassword`, `sendMagicLink`,

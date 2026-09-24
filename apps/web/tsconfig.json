@@ -43,6 +43,9 @@
       "path": "../../libs/organizations"
     },
     {
+      "path": "../../libs/core/observability"
+    },
+    {
       "path": "../../libs/notifications"
     },
     {

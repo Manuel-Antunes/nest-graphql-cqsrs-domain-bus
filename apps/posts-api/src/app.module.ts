@@ -11,6 +11,8 @@ import { CqsrsModule } from '@nestposts/cqsrs';
 import { DatabaseModule, TenancyModule } from '@nestposts/database';
 import { PublishingOnDemandNotifications } from '@nestposts/notifications/infrastructure/on-demand/publishing-on-demand-notifications';
 import { loggingModule } from '@nestposts/observability';
+import { ErrorReportingModule } from '@nestposts/observability/error-reporting.module';
+import { useGraphQLErrorReporting } from '@nestposts/observability/graphql-error-reporting';
 import { useGraphQLTracing } from '@nestposts/observability/graphql-tracing';
 import { organizationAuthPluginProviders } from '@nestposts/organizations/infrastructure/better-auth/organization-better-auth.plugin';
 import { OrganizationsInfrastructureModule } from '@nestposts/organizations/infrastructure/organizations-infrastructure.module';
@@ -18,6 +20,7 @@ import { OrganizationEntities } from '@nestposts/organizations/infrastructure/pe
 import { TenantMembershipModule } from '@nestposts/organizations/infrastructure/tenancy/tenant-membership.module';
 import {
   EventTrace,
+  IncomingRequest,
   MikroOrmMessageInbox,
   TRANSPORT_EVENT_BUS_PUBLISHER,
   TransportEventBusModule,
@@ -49,6 +52,7 @@ import { validatedDtoClasses } from './interfaces/mapper/validated-dto.strategy'
     loggingModule({
       serviceName: process.env.OTEL_SERVICE_NAME ?? 'posts-api',
     }),
+    ErrorReportingModule.forRoot({ traceOf: IncomingRequest.traceOf }),
     CqsrsModule.forRoot({ aggregatePublisher: TRANSPORT_EVENT_BUS_PUBLISHER }),
     DatabaseModule.forRoot(mikroOrmConfig()),
     TenancyModule.forRoot({
@@ -71,6 +75,7 @@ import { validatedDtoClasses } from './interfaces/mapper/validated-dto.strategy'
       maskedErrors: false,
       plugins: [
         useGraphQLTracing({ originOf: EventTrace.of }),
+        useGraphQLErrorReporting(),
         ...(subscriptionMaxSeconds()
           ? [subscriptionDeadline(subscriptionMaxSeconds())]
           : []),

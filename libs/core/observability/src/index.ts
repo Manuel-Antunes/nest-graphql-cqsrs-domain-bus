@@ -8,5 +8,9 @@
  * no-op until something here has started. That split is why a library never depends on this package
  * and an application always does.
  */
+export * from './error-reporting';
+export * from './error-reporting.module';
+export * from './error-reporting.options';
+export * from './graphql-error-reporting';
 export * from './logging';
 export * from './telemetry';

@@ -1,5 +1,6 @@
 /// <reference path="../../../.sst/platform/config.d.ts" />
 
+import { errorReporting } from '../../sentry';
 import { streaming } from '../compute';
 import {
   authSecret,
@@ -29,6 +30,8 @@ import { COLLECTOR_CONFIG, COLLECTOR_LAYER } from '../support';
  * magic link, one-time codes, invitations — are notifications, and the notificator's queue is
  * subscribed to them. The link is what grants `sns:Publish` on that topic and nothing else.
  */
+const webErrorReporting = errorReporting('web');
+
 export const web = new sst.aws.Nextjs('Web', {
   path: 'apps/web',
   vpc,
@@ -50,6 +53,12 @@ export const web = new sst.aws.Nextjs('Web', {
   environment: {
     ...sharedEnvironment,
     OTEL_SERVICE_NAME: 'web',
+    ...webErrorReporting,
+    NEXT_PUBLIC_SENTRY_DSN: webErrorReporting.SENTRY_DSN,
+    NEXT_PUBLIC_SENTRY_ENVIRONMENT: webErrorReporting.SENTRY_ENVIRONMENT,
+    ...(webErrorReporting.SENTRY_RELEASE
+      ? { NEXT_PUBLIC_SENTRY_RELEASE: webErrorReporting.SENTRY_RELEASE }
+      : {}),
     AUTH_SECRET: authSecret.value,
     AUTH_URL: router.url,
     WEB_URL: router.url,

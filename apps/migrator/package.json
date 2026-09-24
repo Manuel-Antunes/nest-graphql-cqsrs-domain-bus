@@ -22,6 +22,7 @@
     "@nestposts/auth": "workspace:*",
     "@nestposts/database": "workspace:*",
     "@nestposts/notifications": "workspace:*",
+    "@nestposts/observability": "workspace:*",
     "@nestposts/organizations": "workspace:*",
     "@nestposts/platform": "workspace:*",
     "@nestposts/posts": "workspace:*",

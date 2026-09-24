@@ -28,6 +28,9 @@
       "path": "../../libs/organizations/tsconfig.lib.json"
     },
     {
+      "path": "../../libs/core/observability/tsconfig.lib.json"
+    },
+    {
       "path": "../../libs/notifications/tsconfig.lib.json"
     },
     {

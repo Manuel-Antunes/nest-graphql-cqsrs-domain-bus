@@ -13,6 +13,8 @@ import { ReactEmailTemplateResolver } from '@nestposts/mail/react-email-template
 import { NotificationChannelsModule } from '@nestposts/notifications/infrastructure/notification-channels.module';
 import { firebasePushOptionsFromEnv } from '@nestposts/notifications/infrastructure/push/firebase.options';
 import { loggingModule } from '@nestposts/observability';
+import { ErrorReportingModule } from '@nestposts/observability/error-reporting.module';
+import { useGraphQLErrorReporting } from '@nestposts/observability/graphql-error-reporting';
 import { useGraphQLTracing } from '@nestposts/observability/graphql-tracing';
 import { OrganizationInvitationNotification } from '@nestposts/organizations/domain/organization/notification/organization-invitation.notification';
 import { organizationAuthPluginProviders } from '@nestposts/organizations/infrastructure/better-auth/organization-better-auth.plugin';
@@ -22,6 +24,7 @@ import { TenantMembershipModule } from '@nestposts/organizations/infrastructure/
 import { PostCreatedNotification } from '@nestposts/posts/domain/post/notification/post-created.notification';
 import { RetryPolicyModule } from '@nestposts/retry-policy/retry-policy.module';
 import {
+  IncomingRequest,
   MikroOrmMessageInbox,
   TRANSPORT_EVENT_BUS_PUBLISHER,
   TransportEventBusModule,
@@ -48,6 +51,7 @@ import { InterfacesModule } from './interfaces/interfaces.module';
     loggingModule({
       serviceName: process.env.OTEL_SERVICE_NAME ?? 'notificator',
     }),
+    ErrorReportingModule.forRoot({ traceOf: IncomingRequest.traceOf }),
     CqsrsModule.forRoot({ aggregatePublisher: TRANSPORT_EVENT_BUS_PUBLISHER }),
     DatabaseModule.forRoot(mikroOrmConfig()),
     TenancyModule.forRoot({
@@ -68,7 +72,7 @@ import { InterfacesModule } from './interfaces/interfaces.module';
       fieldResolverEnhancers: ['guards', 'interceptors', 'filters'],
       graphiql: true,
       maskedErrors: false,
-      plugins: [useGraphQLTracing()],
+      plugins: [useGraphQLTracing(), useGraphQLErrorReporting()],
     }),
     RetryPolicyModule.forRootAsync({
       useFactory: () => ({

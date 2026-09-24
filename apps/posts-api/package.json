@@ -73,6 +73,14 @@
       "serve": {
         "continuous": true,
         "executor": "@nx/js:node",
+        "dependsOn": [
+          {
+            "projects": [
+              "@nestposts/migrator"
+            ],
+            "target": "setup"
+          }
+        ],
         "defaultConfiguration": "development",
         "options": {
           "buildTarget": "@nestposts/posts-api:build",
@@ -90,6 +98,7 @@
       "test-e2e": {
         "executor": "nx:run-commands",
         "cache": true,
+        "parallelism": false,
         "dependsOn": [
           "^build"
         ],

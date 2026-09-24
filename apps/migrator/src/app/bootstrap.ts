@@ -1,6 +1,10 @@
 import { MikroORM } from '@mikro-orm/postgresql';
 import type { INestApplicationContext } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import {
+  reportError,
+  startErrorReporting,
+} from '@nestposts/observability/error-reporting';
 
 import { MigratorModule } from './migrator.module';
 
@@ -22,11 +26,21 @@ export const bootstrap = async (): Promise<MigratorContext> => {
 export const withMigrator = async <T>(
   work: (context: MigratorContext) => Promise<T>,
 ): Promise<T> => {
-  const context = await bootstrap();
+  startErrorReporting({
+    serviceName: process.env.OTEL_SERVICE_NAME ?? 'migrator',
+  });
   try {
-    return await work(context);
-  } finally {
-    await context.app.close();
+    const context = await bootstrap();
+    try {
+      return await work(context);
+    } finally {
+      await context.app.close();
+    }
+  } catch (failure) {
+    await reportError(failure, {
+      mechanism: { handled: false, type: 'auto.migrator' },
+    });
+    throw failure;
   }
 };
 

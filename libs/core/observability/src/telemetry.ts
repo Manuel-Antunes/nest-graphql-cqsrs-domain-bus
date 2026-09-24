@@ -26,6 +26,8 @@ import {
   ATTR_SERVICE_VERSION,
 } from '@opentelemetry/semantic-conventions';
 
+import { startErrorReporting } from './error-reporting';
+
 export interface TelemetryOptions {
   /** What this process is called in a trace. One name per deployable, not per module. */
   readonly serviceName: string;
@@ -78,9 +80,15 @@ let started: NodeSDK | undefined;
  *
  * Outside Lambda the trade is the other way round: the network is real, the process is not frozen,
  * and batching is right.
+ *
+ * ## And the errors, when `SENTRY_DSN` says where
+ * Sentry's SDK starts here too, after the tracer provider, which is the order it asks for — and
+ * whether or not the OpenTelemetry SDK starts, because the two answer different questions. See
+ * `startErrorReporting`.
  */
 export const startTelemetry = (options: TelemetryOptions): TelemetryHandle => {
   if (started || !isEnabled(options)) {
+    startErrorReporting({ serviceName: options.serviceName });
     return async () => undefined;
   }
 
@@ -109,6 +117,7 @@ export const startTelemetry = (options: TelemetryOptions): TelemetryHandle => {
 
   sdk.start();
   started = sdk;
+  startErrorReporting({ serviceName: options.serviceName });
 
   return async () => {
     started = undefined;

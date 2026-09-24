@@ -14,10 +14,10 @@ That split is the whole design:
 | a library (`transport-eventbus`) | `@opentelemetry/api` | a no-op until something registers an SDK, so it costs a function call and changes no behaviour |
 | an application (`posts-api`, `tagging`, the Lambda) | this package | the SDK is a process-wide decision, and a process has exactly one |
 
-What this package provides is therefore three things: `startTelemetry` (the SDK), `loggingModule`
-(the logger), because on their own each is half of what an operator needs, and `useGraphQLTracing`
+What this package provides is therefore four things: `startTelemetry` (the SDK), `loggingModule`
+(the logger), because on their own each is half of what an operator needs, `useGraphQLTracing`
 (`@nestposts/observability/graphql-tracing`), because a GraphQL server's spans come from the server
-and not from a patched module.
+and not from a patched module, and error reporting — see [Errors](#errors-reported-by-sentrys-sdk-on-the-trace).
 
 ## Using it
 
@@ -160,3 +160,47 @@ down — but no handler calls it per invocation any more.
 **Do not let a bundler take the instrumentations.** They patch modules as they are required, which is
 what bundling removes; `infra/aws/support/functions.ts` lists them under `nodejs.install` so they
 stay real files in `node_modules`.
+
+## Errors, reported by Sentry's SDK, on the trace
+
+A failure is reported to a Sentry-compatible tracker — here a self-hosted GlitchTip — by **Sentry's
+own framework SDK**, `@sentry/nestjs`, and not by forwarding spans: Sentry drops span events at OTLP
+ingestion, a recorded exception is a span event, and GlitchTip has no OTLP traces endpoint at all.
+OpenTelemetry keeps tracing; Sentry only reports, and stamps each report with the trace that is
+active when it is captured.
+
+```ts
+// apps/posts-api/src/app.module.ts
+imports: [
+  loggingModule({ serviceName: 'posts-api' }),
+  ErrorReportingModule.forRoot({ traceOf: IncomingRequest.traceOf }),
+  GraphQLModule.forRoot<YogaFederationDriverConfig>({
+    plugins: [useGraphQLTracing(), useGraphQLErrorReporting()],
+  }),
+],
+```
+
+| | what | reports |
+|---|---|---|
+| `startErrorReporting` | the SDK, with `errorReportingOptions` — started by `startTelemetry` once the tracer provider exists | nothing without `SENTRY_DSN` |
+| `useGraphQLErrorReporting` | a Yoga plugin | a result error whose `originalError` is not a `GraphQLError`: what nobody answered, what Yoga would mask |
+| `ErrorReportingModule` | `SentryModule` and a global interceptor | a failed message or HTTP route, rethrown untouched; a 4xx `HttpException` is an answer, not a failure |
+| `reportError` | the one call both use | one failure; in a Lambda it resolves once the report is delivered |
+
+- **What an exception filter answers is not reported.** A domain exception the application's filter
+  turns into `BAD_USER_INPUT` reaches Yoga as a `GraphQLError`, and so does whatever a subgraph
+  answered and a gateway relayed — the process that threw it reports it. That is why GraphQL is a
+  Yoga plugin and not the interceptor: the interceptor runs before the filters and cannot know.
+- **The interceptor never swallows.** `@sentry/nestjs`'s `SentryGlobalFilter` returns in an `rpc`
+  context, which acknowledges a message that failed; the interceptor reports and rethrows the same
+  object, so `@RetryPolicy` and the transport still retry it. It reports a `RetryPolicyFailure`'s
+  `cause`, not the carrier.
+- **A message's report opens on the message's trace.** By the time the failure reaches the
+  interceptor, the handler's `process` span has ended and what is active is the delivery — the
+  Lambda invocation, the consumer loop. `traceOf` hands it the trace the envelope carries.
+- **In a Lambda the report is flushed before the failure goes on** (`LAMBDA_TASK_ROOT`, the rule
+  Sentry's `flushIfServerless` applies), so the container is never frozen with a report in flight,
+  and nothing in `@nestposts/lambda` has to know. A request that did not fail pays nothing.
+- **Credentials stay in the process**: `errorReportingOptions` turns cookies and user data off and
+  denies `authorization`, `cookie` and `set-cookie` in both directions. It imports no SDK, which is
+  how `apps/web` starts `@sentry/nextjs` with the same settings.

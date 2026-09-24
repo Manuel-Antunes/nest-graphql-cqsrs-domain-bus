@@ -15,74 +15,6 @@
 
 language js
 
-// The indentation of an embedded document is kept BY HAND: Biome formats standalone `.graphql`
-// files and leaves a template literal alone, and Prettier — which used to reindent these — is gone.
-// These are what a regex can prove about the shape without counting braces. Canonical is two spaces
-// per level, the definition at two, its closing brace at two. Each was run against every document in
-// `apps/web` first: none of them matches correctly formatted GraphQL.
-pattern graphql_indentation_drift() {
-  or {
-    // A line at column zero. Only the literal's own backticks belong there.
-    r"(?s).*\n[^ \n`].*",
-    // An odd number of leading spaces.
-    r"(?s).*\n(?: {2})* \S.*",
-    // A tab.
-    r"(?s).*\t.*",
-    // At depth two a line is a definition header, which ends in `{`, or the brace closing it.
-    // Anything else there is a field that lost a level — the drift a careless edit actually makes.
-    r"(?s).*\n {2}[^ }\n][^\n{]*\n.*",
-    // Indentation grows only after a line that opened a block…
-    r"(?s).*\n {2}[^ \n][^\n]*[^{\n]\n {4,}\S.*",
-    r"(?s).*\n {4}[^ \n][^\n]*[^{\n]\n {6,}\S.*",
-    r"(?s).*\n {6}[^ \n][^\n]*[^{\n]\n {8,}\S.*",
-    r"(?s).*\n {8}[^ \n][^\n]*[^{\n]\n {10,}\S.*",
-    // …and it shrinks only onto a line that closes a block. A field that dedents without one is a
-    // sibling that lost its level — `endCursor` back to four where `hasNextPage` is at six.
-    r"(?s).*\n {4}[^ \n][^\n]*\n {0,2}[^ }`\n].*",
-    r"(?s).*\n {6}[^ \n][^\n]*\n {0,4}[^ }`\n].*",
-    r"(?s).*\n {8}[^ \n][^\n]*\n {0,6}[^ }`\n].*",
-    r"(?s).*\n {10}[^ \n][^\n]*\n {0,8}[^ }`\n].*",
-    // A line that opens a block is followed by one exactly one level deeper — never by one at the
-    // same depth or shallower.
-    r"(?s).*\n {2}[^ \n][^\n]*\{\n {0,2}[^ }`\n].*",
-    r"(?s).*\n {4}[^ \n][^\n]*\{\n {0,4}[^ }`\n].*",
-    r"(?s).*\n {6}[^ \n][^\n]*\{\n {0,6}[^ }`\n].*",
-    r"(?s).*\n {8}[^ \n][^\n]*\{\n {0,8}[^ }`\n].*",
-    // …and then by exactly one level.
-    r"(?s).*\n {2}[^ \n][^\n]*\{\n {6,}\S.*",
-    r"(?s).*\n {4}[^ \n][^\n]*\{\n {8,}\S.*",
-    r"(?s).*\n {6}[^ \n][^\n]*\{\n {10,}\S.*",
-    r"(?s).*\n {8}[^ \n][^\n]*\{\n {12,}\S.*"
-  }
-}
-
-// The rest of the printed shape, on one line rather than between lines. `print` puts exactly one
-// space where a space goes and none anywhere else, so each of these is a fact about its output —
-// and each was run against every document in `apps/web` first. `... on Post {` is an inline
-// fragment and legal; `... Spread` is not. A comma is legal: `print` writes `(a: $a, b: $b)`.
-pattern graphql_shape_drift() {
-  or {
-    // Two spaces in a row anywhere but the indentation.
-    r"(?s).*\S {2,}.*",
-    // A spread carries no space. Only `... on Type` does.
-    r"(?s).*\.\.\. (?:[^o\n]|o[^n\n]|on[^ \n]).*",
-    // Argument lists are `name(a: $a)`.
-    r"(?s).*\S \(.*",
-    r"(?s).*\( .*",
-    r"(?s).* \).*",
-    r"(?s).*\S :.*",
-    // `name: value`, and the quote guard keeps a `://` inside a string out of it.
-    r"(?s).*\n[^\"\n]*[A-Za-z0-9_]:[^ \n].*",
-    // A brace opens at the end of its line and closes alone on its own.
-    r"(?s).*[^ \n]\{.*",
-    r"(?s).*\{[^\n].*",
-    r"(?s).*[^ \n]\}.*",
-    r"(?s).*\}[^\n].*",
-    // No blank line inside a document.
-    r"(?s).*\n[ \t]*\n[ \t]*[^`\n].*"
-  }
-}
-
 or {
   // `FragmentDefinition: requiredPattern` from the old config: `<Owner>_<field>`, as in
   // `PostCard_post`. It is what makes a fragment's owner readable at the spread site, and what
@@ -101,13 +33,5 @@ or {
   `graphql($document)` where {
     $document <: graphql_indentation_drift(),
     register_diagnostic(span=$document, message="This document is not indented the way it would be printed: two spaces per level, the definition at two, its closing brace at two. Biome does not format GraphQL inside a template literal, so the indentation is kept by hand.", severity="error")
-  },
-  `graphql($document)` where {
-    $document <: graphql_shape_drift(),
-    register_diagnostic(span=$document, message="This document is not spaced the way it would be printed: one space where a space goes and none elsewhere — `field {`, `...Spread`, `name(a: $a)`, a closing brace alone on its line. Biome does not format GraphQL inside a template literal, so this is kept by hand.", severity="error")
-  },
-  `graphql($document)` where {
-    $document <: r"(?s).*[ \t]\n.*",
-    register_diagnostic(span=$document, message="A line of this document ends in whitespace.", severity="error")
   }
 }

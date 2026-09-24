@@ -1381,8 +1381,67 @@ appended in, the subgraph hands the delivery's `traceparent` to the gateway in t
 `extensions`, and the gateway's delivery is a child of that. A post's trace now reads from the click
 in the browser to the subscriber that heard about it.
 
+**And the web's own spans went missing, one request in ten.** Better Stack showed traces rooted at
+the gateway with "missing root span": the gateway's log had the `traceparent` the Next server sent,
+and the span it named never arrived. `@vercel/otel` batches in process and relies on Vercel's
+`waitUntil` to flush when a request ends; OpenNext's Lambda froze the function with the batch in
+memory, and it left only if the same container served another request. `FlushAtRequestEnd` now
+registers the flush with the `waitUntil` OpenNext does provide, `@next/request-context`'s, which it
+awaits before the invocation returns.
+
 **What proved it.** Nothing local could: the SDK does not start unless `OTEL_EXPORTER_OTLP_ENDPOINT`
 is set, and Vitest loads modules through a runner of its own, so the patching this all depends on
 never happens in a test. The loop that worked was a deployed stage, the saga driven through the web
 origin, and then querying the collector's destination for a trace whose spans name more than one
 service — and, once the logs came back, for a log record carrying the same `trace_id` as that trace.
+
+## Errors: an issue per failure, on the trace it happened in
+
+The error tracker is a self-hosted **GlitchTip**, which speaks Sentry's API and Sentry's SDK
+protocol. The first design forwarded the spans that failed, as OpenTelemetry, and it cannot work
+anywhere: Sentry drops span events at OTLP ingestion — and an exception recorded on a span *is* a
+span event — while GlitchTip 6.2.3 has no OTLP traces endpoint at all (`POST /api/<id>/integration/otlp/v1/traces/`
+answers 404; its native OTLP route is `/v1/logs`). The contrib collector's `sentry` exporter posts to
+exactly those routes. So the errors are reported the way Sentry's own "Sentry with OTel" page says:
+the **framework SDK** reports, with its OpenTelemetry setup off and `openTelemetryIntegration()` on,
+which stamps each report with the span that is active — the `trace_id` Better Stack already has.
+
+```
+posts-api, notificator   useGraphQLErrorReporting   (Yoga)   what no exception filter answered
+gateway                  useGraphQLErrorReporting   (Yoga)   what it threw itself, not what it relayed
+every Nest app           ErrorReportingModule       (Nest)   a failed message or route, rethrown untouched
+migrator                 withMigrator                         a failed migration or seed
+web                      onRequestError + global-error        @sentry/nextjs, server and browser
+```
+
+Two decisions are worth knowing before changing any of it. **What an exception filter turned into
+an answer is not a failure**: a domain exception mapped to `BAD_USER_INPUT` reaches Yoga as a
+`GraphQLError` and is left out, and so is everything a subgraph answered and the gateway relayed —
+the process that threw it reports it. And **nothing swallows**: `@sentry/nestjs`'s
+`SentryGlobalFilter` returns in an `rpc` context, which would acknowledge a message that failed, so
+the interceptor reports and rethrows the same object and `@RetryPolicy` still retries it.
+
+In a Lambda, a report is flushed before the failure goes any further — by `reportError` itself,
+under `LAMBDA_TASK_ROOT`, the rule Sentry's `flushIfServerless` follows, and by the web's
+`onRequestError`, which Next awaits. `@nestposts/lambda` knows nothing about it, and only a request
+that failed pays for it.
+
+**The projects are infrastructure** (`infra/sentry`): one per application, in the `vaz-test` team,
+each with a key named `nestposts` and an `Errors` alert (email; Discord too when
+`GLITCHTIP_DISCORD_WEBHOOK_URL` is set). The `dev` stage owns them — there is one GlitchTip and one
+project per application, so two stages creating the same slug would conflict — and every other stage
+finds the key by its name. The deploy gives each function `SENTRY_DSN`, `SENTRY_ENVIRONMENT` (the
+stage) and `SENTRY_RELEASE` (the commit), and the stack's `errorTracking` output links each
+application's issues.
+
+**What proved it.** Locally, the built `posts-api` against a capture server standing in for
+GlitchTip: a query that succeeds and one that fails validation reported nothing; a cursor MikroORM
+cannot decode reported one `CursorError`, with an OpenTelemetry `trace_id` and `span_id`, the
+operation and path, the `service` tag — and without the `cookie` the request carried. Deployed, on
+2026-09-24: the same cursor through the router opened an issue in `nestposts-posts-api` (and the
+second one grouped into it), `nestposts-gateway` stayed empty, and a malformed
+`Next-Router-State-Tree` header — a 500 from Next itself — opened one in `nestposts-web` within the
+same second. GlitchTip itself was not storing event rows at the time, for any project (the newest
+stored event on the instance was from 2026-09-22 22:53 UTC), so the issue pages show counts but not
+the events' detail.
+

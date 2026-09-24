@@ -2,10 +2,11 @@ import { GraphQLInstrumentation } from '@opentelemetry/instrumentation-graphql';
 import { registerOTel } from '@vercel/otel';
 
 import { API_URL, GRAPHQL_UPSTREAM } from '@/lib/env';
+import { FlushAtRequestEnd } from '@/lib/flush-at-request-end';
 
 registerOTel({
   serviceName: 'nestposts-web',
-  spanProcessors: ['auto'],
+  spanProcessors: ['auto', new FlushAtRequestEnd()],
   propagators: ['auto'],
   instrumentationConfig: {
     fetch: {
