@@ -1,4 +1,5 @@
-import { Badge } from '@/components/ui/badge';
+import { Badge } from '@nestposts/ui/components/ui/badge';
+
 import type { FragmentType } from '@/gql';
 import { getFragmentData, graphql } from '@/gql';
 

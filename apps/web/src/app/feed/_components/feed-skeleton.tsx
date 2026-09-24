@@ -1,4 +1,4 @@
-import { Skeleton } from '@/components/ui/skeleton';
+import { Skeleton } from '@nestposts/ui/components/ui/skeleton';
 
 export function FeedSkeleton() {
   return (

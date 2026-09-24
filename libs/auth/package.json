@@ -13,8 +13,17 @@
   },
   "dependencies": {
     "@nestposts/database": "workspace:*",
+    "@nestposts/mail": "workspace:*",
+    "@nestposts/notifications": "workspace:*",
     "@nestposts/platform": "workspace:*",
     "@nestposts/users": "workspace:*",
-    "@nestposts/validated-dto": "workspace:*"
+    "@nestposts/validated-dto": "workspace:*",
+    "clsx": "catalog:",
+    "react": "catalog:",
+    "react-email": "catalog:",
+    "tailwind-merge": "catalog:"
+  },
+  "devDependencies": {
+    "@types/react": "catalog:"
   }
 }

@@ -1,6 +1,6 @@
 import type { ComponentType } from 'react';
 import { createElement } from 'react';
-import { render } from '@react-email/components';
+import { render } from 'react-email';
 
 /**
  * A React Email component under a stable name.
@@ -73,4 +73,7 @@ export const renderEmailTemplate = <P extends object>(
   props: P,
   { plainText = false }: { plainText?: boolean } = {},
 ): Promise<string> =>
-  render(createElement(template.component, props), { plainText });
+  render(
+    createElement(template.component, props),
+    plainText ? { plainText: true } : {},
+  );

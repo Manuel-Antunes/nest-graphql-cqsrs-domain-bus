@@ -20,7 +20,7 @@ interface AuthField {
  */
 export class BetterAuthSchema {
   private static readonly LONG_TEXT =
-    /token|secret|key|statement|jwks|value|uri|uris|claims|metadata/i;
+    /token|secret|key|codes|statement|jwks|value|uri|uris|claims|metadata/i;
 
   private static readonly ID_LENGTH = 64;
 
@@ -83,7 +83,7 @@ export class BetterAuthSchema {
           return p.json<unknown>();
         case 'string[]':
         case 'number[]':
-          return p.array();
+          return p.text();
         default:
           return BetterAuthSchema.LONG_TEXT.test(name) ? p.text() : p.string();
       }

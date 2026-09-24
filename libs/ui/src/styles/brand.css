@@ -1,0 +1,298 @@
+/* ==========================================================================
+   Brand layer — the Gêmeo identity, as part of the design system
+   ==========================================================================
+
+   These are the recipes behind the product's "ludic" surfaces: the canvas the
+   auth screens and the creation journey sit on, the aura blobs, the dot grid,
+   the glass cards, the glow under the primary action, the display gradients.
+
+   They live HERE rather than in an app's `globals.css` for the same reason the
+   colour tokens do: they are shared vocabulary. A screen that wants the
+   identity should reach for a documented class, not re-derive a
+   `radial-gradient` with a magic rgba in it — that is how the auth screens
+   ended up with a single hardcoded light theme while the rest of the app
+   learned to switch.
+
+   Every recipe below resolves through the brand tokens in `theme.css`, so all
+   of it follows `.dark` automatically. Nothing in this file may hardcode a
+   colour that isn't a token. See `brand.stories.tsx` for the rendered catalogue.
+
+   -------------------------------------------------------------------------- */
+
+/* --------------------------------------------------------------- canvas ---
+   The brand SKIN. It re-declares the design-system tokens for its subtree, so
+   everything inside styles itself with `bg-card`, `text-foreground` and
+   friends exactly like the rest of the app — it just resolves them to the
+   identity's values: a pure-white page instead of the app's faintly grey one,
+   the identity blue as `primary`, and the display fonts.
+
+   That indirection is what lets the identity travel. A screen using the canvas
+   is not an island of `bg-white`/`text-slate-900`, it is the same components
+   reading the same names against a different palette.
+
+   Also applied to portaled popovers (SelectContent) which escape the subtree.
+
+   `:where()` around the guard on purpose: it zeroes the selector's
+   specificity, so this block stays at (0,1,0) and the `.dark .gemeo-canvas`
+   block below can outrank it. Written as a bare `:root:not(.dark)` it would
+   score (0,3,0) and WIN over the dark block — which is invisible in the app
+   (there `.dark` sits on `<html>`, so the guard simply fails) but breaks the
+   moment a `.dark` island is nested inside a light page, as in a side-by-side
+   theme preview. */
+:where(:root:not(.dark)) .gemeo-canvas {
+  --background: oklch(1 0 0);
+  --background-muted: oklch(93.403% 0.00011 271.152);
+  --foreground: oklch(0.2103 0.0059 285.8852);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.2103 0.0059 285.8852);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.2103 0.0059 285.8852);
+  --primary: var(--brand-strong);
+  --primary-foreground: var(--brand-foreground);
+  --secondary: oklch(0.9674 0.0013 286.3752);
+  --secondary-foreground: oklch(0.2103 0.0059 285.8852);
+  --muted: oklch(0.9674 0.0013 286.3752);
+  --muted-foreground: oklch(0.5517 0.0138 285.9385);
+  --accent: oklch(0.9674 0.0013 286.3752);
+  --accent-foreground: oklch(0.2103 0.0059 285.8852);
+  --destructive: oklch(0.6368 0.2078 25.3313);
+  --destructive-foreground: oklch(1 0 0);
+  --border: oklch(0.9197 0.004 286.3202);
+  --input: var(--border);
+  --ring: var(--brand);
+  --input-focus-shadow:
+    0px 1px 0px rgb(var(--brand-glow-rgb) / 0.25),
+    0px 0.5px 0px 3px rgb(var(--brand-glow-rgb) / 0.12);
+  color-scheme: light;
+}
+
+/* In the dark theme the canvas deliberately does NOT redeclare its surfaces.
+   There is exactly ONE dark palette in this system — the brand's night colours
+   already live in `theme.css`'s `.dark` — and a second one here would drift
+   from it and put a visible seam wherever a canvas screen meets an ordinary
+   one. All that is left to say is the accent and the focus ring, which the
+   canvas pins to the identity blue in both themes. */
+.dark .gemeo-canvas {
+  --primary: var(--brand);
+  --primary-foreground: var(--brand-foreground);
+  --ring: var(--brand);
+  --input-focus-shadow:
+    0px 1px 0px rgb(var(--brand-glow-rgb) / 0.3),
+    0px 0.5px 0px 3px rgb(var(--brand-glow-rgb) / 0.16);
+}
+
+.gemeo-canvas {
+  font-family: var(--font-gemeo-sans), 'Sora', system-ui, sans-serif;
+}
+
+/* ---------------------------------------------------------------- fonts ---
+   The display serif, for a Gêmeo's own name. Used sparingly and always
+   alongside the sans — it marks the ONE proper noun on a screen. */
+.gemeo-serif {
+  font-family: var(--font-gemeo-serif), 'Instrument Serif', Georgia, serif;
+}
+
+/* ------------------------------------------------------------- textures ---
+   The dot grid behind the brand screens. Drawn in the identity blue at very
+   low alpha; the alpha is a token because the same 7% that reads as a
+   whisper on white is invisible on near-black. */
+.gemeo-dot-grid {
+  background-image: radial-gradient(
+    circle,
+    rgb(var(--brand-glow-rgb) / var(--brand-grid-alpha)) 1px,
+    transparent 1px
+  );
+  background-size: 24px 24px;
+}
+
+/* Soft out-of-focus light source. Placed off-canvas at the corners of brand
+   screens to keep large empty areas from reading as flat. Always `aria-hidden`
+   and `pointer-events-none` at the call site — it is atmosphere, not content.
+   `--gemeo-aura-strength` tunes an individual instance. */
+.gemeo-aura {
+  --gemeo-aura-strength: 0.1;
+  border-radius: 9999px;
+  background: radial-gradient(
+    circle,
+    rgb(var(--brand-glow-rgb) / var(--gemeo-aura-strength)) 0%,
+    transparent 65%
+  );
+}
+
+/* The dark page swallows a 10% wash, so auras carry a little further at night. */
+.dark .gemeo-aura {
+  --gemeo-aura-strength: 0.16;
+}
+
+/* -------------------------------------------------------------- surfaces ---
+   Frosted panel: the auth card, the capability list, any panel that should
+   feel like it is floating just above the canvas rather than cut into it.
+   Pairs with `gemeo-aura` — the blur is what makes the aura read as depth. */
+.gemeo-glass {
+  background-color: color-mix(in oklab, var(--card) 78%, transparent);
+  border: 1px solid color-mix(in oklab, var(--border) 70%, transparent);
+  backdrop-filter: blur(20px);
+  box-shadow:
+    0px 1.8px 1.8px -1.08px rgb(0 0 0 / 0.05),
+    0px 28px 48px -20px rgb(0 0 0 / 0.18);
+}
+
+.dark .gemeo-glass {
+  background-color: color-mix(in oklab, var(--card) 72%, transparent);
+  box-shadow:
+    0px 1.8px 1.8px -1.08px rgb(0 0 0 / 0.3),
+    0px 28px 48px -20px rgb(0 0 0 / 0.55);
+}
+
+/* The lighter sibling, for list items rather than the one hero panel. */
+.gemeo-glass-subtle {
+  background-color: color-mix(in oklab, var(--card) 60%, transparent);
+  border: 1px solid color-mix(in oklab, var(--border) 55%, transparent);
+  backdrop-filter: blur(20px);
+  box-shadow:
+    0px 1.8px 1.8px -1.08px rgb(0 0 0 / 0.04),
+    0px 10px 20px -14px rgb(0 0 0 / 0.25);
+}
+
+.dark .gemeo-glass-subtle {
+  box-shadow:
+    0px 1.8px 1.8px -1.08px rgb(0 0 0 / 0.25),
+    0px 10px 20px -14px rgb(0 0 0 / 0.5);
+}
+
+/* ------------------------------------------------------------------ glow ---
+   The halo under a primary action. Prefer `<Button variant="brand">`, which
+   applies this for you; the bare class is for elements that cannot be a
+   Button (a logo tile, a floating orb). */
+.gemeo-glow {
+  box-shadow:
+    0 1px 2px rgb(0 0 0 / 0.05),
+    0 4px 16px rgb(var(--brand-glow-rgb) / 0.15),
+    0 8px 32px rgb(var(--brand-glow-rgb) / 0.08);
+}
+
+.gemeo-glow:hover {
+  box-shadow:
+    0 1px 2px rgb(0 0 0 / 0.05),
+    0 8px 24px rgb(var(--brand-glow-rgb) / 0.25),
+    0 16px 48px rgb(var(--brand-glow-rgb) / 0.12);
+}
+
+/* Kept as an alias: `gemeo-glow-button` is the older name and still reads well
+   at the call sites that are literally buttons. */
+.gemeo-glow-button {
+  box-shadow:
+    0 1px 2px rgb(0 0 0 / 0.05),
+    0 4px 16px rgb(var(--brand-glow-rgb) / 0.15),
+    0 8px 32px rgb(var(--brand-glow-rgb) / 0.08);
+}
+
+.gemeo-glow-button:hover {
+  box-shadow:
+    0 1px 2px rgb(0 0 0 / 0.05),
+    0 8px 24px rgb(var(--brand-glow-rgb) / 0.25),
+    0 16px 48px rgb(var(--brand-glow-rgb) / 0.12);
+}
+
+/* ------------------------------------------------------------- gradients ---
+   Display type only — never body copy. Both clip a gradient to the glyphs,
+   which means the text has NO computed colour: it is invisible to a forced
+   colour scheme and to `::selection`. Keep the runs short. */
+.gemeo-text-gradient-blue {
+  --gemeo-gradient-from: var(--brand-strong);
+  --gemeo-gradient-via: var(--brand);
+  --gemeo-gradient-to: oklch(0.707 0.165 254.624);
+  background: linear-gradient(
+    135deg,
+    var(--gemeo-gradient-from) 0%,
+    var(--gemeo-gradient-via) 40%,
+    var(--gemeo-gradient-to) 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Night: the run climbs instead of descending, so it stays legible on a dark
+   page rather than bottoming out in the background. */
+.dark .gemeo-text-gradient-blue {
+  --gemeo-gradient-from: oklch(0.809 0.105 251.813);
+  --gemeo-gradient-via: var(--brand);
+  --gemeo-gradient-to: oklch(0.882 0.059 254.128);
+}
+
+/* The hero gradient: ink at the start, identity blue at the end. */
+.gemeo-text-gradient-hero {
+  --gemeo-gradient-from: var(--foreground);
+  --gemeo-gradient-via: oklch(0.35 0.06 250);
+  --gemeo-gradient-mid: var(--brand-strong);
+  --gemeo-gradient-to: var(--brand);
+  background: linear-gradient(
+    145deg,
+    var(--gemeo-gradient-from) 0%,
+    var(--gemeo-gradient-via) 35%,
+    var(--gemeo-gradient-mid) 75%,
+    var(--gemeo-gradient-to) 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.dark .gemeo-text-gradient-hero {
+  --gemeo-gradient-from: var(--foreground);
+  --gemeo-gradient-via: oklch(0.86 0.05 253);
+  --gemeo-gradient-mid: oklch(0.78 0.12 254);
+  --gemeo-gradient-to: var(--brand);
+}
+
+/* ------------------------------------------------------------- animation ---
+   A light sweeping along a border. Marks a surface as *live* — currently the
+   section being filled in during the creation journey. One per screen: two
+   shimmering at once and neither means anything. */
+@keyframes gemeo-shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.gemeo-shimmer-border {
+  position: relative;
+}
+
+.gemeo-shimmer-border::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgb(var(--brand-glow-rgb) / 0.15) 25%,
+    rgb(var(--brand-glow-rgb) / 0.3) 50%,
+    rgb(var(--brand-glow-rgb) / 0.15) 75%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: gemeo-shimmer 3s linear infinite;
+}
+
+/* Every brand animation here is ambient — nothing depends on it to be
+   understood — so it all stops for anyone who asked it to. */
+@media (prefers-reduced-motion: reduce) {
+  .gemeo-shimmer-border::before {
+    animation: none;
+  }
+}

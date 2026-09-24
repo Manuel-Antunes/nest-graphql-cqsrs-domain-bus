@@ -1,0 +1,37 @@
+/* ==========================================================================
+   Brand fonts — self-hosted, so every runtime can have them
+   ==========================================================================
+
+   `brand.css` declares `font-family: var(--font-gemeo-sans), 'Sora', …`, and
+   until now only the Next app could satisfy that variable: it came from
+   `next/font/google` via `gemeo-fonts.ts`. Anything that is not a Next app —
+   the browser extension, Storybook, an email preview — fell straight through
+   to `system-ui` and quietly stopped looking like the product. That is exactly
+   the drift this file removes.
+
+   `@fontsource/*` ships the actual woff2 files as a dependency, so the fonts
+   resolve through the bundler like any other asset. That matters most for the
+   extension: MV3's content security policy blocks remote stylesheets and
+   fonts on extension pages, so a Google Fonts `@import` is not an option
+   there — the files have to be part of the bundle.
+
+   Apps using `next/font` may keep doing so; it sets the same two variables, so
+   the two mechanisms agree rather than compete.
+   -------------------------------------------------------------------------- */
+
+@import '@fontsource/sora/300.css';
+@import '@fontsource/sora/400.css';
+@import '@fontsource/sora/500.css';
+@import '@fontsource/sora/600.css';
+@import '@fontsource/sora/700.css';
+
+@import '@fontsource/instrument-serif/400.css';
+@import '@fontsource/instrument-serif/400-italic.css';
+
+/* The contract `brand.css` reads. Declared here so a runtime that imports the
+   design system gets the identity's fonts without any framework-specific
+   font loader. */
+:root {
+  --font-gemeo-sans: 'Sora';
+  --font-gemeo-serif: 'Instrument Serif';
+}

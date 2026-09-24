@@ -28,11 +28,18 @@ The only exceptions:
    module; `noEmptyInterface` on `ISubscription`, a marker interface;
    `noDoubleEquals` in `validated-scalar.mixin.spec.ts`, where the coercion is what is under test;
    `noArrayIndexKey` in `saga-runner.tsx` and `entities-probe.tsx`, whose lists are append-only and
-   positional; `noLabelWithoutControl` and `useSemanticElements` in `apps/web`; and the
+   positional; `useSemanticElements` in `entities-probe.tsx`; `noLabelWithoutControl` on
+   `libs/ui`'s `Label`, a generic wrapper whose control arrives through props; and the
    `biome-ignore-all` on `libs/database/src/index.ts` described under **Linting** below.
+   `libs/ui` is otherwise covered by an `overrides` entry rather than by suppressions: its components
+   come from shadcn's and reui's registries, and the rules they break by design (exhaustive effect
+   dependencies, index keys on positional lists, a few a11y rules on composite widgets) are off for
+   `libs/ui/**` so that refreshing one is a copy and not a merge. Its TypeScript carries no comments
+   — they were stripped on arrival, as every registry file is — and its CSS keeps its own.
 3. **The in-house libraries** — `libs/core/cqsrs`, `libs/database`, `libs/core/validated-dto`,
    `libs/core/transport-eventbus`, `libs/core/microservices-aws`,
-   `libs/core/microservices-inngest`, `libs/core/mail`, `libs/notifications` and `libs/asset` — may
+   `libs/core/microservices-inngest`, `libs/core/mail`, `libs/notifications`, `libs/asset`,
+   `libs/auth` and `libs/organizations` — may
    carry **JSDoc**, and only JSDoc
    (`/** … */`), as usage documentation of their public API. These are
    general-purpose libraries that happen to live in this repository: their callers read the signature
@@ -45,7 +52,9 @@ The only exceptions:
    [nestjs-transport-eventbus](https://github.com/sergey-telpuk/nestjs-transport-eventbus) is
    accounted for: what came from upstream, what the new versions forced, what this repository added.
    Anything that changes that library's relationship to upstream belongs there.
-   **`libs/core/mail/NOTICE.md`** does the same for the port of `@adonisjs/mail`'s class-based mail.
+   **`libs/core/mail/NOTICE.md`** does the same for the port of `@adonisjs/mail`'s class-based mail,
+   and **`libs/auth/NOTICE.md`** for the React Email components copied from better-auth-ui's registry
+   into `libs/auth` and `libs/organizations`.
 
 GraphQL `"""descriptions"""` in `apps/posts-api/src/graphql/*.graphql` are **not** comments — they are
 part of the schema and are served through introspection and GraphiQL. Keep them. SDL `#` comments are
@@ -223,11 +232,17 @@ Environment variables, per application:
 | subscriptions | `POSTS_SUBSCRIPTION_SOURCE` = `local` (default, this process's `EventBus`) \| `feed` (the shared table, for a service running as several processes) | — | — |
 | logging | `LOG_LEVEL` (default `info`); pretty when stdout is a terminal, JSON otherwise | idem | idem |
 | telemetry | `OTEL_EXPORTER_OTLP_ENDPOINT` turns tracing **on** — unset, the SDK never starts; `OTEL_SERVICE_NAME`, and the rest of `OTEL_*` | idem | idem |
-| auth | `AUTH_URL`, `AUTH_SECRET`, `AUTH_BASE_PATH` (default `/api/auth`), `WEB_URL`, `AUTH_TRUSTED_ORIGINS`, `AUTH_COOKIE_DOMAIN`, `AUTH_GOOGLE_ID`/`AUTH_GOOGLE_SECRET`, `AUTH_GITHUB_ID`/`AUTH_GITHUB_SECRET` — see `libs/auth/README.md`. **Every process that reads a session shares `AUTH_SECRET`**, `apps/web` included | — | — |
+| auth | `AUTH_URL`, `AUTH_SECRET`, `AUTH_BASE_PATH` (default `/api/auth`), `WEB_URL`, `AUTH_TRUSTED_ORIGINS`, `AUTH_COOKIE_DOMAIN`, `AUTH_GOOGLE_ID`/`AUTH_GOOGLE_SECRET`, `AUTH_GITHUB_ID`/`AUTH_GITHUB_SECRET`, `AUTH_REQUIRE_EMAIL_VERIFICATION` (default `true`), `AUTH_RATE_LIMIT=false` (the e2e sets it) — see `libs/auth/README.md`. **Every process that reads a session shares `AUTH_SECRET`**, `apps/web` included | — | — |
 | storage | `DRIVE_BUCKET`, `DRIVE_S3_ENDPOINT`, `DRIVE_S3_PUBLIC_ENDPOINT` (where the BROWSER reaches the same storage — signed URLs are bound to it), `DRIVE_S3_FORCE_PATH_STYLE`, `DRIVE_CDN_URL`, `DRIVE_AWS_REGION`, `DRIVE_AWS_ACCESS_KEY_ID`/`DRIVE_AWS_SECRET_ACCESS_KEY` — see `libs/asset/README.md` | — | — |
 | mail | — | — | `MAIL_TRANSPORT` = `smtp` (default) \| `ses` \| `json`, `MAIL_SMTP_URL` (default Mailpit, `smtp://localhost:1025`), `MAIL_FROM`, `MAIL_SES_REGION` — read by `infrastructure/mail/mail.config.ts`; `libs/core/mail` itself takes the mailer's options and reads no environment |
 | push | — | — | `FIREBASE_CREDENTIALS` (the service account's JSON); unset, the `push` channel sends nothing |
 | other | `PORT`, `MIKRO_ORM_DEBUG=true` | `MIKRO_ORM_DEBUG=true` | `MIKRO_ORM_DEBUG=true` |
+
+`apps/web` takes the auth and database variables of the posts-api (it holds the same Better Auth) and
+a transport of its own, because it **publishes** the emails its Better Auth asks for:
+`WEB_TRANSPORT` = `inngest` (default) \| `rabbitmq` \| `memory` \| `aws`, with `INNGEST_BASE_URL`,
+`RABBITMQ_URL`/`WEB_EXCHANGE` or `WEB_TOPIC_ARN` as the mode needs, and `WEB_PUBLISH_EVENTS=false` to
+turn it off.
 
 ## Architecture
 
@@ -253,16 +268,20 @@ libs/users               domain/user + its ORM mapping and repositories, wired b
                          UsersInfrastructureModule. It knows nothing about Better Auth
 libs/auth                authentication: the Better Auth server instance and its CORE plugin
                          registry, auth_user and the tables Better Auth generates, the AuthService
-                         port and the IdentityProvider adapter. Knows nothing about organizations
+                         port and the IdentityProvider adapter — and every email authentication
+                         sends, as a notification (BetterAuthEmails). Knows nothing about
+                         organizations
 libs/organizations       organizations, members and invitations: the three tables, their domain and
-                         repositories, the OrganizationService port, and the `organization` plugin it
-                         CONTRIBUTES to the instance libs/auth builds. Both have READMEs
+                         repositories, the OrganizationService port, the invitation email, and the
+                         `organization` plugin (teams on) it CONTRIBUTES to the instance libs/auth
+                         builds. Both have READMEs
 libs/posts               domain/post + domain/tag + their ORM mappings and repositories,
                          wired by PostsInfrastructureModule
 libs/notifications       notifications as a domain concept: Notification (via, and the channel
                          interfaces it implements — MailNotification, PushNotification), the
-                         NotificationRecord it keeps its data in, the Notifiable mixin, devices, the
-                         delivery ledger, and the channels that deliver. It has a README
+                         NotificationRecord it keeps its data in, the Notifiable mixin and its
+                         on-demand twin (someone known only by an address), devices, the delivery
+                         ledger, and the channels that deliver. It has a README
 libs/asset               files in S3-compatible storage as a value an entity holds: Asset, the
                          attachment() column type and the subscriber that moves, signs and cleans up
                          the objects on flush, and the DiskService port. It has a README
@@ -286,6 +305,9 @@ libs/core/observability  the one door to observability: startTelemetry (the OTel
                          @nestposts/observability/telemetry, NEVER the barrel — see Observability
 libs/core/lambda         how AWS enters a Nest application: bootOnce (one boot per container),
                          streamingHandler (HTTP over a Function URL) and queueHandler (SQS)
+libs/ui                  the design system: shadcn base-nova primitives (Base UI, not Radix), the
+                         components built on them, the hooks and the theme. A SOURCE package — Next
+                         compiles it with apps/web (transpilePackages); it has a README
 
 apps/posts-api           application + interfaces (GraphQL, messaging), a HYBRID application:
                          HTTP (GraphQL, and subscriptions over SSE) and a microservice, one process
@@ -300,7 +322,8 @@ infra/aws                the deployed shape: the topic, the queues, the four fun
 apps/web-e2e             the whole system through a BROWSER: Playwright over three processes and a
                          real broker — authentication, authorization, the reading path and the saga
 apps/web                 a Next.js client, to see the API from outside (not part of the saga). It boots
-                         a Nest CONTAINER of its own and holds the same Better Auth — see below
+                         a Nest CONTAINER of its own, holds the same Better Auth and serves its
+                         screens — better-auth-ui's — and PUBLISHES the emails they send — see below
 ```
 
 What that buys, concretely: `apps/tagging` imports `libs/posts` and gets the `Post`, its events, its
@@ -581,6 +604,16 @@ ProjectPostCompletion        ◀──  posts.PostCreated.<postId>      ◀─�
   `vitest.shared.mts` runs two SWC instances — `.ts` as TypeScript, `.tsx` as TSX — because
   unplugin-swc turns TSX on for a whole project whose tsconfig sets `jsx`, and TSX cannot parse a
   `<T>value` assertion.
+- **Every email authentication sends is a notification too.** Better Auth asks for a verification
+  link, a reset, a magic link, a one-time code, an email-change confirmation, an account-deletion
+  confirmation or an invitation through a callback; `BetterAuthEmails` (`libs/auth`) and the
+  organization plugin turn each into a notification of `libs/auth` or `libs/organizations`
+  (`auth.PasswordReset`, `organizations.Invitation`, …) and send it through `OnDemandNotifications`
+  to an `OnDemandNotifiable` — someone known only by the address, because most of them are not users
+  yet. They go through `email` only: no identity to keep a record against, and a secret in the data.
+  `PublishingOnDemandNotifications` commits inside a unit of work, so the callback resolves once the
+  event has left — which is what makes `apps/web` a publisher (below). The notificator registers
+  `authNotifications` and `OrganizationInvitationNotification` beside `PostCreatedNotification`.
 - **Locally the email lands in Mailpit** (`docker compose up -d mailpit`, http://localhost:8025); on
   AWS it goes through SES, from the identity `infra/aws/mail/email.ts` creates with `MAIL_SENDER`.
 
@@ -926,7 +959,7 @@ Four levels, and each answers something the others cannot:
 | unit / slice | every project, beside the code | the rule, the handler, the mapping |
 | integration | `libs/core/transport-eventbus/src/**`, `libs/auth/src/infrastructure/persistence`, `apps/posts-api/test/persistence` | the envelope, the routing table's refusals, the inbox, the event store and its replay, the ORM mapping — and that Better Auth writes and reads through the entities `libs/auth` maps by hand |
 | one hop, in process | `libs/core/transport-eventbus/src/in-memory/transport-loop.spec.ts` | two services over `MemoryServer` + `MemoryClient`, each able to reach the other: the real class arrives, the request is restored, a redelivery is deduplicated, the loop is cut |
-| the whole system, in a browser | `pnpm test:web` (`apps/web-e2e`, **Playwright**) | **the packaged services over Inngest AND over real RabbitMQ**, driven through Chromium: signing in, being refused, the three states of `/posts/new`, the polymorphic `me`, a post read by someone who never signed in — and then what the browser cannot see, in the same test: each service's durable state, both inboxes, idempotency through the broker's management API, the replica channel, one correlation id across two processes, and the `x-tenant` **of the browser** on the headers of both events |
+| the whole system, in a browser | `pnpm test:web` (`apps/web-e2e`, **Playwright**) | **the packaged services over Inngest AND over real RabbitMQ**, driven through Chromium: signing in, being refused, the three states of `/posts/new`, the polymorphic `me`, a post read by someone who never signed in — and then what the browser cannot see, in the same test: each service's durable state, both inboxes, idempotency through the broker's management API, the replica channel, one correlation id across two processes, and the `x-tenant` **of the browser** on the headers of both events. Every email flow is walked through its inbox — sign-up verification, reset, magic link, email code, two factor by email, email change, account deletion, an organization invitation accepted by the invitee — plus the admin screens and an OAuth authorization code grant with PKCE through the consent screen |
 
 **`test-e2e` is the target name for every level of e2e there is**, in `apps/posts-api` and in
 `apps/web-e2e`, which is the whole reason `pnpm test:e2e` can be `nx run-many` and reach both. A new
@@ -1183,6 +1216,47 @@ DTOs count.
   `batchItemFailures` mean anything. Without it AWS decides the whole batch by whether the invocation
   threw: throwing redrives the records that succeeded, and returning deletes the one that failed.
 
+- **A Better Auth `string[]` field is a TEXT column, holding JSON.** `better-auth-mikro-orm` does not
+  declare array support, so Better Auth serializes an array before the adapter sees it and parses it
+  after. Mapped as a Postgres `text[]`, the first OAuth client registration failed with
+  `Could not convert JS value '["openid",…]' of type 'string' to type ArrayType` — only when a client
+  was created, which nothing had done before the consent screen existed.
+  `Migration…_auth_plugins` converts the existing columns with `array_to_json`, not a cast: `::text`
+  would have left `{a,b}`, which Better Auth cannot parse back.
+- **A query that runs before sign-in is cached as a failure.** better-auth-ui's accept-invitation
+  view asked for the invitation as soon as it mounted, signed out, and got a 401 that TanStack Query
+  kept; after signing in the view read the cached error and said "Invitation unavailable" for an
+  invitation that was fine. The copied component waits for the session (`enabled` on
+  `session.data`) — a change to registry code, so `shadcn add --diff` will show it. It also reads
+  `invitationId` through `useSearchParams()` where upstream reads `window.location` during render:
+  after sign-in the view is rendered by a client navigation BEFORE Next updates the URL, so the
+  render saw `/auth/sign-in?redirectTo=…`, found no id, never asked for the invitation and said
+  "unavailable" — every time, on a fast enough machine.
+- **An account need not have a name.** A magic link or an emailed code signs up an address nobody
+  registered, and Better Auth creates that user with `name: ''` — while `UserName` refuses the empty
+  string, so the first `me` of such an account failed with `name não pode ser vazio`, and only
+  through the flows the sign-up form does not cover. `UserName.from(given, email)` names it after the
+  email's local part; `init-auth`'s `databaseHooks.user.create.before` applies it to every new user,
+  and `BetterAuthIdentityProvider` to the rows that already exist.
+- **A session need not have a user agent.** One Better Auth creates on the server's own behalf — the
+  seeder, a script calling `auth.api` — records an empty one, and better-auth-ui's session list ran
+  `Bowser.parse('')`, which throws: on AWS `/settings/security` failed to load for anyone holding such
+  a session, and locally nothing ever did. The copied `active-session.tsx` parses only a user agent
+  that exists; `settings.spec` blanks one and loads the page.
+- **Removing a query does not re-render whoever observes it.** better-auth-ui's sign-out *removes*
+  the session query (`meta.removes`), and TanStack Query tells nobody: an observer keeps the dead
+  query's data until something re-renders it. `SessionProvider` lives in the root layout, which a
+  navigation does not re-render, so the header kept showing the signed-out user after `get-session`
+  had already answered `null`. It subscribes to the query cache and re-renders when the session
+  query is removed.
+- **An OAuth client on a loopback redirect is `native`.** `@better-auth/oauth-provider` refuses
+  `http://localhost` and `http://127.0.0.1` for a `web` client, as RFC 8252 says; a CLI or a test
+  redirecting to the loopback registers with `application_type: 'native'`. The consent screen's URL
+  carries the redirect URI too, encoded — `waitForURL(/oauth-callback/)` matches the consent page;
+  wait for the callback's host instead.
+- **An invitation notification has no `key`.** Resending an invitation reuses its id, and a keyed
+  notification would reuse the notification id too — which the delivery ledger skips as delivered.
+
 ## `apps/web` holds its own Better Auth, in a Nest container
 
 The Next server is **not** a client of the posts-api's auth, and it does not assemble a second one
@@ -1231,3 +1305,31 @@ default external list. Three more things follow from bundling:
   route is hit second. `container.ts` keys its `globalThis` cache by the layer's `NestFactory`.
 
 **`apps/web/tsconfig.json` turns `experimentalDecorators` on**, or Next's SWC cannot parse `@Module`.
+
+### The screens are better-auth-ui's, and the web publishes what they send
+
+- **better-auth-ui is copied, not imported.** `npx shadcn add @better-auth-ui/<item>` (the registry is
+  in `apps/web/components.json`) writes the views into `src/components/auth/**` and the plugin
+  factories into `src/lib/auth/*-plugin.ts(x)` — and the primitives they need into `libs/ui`, because
+  that file's `ui` and `utils` aliases point at `@nestposts/ui`. The web keeps no primitive of its own:
+  `@nestposts/ui/components/ui/<name>` is the only button there is, and `globals.css` imports
+  `@nestposts/ui/styles/global.css` and overrides only the two font tokens `next/font` fills; `@better-auth-ui/core` and `/react` are the runtime
+  underneath. `app/_providers/auth-providers.tsx` is the `QueryClientProvider` + `AuthProvider` with
+  every plugin this system runs, and the routes are `app/auth/[path]` (sign-in, sign-up, reset, magic
+  link, email code, two factor, accept invitation, OAuth consent), `app/settings/[path]`,
+  `app/organization/[path]` and `app/admin/users`; `lib/auth/views.ts` is their allow-list. `/login`
+  redirects to `/auth/sign-in`. Refreshing a component is `shadcn add … --diff`, then strip its
+  comments and run Biome — that is what was done to every copied file. Registry installs need
+  `catalogMode: prefer` for the duration: the CLI runs `pnpm add <pkg>@latest`, which strict refuses.
+- **The session is TanStack Query's.** The layout prefetches it on the server
+  (`prefetchSessionServer` over `WebAuth.server()`, the instance with each endpoint run inside a
+  database context) and hydrates it, and `SessionProvider` derives this application's `Session`
+  from that query — so signing in, out or into another account in better-auth-ui's screens is seen by
+  the header and the pages at once, with no server action in between.
+- **The container publishes.** `WebAppModule` imports `CqsrsModule` and a publish-only
+  `TransportEventBusModule` (identity `web`, `@Publisher(NOTIFICATIONS_NAMESPACE)`, no inbox, no
+  event log) and binds `PublishingOnDemandNotifications` into `BetterAuthModule`, so a verification
+  email asked for in the browser reaches the notificator on the same transport the services use.
+  Turbopack cannot externalize `@nestjs/microservices` (it resolves to ESM) and so bundles it, and
+  with it the optional transports it `require`s lazily: `resolveAlias` points `ioredis`, `kafkajs`,
+  `mqtt` and `@nats-io/transport-node` at the same empty module as the websockets one.

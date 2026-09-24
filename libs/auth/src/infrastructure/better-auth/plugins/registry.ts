@@ -1,13 +1,21 @@
 import { AdminBetterAuthPluginProvider } from './admin-better-auth.plugin';
+import { EmailOtpBetterAuthPluginProvider } from './email-otp-better-auth.plugin';
 import { JwtBetterAuthPluginProvider } from './jwt-better-auth.plugin';
+import { MagicLinkBetterAuthPluginProvider } from './magic-link-better-auth.plugin';
+import { MultiSessionBetterAuthPluginProvider } from './multi-session-better-auth.plugin';
 import { OAuthProviderBetterAuthPluginProvider } from './oauth-provider-better-auth.plugin';
 import { OpenApiBetterAuthPluginProvider } from './open-api-better-auth.plugin';
+import { TwoFactorBetterAuthPluginProvider } from './two-factor-better-auth.plugin';
 
 export const coreBetterAuthPluginProviders = [
   AdminBetterAuthPluginProvider,
   JwtBetterAuthPluginProvider,
   OAuthProviderBetterAuthPluginProvider,
   OpenApiBetterAuthPluginProvider,
+  MagicLinkBetterAuthPluginProvider,
+  EmailOtpBetterAuthPluginProvider,
+  TwoFactorBetterAuthPluginProvider,
+  MultiSessionBetterAuthPluginProvider,
 ] as const;
 
 type PluginOf<TProvider> = TProvider extends {

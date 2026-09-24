@@ -33,6 +33,7 @@ export const InvitationEntitySchema = defineEntity({
     expiresAt: p.datetime(),
     createdAt: p.datetime(),
     inviter: () => p.manyToOne(AuthUserEntitySchema).ref(),
+    teamId: p.string().length(64).nullable(),
   },
   indexes: [{ properties: ['email'] }],
 });

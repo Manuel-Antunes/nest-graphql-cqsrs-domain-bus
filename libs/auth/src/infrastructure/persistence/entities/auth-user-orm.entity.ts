@@ -30,5 +30,6 @@ export const AuthUserEntitySchema = defineEntity({
     banned: p.boolean().nullable(),
     banReason: p.text().nullable(),
     banExpires: p.datetime().nullable(),
+    twoFactorEnabled: p.boolean().nullable().default(false),
   },
 });

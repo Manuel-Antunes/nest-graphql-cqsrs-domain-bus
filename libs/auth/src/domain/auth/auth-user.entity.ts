@@ -22,6 +22,8 @@ export class AuthUser extends BaseEntity {
 
   banExpires: Date | null = null;
 
+  twoFactorEnabled: boolean | null = false;
+
   roles(): string[] {
     return (this.role ?? '')
       .split(',')

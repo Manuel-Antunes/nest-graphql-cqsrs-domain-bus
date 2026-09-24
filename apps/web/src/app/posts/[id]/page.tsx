@@ -1,6 +1,6 @@
 import { Suspense } from 'react';
+import { Skeleton } from '@nestposts/ui/components/ui/skeleton';
 
-import { Skeleton } from '@/components/ui/skeleton';
 import { PreloadQuery } from '@/lib/apollo/rsc';
 
 import { PostView } from './_components/post-view';

@@ -1,18 +1,27 @@
-import type { Session } from '@/lib/auth/session';
+import type { AuthSocialProvider } from '@better-auth-ui/core';
+import type { DehydratedState } from '@tanstack/react-query';
 
 import { ApolloProvider } from './apollo-provider';
+import { AuthProviders } from './auth-providers';
 import { SessionProvider } from './session-provider';
 
 export function Providers({
-  session,
+  socialProviders,
+  dehydratedState,
   children,
 }: {
-  session: Session | null;
+  socialProviders: AuthSocialProvider[];
+  dehydratedState: DehydratedState;
   children: React.ReactNode;
 }) {
   return (
-    <SessionProvider initialSession={session}>
-      <ApolloProvider>{children}</ApolloProvider>
-    </SessionProvider>
+    <AuthProviders
+      socialProviders={socialProviders}
+      dehydratedState={dehydratedState}
+    >
+      <SessionProvider>
+        <ApolloProvider>{children}</ApolloProvider>
+      </SessionProvider>
+    </AuthProviders>
   );
 }

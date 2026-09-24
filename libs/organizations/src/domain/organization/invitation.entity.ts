@@ -26,6 +26,8 @@ export class Invitation extends BaseEntity {
 
   inviter!: Ref<AuthUser>;
 
+  teamId: string | null = null;
+
   belongsTo(organizationId: OrganizationId | string): boolean {
     return this.organization.id.equals(organizationId);
   }

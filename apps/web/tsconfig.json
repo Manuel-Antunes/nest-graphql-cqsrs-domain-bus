@@ -34,10 +34,28 @@
   "exclude": ["node_modules"],
   "references": [
     {
+      "path": "../../libs/ui"
+    },
+    {
+      "path": "../../libs/core/transport-eventbus"
+    },
+    {
       "path": "../../libs/organizations"
     },
     {
+      "path": "../../libs/notifications"
+    },
+    {
+      "path": "../../libs/core/microservices-inngest"
+    },
+    {
+      "path": "../../libs/core/microservices-aws"
+    },
+    {
       "path": "../../libs/database"
+    },
+    {
+      "path": "../../libs/core/cqsrs"
     },
     {
       "path": "../../libs/auth"

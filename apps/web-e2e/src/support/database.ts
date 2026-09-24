@@ -135,9 +135,13 @@ export class ServiceDatabase {
    * profile is promoted by the application itself on the next request.
    */
   promoteToAuthor(credentialId: string): Promise<void> {
+    return this.promote(credentialId, 'author');
+  }
+
+  promote(credentialId: string, role: string): Promise<void> {
     return this.execute(
       'update auth_user set role = ? where id = ?',
-      'author',
+      role,
       credentialId,
     );
   }

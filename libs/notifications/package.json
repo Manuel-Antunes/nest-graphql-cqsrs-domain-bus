@@ -12,6 +12,7 @@
     }
   },
   "dependencies": {
+    "@nestposts/cqsrs": "workspace:*",
     "@nestposts/database": "workspace:*",
     "@nestposts/mail": "workspace:*",
     "@nestposts/platform": "workspace:*",

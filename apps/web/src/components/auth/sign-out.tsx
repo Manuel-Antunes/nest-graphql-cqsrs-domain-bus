@@ -1,0 +1,40 @@
+'use client';
+
+import { useEffect, useRef } from 'react';
+import { useAuth, useSignOut } from '@better-auth-ui/react';
+import { Spinner } from '@nestposts/ui/components/ui/spinner';
+
+import { cn } from '@/lib/utils';
+
+export type SignOutProps = {
+  className?: string;
+};
+
+export function SignOut({ className }: SignOutProps) {
+  const { authClient, basePaths, navigate, viewPaths } = useAuth();
+
+  const { mutate: signOut } = useSignOut(authClient, {
+    onError: () => {
+      navigate({
+        to: `${basePaths.auth}/${viewPaths.auth.signIn}`,
+        replace: true,
+      });
+    },
+    onSuccess: () =>
+      navigate({
+        to: `${basePaths.auth}/${viewPaths.auth.signIn}`,
+        replace: true,
+      }),
+  });
+
+  const hasSignedOut = useRef(false);
+
+  useEffect(() => {
+    if (hasSignedOut.current) return;
+    hasSignedOut.current = true;
+
+    signOut();
+  }, [signOut]);
+
+  return <Spinner className={cn('mx-auto my-auto', className)} />;
+}

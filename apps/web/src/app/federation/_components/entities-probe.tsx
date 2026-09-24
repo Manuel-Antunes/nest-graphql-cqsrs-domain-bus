@@ -2,19 +2,19 @@
 
 import { useState } from 'react';
 import { useQuery, useSuspenseQuery } from '@apollo/client/react';
-import { Loader2Icon, NetworkIcon, PlayIcon } from 'lucide-react';
-
-import { ErrorNotice } from '@/app/_components/error-notice';
-import { useSession } from '@/app/_providers/session-provider';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { Badge } from '@nestposts/ui/components/ui/badge';
+import { Button } from '@nestposts/ui/components/ui/button';
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from '@/components/ui/card';
+} from '@nestposts/ui/components/ui/card';
+import { Loader2Icon, NetworkIcon, PlayIcon } from 'lucide-react';
+
+import { ErrorNotice } from '@/app/_components/error-notice';
+import { useSession } from '@/app/_providers/session-provider';
 
 import { EntitiesQuery, FederationSeedQuery } from '../query';
 

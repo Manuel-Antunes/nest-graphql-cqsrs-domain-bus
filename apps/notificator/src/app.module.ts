@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { authNotifications } from '@nestposts/auth/domain/auth/notification/auth-notifications';
 import { CqsrsModule } from '@nestposts/cqsrs';
 import { DatabaseModule, TenancyModule } from '@nestposts/database';
 import { MailModule } from '@nestposts/mail/mail.module';
@@ -7,6 +8,7 @@ import { ReactEmailTemplateResolver } from '@nestposts/mail/react-email-template
 import { NotificationChannelsModule } from '@nestposts/notifications/infrastructure/notification-channels.module';
 import { firebasePushOptionsFromEnv } from '@nestposts/notifications/infrastructure/push/firebase.options';
 import { loggingModule } from '@nestposts/observability';
+import { OrganizationInvitationNotification } from '@nestposts/organizations/domain/organization/notification/organization-invitation.notification';
 import { PostCreatedNotification } from '@nestposts/posts/domain/post/notification/post-created.notification';
 import { RetryPolicyModule } from '@nestposts/retry-policy/retry-policy.module';
 import {
@@ -57,7 +59,11 @@ import { NotificationRequestsController } from './interfaces/messaging/notificat
       },
     }),
     NotificationChannelsModule.forRoot({
-      notifications: [PostCreatedNotification],
+      notifications: [
+        PostCreatedNotification,
+        ...authNotifications,
+        OrganizationInvitationNotification,
+      ],
       push: firebasePushOptionsFromEnv(),
     }),
   ],

@@ -1,6 +1,8 @@
+import type { Page } from '@playwright/test';
 import { test as base, expect } from '@playwright/test';
 
 import type { Account, Accounts } from '../support/accounts';
+import { Registrar } from '../support/accounts';
 import { Broker } from '../support/broker';
 import { ServiceDatabase } from '../support/database';
 import type { ExecuteGraphql } from '../support/graphql';
@@ -10,16 +12,44 @@ import type { Messages } from '../support/messages';
 import { messagesOf } from '../support/messages';
 import { PostsApi } from '../support/posts-api';
 import { RunningStack } from '../support/running-stack';
-import { POSTS_SCHEMA, TAGGING_SCHEMA } from '../support/stack';
+import { POSTS_SCHEMA, TAGGING_SCHEMA, WEB_URL } from '../support/stack';
 import { Storage } from '../support/storage';
 
 export type SignIn = (account: Account) => Promise<void>;
+
+/** A new account of its own, signed up and verified by email, for a test that changes what it holds. */
+export type FreshAccount = (name: string) => Promise<Account>;
+
+/**
+ * Opens one of better-auth-ui's views and waits until it can be typed into. Its forms are TanStack
+ * Form state, not the DOM: a field filled before the page hydrates keeps its text on screen and loses
+ * it in the form, which then refuses to submit with "This field is required".
+ */
+export const openAuthView = async (page: Page, path: string): Promise<void> => {
+  await page.goto(path);
+  await page.waitForLoadState('networkidle');
+};
+
+/**
+ * Signs in **through the form**, which is the only way this suite ever authenticates: the session
+ * cookie has to be one `apps/web`'s own Better Auth wrote, on the web's origin.
+ */
+export const signInThroughTheForm = async (
+  page: Page,
+  account: Pick<Account, 'email' | 'password'>,
+): Promise<void> => {
+  await openAuthView(page, '/auth/sign-in');
+  await page.getByRole('textbox', { name: 'Email' }).fill(account.email);
+  await page.getByRole('textbox', { name: 'Password' }).fill(account.password);
+  await page.getByRole('button', { name: 'Sign In' }).click();
+};
 
 export type { ExecuteGraphql, GraphQlAnswer } from '../support/graphql';
 
 interface Fixtures {
   accounts: Accounts;
   signIn: SignIn;
+  freshAccount: FreshAccount;
   executeGraphql: ExecuteGraphql;
   apiUrl: string;
   postsStore: ServiceDatabase;
@@ -108,18 +138,21 @@ export const test = base.extend<Fixtures>({
     );
   },
 
-  /**
-   * Signs in **through the form**, which is the only way this suite ever authenticates: the session
-   * cookie has to be one `apps/web`'s own Better Auth wrote, on the web's origin.
-   */
   signIn: async ({ page }, use) => {
     await use(async (account: Account) => {
-      await page.goto('/login');
-      await page.getByLabel('E-mail').fill(account.email);
-      await page.getByLabel('Senha').fill(account.password);
-      await page.getByRole('button', { name: 'Entrar' }).click();
+      await signInThroughTheForm(page, account);
       await expect(page.getByText(account.email).first()).toBeVisible();
     });
+  },
+
+  freshAccount: async ({ postsStore }, use) => {
+    const registrar = new Registrar(WEB_URL, postsStore);
+    await use((name) =>
+      registrar.signUp(
+        `${name.toLowerCase()}-${Date.now()}-${Math.round(Math.random() * 1e6)}@example.com`,
+        name,
+      ),
+    );
   },
 });
 

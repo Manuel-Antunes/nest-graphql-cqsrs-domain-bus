@@ -1,4 +1,5 @@
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback } from '@nestposts/ui/components/ui/avatar';
+
 import type { FragmentType } from '@/gql';
 import { getFragmentData, graphql } from '@/gql';
 

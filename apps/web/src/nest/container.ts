@@ -79,6 +79,14 @@ export class Nest {
   }
 
   /**
+   * Any object held by the container — `auth.api`, say — with its methods run the same way a
+   * resolved provider's are.
+   */
+  static async scoped<T>(target: T): Promise<T> {
+    return Nest.inDatabaseContext(await Nest.context(), target);
+  }
+
+  /**
    * Every method call wrapped in a MikroORM request context.
    *
    * Nothing opens one here: there is no Nest middleware and no interceptor, because Next owns the

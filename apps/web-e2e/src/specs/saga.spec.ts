@@ -2,7 +2,7 @@ import type { ResultOf } from '@graphql-typed-document-node/core';
 import { print } from 'graphql';
 
 import type { GraphQlAnswer } from '../fixtures/test';
-import { expect, test } from '../fixtures/test';
+import { expect, signInThroughTheForm, test } from '../fixtures/test';
 import { graphql } from '../gql';
 import { until } from '../support/posts-api';
 
@@ -120,7 +120,9 @@ test.describe
      *
      * The `posts` schema's inbox is shared with `notificator`, which lives in that schema too, so its
      * rows are split by namespace: `posts.*` is what posts-api ingested, `notifications.*` is what the
-     * notificator did — and each side only ever ingests what the other produced.
+     * notificator did — and each side only ever ingests what somebody else produced. Notifications
+     * come from two publishers: posts-api (a post is live) and the web, whose Better Auth sent the
+     * verification emails the accounts were created with.
      */
     test('cada serviço só ingere o que o outro produziu: a marca de origem corta o laço', async ({
       postsStore,
@@ -129,8 +131,10 @@ test.describe
       const ingestedInPosts =
         (await until(async () => {
           const rows = await postsStore.inbox();
-          return rows.some((row) =>
-            row.message_type.startsWith('notifications.'),
+          return rows.some(
+            (row) =>
+              row.message_type.startsWith('notifications.') &&
+              row.origin === 'posts-api',
           )
             ? rows
             : undefined;
@@ -161,9 +165,9 @@ test.describe
         deliveredByNotificator.length,
         'the notificator ingested nothing',
       ).toBeGreaterThan(0);
-      expect([
-        ...new Set(deliveredByNotificator.map((row) => row.origin)),
-      ]).toEqual(['posts-api']);
+      expect(
+        [...new Set(deliveredByNotificator.map((row) => row.origin))].sort(),
+      ).toEqual(['posts-api', 'web']);
       expect(
         deliveredByNotificator.every((row) =>
           row.message_type.startsWith('notifications.NotificationReceived'),
@@ -283,10 +287,7 @@ test.describe
         extraHTTPHeaders: { 'x-tenant': 'Acme' },
       });
       const page = await context.newPage();
-      await page.goto('/login');
-      await page.getByLabel('E-mail').fill(accounts.author.email);
-      await page.getByLabel('Senha').fill(accounts.author.password);
-      await page.getByRole('button', { name: 'Entrar' }).click();
+      await signInThroughTheForm(page, accounts.author);
       await expect(page.getByText(accounts.author.email).first()).toBeVisible();
 
       const created = await page.evaluate<TenantPostAnswer, string>(

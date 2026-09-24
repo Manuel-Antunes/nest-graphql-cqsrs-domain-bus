@@ -1,12 +1,15 @@
-import type { DynamicModule } from '@nestjs/common';
+import type { DynamicModule, Type } from '@nestjs/common';
 import { Module, Scope } from '@nestjs/common';
 import type { DatabaseEntities } from '@nestposts/database';
 import { DatabaseModule } from '@nestposts/database';
+import { OnDemandNotifications } from '@nestposts/notifications/domain/notification/on-demand-notifications';
+import { LoggingOnDemandNotifications } from '@nestposts/notifications/infrastructure/on-demand/logging-on-demand-notifications';
 import { IdentityProvider } from '@nestposts/users/domain/user/identity.provider';
 
 import { AuthService } from '../../domain/auth/auth.service';
 import { authEntities } from '../persistence/auth-entities';
 import type { AuthConfig } from './config';
+import { BetterAuthEmails } from './emails/better-auth-emails';
 import {
   BetterAuthAdapterFactory,
   BetterAuthConfigFactory,
@@ -41,6 +44,12 @@ export interface BetterAuthModuleOptions {
   config?: Partial<AuthConfig>;
   /** Modules providing what those plugin providers inject. */
   imports?: DynamicModule['imports'];
+  /**
+   * What sends the emails authentication asks for — verification, reset, magic link, one-time codes.
+   * `PublishingOnDemandNotifications` hands them to the process that delivers notifications; the
+   * default logs them and sends nothing, which is right for a runtime with no transport.
+   */
+  notifications?: Type<OnDemandNotifications>;
 }
 
 @Module({})
@@ -51,6 +60,7 @@ export class BetterAuthModule {
       trailingPlugins = [],
       entities = authEntities,
       imports = [],
+      notifications = LoggingOnDemandNotifications,
     } = options;
     const providers = BetterAuthPlugins.providersWith(plugins, trailingPlugins);
 
@@ -68,6 +78,8 @@ export class BetterAuthModule {
       providers: [
         BetterAuthConfigFactory.with(options.config),
         BetterAuthAdapterFactory,
+        { provide: OnDemandNotifications, useClass: notifications },
+        BetterAuthEmails,
         ...providers,
         BetterAuthPluginsFactory(providers),
         BetterAuthFactory,
@@ -78,7 +90,14 @@ export class BetterAuthModule {
         },
         { provide: IdentityProvider, useClass: BetterAuthIdentityProvider },
       ],
-      exports: [BETTER_AUTH, BETTER_AUTH_CONFIG, AuthService, IdentityProvider],
+      exports: [
+        BETTER_AUTH,
+        BETTER_AUTH_CONFIG,
+        AuthService,
+        IdentityProvider,
+        OnDemandNotifications,
+        BetterAuthEmails,
+      ],
     };
   }
 }

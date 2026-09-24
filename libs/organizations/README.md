@@ -60,6 +60,27 @@ The cost is Nest's scope bubbling: whatever injects these becomes request-scoped
 pipes are, and why nothing in a saga or an event handler injects them — those have a `PostRequest`,
 not an HTTP one.
 
+## An invitation is a notification
+
+The plugin's `sendInvitationEmail` builds an `OrganizationInvitationNotification`
+(`organizations.Invitation`) and sends it through `OnDemandNotifications` to the invited address — the
+same path every authentication email takes (`libs/auth/README.md`), so it is delivered by
+`apps/notificator` and rendered from better-auth-ui's `OrganizationInvitationEmail`, copied here with
+its own `email-styles` (see `libs/auth/NOTICE.md`).
+
+The link is `WEB_URL/auth/accept-invitation?invitationId=…`, better-auth-ui's accept view, which signs
+the invitee in first and brings them back. It has no `key`, deliberately: resending an invitation is
+the same invitation id, and a keyed notification would be the same notification — which the
+notificator's delivery ledger would skip as already sent.
+
+## Teams
+
+`teams: { enabled: true }`. Better Auth then owns two more tables, `team` and `team_member`, and a
+column on each of `session` (`active_team_id`) and `invitation` (`team_id`). The first two are
+generated like every other Better Auth table; `invitation` is mapped here, so `teamId` is on
+`Invitation`. better-auth-ui's organization screens show the teams tab, the team switcher and the team
+picker in the invite dialog.
+
 ## `OrganizationNotSelected` and `ActiveMemberNotFound` are different failures
 
 The first says the session has not picked an organization; the second says the caller picked one they

@@ -1,10 +1,10 @@
 'use client';
 
+import { Button } from '@nestposts/ui/components/ui/button';
 import { RefreshCwIcon } from 'lucide-react';
 
 import { ErrorNotice } from '@/app/_components/error-notice';
 import { PostList } from '@/app/_components/post-list';
-import { Button } from '@/components/ui/button';
 
 import { usePostFeed } from '../_hooks/use-post-feed';
 

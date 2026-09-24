@@ -13,11 +13,11 @@
   },
   "dependencies": {
     "@nestjs-modules/mailer": "catalog:",
-    "@react-email/components": "catalog:",
     "html-to-text": "catalog:",
     "nodemailer": "catalog:",
     "react": "catalog:",
-    "react-dom": "catalog:"
+    "react-dom": "catalog:",
+    "react-email": "catalog:"
   },
   "devDependencies": {
     "@types/html-to-text": "catalog:",

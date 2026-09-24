@@ -1,13 +1,11 @@
 import { Module } from '@nestjs/common';
 import { DatabaseModule } from '@nestposts/database';
 
-import { InvitationNotifier } from '../domain/organization/invitation.notifier';
 import { InvitationRepository } from '../domain/organization/invitation.repository';
 import { MemberRepository } from '../domain/organization/member.repository';
 import { OrganizationRepository } from '../domain/organization/organization.repository';
 import { OrganizationService } from '../domain/organization/organization.service';
 import { BetterAuthOrganizationService } from './better-auth/better-auth-organization.service';
-import { LoggingInvitationNotifier } from './notifier/logging-invitation.notifier';
 import { organizationEntities } from './persistence/organization-entities';
 import { MikroOrmInvitationRepository } from './persistence/repositories/mikro-orm-invitation.repository';
 import { MikroOrmMemberRepository } from './persistence/repositories/mikro-orm-member.repository';
@@ -24,7 +22,6 @@ import { MikroOrmOrganizationRepository } from './persistence/repositories/mikro
 @Module({
   imports: [DatabaseModule.forFeature(organizationEntities)],
   providers: [
-    { provide: InvitationNotifier, useClass: LoggingInvitationNotifier },
     {
       provide: OrganizationRepository,
       useClass: MikroOrmOrganizationRepository,
@@ -34,7 +31,6 @@ import { MikroOrmOrganizationRepository } from './persistence/repositories/mikro
     { provide: OrganizationService, useClass: BetterAuthOrganizationService },
   ],
   exports: [
-    InvitationNotifier,
     OrganizationRepository,
     MemberRepository,
     InvitationRepository,

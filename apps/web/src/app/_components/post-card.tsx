@@ -1,16 +1,16 @@
 import Link from 'next/link';
-
-import { AuthorByline } from '@/app/_components/author-byline';
-import { RelativeTime } from '@/app/_components/relative-time';
-import { TagList } from '@/app/_components/tag-list';
-import { VersionBadge } from '@/app/_components/version-badge';
 import {
   Card,
   CardContent,
   CardFooter,
   CardHeader,
   CardTitle,
-} from '@/components/ui/card';
+} from '@nestposts/ui/components/ui/card';
+
+import { AuthorByline } from '@/app/_components/author-byline';
+import { RelativeTime } from '@/app/_components/relative-time';
+import { TagList } from '@/app/_components/tag-list';
+import { VersionBadge } from '@/app/_components/version-badge';
 import type { FragmentType } from '@/gql';
 import { getFragmentData, graphql } from '@/gql';
 

@@ -1,9 +1,7 @@
 import { BetterAuthEntities } from '@nestposts/auth/infrastructure/persistence/auth-entities';
 import type { EntitySchema } from '@nestposts/database';
 
-import { InvitationNotifier } from '../../domain/organization/invitation.notifier';
 import { organizationAuthPluginProviders } from '../better-auth/organization-better-auth.plugin';
-import { silentInvitationNotifier } from '../notifier/logging-invitation.notifier';
 import { InvitationEntitySchema } from './entities/invitation-orm.entity';
 import { MemberEntitySchema } from './entities/member-orm.entity';
 import { OrganizationEntitySchema } from './entities/organization-orm.entity';
@@ -21,12 +19,6 @@ export const organizationEntities = [
   MemberEntitySchema,
   InvitationEntitySchema,
 ];
-
-/** What a plugin provider of this module injects, for building it outside the container. */
-export const organizationPluginDependencies: readonly (readonly [
-  unknown,
-  unknown,
-])[] = [[InvitationNotifier, silentInvitationNotifier]];
 
 /**
  * **Every table authentication owns in a system that has organizations** — Better Auth's, generated
@@ -53,7 +45,6 @@ export class OrganizationEntities {
       ...BetterAuthEntities.forPlugins({
         plugins: organizationAuthPluginProviders,
         mapped: ORGANIZATION_MODELS,
-        dependencies: organizationPluginDependencies,
       }),
       ...organizationEntities,
     ];

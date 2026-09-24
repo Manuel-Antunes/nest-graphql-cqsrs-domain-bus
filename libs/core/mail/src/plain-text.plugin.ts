@@ -1,7 +1,7 @@
 import type { MailerPlugin } from '@nestjs-modules/mailer';
-import { plainTextSelectors } from '@react-email/components';
 import type { HtmlToTextOptions } from 'html-to-text';
 import { convert } from 'html-to-text';
+import { plainTextSelectors } from 'react-email';
 
 /**
  * A mailer plugin that gives a message with HTML and no text a plain-text part, converted from the

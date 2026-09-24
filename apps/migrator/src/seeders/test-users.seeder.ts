@@ -55,18 +55,26 @@ export class TestUsersSeeder extends Seeder {
     const identities = container.get(IdentityProvider);
 
     for (const user of seededUsers()) {
-      if (await em.findOne(AuthUser, { email: Email.parse(user.email) })) {
-        continue;
-      }
-      const created = await inRequestContext(em, async () => {
-        const { user: signedUp } = await auth.api.signUpEmail({
-          body: { email: user.email, password: user.password, name: user.name },
+      const email = Email.parse(user.email);
+      if (!(await em.findOne(AuthUser, { email }))) {
+        const created = await inRequestContext(em, async () => {
+          const { user: signedUp } = await auth.api.signUpEmail({
+            body: {
+              email: user.email,
+              password: user.password,
+              name: user.name,
+            },
+          });
+          return signedUp;
         });
-        return signedUp;
-      });
-      if (user.author) {
-        await identities.grantRole(CredentialId.parse(created.id), AUTHOR_ROLE);
+        if (user.author) {
+          await identities.grantRole(
+            CredentialId.parse(created.id),
+            AUTHOR_ROLE,
+          );
+        }
       }
+      await em.nativeUpdate(AuthUser, { email }, { emailVerified: true });
     }
   }
 }

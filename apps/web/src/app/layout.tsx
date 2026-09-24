@@ -1,16 +1,20 @@
 import type { Metadata } from 'next';
-import { Geist, Geist_Mono } from 'next/font/google';
+import { Inter, JetBrains_Mono } from 'next/font/google';
+import { headers } from 'next/headers';
+import { prefetchSessionServer } from '@better-auth-ui/core/server';
+import { Toaster } from '@nestposts/ui/components/ui/sonner';
+import { dehydrate } from '@tanstack/react-query';
 
 import { SiteHeader } from '@/app/_components/site-header';
 import { Providers } from '@/app/_providers';
-import { Toaster } from '@/components/ui/sonner';
 import { WebAuth } from '@/lib/auth/server';
+import { getQueryClient } from '@/lib/query-client';
 
 import './globals.css';
 
-const geistSans = Geist({ variable: '--font-geist-sans', subsets: ['latin'] });
-const geistMono = Geist_Mono({
-  variable: '--font-geist-mono',
+const inter = Inter({ variable: '--font-inter', subsets: ['latin'] });
+const jetbrainsMono = JetBrains_Mono({
+  variable: '--font-jetbrains-mono',
   subsets: ['latin'],
 });
 
@@ -25,14 +29,22 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const session = await WebAuth.session();
+  const queryClient = getQueryClient();
+  await prefetchSessionServer(queryClient, await WebAuth.server(), {
+    headers: await headers(),
+  });
 
   return (
-    <html lang="pt-BR" suppressHydrationWarning>
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
-        <Providers session={session}>
+    <html
+      lang="pt-BR"
+      className={`${inter.variable} ${jetbrainsMono.variable}`}
+      suppressHydrationWarning
+    >
+      <body className="antialiased">
+        <Providers
+          socialProviders={WebAuth.socialProviders()}
+          dehydratedState={dehydrate(queryClient)}
+        >
           <SiteHeader />
           <main className="mx-auto max-w-5xl px-4 py-8">{children}</main>
           <Toaster position="bottom-right" />

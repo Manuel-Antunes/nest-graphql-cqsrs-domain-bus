@@ -2,12 +2,13 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LogOutIcon, RadioIcon } from 'lucide-react';
+import { Badge } from '@nestposts/ui/components/ui/badge';
+import { buttonVariants } from '@nestposts/ui/components/ui/button';
+import { RadioIcon, ShieldCheckIcon, UsersIcon } from 'lucide-react';
 
 import { useSession } from '@/app/_providers/session-provider';
-import { signOut } from '@/app/actions/auth';
-import { Badge } from '@/components/ui/badge';
-import { Button, buttonVariants } from '@/components/ui/button';
+import { OrganizationSwitcher } from '@/components/auth/organization/organization-switcher';
+import { UserButton } from '@/components/auth/user/user-button';
 import { upstreamHost } from '@/lib/env';
 import { cn } from '@/lib/utils';
 
@@ -20,6 +21,9 @@ const routes = [
   { href: '/me', label: 'Identidade' },
   { href: '/federation', label: 'Federação' },
 ];
+
+const hasRole = (role: string | null | undefined, wanted: string) =>
+  role?.split(',').some((held) => held.trim() === wanted) ?? false;
 
 export function SiteHeader() {
   const pathname = usePathname();
@@ -57,6 +61,7 @@ export function SiteHeader() {
           </Badge>
           {session ? (
             <>
+              <OrganizationSwitcher align="end" />
               <span className="text-muted-foreground text-xs">
                 {session.user.email}
                 {isAuthor ? (
@@ -65,23 +70,37 @@ export function SiteHeader() {
                   </Badge>
                 ) : null}
               </span>
-              <Button
-                variant="ghost"
-                size="sm"
-                aria-label="Sair"
-                onClick={() => {
-                  void signOut().then(() => window.location.assign('/login'));
-                }}
-              >
-                <LogOutIcon />
-              </Button>
+              <UserButton
+                size="icon"
+                align="end"
+                links={[
+                  {
+                    label: 'Organization',
+                    href: '/organization/settings',
+                    icon: <UsersIcon className="text-muted-foreground" />,
+                    visibility: 'authenticated',
+                  },
+                  ...(hasRole(session.user.role, 'admin')
+                    ? [
+                        {
+                          label: 'Users',
+                          href: '/admin/users',
+                          icon: (
+                            <ShieldCheckIcon className="text-muted-foreground" />
+                          ),
+                          visibility: 'authenticated' as const,
+                        },
+                      ]
+                    : []),
+                ]}
+              />
             </>
           ) : (
             <Link
-              href="/login"
+              href="/auth/sign-in"
               className={cn(buttonVariants({ variant: 'outline', size: 'sm' }))}
             >
-              Entrar
+              Sign in
             </Link>
           )}
         </div>

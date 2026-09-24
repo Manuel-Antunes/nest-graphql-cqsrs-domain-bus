@@ -2,8 +2,9 @@ import type { ResultOf } from '@graphql-typed-document-node/core';
 import { print } from 'graphql';
 
 import type { GraphQlAnswer } from '../fixtures/test';
-import { expect, test } from '../fixtures/test';
+import { expect, signInThroughTheForm, test } from '../fixtures/test';
 import { graphql } from '../gql';
+import { WEB_URL } from '../support/stack';
 
 const MeAtTheApi = graphql(`
   query MeAtTheApi {
@@ -38,7 +39,7 @@ test.describe('autenticação pelo navegador', () => {
       true,
     );
     expect(
-      signUps,
+      signUps.filter((origin) => origin !== new URL(WEB_URL).origin),
       'o login não pode sair para outra origem: o Better Auth que responde é o deste app',
     ).toEqual([]);
   });
@@ -95,15 +96,16 @@ test.describe('autenticação pelo navegador', () => {
     page,
     accounts,
   }) => {
-    await page.goto('/login');
-    await page.getByLabel('E-mail').fill(accounts.author.email);
-    await page.getByLabel('Senha').fill('senha-errada-de-proposito');
-    await page.getByRole('button', { name: 'Entrar' }).click();
+    await signInThroughTheForm(page, {
+      email: accounts.author.email,
+      password: 'senha-errada-de-proposito',
+    });
 
     await expect(
-      page.getByText(/INVALID_EMAIL_OR_PASSWORD|Credenciais inválidas/i),
+      page.getByText('The sign-in details are incorrect. Please try again.'),
     ).toBeVisible();
-    await expect(page.getByText(`${accounts.author.email} `)).toHaveCount(0);
+    await expect(page).toHaveURL(/\/auth\/sign-in/);
+    await expect(page.getByRole('link', { name: 'Sign in' })).toBeVisible();
   });
 
   test('quem já entrou é reconhecido ao voltar ao login', async ({
@@ -115,9 +117,8 @@ test.describe('autenticação pelo navegador', () => {
 
     await page.goto('/login');
 
-    await expect(
-      page.getByText(`Já autenticado como ${accounts.author.email}`),
-    ).toBeVisible();
+    await expect(page).toHaveURL(/\/auth\/sign-in\?redirectTo=/);
+    await expect(page.getByText(accounts.author.email).first()).toBeVisible();
   });
 
   test('sair apaga a sessão, e o cabeçalho volta a oferecer entrar', async ({
@@ -127,10 +128,11 @@ test.describe('autenticação pelo navegador', () => {
   }) => {
     await signIn(accounts.author);
 
-    await page.getByRole('button', { name: 'Sair' }).click();
-    await page.waitForURL('**/login');
+    await page.getByRole('button', { name: 'Account' }).click();
+    await page.getByRole('menuitem', { name: 'Sign Out' }).click();
+    await page.waitForURL('**/auth/sign-in**');
 
-    await expect(page.getByRole('link', { name: 'Entrar' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Sign in' })).toBeVisible();
     expect(
       (await page.context().cookies()).filter(
         (cookie) => cookie.name.includes('better-auth') && cookie.value !== '',

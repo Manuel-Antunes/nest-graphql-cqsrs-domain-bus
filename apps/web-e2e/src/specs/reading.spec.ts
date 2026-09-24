@@ -60,7 +60,7 @@ test.describe
         'o byline é o @ResolveField author, resolvido sem sessão',
       ).toBeVisible();
       await expect(page.getByText('Untagged').first()).toBeVisible();
-      await expect(page.getByRole('link', { name: 'Entrar' })).toBeVisible();
+      await expect(page.getByRole('link', { name: 'Sign in' })).toBeVisible();
 
       await context.close();
     });

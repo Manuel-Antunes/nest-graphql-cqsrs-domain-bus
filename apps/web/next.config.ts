@@ -10,14 +10,18 @@ const monorepoRoot = path.resolve(
 
 const nextConfig: NextConfig = {
   outputFileTracingRoot: monorepoRoot,
-  transpilePackages: ['@mikro-orm/core', '@mikro-orm/postgresql', 'pg'],
+  transpilePackages: [
+    '@nestposts/ui',
+    '@mikro-orm/core',
+    '@mikro-orm/postgresql',
+    'pg',
+  ],
   serverExternalPackages: [
     'ssh2',
     'msw/node',
     '@nestjs/cache-manager',
-    '@nestjs/microservices',
     '@nestjs-modules/mailer',
-    '@react-email/components',
+    'react-email',
     'pino',
     'pino-pretty',
     '@nestjs/typeorm',
@@ -26,10 +30,15 @@ const nextConfig: NextConfig = {
     turbopackMinify: false,
   },
   turbopack: {
-    resolveAlias: {
-      '@nestjs/websockets/socket-module.js':
-        './src/nest/absent-optional-package.ts',
-    },
+    resolveAlias: Object.fromEntries(
+      [
+        '@nestjs/websockets/socket-module.js',
+        '@nats-io/transport-node',
+        'ioredis',
+        'kafkajs',
+        'mqtt',
+      ].map((optional) => [optional, './src/nest/absent-optional-package.ts']),
+    ),
   },
 };
 

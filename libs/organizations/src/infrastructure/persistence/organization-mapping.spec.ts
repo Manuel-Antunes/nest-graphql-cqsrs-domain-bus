@@ -1,21 +1,22 @@
 import { AuthUser } from '@nestposts/auth/domain/auth/auth-user.entity';
 import { AuthConfiguration } from '@nestposts/auth/infrastructure/better-auth/config';
+import { BetterAuthEmails } from '@nestposts/auth/infrastructure/better-auth/emails/better-auth-emails';
 import { BetterAuthInstance } from '@nestposts/auth/infrastructure/better-auth/init-auth';
 import { BetterAuthPlugins } from '@nestposts/auth/infrastructure/better-auth/plugins/registry';
 import { BETTER_AUTH_CONFIG } from '@nestposts/auth/infrastructure/better-auth/tokens';
 import { inRequestContext } from '@nestposts/database';
 import type { AnyMikroORM } from '@nestposts/database/testing';
 import { closeTestDatabase, testDatabase } from '@nestposts/database/testing';
+import { OnDemandNotifications } from '@nestposts/notifications/domain/notification/on-demand-notifications';
+import { LoggingOnDemandNotifications } from '@nestposts/notifications/infrastructure/on-demand/logging-on-demand-notifications';
 import { CredentialId } from '@nestposts/users/domain/user/vo/credential-id';
 import { mikroOrmAdapter } from 'better-auth-mikro-orm';
 
-import { InvitationNotifier } from '../../domain/organization/invitation.notifier';
 import { Member } from '../../domain/organization/member.entity';
 import { Organization } from '../../domain/organization/organization.entity';
 import { OrganizationId } from '../../domain/organization/vo/organization-id';
 import { OrganizationSlug } from '../../domain/organization/vo/organization-slug';
 import { organizationAuthPluginProviders } from '../better-auth/organization-better-auth.plugin';
-import { silentInvitationNotifier } from '../notifier/logging-invitation.notifier';
 import { OrganizationEntities } from './organization-entities';
 
 describe('better-auth writing through the organization entities', () => {
@@ -64,6 +65,7 @@ describe('better-auth writing through the organization entities', () => {
       'org',
     );
     const config = AuthConfiguration.fromEnvironment();
+    const emails = BetterAuthEmails.unsent();
     adapter = mikroOrmAdapter(orm)(
       BetterAuthInstance.optionsFor(
         config,
@@ -71,9 +73,11 @@ describe('better-auth writing through the organization entities', () => {
           BetterAuthPlugins.providersWith(organizationAuthPluginProviders),
           [
             [BETTER_AUTH_CONFIG, config],
-            [InvitationNotifier, silentInvitationNotifier],
+            [BetterAuthEmails, emails],
+            [OnDemandNotifications, new LoggingOnDemandNotifications()],
           ],
         ),
+        emails,
       ),
     );
   });

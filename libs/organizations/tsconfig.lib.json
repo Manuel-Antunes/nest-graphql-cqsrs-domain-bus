@@ -4,22 +4,29 @@
     "rootDir": "src",
     "outDir": "dist",
     "tsBuildInfoFile": "dist/tsconfig.lib.tsbuildinfo",
-    "emitDeclarationOnly": false
+    "emitDeclarationOnly": false,
+    "jsx": "react-jsx"
   },
-  "include": ["src/**/*.ts"],
+  "include": ["src/**/*.ts", "src/**/*.tsx"],
   "exclude": ["src/**/*.spec.ts"],
   "references": [
     {
       "path": "../core/validated-dto/tsconfig.lib.json"
     },
     {
+      "path": "../users/tsconfig.lib.json"
+    },
+    {
       "path": "../platform/tsconfig.lib.json"
     },
     {
-      "path": "../database/tsconfig.lib.json"
+      "path": "../notifications/tsconfig.lib.json"
     },
     {
-      "path": "../users/tsconfig.lib.json"
+      "path": "../core/mail/tsconfig.lib.json"
+    },
+    {
+      "path": "../database/tsconfig.lib.json"
     },
     {
       "path": "../auth/tsconfig.lib.json"

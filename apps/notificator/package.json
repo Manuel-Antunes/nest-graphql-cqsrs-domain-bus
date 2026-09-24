@@ -4,6 +4,7 @@
   "private": true,
   "dependencies": {
     "@aws-sdk/client-sesv2": "catalog:",
+    "@nestposts/auth": "workspace:*",
     "@nestposts/cqsrs": "workspace:*",
     "@nestposts/database": "workspace:*",
     "@nestposts/lambda": "workspace:*",
@@ -12,6 +13,7 @@
     "@nestposts/microservices-inngest": "workspace:*",
     "@nestposts/notifications": "workspace:*",
     "@nestposts/observability": "workspace:*",
+    "@nestposts/organizations": "workspace:*",
     "@nestposts/platform": "workspace:*",
     "@nestposts/posts": "workspace:*",
     "@nestposts/retry-policy": "workspace:*",

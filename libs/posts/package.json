@@ -19,8 +19,8 @@
     "@nestposts/platform": "workspace:*",
     "@nestposts/users": "workspace:*",
     "@nestposts/validated-dto": "workspace:*",
-    "@react-email/components": "catalog:",
-    "react": "catalog:"
+    "react": "catalog:",
+    "react-email": "catalog:"
   },
   "devDependencies": {
     "@types/react": "catalog:"

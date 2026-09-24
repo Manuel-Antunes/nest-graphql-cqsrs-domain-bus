@@ -1,4 +1,12 @@
 import Link from 'next/link';
+import { Badge } from '@nestposts/ui/components/ui/badge';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@nestposts/ui/components/ui/card';
 import {
   ArrowRightIcon,
   KeyRoundIcon,
@@ -10,23 +18,16 @@ import {
   WorkflowIcon,
 } from 'lucide-react';
 
-import { Badge } from '@/components/ui/badge';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
 import { API_URL, GRAPHQL_UPSTREAM } from '@/lib/env';
 
 const flows = [
   {
-    href: '/login',
+    href: '/auth/sign-in',
     icon: KeyRoundIcon,
-    title: 'Entrar',
-    what: 'e-mail e senha no Better Auth, por server action',
-    proves: 'O cookie que esta aplicação assina é o que a API resolve.',
+    title: 'Sign in',
+    what: 'better-auth-ui over this app’s own Better Auth: password, magic link, email code, two factor',
+    proves:
+      'The cookie this application signs is the one the API resolves, and every email a flow sends goes through the notificator.',
   },
   {
     href: '/feed',

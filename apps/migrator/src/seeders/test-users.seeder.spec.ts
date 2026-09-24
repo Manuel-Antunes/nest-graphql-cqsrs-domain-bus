@@ -90,6 +90,23 @@ describe('seeding the users the system should have', () => {
     expect(signedIn.user.email).toBe('manuel@example.com');
   });
 
+  it('verifies every address it seeds, including one seeded before verification was required', async () => {
+    await context.orm.em
+      .fork()
+      .nativeUpdate(
+        AuthUser,
+        { email: Email.parse('leitor@example.com') },
+        { emailVerified: false },
+      );
+
+    await runSeeder();
+
+    const found = await context.orm.em.fork().find(AuthUser, {
+      email: { $in: seededUsers().map((user) => Email.parse(user.email)) },
+    });
+    expect(found.every((credential) => credential.emailVerified)).toBe(true);
+  });
+
   it('is safe to run on every deploy: a second pass adds nobody', async () => {
     await runSeeder();
 

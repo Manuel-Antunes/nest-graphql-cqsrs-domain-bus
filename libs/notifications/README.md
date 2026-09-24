@@ -39,6 +39,8 @@ user.commit();
 | `Notifiable(Base)` | the mixin that makes an aggregate root notifiable. `notify` raises `NotificationReceivedEvent`; the host says who it is (`notifiableType`, `notifiableId`, `notifiableName`) and where each channel reaches it (`routeNotificationFor`) |
 | `NotificationRecipient` | the notifiable as it was when notified — what the channels deliver to, in a process that holds no aggregate |
 | `MailNotification`, `PushNotification` | what a notification implements to go through `email` (`toMail` → a `Mail` of `@nestposts/mail`) and `push` (`toPush` → an FCM message). A channel checks it with `isMailNotification` / `isPushNotification` |
+| `OnDemandNotifiable` | someone known only by where to reach them — an address being verified, an invitee — notified exactly like an aggregate, but only through the channels it was given a route for |
+| `OnDemandNotifications` | the port that sends to one, from code that saves no aggregate; `PublishingOnDemandNotifications` publishes and resolves once the event has left |
 | `NotificationDelivery` | the ledger: one row per notification and channel that delivered it |
 | `Device` | a push token, owned by a notifiable by kind and id |
 
@@ -71,6 +73,32 @@ NotificationChannelsModule.forRoot({
 `UnknownNotificationTypeException`. `push` is optional — without `FIREBASE_CREDENTIALS` the channel
 sends nothing and says so, and a retry would not change that. `email` sends through the `MailSender` a
 global `MailModule` binds.
+
+## Notifying someone who is not an aggregate
+
+Laravel calls it on-demand notification, and it is what authentication needs: a password reset goes
+to the address that asked, whoever that is.
+
+```ts
+await notifications.send(
+  OnDemandNotifiable.route(EMAIL_CHANNEL, 'ada@example.com', 'Ada'),
+  new PasswordResetNotification({ url, expiresInMinutes: 60 }),
+);
+```
+
+It raises the same `NotificationReceivedEvent` a `User` does, so the process that delivers cannot tell
+the two apart and does not need to. What differs is what it can be reached through: there is no
+identity to keep a record against, so `database` is never one of its channels, and `notify` refuses a
+notification asking for a channel it has no route for (`UnroutableNotificationException`) rather than
+delivering part of it. An authentication notification says `via() { return [EMAIL_CHANNEL]; }`.
+
+`send` needs no command: `PublishingOnDemandNotifications` merges the notifiable into the
+application's `EventPublisher` and commits inside a unit of work, so it resolves only once the event
+has gone out — which is what a Better Auth callback, and a function frozen the moment it returns,
+need. Inside a unit that is already open it joins it instead. `LoggingOnDemandNotifications` sends
+nothing and logs the type and the address (never the data — that is where a link or a code is), for a
+process with no transport. `RecordingOnDemandNotifications` (`testing/`) keeps what it was asked to
+send.
 
 ## Delivering once, and again when it failed
 

@@ -9,6 +9,7 @@ import { assetStorageOptionsFromEnv } from '@nestposts/asset/infrastructure/stor
 import { AuthInfrastructureModule } from '@nestposts/auth/infrastructure/auth-infrastructure.module';
 import { CqsrsModule } from '@nestposts/cqsrs';
 import { DatabaseModule, TenancyModule } from '@nestposts/database';
+import { PublishingOnDemandNotifications } from '@nestposts/notifications/infrastructure/on-demand/publishing-on-demand-notifications';
 import { loggingModule } from '@nestposts/observability';
 import { organizationAuthPluginProviders } from '@nestposts/organizations/infrastructure/better-auth/organization-better-auth.plugin';
 import { OrganizationsInfrastructureModule } from '@nestposts/organizations/infrastructure/organizations-infrastructure.module';
@@ -50,6 +51,7 @@ import { validatedDtoClasses } from './interfaces/mapper/validated-dto.strategy'
       plugins: organizationAuthPluginProviders,
       entities: OrganizationEntities.withAuth(),
       imports: [OrganizationsInfrastructureModule],
+      notifications: PublishingOnDemandNotifications,
     }),
     GraphQLModule.forRoot<YogaFederationDriverConfig>({
       driver: YogaFederationDriver,

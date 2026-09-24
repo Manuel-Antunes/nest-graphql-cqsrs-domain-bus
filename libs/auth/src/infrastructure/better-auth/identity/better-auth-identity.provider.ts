@@ -53,10 +53,11 @@ export class BetterAuthIdentityProvider extends IdentityProvider {
   }
 
   private static toIdentity(user: AuthUserRow): Identity {
+    const email = Email.parse(user.email);
     return {
       credentialId: CredentialId.parse(user.id),
-      email: Email.parse(user.email),
-      name: UserName.parse(user.name),
+      email,
+      name: UserName.from(user.name, email),
       role: BetterAuthIdentityProvider.firstRole(user.role),
     };
   }

@@ -28,6 +28,9 @@
       "path": "../../libs/platform/tsconfig.lib.json"
     },
     {
+      "path": "../../libs/organizations/tsconfig.lib.json"
+    },
+    {
       "path": "../../libs/core/observability/tsconfig.lib.json"
     },
     {
@@ -50,6 +53,9 @@
     },
     {
       "path": "../../libs/core/cqsrs/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/auth/tsconfig.lib.json"
     }
   ]
 }

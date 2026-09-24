@@ -1,14 +1,14 @@
 'use client';
 
 import { useState } from 'react';
+import { Button } from '@nestposts/ui/components/ui/button';
+import { Input } from '@nestposts/ui/components/ui/input';
+import { Label } from '@nestposts/ui/components/ui/label';
+import { Textarea } from '@nestposts/ui/components/ui/textarea';
 import { Loader2Icon, SaveIcon } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { ErrorNotice } from '@/app/_components/error-notice';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import type { FragmentType } from '@/gql';
 import { getFragmentData, graphql } from '@/gql';
 import type { UploadedFile } from '@/hooks/use-upload-file';

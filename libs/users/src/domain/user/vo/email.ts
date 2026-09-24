@@ -6,4 +6,8 @@ export class Email extends ValidatedDto.Scalar(EmailSchema) {
   get domain(): string {
     return this.value.split('@')[1];
   }
+
+  get localPart(): string {
+    return this.value.split('@')[0];
+  }
 }

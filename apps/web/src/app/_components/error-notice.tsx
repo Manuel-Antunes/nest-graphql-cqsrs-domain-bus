@@ -1,6 +1,9 @@
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from '@nestposts/ui/components/ui/alert';
 import { TriangleAlertIcon } from 'lucide-react';
-
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 export function ErrorNotice({
   title = 'A operação falhou',

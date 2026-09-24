@@ -1,6 +1,5 @@
 import { Suspense } from 'react';
-
-import { Skeleton } from '@/components/ui/skeleton';
+import { Skeleton } from '@nestposts/ui/components/ui/skeleton';
 
 import { SagaRunner } from './_components/saga-runner';
 

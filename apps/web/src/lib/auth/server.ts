@@ -1,6 +1,8 @@
 import 'server-only';
 
 import { cookies } from 'next/headers';
+import type { AuthSocialProvider } from '@better-auth-ui/core';
+import type { AuthServer } from '@better-auth-ui/core/server';
 import { AuthService } from '@nestposts/auth/domain/auth/auth.service';
 import { BETTER_AUTH } from '@nestposts/auth/infrastructure/better-auth/tokens';
 import { OrganizationService } from '@nestposts/organizations/domain/organization/organization.service';
@@ -30,6 +32,27 @@ export class WebAuth {
 
   static organizations(): Promise<OrganizationService> {
     return Nest.resolve(OrganizationService);
+  }
+
+  /**
+   * The instance as better-auth-ui's server helpers take it — `ensureSessionServer` and the other
+   * prefetches — with every endpoint run inside a database context, which nothing else opens here.
+   */
+  static async server(): Promise<AuthServer> {
+    const auth = await Nest.get<AuthServer>(BETTER_AUTH);
+    return { api: await Nest.scoped(auth.api) };
+  }
+
+  /** The social providers this deployment has credentials for — the sign-in screen offers these. */
+  static socialProviders(): AuthSocialProvider[] {
+    return [
+      ...(process.env.AUTH_GOOGLE_ID && process.env.AUTH_GOOGLE_SECRET
+        ? (['google'] as const)
+        : []),
+      ...(process.env.AUTH_GITHUB_ID && process.env.AUTH_GITHUB_SECRET
+        ? (['github'] as const)
+        : []),
+    ];
   }
 
   /** The instance itself, for the `/api/auth/*` catch-all Next serves. */

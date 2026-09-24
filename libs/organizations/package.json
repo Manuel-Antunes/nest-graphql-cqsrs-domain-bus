@@ -14,8 +14,15 @@
   "dependencies": {
     "@nestposts/auth": "workspace:*",
     "@nestposts/database": "workspace:*",
+    "@nestposts/mail": "workspace:*",
+    "@nestposts/notifications": "workspace:*",
     "@nestposts/platform": "workspace:*",
     "@nestposts/users": "workspace:*",
-    "@nestposts/validated-dto": "workspace:*"
+    "@nestposts/validated-dto": "workspace:*",
+    "react": "catalog:",
+    "react-email": "catalog:"
+  },
+  "devDependencies": {
+    "@types/react": "catalog:"
   }
 }

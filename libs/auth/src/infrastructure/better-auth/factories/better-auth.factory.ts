@@ -3,6 +3,7 @@ import { Logger } from '@nestjs/common';
 import type { BetterAuthOptions, BetterAuthPlugin } from 'better-auth';
 
 import type { AuthConfig } from '../config';
+import { BetterAuthEmails } from '../emails/better-auth-emails';
 import type { BetterAuth } from '../init-auth';
 import { BetterAuthInstance, BetterAuthLogging } from '../init-auth';
 import {
@@ -18,9 +19,10 @@ export const BetterAuthFactory = {
     config: AuthConfig,
     adapter: NonNullable<BetterAuthOptions['database']>,
     plugins: BetterAuthPlugin[],
+    emails: BetterAuthEmails,
   ): BetterAuth => {
     const logger = new Logger('BetterAuth');
-    return BetterAuthInstance.create(config, adapter, plugins, {
+    return BetterAuthInstance.create(config, adapter, plugins, emails, {
       logger: BetterAuthLogging.through((level, message, ...args) => {
         const write = (
           logger as unknown as Record<
@@ -32,5 +34,10 @@ export const BetterAuthFactory = {
       }),
     }) as unknown as BetterAuth;
   },
-  inject: [BETTER_AUTH_CONFIG, BETTER_AUTH_ADAPTER, BETTER_AUTH_PLUGINS],
+  inject: [
+    BETTER_AUTH_CONFIG,
+    BETTER_AUTH_ADAPTER,
+    BETTER_AUTH_PLUGINS,
+    BetterAuthEmails,
+  ],
 } satisfies FactoryProvider<BetterAuth>;

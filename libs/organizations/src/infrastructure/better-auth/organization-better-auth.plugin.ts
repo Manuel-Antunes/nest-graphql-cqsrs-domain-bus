@@ -1,38 +1,53 @@
 import type { FactoryProvider } from '@nestjs/common';
 import type { AuthConfig } from '@nestposts/auth/infrastructure/better-auth/config';
+import { AuthExpirations } from '@nestposts/auth/infrastructure/better-auth/emails/auth-expirations';
 import { BETTER_AUTH_CONFIG } from '@nestposts/auth/infrastructure/better-auth/tokens';
-import { Email } from '@nestposts/users/domain/user/vo/email';
-import { UserName } from '@nestposts/users/domain/user/vo/user-name';
+import { EMAIL_CHANNEL } from '@nestposts/notifications/domain/channel/channel-names';
+import { OnDemandNotifiable } from '@nestposts/notifications/domain/notification/on-demand-notifiable';
+import { OnDemandNotifications } from '@nestposts/notifications/domain/notification/on-demand-notifications';
 import { organization } from 'better-auth/plugins';
 
-import { InvitationNotifier } from '../../domain/organization/invitation.notifier';
-import { InvitationId } from '../../domain/organization/vo/invitation-id';
-import { MemberRole } from '../../domain/organization/vo/member-role';
-import { OrganizationName } from '../../domain/organization/vo/organization-name';
+import { OrganizationInvitationNotification } from '../../domain/organization/notification/organization-invitation.notification';
 import { organizationAccessControl, organizationRoles } from './access';
 
 export const ORGANIZATION_BETTER_AUTH_PLUGIN =
   'BETTER_AUTH_PLUGIN_ORGANIZATION';
 
+const SECONDS_IN_AN_HOUR = 3600;
+
+export class OrganizationInvitations {
+  /** Where an invitation is accepted: the web's accept-invitation view, which signs the invitee in first. */
+  static acceptUrl(config: Pick<AuthConfig, 'webUrl'>, invitationId: string) {
+    const url = new URL('/auth/accept-invitation', config.webUrl);
+    url.searchParams.set('invitationId', invitationId);
+    return url.toString();
+  }
+}
+
 export const OrganizationBetterAuthPluginProvider = {
   provide: ORGANIZATION_BETTER_AUTH_PLUGIN,
-  useFactory: (config: AuthConfig, notifier: InvitationNotifier) =>
+  useFactory: (config: AuthConfig, notifications: OnDemandNotifications) =>
     organization({
       ac: organizationAccessControl,
       roles: organizationRoles,
-      async sendInvitationEmail(data) {
-        const role = MemberRole.safeParse(data.role);
-        await notifier.invited({
-          invitationId: InvitationId.parse(data.id),
-          email: Email.parse(data.email),
-          role: role.success ? role.data : null,
-          organization: OrganizationName.parse(data.organization.name),
-          invitedBy: UserName.parse(data.inviter.user.name),
-          acceptUrl: `${config.webUrl}/accept-invitation/${data.id}`,
-        });
-      },
+      teams: { enabled: true },
+      invitationExpiresIn: AuthExpirations.invitationSeconds,
+      sendInvitationEmail: ({ id, email, role, organization, inviter }) =>
+        notifications.send(
+          OnDemandNotifiable.route(EMAIL_CHANNEL, email),
+          new OrganizationInvitationNotification({
+            invitationId: id,
+            organizationName: organization.name,
+            inviterName: inviter.user.name,
+            inviterEmail: inviter.user.email,
+            role: role || null,
+            url: OrganizationInvitations.acceptUrl(config, id),
+            expiresInHours:
+              AuthExpirations.invitationSeconds / SECONDS_IN_AN_HOUR,
+          }),
+        ),
     }),
-  inject: [BETTER_AUTH_CONFIG, InvitationNotifier],
+  inject: [BETTER_AUTH_CONFIG, OnDemandNotifications],
 } satisfies FactoryProvider;
 
 export const organizationAuthPluginProviders = [

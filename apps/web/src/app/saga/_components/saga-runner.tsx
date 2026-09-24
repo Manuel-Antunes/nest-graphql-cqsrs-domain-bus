@@ -3,19 +3,23 @@
 import { useEffect } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { Loader2Icon, PlayIcon, SquareIcon, WorkflowIcon } from 'lucide-react';
-
-import { useSession } from '@/app/_providers/session-provider';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
-import { Button, buttonVariants } from '@/components/ui/button';
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from '@nestposts/ui/components/ui/alert';
+import { Badge } from '@nestposts/ui/components/ui/badge';
+import { Button, buttonVariants } from '@nestposts/ui/components/ui/button';
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from '@/components/ui/card';
+} from '@nestposts/ui/components/ui/card';
+import { Loader2Icon, PlayIcon, SquareIcon, WorkflowIcon } from 'lucide-react';
+
+import { useSession } from '@/app/_providers/session-provider';
 import { cn } from '@/lib/utils';
 
 import type { SagaEvent } from '../_hooks/use-saga-run';
@@ -64,7 +68,10 @@ export function SagaRunner() {
               <WorkflowIcon />
               <AlertTitle>Precisa de uma conta com a role author</AlertTitle>
               <AlertDescription>
-                <Link href="/login?next=/saga" className="underline">
+                <Link
+                  href="/auth/sign-in?redirectTo=/saga"
+                  className="underline"
+                >
                   Entrar como manuel@example.com
                 </Link>
               </AlertDescription>

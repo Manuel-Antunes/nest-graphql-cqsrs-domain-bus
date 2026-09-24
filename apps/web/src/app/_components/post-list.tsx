@@ -1,10 +1,10 @@
 'use client';
 
+import { Button } from '@nestposts/ui/components/ui/button';
 import { FileTextIcon, Loader2Icon } from 'lucide-react';
 
 import { EmptyState } from '@/app/_components/empty-state';
 import { PostCard } from '@/app/_components/post-card';
-import { Button } from '@/components/ui/button';
 import type { FragmentType } from '@/gql';
 import { getFragmentData, graphql } from '@/gql';
 

@@ -30,6 +30,10 @@ export const AUTH_SECRET =
  * `next start` the way `nx` serves it everywhere else, and keeping it a process is what keeps a
  * failure one `tail` away instead of one `docker build` away.
  *
+ * The web PUBLISHES on the run's transport as well — the emails its Better Auth asks for are
+ * notifications, and they reach the notificator's container the way every other event does — so it
+ * is handed the broker, or the dev server, at the address the host sees it on.
+ *
  * `AUTH_SECRET` is one value for all of them, and that is the point rather than a convenience:
  * `apps/web` holds its own Better Auth and signs the session cookie itself, and `apps/posts-api`
  * resolves that same cookie against the same row. A different secret per process and the browser
@@ -109,6 +113,13 @@ export class Stack {
         NEXT_PUBLIC_API_URL: endpoints.apiUrl,
         PORT: String(WEB_PORT),
         MIKRO_ORM_DEBUG: 'false',
+        AUTH_RATE_LIMIT: 'false',
+        WEB_TRANSPORT: e2eTransport(),
+        INNGEST_DEV: 'true',
+        ...(endpoints.inngestUrl
+          ? { INNGEST_BASE_URL: endpoints.inngestUrl }
+          : {}),
+        ...(endpoints.brokerUrl ? { RABBITMQ_URL: endpoints.brokerUrl } : {}),
       },
       this.logDirectory,
     );

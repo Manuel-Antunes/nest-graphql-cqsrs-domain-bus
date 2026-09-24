@@ -1,9 +1,12 @@
 import type { AnyMikroORM } from '@nestposts/database/testing';
 import { metadataOnly } from '@nestposts/database/testing';
+import { OnDemandNotifications } from '@nestposts/notifications/domain/notification/on-demand-notifications';
+import { RecordingOnDemandNotifications } from '@nestposts/notifications/testing/recording-on-demand-notifications';
 import { mikroOrmAdapter } from 'better-auth-mikro-orm';
 
 import { authEntities } from '../../persistence/auth-entities';
 import { AuthConfiguration } from '../config';
+import { BetterAuthEmails } from '../emails/better-auth-emails';
 import { BetterAuthInstance } from '../init-auth';
 import { BETTER_AUTH_CONFIG } from '../tokens';
 import { BetterAuthPlugins } from './registry';
@@ -15,15 +18,24 @@ describe('the better-auth plugin registry', () => {
     const config = AuthConfiguration.fromEnvironment({
       AUTH_URL: 'http://localhost:3000',
     } as NodeJS.ProcessEnv);
+    const notifications = new RecordingOnDemandNotifications();
+    const emails = new BetterAuthEmails(notifications);
     const providers = BetterAuthPlugins.providersWith();
     const plugins = BetterAuthPlugins.build(providers, [
       [BETTER_AUTH_CONFIG, config],
+      [BetterAuthEmails, emails],
+      [OnDemandNotifications, notifications],
     ]);
     return {
       config,
       providers,
       plugins,
-      auth: BetterAuthInstance.create(config, mikroOrmAdapter(orm), plugins),
+      auth: BetterAuthInstance.create(
+        config,
+        mikroOrmAdapter(orm),
+        plugins,
+        emails,
+      ),
     };
   };
 
@@ -42,6 +54,10 @@ describe('the better-auth plugin registry', () => {
       'jwt',
       'oauth-provider',
       'open-api',
+      'magic-link',
+      'email-otp',
+      'two-factor',
+      'multi-session',
     ]);
   });
 
@@ -51,6 +67,10 @@ describe('the better-auth plugin registry', () => {
     expect(typeof auth.api.userHasPermission).toBe('function');
     expect(typeof auth.api.getOAuthServerConfig).toBe('function');
     expect(typeof auth.api.generateOpenAPISchema).toBe('function');
+    expect(typeof auth.api.signInMagicLink).toBe('function');
+    expect(typeof auth.api.sendVerificationOTP).toBe('function');
+    expect(typeof auth.api.enableTwoFactor).toBe('function');
+    expect(typeof auth.api.listDeviceSessions).toBe('function');
   });
 
   it('carries no organization endpoint: that plugin belongs to the module built on this one', () => {

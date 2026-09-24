@@ -28,6 +28,10 @@ describe('value objects do User', () => {
       expect(Email.parse('a@b.co.uk').domain).toBe('b.co.uk');
     });
 
+    it('localPart returns what comes before the @', () => {
+      expect(Email.parse('Manuel+np@Example.COM').localPart).toBe('manuel+np');
+    });
+
     it('recusa o que não é endereço', () => {
       expect(Email.safeParse('manuel').success).toBe(false);
       expect(Email.safeParse('manuel@').success).toBe(false);
@@ -60,6 +64,16 @@ describe('value objects do User', () => {
         /name excede 100 caracteres/,
       );
       expect(UserName.parse('x'.repeat(100)).value).toHaveLength(100);
+    });
+
+    it('from keeps a given name and falls back to the email local part when there is none', () => {
+      const email = Email.parse('ana.silva@example.com');
+
+      expect(UserName.from('  Ana  ', email).value).toBe('Ana');
+      expect(UserName.from('', email).value).toBe('ana.silva');
+      expect(UserName.from('   ', email).value).toBe('ana.silva');
+      expect(UserName.from(null, email).value).toBe('ana.silva');
+      expect(UserName.from(undefined, email).value).toBe('ana.silva');
     });
   });
 });

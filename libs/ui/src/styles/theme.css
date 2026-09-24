@@ -1,0 +1,341 @@
+:root {
+  --background: oklch(0.982 0.001 286);
+  --background-muted: oklch(93.403% 0.00011 271.152);
+  --foreground: oklch(0.2103 0.0059 285.8852);
+
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.2103 0.0059 285.8852);
+
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.2103 0.0059 285.8852);
+
+  --primary: oklch(57.4% 0.273 269.3);
+  --primary-foreground: oklch(1 0 0);
+
+  --secondary: oklch(0.274 0.006 286);
+  --secondary-foreground: oklch(0.9851 0 0);
+
+  --muted: oklch(0.9674 0.0013 286.3752);
+  --muted-foreground: oklch(0.5517 0.0138 285.9385);
+
+  --accent: oklch(0.9674 0.0013 286.3752);
+  --accent-foreground: oklch(0.2103 0.0059 285.8852);
+
+  --destructive: oklch(0.6368 0.2078 25.3313);
+  --destructive-foreground: oklch(1 0 0);
+
+  --success: oklch(69.6% 0.17 162.48);
+  --success-foreground: oklch(1 0 0);
+
+  /* The status set had `success` and `destructive` but nothing for "careful" —
+     so every advisory callout in the product reached for a literal amber, and
+     stayed pale-on-pale at night. `warning` is the surface hue; pair it as
+     `bg-warning/10 border-warning/40 text-warning-foreground`. */
+  --warning: oklch(0.769 0.188 70.08);
+  --warning-foreground: oklch(0.414 0.112 45.904);
+
+  --border: oklch(0.9197 0.004 286.3202);
+
+  --input: var(--border);
+
+  --ring: oklch(57.4% 0.273 269.3);
+
+  /* ---------- Brand (the Gêmeo identity) ----------
+     The "ludic" surfaces — auth, the twin gallery, the creation journey, the
+     loading screen — are not decoration bolted onto the product, they ARE the
+     product's face. They used to be written in raw palette utilities
+     (`bg-blue-500`, `text-slate-400`, `rgba(59,130,246,…)`), which is why they
+     had exactly one theme: a literal cannot respond to `.dark`.
+
+     Expressed as tokens they become part of the design system like any other
+     colour, so a brand screen is ordinary components reading ordinary token
+     names — it just resolves them to the identity's values, in whichever theme
+     the user picked. Roles, not shades: `brand-soft` is "a tinted surface",
+     not "blue-50", so the dark theme can answer with something that is not
+     pale at all. */
+  --brand: oklch(0.623 0.214 259.815);
+  --brand-strong: oklch(0.546 0.245 262.881);
+  --brand-foreground: oklch(1 0 0);
+  /* Tinted surface + its hairline: chips, step nodes, icon tiles. */
+  --brand-soft: oklch(0.97 0.014 254.604);
+  --brand-subtle: oklch(0.932 0.032 255.585);
+  /* Text and icons drawn ON `brand-soft`. */
+  --brand-accent: oklch(0.546 0.245 262.881);
+  /* The one heavy call to action per screen. Near-black on a white canvas;
+     in the dark theme an inverted near-white slab would punch a hole in the
+     page, so it becomes the brand blue instead — same weight, same glow. */
+  --brand-solid: oklch(0.2103 0.0059 285.8852);
+  --brand-solid-foreground: oklch(1 0 0);
+  /* Raw channels: the glow and the dot grid are alpha effects, and `color-mix`
+     inside a `box-shadow` list is needlessly fragile next to an rgb triple. */
+  --brand-glow-rgb: 59 130 246;
+  --brand-grid-alpha: 0.07;
+  /* Illustrative washes — the warm "paper" gradient behind the knowledge
+     hero. Warm on light, deep and desaturated on dark. */
+  --brand-wash-warm: oklch(0.96 0.04 95);
+  --brand-wash-blush: oklch(0.97 0.02 20);
+
+  /* The Twin Companion accent. Deliberately NOT the brand blue: the sparkle
+     opens a conversation with the Gêmeo, which is a different kind of thing
+     from "submit this form", and the violet is what tells them apart. */
+  --companion: oklch(0.94 0.05 300);
+  --companion-foreground: oklch(0.5 0.2 300);
+
+  /* ---------- Charts ---------- */
+  --chart-1: oklch(57.4% 0.273 269.3);
+  --chart-2: oklch(0.709 0.1592 293.5412);
+  --chart-3: oklch(0.8112 0.1013 293.5712);
+  --chart-4: oklch(0.8943 0.0549 293.2829);
+  --chart-5: oklch(0.9433 0.0284 294.5878);
+
+  --sidebar: oklch(1 0 0);
+  --sidebar-foreground: oklch(0.4419 0.0146 285.7864);
+  --sidebar-primary: oklch(57.4% 0.273 269.3);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: oklch(0.9197 0.004 286.3202);
+  --sidebar-accent-foreground: oklch(0.2103 0.0059 285.8852);
+  --sidebar-border: oklch(0.8711 0.0055 286.286);
+  --sidebar-ring: oklch(57.4% 0.273 269.3);
+
+  --font-sans: Inter, system-ui, sans-serif;
+  --font-serif: Georgia, serif;
+  --font-mono: JetBrains Mono, monospace;
+
+  /* Identity radius. The Vaz surfaces are soft-cornered — inputs, cards and
+     controls all read rounder than stock shadcn — so the curve lives here as a
+     token instead of being re-applied as `rounded-xl` at every call site.
+     Derived steps below: sm 12px, md 14px (inputs, buttons, triggers),
+     lg 16px, xl 20px (cards, panels). */
+  --radius: 1rem; /* 16px */
+
+  --border-rgb: 212 212 216;
+
+  --shadow-2xs: 0px 1px 0px 0px var(--border);
+  --shadow-xs: 0px 1px 0px 0px var(--border);
+
+  --shadow-sm:
+    0px 1px 0px 0px var(--border), 0px 1px 2px -1px rgb(var(--border-rgb) / 0.6);
+
+  --shadow:
+    0px 1px 0px 0px var(--border), 0px 1px 2px -1px rgb(var(--border-rgb) / 0.6);
+
+  --shadow-md:
+    0px 1px 0px 0px var(--border), 0px 2px 4px -1px rgb(var(--border-rgb) / 0.6);
+
+  --shadow-lg:
+    0px 1px 0px 0px var(--border), 0px 4px 6px -1px rgb(var(--border-rgb) / 0.6);
+
+  --shadow-xl:
+    0px 1px 0px 0px var(--border),
+    0px 8px 10px -1px rgb(var(--border-rgb) / 0.6);
+
+  --shadow-2xl:
+    0px 1px 0px 0px var(--border),
+    0px 16px 24px -8px rgb(var(--border-rgb) / 0.6);
+
+  --input-focus-shadow:
+    0px 1px 0px var(--border), 0px 0.5px 0px 3px rgb(var(--border-rgb) / 0.35);
+
+  --tracking-normal: -0.01em;
+  --spacing: 0.25rem;
+}
+
+/* The dark theme is the brand's night palette — a deep blue-black rather than
+   neutral grey. It lives HERE, once, for the whole design system: the Gêmeo
+   canvas used to carry its own dark override, which meant two dark palettes
+   that did not match and a visible seam wherever a canvas screen sat next to
+   an ordinary one. One theme, one place to change it. */
+.dark {
+  --background: oklch(0.1822 0.0204 264.4);
+  --background-muted: oklch(0.2278 0.0223 264.2);
+  --foreground: oklch(0.9851 0 0);
+
+  --card: oklch(0.2178 0.0219 264.3);
+  --card-foreground: oklch(0.9851 0 0);
+
+  --popover: oklch(0.2178 0.0219 264.3);
+  --popover-foreground: oklch(0.9851 0 0);
+
+  --primary: oklch(57.4% 0.273 269.3);
+  --primary-foreground: oklch(1 0 0);
+
+  --secondary: oklch(0.2789 0.0249 264.1);
+  --secondary-foreground: oklch(0.9683 0.0069 247.9);
+
+  --muted: oklch(0.2789 0.0249 264.1);
+  --muted-foreground: oklch(0.7107 0.0351 256.8);
+
+  --accent: oklch(0.2789 0.0249 264.1);
+  --accent-foreground: oklch(0.9851 0 0);
+
+  --destructive: oklch(0.545 0.176 25.723);
+  --destructive-foreground: oklch(0.9851 0 0);
+
+  --success: oklch(69.6% 0.17 162.48);
+  --success-foreground: oklch(1 0 0);
+
+  --warning: oklch(0.828 0.189 84.429);
+  --warning-foreground: oklch(0.924 0.12 95.746);
+
+  --border: oklch(0.3163 0.0262 263.9);
+  --input: var(--border);
+
+  --ring: oklch(57.4% 0.273 269.3);
+
+  /* ---------- Brand, night ----------
+     Same roles, answered for a dark page. The identity blue LIGHTENS as the
+     surface darkens (a 600 that reads as confident on white reads as a bruise
+     on near-black), so `brand` climbs to a 400 and its foreground flips to the
+     page colour. `brand-soft` stays a tint of the surface rather than becoming
+     pale, which is the whole reason these are roles and not shades. */
+  --brand: oklch(0.707 0.165 254.624);
+  --brand-strong: oklch(0.623 0.214 259.815);
+  --brand-foreground: oklch(0.1822 0.0204 264.4);
+  --brand-soft: oklch(0.2841 0.0466 261.5);
+  --brand-subtle: oklch(0.3407 0.0596 260.6);
+  --brand-accent: oklch(0.809 0.105 251.813);
+  /* A 600, not the 500 that `brand-strong` is: `brand-solid` always carries
+     white text, and white on a 500 lands at 3.8:1 — under AA for body sizes.
+     A step darker takes it to 5.2:1 and, being saturated, it still reads as
+     the loudest thing on a near-black page. */
+  --brand-solid: oklch(0.546 0.245 262.881);
+  --brand-solid-foreground: oklch(1 0 0);
+  --brand-glow-rgb: 96 165 250;
+  --brand-grid-alpha: 0.14;
+  --brand-wash-warm: oklch(0.3 0.045 95);
+  --brand-wash-blush: oklch(0.285 0.035 20);
+  --companion: oklch(0.32 0.07 300);
+  --companion-foreground: oklch(0.84 0.12 300);
+
+  --chart-1: oklch(0.709 0.22 269.3);
+  --chart-2: oklch(0.62 0.25 255);
+  --chart-3: oklch(0.78 0.16 282);
+  --chart-4: oklch(0.54 0.27 262);
+  --chart-5: oklch(0.82 0.12 293);
+
+  --sidebar: oklch(0.176 0.0038 285.8229);
+  --sidebar-foreground: oklch(0.76 0.011 286.0665);
+  --sidebar-primary: oklch(57.4% 0.273 269.3);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: oklch(0.214 0.0053 285.8852);
+  --sidebar-accent-foreground: oklch(0.9851 0 0);
+  --sidebar-border: oklch(0.332 0.0046 286.0326);
+  --sidebar-ring: oklch(57.4% 0.273 269.3);
+
+  --font-sans: Inter, system-ui, sans-serif;
+  --font-serif: Georgia, serif;
+  --font-mono: JetBrains Mono, monospace;
+
+  --radius: 1rem; /* keep in step with the light theme */
+
+  --border-rgb: 84 84 94;
+
+  --shadow-2xs: 0px 1px 0px 0px var(--border);
+  --shadow-xs: 0px 1px 0px 0px var(--border);
+
+  --shadow-sm:
+    0px 1px 0px 0px var(--border), 0px 1px 2px -1px rgb(0 0 0 / 0.28);
+
+  --shadow: 0px 1px 0px 0px var(--border), 0px 1px 2px -1px rgb(0 0 0 / 0.28);
+
+  --shadow-md:
+    0px 1px 0px 0px var(--border), 0px 2px 4px -1px rgb(0 0 0 / 0.34);
+
+  --shadow-lg:
+    0px 1px 0px 0px var(--border), 0px 4px 6px -1px rgb(0 0 0 / 0.38);
+
+  --shadow-xl:
+    0px 1px 0px 0px var(--border), 0px 8px 10px -1px rgb(0 0 0 / 0.42);
+
+  --shadow-2xl:
+    0px 1px 0px 0px var(--border), 0px 16px 24px -8px rgb(0 0 0 / 0.52);
+
+  --input-focus-shadow:
+    0px 1px 0px var(--border), 0px 0.5px 0px 3px rgb(var(--border-rgb) / 0.45);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-background-muted: var(--background-muted);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  /* Brand roles as first-class utilities: `bg-brand`, `text-brand-accent`,
+     `border-brand-subtle`, `from-brand-wash-warm`, … */
+  --color-brand: var(--brand);
+  --color-brand-strong: var(--brand-strong);
+  --color-brand-foreground: var(--brand-foreground);
+  --color-brand-soft: var(--brand-soft);
+  --color-brand-subtle: var(--brand-subtle);
+  --color-brand-accent: var(--brand-accent);
+  --color-brand-solid: var(--brand-solid);
+  --color-brand-solid-foreground: var(--brand-solid-foreground);
+  --color-brand-wash-warm: var(--brand-wash-warm);
+  --color-brand-wash-blush: var(--brand-wash-blush);
+  --color-companion: var(--companion);
+  --color-companion-foreground: var(--companion-foreground);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+  --font-serif: var(--font-serif);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
+
+  --shadow-2xs: var(--shadow-2xs);
+  --shadow-xs: var(--shadow-xs);
+  --shadow-sm: var(--shadow-sm);
+  --shadow: var(--shadow);
+  --shadow-md: var(--shadow-md);
+  --shadow-lg: var(--shadow-lg);
+  --shadow-xl: var(--shadow-xl);
+  --shadow-2xl: var(--shadow-2xl);
+
+  --tracking-tighter: calc(var(--tracking-normal) - 0.05em);
+  --tracking-tight: calc(var(--tracking-normal) - 0.025em);
+  --tracking-normal: var(--tracking-normal);
+  --tracking-wide: calc(var(--tracking-normal) + 0.025em);
+  --tracking-wider: calc(var(--tracking-normal) + 0.05em);
+  --tracking-widest: calc(var(--tracking-normal) + 0.1em);
+}
+
+body {
+  letter-spacing: var(--tracking-normal);
+}

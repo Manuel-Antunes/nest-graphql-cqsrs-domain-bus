@@ -1,6 +1,8 @@
 import { inRequestContext } from '@nestposts/database';
 import type { AnyMikroORM } from '@nestposts/database/testing';
 import { closeTestDatabase, testDatabase } from '@nestposts/database/testing';
+import { OnDemandNotifications } from '@nestposts/notifications/domain/notification/on-demand-notifications';
+import { LoggingOnDemandNotifications } from '@nestposts/notifications/infrastructure/on-demand/logging-on-demand-notifications';
 import { CredentialId } from '@nestposts/users/domain/user/vo/credential-id';
 import { Email } from '@nestposts/users/domain/user/vo/email';
 import { UserName } from '@nestposts/users/domain/user/vo/user-name';
@@ -8,6 +10,7 @@ import { mikroOrmAdapter } from 'better-auth-mikro-orm';
 
 import { AuthUser } from '../../domain/auth/auth-user.entity';
 import { AuthConfiguration } from '../better-auth/config';
+import { BetterAuthEmails } from '../better-auth/emails/better-auth-emails';
 import { BetterAuthInstance } from '../better-auth/init-auth';
 import { BetterAuthPlugins } from '../better-auth/plugins/registry';
 import { BETTER_AUTH_CONFIG } from '../better-auth/tokens';
@@ -31,12 +34,16 @@ describe('better-auth writing through the entities this module maps', () => {
   beforeAll(async () => {
     orm = await testDatabase({ entities: authEntities }, 'auth');
     const config = AuthConfiguration.fromEnvironment();
+    const emails = BetterAuthEmails.unsent();
     adapter = mikroOrmAdapter(orm)(
       BetterAuthInstance.optionsFor(
         config,
         BetterAuthPlugins.build(BetterAuthPlugins.providersWith(), [
           [BETTER_AUTH_CONFIG, config],
+          [BetterAuthEmails, emails],
+          [OnDemandNotifications, new LoggingOnDemandNotifications()],
         ]),
+        emails,
       ),
     );
   });

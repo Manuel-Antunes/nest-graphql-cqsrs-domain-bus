@@ -1,9 +1,10 @@
+import { Separator } from '@nestposts/ui/components/ui/separator';
+
 import { AuthorByline } from '@/app/_components/author-byline';
 import { PostAttachment } from '@/app/_components/post-attachment';
 import { RelativeTime } from '@/app/_components/relative-time';
 import { TagList } from '@/app/_components/tag-list';
 import { VersionBadge } from '@/app/_components/version-badge';
-import { Separator } from '@/components/ui/separator';
 import type { FragmentType } from '@/gql';
 import { getFragmentData, graphql } from '@/gql';
 

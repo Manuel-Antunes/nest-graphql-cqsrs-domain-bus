@@ -2,6 +2,14 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { Button, buttonVariants } from '@nestposts/ui/components/ui/button';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@nestposts/ui/components/ui/card';
 import { FileQuestionIcon, Loader2Icon, Trash2Icon } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -9,14 +17,6 @@ import { EmptyState } from '@/app/_components/empty-state';
 import { ErrorNotice } from '@/app/_components/error-notice';
 import { PostArticle } from '@/app/_components/post-article';
 import { useSession } from '@/app/_providers/session-provider';
-import { Button, buttonVariants } from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
 import { cn, errorShownByHookState } from '@/lib/utils';
 
 import { usePost } from '../_hooks/use-post';

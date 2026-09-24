@@ -3,17 +3,21 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useMutation } from '@apollo/client/react';
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from '@nestposts/ui/components/ui/alert';
+import { Button, buttonVariants } from '@nestposts/ui/components/ui/button';
+import { Input } from '@nestposts/ui/components/ui/input';
+import { Label } from '@nestposts/ui/components/ui/label';
+import { Textarea } from '@nestposts/ui/components/ui/textarea';
 import { Loader2Icon, PenLineIcon, WorkflowIcon } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { ErrorNotice } from '@/app/_components/error-notice';
 import { PostCard } from '@/app/_components/post-card';
 import { useSession } from '@/app/_providers/session-provider';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Button, buttonVariants } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { graphql } from '@/gql';
 import type { UploadedFile } from '@/hooks/use-upload-file';
 import { useUploadFile } from '@/hooks/use-upload-file';
@@ -52,7 +56,10 @@ export function CreatePostForm() {
         <PenLineIcon />
         <AlertTitle>Entre para escrever</AlertTitle>
         <AlertDescription>
-          <Link href="/login?next=/posts/new" className="underline">
+          <Link
+            href="/auth/sign-in?redirectTo=/posts/new"
+            className="underline"
+          >
             Ir para o login
           </Link>
         </AlertDescription>

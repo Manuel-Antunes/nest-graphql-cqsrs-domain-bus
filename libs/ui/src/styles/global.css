@@ -1,0 +1,232 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import './fonts.css';
+@import './theme.css';
+@import './animations.css';
+@import './brand.css';
+@import 'shadcn/tailwind.css';
+
+@source '../**/*.{ts,tsx}';
+
+@custom-variant dark (&:where(.dark, .dark *));
+@custom-variant light (&:where(.light, .light *));
+@custom-variant auto (&:where(.auto, .auto *));
+
+@utility container {
+  margin-inline: auto;
+  padding-inline: 2rem;
+
+  @media (width >= --theme(--breakpoint-sm)) {
+    max-width: none;
+  }
+
+  @media (width >= 1400px) {
+    max-width: 1400px;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    letter-spacing: var(--tracking-normal);
+  }
+}
+
+.loader {
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  position: fixed;
+  background: transparent;
+  overflow: hidden;
+  z-index: 9999;
+}
+
+.loader::after {
+  content: '';
+  width: 40%;
+  height: 3px;
+  position: absolute;
+  top: 0;
+  left: 0;
+  box-sizing: border-box;
+  animation: animloader 1s linear infinite;
+  @apply bg-primary;
+}
+
+.markdown-content ul {
+  list-style-type: disc;
+  padding-left: 1.5rem;
+  margin-left: 1rem;
+}
+
+.markdown-content ol {
+  list-style-type: decimal;
+  padding-left: 1.5rem;
+  margin-left: 1rem;
+}
+
+.markdown-content li {
+  display: list-item;
+  margin-bottom: 0.25rem;
+}
+
+@media (min-width: 800px) {
+  .loader::after {
+    width: 20%;
+    animation: animloader 2s linear infinite;
+  }
+}
+
+@keyframes animloader {
+  0% {
+    left: 0;
+    transform: translateX(-100%);
+  }
+
+  100% {
+    left: 100%;
+    transform: translateX(0%);
+  }
+}
+
+@keyframes accordion-down {
+  from {
+    height: 0;
+  }
+
+  to {
+    height: var(--radix-accordion-content-height);
+  }
+}
+
+@keyframes accordion-up {
+  from {
+    height: var(--radix-accordion-content-height);
+  }
+
+  to {
+    height: 0;
+  }
+}
+
+@keyframes fade-up {
+  0% {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  80% {
+    opacity: 0.7;
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateY(0px);
+  }
+}
+
+@keyframes fade-down {
+  0% {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+
+  80% {
+    opacity: 0.6;
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateY(0px);
+  }
+}
+
+@keyframes fade-in {
+  0% {
+    opacity: 0;
+  }
+
+  50% {
+    opacity: 0.6;
+  }
+
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes fade-out {
+  0% {
+    opacity: 0;
+  }
+
+  50% {
+    opacity: 0.6;
+  }
+
+  100% {
+    opacity: 1;
+  }
+}
+
+@theme inline {
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+[data-slot='input'],
+[data-slot='textarea'] {
+  -webkit-appearance: none;
+  appearance: none;
+  background-clip: padding-box;
+}
+
+/* 2) Focus EXACTO do Figma (duas camadas) */
+[data-slot='input']:focus-visible,
+[data-slot='textarea']:focus-visible {
+  box-shadow: var(--input-focus-shadow);
+}
+
+:root {
+  --sidebar: hsl(0 0% 100%);
+  --sidebar-foreground: hsl(240 5.3% 26.1%);
+  --sidebar-primary: hsl(240 5.9% 10%);
+  --sidebar-primary-foreground: hsl(0 0% 98%);
+  --sidebar-accent: hsl(240 4.8% 95.9%);
+  --sidebar-accent-foreground: hsl(240 5.9% 10%);
+  --sidebar-border: hsl(220 13% 91%);
+  --sidebar-ring: hsl(217.2 91.2% 59.8%);
+}
+
+.dark {
+  --sidebar: hsl(240 5.9% 10%);
+  --sidebar-foreground: hsl(240 4.8% 95.9%);
+  --sidebar-primary: hsl(224.3 76.3% 48%);
+  --sidebar-primary-foreground: hsl(0 0% 100%);
+  --sidebar-accent: hsl(240 3.7% 15.9%);
+  --sidebar-accent-foreground: hsl(240 4.8% 95.9%);
+  --sidebar-border: hsl(240 3.7% 15.9%);
+  --sidebar-ring: hsl(217.2 91.2% 59.8%);
+}

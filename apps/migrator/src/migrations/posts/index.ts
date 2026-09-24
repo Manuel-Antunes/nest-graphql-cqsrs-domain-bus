@@ -5,6 +5,7 @@ import { Migration20260922040710_add_event_feed } from './Migration2026092204071
 import { Migration20260922172513_unify_event_log } from './Migration20260922172513_unify_event_log';
 import { Migration20260923200000_add_post_asset } from './Migration20260923200000_add_post_asset';
 import { Migration20260924024220_add_notifications } from './Migration20260924024220_add_notifications';
+import { Migration20260924055202_auth_plugins } from './Migration20260924055202_auth_plugins';
 
 export const postsMigrations = [
   { name: 'Migration20260921214755_init', class: Migration20260921214755_init },
@@ -31,5 +32,9 @@ export const postsMigrations = [
   {
     name: 'Migration20260924024220_add_notifications',
     class: Migration20260924024220_add_notifications,
+  },
+  {
+    name: 'Migration20260924055202_auth_plugins',
+    class: Migration20260924055202_auth_plugins,
   },
 ];

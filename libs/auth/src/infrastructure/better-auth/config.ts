@@ -8,6 +8,8 @@ export const AuthConfigSchema = z.object({
   trustedOrigins: z.array(z.string()),
   cookieDomain: z.string().optional(),
   secure: z.boolean(),
+  requireEmailVerification: z.boolean(),
+  rateLimit: z.boolean(),
   googleClientId: z.string().optional(),
   googleClientSecret: z.string().optional(),
   githubClientId: z.string().optional(),
@@ -80,6 +82,8 @@ export class AuthConfiguration {
       googleClientSecret: env.AUTH_GOOGLE_SECRET,
       githubClientId: env.AUTH_GITHUB_ID,
       githubClientSecret: env.AUTH_GITHUB_SECRET,
+      requireEmailVerification: env.AUTH_REQUIRE_EMAIL_VERIFICATION !== 'false',
+      rateLimit: env.AUTH_RATE_LIMIT !== 'false',
       ...AuthConfiguration.cookieSecurity(
         baseUrl,
         env.NODE_ENV,

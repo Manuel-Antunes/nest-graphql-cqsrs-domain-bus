@@ -8,8 +8,9 @@ npx nx serve @nestposts/posts-api  # a API em :3000
 npx nx serve @nestposts/web        # este app em :4200
 ```
 
-`NEXT_PUBLIC_API_URL` (padrão `http://localhost:3000`) é a única configuração: dela saem o endpoint
-GraphQL, o socket das subscriptions e as rotas do Better Auth.
+`NEXT_PUBLIC_API_URL` (padrão `http://localhost:3000`) é de onde saem o endpoint GraphQL e o socket das
+subscriptions. The auth variables are the API's (see the root `CLAUDE.md`), plus `WEB_TRANSPORT` and
+its broker address, because this server publishes the emails its Better Auth sends.
 
 ## Por onde os dados passam
 
@@ -31,11 +32,35 @@ processo responda tudo dali em diante — o que uma função atrás de um balanc
 para fazer isso porque `onPostCreated` e `onPostUpdated` são `@AllowAnonymous`: não há sessão a
 reencaminhar.
 
-**A sessão é do Better Auth, e mora no servidor do Next.** O cookie que a API devolve é para o domínio
-dela, não para o deste app; então o `signIn` guarda esse cookie num cookie httpOnly próprio e o proxy o
-devolve para cima. Não há claims para ler deste lado — o cookie é opaco —, então quem responde o que a
-sessão é continua sendo a API (`/api/auth/get-session`), e o papel que ela devolve é o que decide se
-esta pessoa escreve.
+## Authentication: better-auth-ui, over this application's own Better Auth
+
+Every auth screen is [better-auth-ui](https://better-auth-ui.com)'s, copied in from its shadcn
+registry: `src/components/auth/**` are the views, `src/lib/auth/*-plugin.ts(x)` the plugin factories,
+and `app/_providers/auth-providers.tsx` wires them — password with **required** email verification,
+magic link, email code, two factor (authenticator, emailed code, backup codes), several accounts per
+browser, organizations with teams, the admin screens and the OAuth consent screen.
+
+The primitives under them — and under every other page here — are `@nestposts/ui`'s (`libs/ui`), the
+repository's one design system: `components.json` points its `ui` and `utils` aliases there, so a
+registry install writes the views here and the primitives there, and `globals.css` is that package's
+theme plus the two font tokens `next/font` fills.
+
+| route | what answers |
+|---|---|
+| `/auth/[path]` | sign-in, sign-up, forgot/reset password, magic link, email code, two factor, accept invitation, OAuth consent, sign-up and account selection |
+| `/settings/[path]` | account, security (password, sessions, two factor, deletion, connected apps), organizations, OAuth clients |
+| `/organization/[path]` | the active organization: settings, people, teams |
+| `/admin/users` | the admin plugin's user management — `admin` role only |
+
+The Better Auth behind them runs **here**, in the Nest container of `src/nest/`, against the API's
+database and secret — so the cookie it writes belongs to this origin and is one the API resolves.
+Every email those screens make Better Auth send is a notification that this server publishes on the
+system's transport (`WEB_TRANSPORT`) and `apps/notificator` delivers; locally it lands in Mailpit, at
+http://localhost:8025.
+
+The session this application reads (`useSession()` in `app/_providers/session-provider.tsx`) is the
+one better-auth-ui keeps in TanStack Query, prefetched by the layout — so signing in or out in those
+screens reaches the header and the pages without a reload.
 
 ## Federação
 

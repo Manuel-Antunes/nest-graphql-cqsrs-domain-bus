@@ -167,6 +167,48 @@
         "./tools/biome/graphql-operations.grit",
         "./tools/biome/tailwind.grit"
       ]
+    },
+    {
+      "includes": ["libs/ui/**"],
+      "linter": {
+        "domains": {
+          "react": "recommended"
+        },
+        "rules": {
+          "style": {
+            "useImportType": "warn"
+          },
+          "nursery": {
+            "useSortedClasses": {
+              "level": "warn",
+              "options": {
+                "functions": ["cn", "cva", "clsx", "twMerge"]
+              }
+            }
+          },
+          "correctness": {
+            "useExhaustiveDependencies": "off"
+          },
+          "a11y": {
+            "useSemanticElements": "off",
+            "useKeyWithClickEvents": "off",
+            "noStaticElementInteractions": "off",
+            "useFocusableInteractive": "off",
+            "useAriaPropsSupportedByRole": "off",
+            "useAriaPropsForRole": "off",
+            "noNoninteractiveElementToInteractiveRole": "off",
+            "noRedundantRoles": "off"
+          },
+          "suspicious": {
+            "useIterableCallbackReturn": "off",
+            "noDoubleEquals": "off",
+            "noArrayIndexKey": "off"
+          },
+          "security": {
+            "noDangerouslySetInnerHtml": "off"
+          }
+        }
+      }
     }
   ]
 }

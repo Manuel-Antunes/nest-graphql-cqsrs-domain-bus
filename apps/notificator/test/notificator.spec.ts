@@ -202,6 +202,42 @@ describe('the notificator service', () => {
     expect(mails.sent).toHaveLength(1);
   });
 
+  it('mails an authentication email to an address, and keeps no record of it', async () => {
+    const notificationId = NotificationId.generate().value;
+    const reset = new EventEnvelope(
+      new NotificationReceivedEvent(
+        notificationId,
+        'auth.PasswordReset',
+        'notifications.OnDemand',
+        'bia@example.com',
+        {
+          url: 'http://localhost:4200/api/auth/reset-password/secret-token',
+          expiresInMinutes: 60,
+        },
+        ['email'],
+        { notifiableName: 'Bia', routes: { email: 'bia@example.com' } },
+        new Date('2026-09-24T12:00:00.000Z'),
+      ),
+      {
+        [TRANSPORT_MESSAGE_TYPE]: 'notifications.NotificationReceived#1.0.0',
+        [TRANSPORT_IDENTIFIER]: `evt-${notificationId}`,
+        [TRANSPORT_TIMESTAMP]: '2026-09-24T12:00:00.000Z',
+        [TRANSPORT_ORIGIN]: 'web',
+        [TRANSPORT_TAGS]: `notificationId=${notificationId}`,
+      },
+    );
+
+    await deliver(reset);
+    await until(async () => (await deliveriesOf(notificationId)).length === 1);
+
+    const [mail] = mailsTo('bia@example.com');
+    expect(mail.subject).toBe('Reset your password');
+    expect(mail.html).toContain('reset-password/secret-token');
+    expect(mail.text).toContain('reset-password/secret-token');
+    expect(await deliveriesOf(notificationId)).toEqual(['email']);
+    expect(await recordsOf(notificationId)).toEqual([]);
+  });
+
   it('drops its own echo', async () => {
     const message = notificationFrom(undefined, {
       [TRANSPORT_ORIGIN]: 'notificator',

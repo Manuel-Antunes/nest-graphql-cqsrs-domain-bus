@@ -103,8 +103,9 @@ test.describe('autorização', () => {
     await signIn(accounts.reader);
     expect(await typeOfMe()).toBe('User');
 
-    await page.getByRole('button', { name: 'Sair' }).click();
-    await page.waitForURL('**/login');
+    await page.getByRole('button', { name: 'Account' }).click();
+    await page.getByRole('menuitem', { name: 'Sign Out' }).click();
+    await page.waitForURL('**/auth/sign-in**');
 
     await signIn(accounts.author);
     expect(await typeOfMe()).toBe('Author');

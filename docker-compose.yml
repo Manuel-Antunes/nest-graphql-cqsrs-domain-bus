@@ -222,8 +222,13 @@ services:
       AUTH_SECRET: ${AUTH_SECRET:-nestposts-compose-secret}
       WEB_URL: http://localhost:${WEB_PORT:-4300}
       NEXT_PUBLIC_API_URL: http://posts-api:3000
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672
+      WEB_TRANSPORT: ${WEB_TRANSPORT:-inngest}
+      INNGEST_BASE_URL: http://inngest:8288
     depends_on:
       posts-api:
+        condition: service_started
+      notificator:
         condition: service_started
 
   # The Inngest dev server: the local default transport's broker-equivalent.

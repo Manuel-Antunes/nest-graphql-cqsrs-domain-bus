@@ -39,6 +39,8 @@ export interface Endpoints {
   readonly mailboxUrl: string;
   /** The broker's management API, on the run that has a broker. */
   readonly managementUrl?: string;
+  /** The broker itself, as the host reaches it — where the web process publishes on that run. */
+  readonly brokerUrl?: string;
   /** The Inngest dev server, on the run that has one — its `/v1/events` is that run's wire. */
   readonly inngestUrl?: string;
 }
@@ -315,6 +317,7 @@ export class ContainerStack {
         AUTH_URL: apiUrl,
         WEB_URL: options.webUrl,
         AUTH_TRUSTED_ORIGINS: `${apiUrl},${options.webUrl}`,
+        AUTH_RATE_LIMIT: 'false',
         DRIVE_BUCKET: STORAGE_BUCKET,
         DRIVE_AWS_REGION: STORAGE_REGION,
         DRIVE_AWS_ACCESS_KEY_ID: STORAGE_USER,
@@ -369,6 +372,7 @@ export class ContainerStack {
       ...(this.rabbitmq
         ? {
             managementUrl: `http://${this.rabbitmq.getHost()}:${this.rabbitmq.getMappedPort(15672)}`,
+            brokerUrl: `amqp://guest:guest@${this.rabbitmq.getHost()}:${this.rabbitmq.getMappedPort(5672)}`,
           }
         : {}),
       ...(this.inngest

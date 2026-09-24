@@ -128,7 +128,7 @@ test.describe
         '"Post"',
       );
       await expect(
-        anonymous.getByRole('link', { name: 'Entrar' }),
+        anonymous.getByRole('link', { name: 'Sign in' }),
       ).toBeVisible();
 
       await context.close();

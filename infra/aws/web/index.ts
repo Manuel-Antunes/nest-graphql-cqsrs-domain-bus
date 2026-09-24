@@ -2,6 +2,7 @@
 
 import { authSecret, sharedEnvironment } from '../compute/environment';
 import { router } from '../edge';
+import { postEvents } from '../messaging';
 import { vpc } from '../network';
 import { COLLECTOR_CONFIG, COLLECTOR_LAYER } from '../support';
 
@@ -18,11 +19,16 @@ import { COLLECTOR_CONFIG, COLLECTOR_LAYER } from '../support';
  * {@link NodeFunction}, so the layer and `collector.yaml` are attached here, through `transform`.
  * Without them `OTEL_EXPORTER_OTLP_ENDPOINT` would point at a `localhost` with nothing listening, and
  * the one application a person actually looks at would be the one missing from the traces.
+ *
+ * It PUBLISHES to the events topic, too: the emails its Better Auth asks for — verification, reset,
+ * magic link, one-time codes, invitations — are notifications, and the notificator's queue is
+ * subscribed to them. The link is what grants `sns:Publish` on that topic and nothing else.
  */
 export const web = new sst.aws.Nextjs('Web', {
   path: 'apps/web',
   vpc,
   router: { instance: router },
+  link: [postEvents],
   server: {
     timeout: '60 seconds',
     architecture: 'arm64',
@@ -45,5 +51,7 @@ export const web = new sst.aws.Nextjs('Web', {
     WEB_URL: router.url,
     AUTH_TRUSTED_ORIGINS: router.url,
     NEXT_PUBLIC_API_URL: router.url,
+    WEB_TRANSPORT: 'aws',
+    WEB_TOPIC_ARN: postEvents.arn,
   },
 });

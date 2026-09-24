@@ -92,13 +92,78 @@ Better Auth wrote comes back with `Email` and `OrganizationSlug` instances on it
 which `@nestposts/users` already owns. `auth_user` is the credential; `users` is the profile; they are
 joined by email, by `UserProvisioning` in `apps/posts-api`.
 
+**A Better Auth array is a TEXT column.** The adapter does not declare array support, so Better Auth
+writes a `string[]` field — the OAuth client's `redirectUris`, its `scopes` — as a JSON string and
+parses it back on read. Mapped as a Postgres array, the first client registration failed with
+`Could not convert JS value '["openid",…]' of type 'string' to type ArrayType`. `schema.ts` maps
+those fields to `text`, and so does everything whose name matches `LONG_TEXT` (the two-factor backup
+codes, encrypted, are longer than a `varchar(255)`).
+
 **No schema is created here.** DDL is `apps/migrator`'s, and a mapping added here means a migration
 there.
+
+## The plugins, and what each one is for
+
+| plugin | what it gives | its emails |
+|---|---|---|
+| `admin` | roles on `auth_user`, bans, impersonation — what `@Roles([...])` reads | — |
+| `jwt` | the JWKS the OAuth tokens are signed with (ES256) | — |
+| `@better-auth/oauth-provider` | this system as an OAuth 2.1 / OIDC provider: authorize, consent, token, userinfo. Only a system `admin` creates, edits or deletes clients (`clientPrivileges`) | — |
+| `openAPI` | the reference at `/api/auth/reference` | — |
+| `magicLink` | sign-in by a link, token stored hashed | `auth.MagicLink` |
+| `emailOTP` | sign-in by a code, stored hashed | `auth.OneTimePassword` |
+| `twoFactor` | TOTP, backup codes, and an emailed code as the second step | `auth.OneTimePassword` (`two-factor`) |
+| `multiSession` | several accounts in one browser | — |
+
+and, in the core options: email verification (**required to sign in** unless
+`AUTH_REQUIRE_EMAIL_VERIFICATION=false`), password reset, email change and account deletion, each of
+which sends an email.
+
+The screens for all of them are better-auth-ui's, copied into `apps/web` from its shadcn registry.
+`loginPage`, `consentPage`, `signup.page` and `selectAccount.page` of the OAuth provider point at
+those screens (`/auth/sign-in`, `/auth/oauth-consent`, …), on `WEB_URL`.
+
+## Every email is a notification
+
+Better Auth asks for an email through a callback — `sendResetPassword`, `sendMagicLink`,
+`sendVerificationOTP`. `BetterAuthEmails` is the object those callbacks are, and each of its methods
+builds a domain notification (`domain/auth/notification/`) and sends it through
+`OnDemandNotifications` (`@nestposts/notifications`), addressed by the email alone:
+
+```ts
+sendResetPassword: ({ user, url }) => emails.resetPassword({ user, url }),
+```
+
+By the address alone because most of these are about somebody who is not a user yet — a sign-up
+being verified, a magic link to an address never seen. Each notification goes through `email` only,
+never `database`: there is no identity to keep a record against, and what it carries is a secret.
+
+What sends them is an option of the module: `PublishingOnDemandNotifications` hands them to the
+transport, and `apps/notificator` renders and delivers them — that is what `apps/posts-api` and
+`apps/web` bind. The default, `LoggingOnDemandNotifications`, sends nothing and says so, which is right
+for the migrator, whose seeders sign users up through Better Auth.
+
+```ts
+BetterAuthModule.forRoot({ ..., notifications: PublishingOnDemandNotifications })
+```
+
+| notification | sent when | template |
+|---|---|---|
+| `auth.EmailVerification` | sign-up, and an unverified sign-in | better-auth-ui `EmailVerificationEmail` |
+| `auth.PasswordReset` | a reset is requested | `ResetPasswordEmail` |
+| `auth.MagicLink` | a magic link is requested | `MagicLinkEmail` |
+| `auth.OneTimePassword` | a code is requested — `sign-in`, `email-verification`, `forget-password`, `change-email`, or the `two-factor` step | `OtpEmail`, worded for the purpose |
+| `auth.EmailChange` | a change of address, confirmed at the CURRENT address | `ChangeEmailConfirmationEmail` |
+| `auth.AccountDeletion` | a deletion, confirmed before anything is removed | `DeleteAccountVerificationEmail` |
+
+`authNotifications` is the list, for the process that delivers them to register. The templates are
+the React Email components of better-auth-ui, copied here — `NOTICE.md` says what, from where, and why
+they are copied rather than imported.
 
 ## Organizations
 
 Gone to `@nestposts/organizations`, along with the `organization` plugin provider, the organization
-access control, `InvitationNotifier` and the tenant-schema trigger. What stayed here is the *system*
+access control, the invitation email and the tenant-schema trigger. What stayed here is the *system*
 access control in `access.ts` — the roles the `admin` plugin checks (`admin`, `author`, `user`),
 which is what `@Roles([AUTHOR_ROLE])` reads off `auth_user.role`.
 
@@ -116,6 +181,8 @@ which is what `@Roles([AUTHOR_ROLE])` reads off `auth_user.role`.
 | `AUTH_TRUSTED_ORIGINS` | replaces that default, comma-separated |
 | `AUTH_COOKIE_DOMAIN` | the cross-subdomain cookie domain, applied only on a real deployment |
 | `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET`, `AUTH_GITHUB_*` | a provider is configured or it is absent |
+| `AUTH_REQUIRE_EMAIL_VERIFICATION` | `false` lets an unverified address sign in; the verification email is sent either way |
+| `AUTH_RATE_LIMIT` | `false` turns Better Auth's rate limiter off. It is on in production by default, and a browser suite signing dozens of people up from one address is exactly what it refuses |
 
 `cookieSecurity` decides `Secure` and `Domain` from **the URL and `NODE_ENV` together**, not from
 `NODE_ENV` alone: a production build served on `localhost` would otherwise issue

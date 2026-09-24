@@ -2,24 +2,28 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { InfoIcon, RadioIcon, TrashIcon } from 'lucide-react';
-
-import { ErrorNotice } from '@/app/_components/error-notice';
-import { RelativeTime } from '@/app/_components/relative-time';
-import { StatusDot } from '@/app/_components/status-dot';
-import { VersionBadge } from '@/app/_components/version-badge';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from '@nestposts/ui/components/ui/alert';
+import { Badge } from '@nestposts/ui/components/ui/badge';
+import { Button } from '@nestposts/ui/components/ui/button';
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from '@/components/ui/card';
-import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
+} from '@nestposts/ui/components/ui/card';
+import { Label } from '@nestposts/ui/components/ui/label';
+import { Switch } from '@nestposts/ui/components/ui/switch';
+import { InfoIcon, RadioIcon, TrashIcon } from 'lucide-react';
+
+import { ErrorNotice } from '@/app/_components/error-notice';
+import { RelativeTime } from '@/app/_components/relative-time';
+import { StatusDot } from '@/app/_components/status-dot';
+import { VersionBadge } from '@/app/_components/version-badge';
 import { upstreamHost } from '@/lib/env';
 
 import { usePostStream } from '../_hooks/use-post-stream';

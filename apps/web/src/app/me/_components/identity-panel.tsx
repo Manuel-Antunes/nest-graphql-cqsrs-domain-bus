@@ -2,21 +2,25 @@
 
 import Link from 'next/link';
 import { skipToken, useSuspenseQuery } from '@apollo/client/react';
-import { ShieldCheckIcon, UserIcon } from 'lucide-react';
-
-import { ErrorNotice } from '@/app/_components/error-notice';
-import { PostList } from '@/app/_components/post-list';
-import { useSession } from '@/app/_providers/session-provider';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
-import { buttonVariants } from '@/components/ui/button';
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from '@nestposts/ui/components/ui/alert';
+import { Badge } from '@nestposts/ui/components/ui/badge';
+import { buttonVariants } from '@nestposts/ui/components/ui/button';
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from '@/components/ui/card';
+} from '@nestposts/ui/components/ui/card';
+import { ShieldCheckIcon, UserIcon } from 'lucide-react';
+
+import { ErrorNotice } from '@/app/_components/error-notice';
+import { PostList } from '@/app/_components/post-list';
+import { useSession } from '@/app/_providers/session-provider';
 import type { FragmentType } from '@/gql';
 import { getFragmentData, graphql } from '@/gql';
 import { cn } from '@/lib/utils';
@@ -53,7 +57,7 @@ export function IdentityPanel() {
           A autenticação não é proativa nesta API:{' '}
           <span className="font-mono">posts</span> é pública no mesmo POST em
           que <span className="font-mono">me</span> exige bearer.{' '}
-          <Link href="/login?next=/me" className="underline">
+          <Link href="/auth/sign-in?redirectTo=/me" className="underline">
             Entrar
           </Link>
         </AlertDescription>

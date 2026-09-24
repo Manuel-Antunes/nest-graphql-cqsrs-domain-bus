@@ -1,7 +1,10 @@
 import type { EntitySchema } from '@nestposts/database';
+import { OnDemandNotifications } from '@nestposts/notifications/domain/notification/on-demand-notifications';
+import { LoggingOnDemandNotifications } from '@nestposts/notifications/infrastructure/on-demand/logging-on-demand-notifications';
 import type { BetterAuthPlugin } from 'better-auth';
 
 import { AuthConfiguration } from '../better-auth/config';
+import { BetterAuthEmails } from '../better-auth/emails/better-auth-emails';
 import { BetterAuthInstance } from '../better-auth/init-auth';
 import type {
   BetterAuthPluginProvider,
@@ -38,9 +41,15 @@ export class BetterAuthEntities {
     dependencies = [],
   }: BetterAuthEntityOptions = {}): EntitySchema[] {
     const config = AuthConfiguration.fromEnvironment();
+    const emails = BetterAuthEmails.unsent();
     const built = BetterAuthPlugins.build(
       BetterAuthPlugins.providersWith(plugins),
-      [[BETTER_AUTH_CONFIG, config], ...dependencies],
+      [
+        [BETTER_AUTH_CONFIG, config],
+        [BetterAuthEmails, emails],
+        [OnDemandNotifications, new LoggingOnDemandNotifications()],
+        ...dependencies,
+      ],
     );
 
     return [
@@ -49,6 +58,7 @@ export class BetterAuthEntities {
         BetterAuthInstance.optionsFor(
           config,
           built as readonly BetterAuthPlugin[],
+          emails,
         ),
         [AUTH_USER_MODEL_KEY, ...mapped],
       ),
