@@ -1,15 +1,19 @@
 # The same system, on Lambda
 
-Five functions of ours plus the Next server, one FIFO topic, three FIFO queues (and their
+Seven functions of ours plus the Next server, one FIFO topic, three FIFO queues (and their
 dead-letter queues), one Postgres, one CloudFront router and one SES identity. The domain, application and presentation code is
 **unchanged**: what a handler here does is hand AWS's calling convention to the same container
 `main.ts` starts.
 
 ```
-                    ┌─────────────────────────────────────────────────────┐
+  CloudFront ──────► Gateway   apps/gateway/dist/lambda/http — the supergraph, composed from baked SDL
+  /graphql              │ forwards cookie + bearer + x-tenant
+       │                ├──────────────► NotificatorApi  apps/notificator/dist/lambda/http
+       │                ▼                (the notifications subgraph)
+       │            ┌─────────────────────────────────────────────────────┐
   CloudFront ──────►│ PostsApi          apps/posts-api/dist/lambda/http   │
-  /graphql          │ Function URL, InvokeMode: RESPONSE_STREAM           │
-  /api/auth         │ GraphQL, Better Auth, the read model                │
+  /api/auth         │ Function URL, InvokeMode: RESPONSE_STREAM           │
+                    │ the posts subgraph, Better Auth, the read model     │
        │            └───────────────────────┬─────────────────────────────┘
        │                                    │ posts.PostPreCreated / Updated / Deleted / Restored
        │                                    ▼
@@ -153,8 +157,10 @@ silently when it is changed**, so that it cannot be forgotten by whoever adds th
 
 `apps/web` holds its own Better Auth and signs the session cookie; `apps/posts-api` resolves that
 same cookie against the same row. On two domains that needs a cookie domain, a SameSite policy and a
-CORS list that all agree. Behind one router it needs nothing: `/graphql` and `/api/auth` go to the
-API function, everything else to the Next server, and the browser stays where it logged in.
+CORS list that all agree. Behind one router it needs nothing: `/graphql` goes to the gateway,
+`/api/auth` to the API function, everything else to the Next server, and the browser stays where it
+logged in. The subgraphs keep their own Function URLs, which the gateway calls — and which anything
+that can reach them can call too; the gateway is the place for a policy about who may.
 
 ### Files: one bucket, served by the same router
 
@@ -207,11 +213,13 @@ up. `SEED_AUTHOR_EMAIL`, `SEED_AUTHOR_PASSWORD` and their `SEED_READER_` twins c
 without touching code. They are ordinary credentials in a deployed database: for anything but a demo
 stage, set them.
 
-### The five functions, from four builds
+### The seven functions, from five builds
 
 | function | handler | what triggers it |
 |---|---|---|
-| `PostsApi` | `apps/posts-api/dist/lambda/http.handler` | the Function URL, behind the router |
+| `Gateway` | `apps/gateway/dist/lambda/http.handler` | the Function URL, behind the router at `/graphql` |
+| `PostsApi` | `apps/posts-api/dist/lambda/http.handler` | the Function URL: the router at `/api/auth`, and the gateway |
+| `NotificatorApi` | `apps/notificator/dist/lambda/http.handler` | the Function URL, called by the gateway |
 | `PostsApiInbox` | `apps/posts-api/dist/lambda/sqs.handler` | the `PostsApiCompleted` queue |
 | `Tagging` | `apps/tagging/dist/lambda/sqs.handler` | the `TaggingPostEvents` queue |
 | `Notificator` | `apps/notificator/dist/lambda/sqs.handler` | the `NotificatorNotifications` queue |
@@ -236,7 +244,7 @@ nothing is stored twice when it is redriven.
 
 Push is not configured here: without `FIREBASE_CREDENTIALS` the `push` channel sends nothing.
 
-The first two are the **same bundle**, one `nest build` with two handlers, sharing one
+The first two are the **same bundle**, one webpack build with two handler entries, sharing one
 `bootOnce`. Nothing in Node forces the split a Quarkus classpath would, and one bundle means the
 projection that runs in the queue function cannot drift from the read model the API serves.
 
@@ -312,6 +320,17 @@ from whichever workspace package declares it, because `better-auth` belongs to `
 is deployed is what was tested. It throws rather than guessing when a listed package is not
 installed.
 
+### The tenant migrations travel beside the bundle
+
+A tenant's schema is migrated by the first function that serves it (see the root `CLAUDE.md`), from
+`join(__dirname, 'migrations', 'tenant')`. Every function of posts-api, tagging and the notificator
+therefore has `copyFiles: tenantMigrationsOf('<app>')` — `apps/<app>/dist/migrations` to
+`migrations`, beside the bundle — and each of those files `require`s `@mikro-orm/migrations`, which
+is why that package is on `INSTALLED_PACKAGES`: the bundle's `Migrator` and the migration files must
+be one copy. The migrator's own function bundles its migrations as a list and needs no files. There is
+no schema variable any more: every function connects to `public`, and the migrator runs the system
+migrations, then every tenant's.
+
 ### Three things the bundling must not do
 
 All three are silent when they are wrong:
@@ -319,9 +338,11 @@ All three are silent when they are wrong:
 1. **`minify: false`, `keepNames: true`.** Nest's DI and AutoMapper read the `design:type` metadata
    `tsc` emitted and look classes up by **name**. Minifying renames them, the metadata then describes
    types nothing resolves, and the build still succeeds — the failure is a provider that is
-   `undefined` at runtime. It is the same reason `nest build` stays on `tsc`.
-2. **The handlers point at `dist/`**, already compiled with decorators. esbuild only bundles here; it
-   never transpiles a decorator, which it cannot do.
+   `undefined` at runtime. It is the same reason each application's webpack build compiles with
+   `tsc` and `optimization: false`.
+2. **The handlers point at `dist/`**, already compiled with decorators — each Lambda handler is an
+   entry of its application's webpack build, the workspace libraries compiled in. esbuild only
+   bundles here; it never transpiles a decorator, which it cannot do.
 3. **`nodejs.install` keeps MikroORM and the OpenTelemetry packages out of the bundle.** MikroORM is
    ESM-only and resolves parts of itself at require time; an instrumentation works by patching a
    module **as it is required**, which is precisely what bundling removes. A bundled `pg` is a `pg`

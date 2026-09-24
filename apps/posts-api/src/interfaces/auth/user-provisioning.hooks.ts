@@ -1,6 +1,9 @@
-import { MikroORM } from '@mikro-orm/core';
 import { Injectable, Logger } from '@nestjs/common';
-import { inRequestContext } from '@nestposts/database';
+import {
+  RequestContext,
+  ROOT_TENANT,
+  TenantEntityManagerService,
+} from '@nestposts/database';
 import { CredentialId } from '@nestposts/users/domain/user/vo/credential-id';
 import {
   AfterCreate,
@@ -20,7 +23,7 @@ export class UserProvisioningHooks {
   private readonly logger = new Logger(UserProvisioningHooks.name);
 
   constructor(
-    private readonly orm: MikroORM,
+    private readonly tenants: TenantEntityManagerService,
     private readonly provisioning: UserProvisioning,
   ) {}
 
@@ -46,7 +49,9 @@ export class UserProvisioningHooks {
       return;
     }
     try {
-      await inRequestContext(this.orm, () =>
+      const root =
+        await this.tenants.createAndMigrateTenantEntityManager(ROOT_TENANT);
+      await RequestContext.create(root, () =>
         this.provisioning.provision(parsed.data),
       );
     } catch (error) {

@@ -107,13 +107,14 @@ there.
 | plugin | what it gives | its emails |
 |---|---|---|
 | `admin` | roles on `auth_user`, bans, impersonation — what `@Roles([...])` reads | — |
-| `jwt` | the JWKS the OAuth tokens are signed with (ES256) | — |
+| `jwt` | the JWKS the OAuth tokens are signed with (ES256), under one `issuer` (`AUTH_ISSUER`) for every instance | — |
 | `@better-auth/oauth-provider` | this system as an OAuth 2.1 / OIDC provider: authorize, consent, token, userinfo. Only a system `admin` creates, edits or deletes clients (`clientPrivileges`) | — |
 | `openAPI` | the reference at `/api/auth/reference` | — |
 | `magicLink` | sign-in by a link, token stored hashed | `auth.MagicLink` |
 | `emailOTP` | sign-in by a code, stored hashed | `auth.OneTimePassword` |
 | `twoFactor` | TOTP, backup codes, and an emailed code as the second step | `auth.OneTimePassword` (`two-factor`) |
 | `multiSession` | several accounts in one browser | — |
+| `oauth-bearer-session` (ours) | an OAuth access token issued for a resource of this system answers `getSession` as its user — see below | — |
 
 and, in the core options: email verification (**required to sign in** unless
 `AUTH_REQUIRE_EMAIL_VERIFICATION=false`), password reset, email change and account deletion, each of
@@ -122,6 +123,40 @@ which sends an email.
 The screens for all of them are better-auth-ui's, copied into `apps/web` from its shadcn registry.
 `loginPage`, `consentPage`, `signup.page` and `selectAccount.page` of the OAuth provider point at
 those screens (`/auth/sign-in`, `/auth/oauth-consent`, …), on `WEB_URL`.
+
+## An OAuth access token is a session
+
+A client that went through the consent screen holds an access token, and the services behind the
+gateway accept it where they accept a cookie. `plugins/oauth-bearer-session-better-auth.plugin.ts` is
+a `before` hook on `/get-session`: `Authorization: Bearer <JWT>` addressed to one of
+`oauthResources` and signed by this deployment's `issuer` answers as the user it was issued for —
+so the global guard, `@Session()` and `AuthService` see it without knowing a token was involved.
+
+- **Verified locally.** `verifyJWT` reads the keys the jwt plugin keeps in the database every process
+  shares: no call to the issuer, no JWKS fetch, nothing that a cold identity provider can stall.
+- **A JWT only when asked for a resource.** The client names the gateway as the `resource` (RFC 8707)
+  on authorize and on token; without it the provider issues an opaque token that only `userinfo`
+  understands. Anything that is not a signed token falls through to Better Auth's own lookup.
+- **The user is read, not trusted.** The token carries only `sub`; the row is loaded, and a user who
+  no longer exists — or is banned — gets no session.
+- **One issuer for every instance.** `posts-api`, `apps/web`, the notificator and the migrator each
+  hold a Better Auth instance with a base URL of their own, and the jwt plugin would sign with that
+  URL as `iss`. `AUTH_ISSUER` (default `WEB_URL`) makes it one value, so a token issued by the web
+  verifies in a subgraph.
+
+**The resources are rows, seeded by the migrator — not configuration.** `oauthProvider({ resources })`
+seeds its `oauth_resource` table in the plugin's `init`, which Better Auth runs as the instance is
+constructed: outside any MikroORM request context (`Using global EntityManager…`), and in every
+process — the web and the notificator included — that would then need the database at boot, with a
+failure rejecting the whole `$context`. `apps/migrator`'s `OAuthResourcesSeeder` registers
+`oauthResources` instead, from the same configuration, in `setup` and in the deployment seed.
+
+**Any registered client may ask for any enabled resource** (`enforcePerClientResources: false`). The
+provider's default is to require each client to be linked to each resource first (RFC 8707 §3), and
+linking new clients automatically (`clientRegistrationDefaultResources`) needs the resources in the
+plugin's configuration — which is the boot-time seeding above. Here only a system `admin` registers a
+client (`clientPrivileges`), there is one resource — the gateway — and what a token may do is decided
+by its scopes, so the linkage would restrict nothing that is not already restricted.
 
 ## Every email is a notification
 
@@ -183,6 +218,13 @@ which is what `@Roles([AUTHOR_ROLE])` reads off `auth_user.role`.
 | `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET`, `AUTH_GITHUB_*` | a provider is configured or it is absent |
 | `AUTH_REQUIRE_EMAIL_VERIFICATION` | `false` lets an unverified address sign in; the verification email is sent either way |
 | `AUTH_RATE_LIMIT` | `false` turns Better Auth's rate limiter off. It is on in production by default, and a browser suite signing dozens of people up from one address is exactly what it refuses |
+| `AUTH_ISSUER` | the `iss` every access token is signed with and verified against (default `WEB_URL`) |
+| `GATEWAY_URL` | the gateway as an OAuth resource — the audience a bearer JWT must carry (default `http://localhost:4000/graphql`) |
+| `AUTH_OAUTH_RESOURCES` | replaces that single resource, comma-separated |
+
+`AuthInfrastructureModule.forRoot({ routes: false })` keeps the global guard and does not serve
+`/api/auth/*` — what a subgraph behind the gateway wants: it authenticates every caller and signs
+nobody in.
 
 `cookieSecurity` decides `Secure` and `Domain` from **the URL and `NODE_ENV` together**, not from
 `NODE_ENV` alone: a production build served on `localhost` would otherwise issue

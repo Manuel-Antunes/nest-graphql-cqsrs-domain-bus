@@ -25,12 +25,14 @@ export class DatabaseModule {
    * The connection, with the entity list resolved **lazily** — see the note in `CLAUDE.md` on why
    * this is a factory and not `autoLoadEntities`.
    *
-   * `exclusive` is for the one process that has more than one of these: `apps/migrator`, which has a
-   * Nest module per migrated database. {@link declared} is filled when a module is **imported**, not
-   * when it is booted, so by the time either migrator module boots, the registry already holds the
-   * union of both — and `tagging` would be handed `posts`' `auth_user`. Exclusive, the connection
-   * takes the entities it was given and nothing else, which is the same list the modules that own
-   * those tables already export.
+   * `exclusive` makes the connection take the entities it was given and nothing else. {@link declared}
+   * is filled when a module is **imported**, not when it is booted, so in a process that imports more
+   * than it boots — `apps/migrator`, whose list is the one its own modules export — the registry can
+   * hold tables its connection has no business with.
+   *
+   * `@mikro-orm/nestjs`'s own request-context middleware is turned off: the context is
+   * `TenancyModule`'s to open, on the tenant's entity manager, and a second one opened on the global
+   * manager would resolve every wildcard table to the connection's schema.
    */
   static forRoot(
     options: MikroOrmModuleSyncOptions & { exclusive?: boolean },
@@ -47,7 +49,12 @@ export class DatabaseModule {
                 ...(exclusive ? [] : declared),
               ]),
             ] as EntityName<AnyEntity>[];
-            return { ...connection, entities, entitiesTs: entities };
+            return {
+              registerRequestContext: false,
+              ...connection,
+              entities,
+              entitiesTs: entities,
+            };
           },
         }),
       ],

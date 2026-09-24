@@ -1,5 +1,5 @@
-import { MikroORM } from '@mikro-orm/core';
-import { Logger } from '@nestjs/common';
+import type { Logger } from '@nestjs/common';
+import type { TenantEntityManagerService } from '@nestposts/database';
 import type { User } from '@nestposts/users/domain/user/user.entity';
 import { CredentialId } from '@nestposts/users/domain/user/vo/credential-id';
 
@@ -9,11 +9,13 @@ import { UserProvisioningHooks } from './user-provisioning.hooks';
 describe('UserProvisioningHooks', () => {
   const profile = { id: 'perfil' } as unknown as User;
   let asked: CredentialId[];
+  let tenantsAsked: string[];
   let fail: Error | null;
   let hooks: UserProvisioningHooks;
 
   beforeEach(() => {
     asked = [];
+    tenantsAsked = [];
     fail = null;
     const provisioning = {
       provision: async (credentialId: CredentialId) => {
@@ -24,8 +26,13 @@ describe('UserProvisioningHooks', () => {
         return profile;
       },
     } as unknown as UserProvisioning;
-    const orm = { em: { fork: () => ({}) } } as unknown as MikroORM;
-    hooks = new UserProvisioningHooks(orm, provisioning);
+    const tenants = {
+      createAndMigrateTenantEntityManager: async (tenantId: string) => {
+        tenantsAsked.push(tenantId);
+        return { fork: () => ({}) };
+      },
+    } as unknown as TenantEntityManagerService;
+    hooks = new UserProvisioningHooks(tenants, provisioning);
   });
 
   it('o sign-up provisiona o perfil da credencial recém-criada', async () => {
@@ -34,6 +41,12 @@ describe('UserProvisioningHooks', () => {
     expect(asked).toHaveLength(1);
     expect(asked[0]).toBeInstanceOf(CredentialId);
     expect(asked[0].value).toBe('cred-1');
+  });
+
+  it('provisions in the root tenant, which is where a sign-up that names none belongs', async () => {
+    await hooks.onCredentialCreated({ id: 'cred-1' });
+
+    expect(tenantsAsked).toEqual(['root']);
   });
 
   it('a credencial atualizada volta para o provisionamento, que decide se promove', async () => {

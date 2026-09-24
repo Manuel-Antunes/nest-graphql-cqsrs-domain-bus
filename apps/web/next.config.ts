@@ -13,6 +13,7 @@ const nextConfig: NextConfig = {
   transpilePackages: [
     '@nestposts/ui',
     '@mikro-orm/core',
+    '@mikro-orm/migrations',
     '@mikro-orm/postgresql',
     'pg',
   ],

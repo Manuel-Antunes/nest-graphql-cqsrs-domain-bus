@@ -79,8 +79,60 @@ class TestPostgres {
 export const startPostgres = (): Promise<PostgresForTests> =>
   TestPostgres.start();
 
+/**
+ * The variable a project names a database of its own with — `testProject({ database: 'own' })`.
+ *
+ * A spec that exercises the real layout, `public` and `tenant_root` by those names, cannot share them
+ * with every other project of the run, nor with the development database that `docker compose`
+ * publishes on the same server. It gets a database created for the run and dropped after it.
+ */
+export const OWN_DATABASE = 'POSTGRES_OWN_DATABASE';
+
+export const onDatabase = (clientUrl: string, database: string): string => {
+  const url = new URL(clientUrl);
+  url.pathname = `/${database}`;
+  return url.toString();
+};
+
+class OwnDatabase {
+  static async create(
+    serverUrl: string,
+    name: string,
+  ): Promise<() => Promise<void>> {
+    await OwnDatabase.execute(serverUrl, `create database "${name}"`);
+    return () =>
+      OwnDatabase.execute(
+        serverUrl,
+        `drop database if exists "${name}" with (force)`,
+      );
+  }
+
+  private static async execute(clientUrl: string, sql: string): Promise<void> {
+    const orm = await MikroORM.init({
+      clientUrl,
+      schema: 'public',
+      entities: [],
+      discovery: { warnWhenNoEntities: false },
+    });
+    try {
+      await orm.em.getConnection().execute(sql);
+    } finally {
+      await orm.close(true);
+    }
+  }
+}
+
 export default async function setup(): Promise<() => Promise<void>> {
   const postgres = await startPostgres();
-  process.env.POSTGRES_URL = postgres.clientUrl;
-  return () => postgres.stop();
+  const own = process.env[OWN_DATABASE];
+  if (!own) {
+    process.env.POSTGRES_URL = postgres.clientUrl;
+    return () => postgres.stop();
+  }
+  const drop = await OwnDatabase.create(postgres.clientUrl, own);
+  process.env.POSTGRES_URL = onDatabase(postgres.clientUrl, own);
+  return async () => {
+    await drop();
+    await postgres.stop();
+  };
 }

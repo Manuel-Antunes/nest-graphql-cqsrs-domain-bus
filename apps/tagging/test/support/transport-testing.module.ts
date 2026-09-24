@@ -1,6 +1,9 @@
 import { type DynamicModule } from '@nestjs/common';
 import { DatabaseModule } from '@nestposts/database';
-import { TestSchemaModule, testSchema } from '@nestposts/database/testing';
+import {
+  TestSchemaModule,
+  testDatabaseConfig,
+} from '@nestposts/database/testing';
 import { Post } from '@nestposts/posts/domain/post/post.entity';
 import { postsEntities } from '@nestposts/posts/infrastructure/posts-infrastructure.module';
 import {
@@ -13,7 +16,7 @@ import { mikroOrmConfig } from '../../src/infrastructure/persistence/mikro-orm.c
 
 /** This service's connection, on a schema of its own, plus the domain mappings it rehydrates a Post through. */
 export const persistenceTesting = (): DynamicModule[] => [
-  DatabaseModule.forRoot(mikroOrmConfig(testSchema('tagging'))),
+  DatabaseModule.forRoot(testDatabaseConfig(mikroOrmConfig(), 'tagging')),
   DatabaseModule.forFeature([...postsEntities, ...usersEntities]),
   TestSchemaModule.forRoot(),
 ];

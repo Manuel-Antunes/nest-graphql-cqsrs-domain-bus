@@ -3,7 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "dependencies": {
+    "@aws-sdk/client-s3": "catalog:",
     "@aws-sdk/client-sesv2": "catalog:",
+    "@aws-sdk/lib-storage": "catalog:",
+    "@aws-sdk/s3-request-presigner": "catalog:",
+    "@nestjs-modules/mailer": "catalog:",
     "@nestposts/auth": "workspace:*",
     "@nestposts/cqsrs": "workspace:*",
     "@nestposts/database": "workspace:*",
@@ -18,7 +22,17 @@
     "@nestposts/posts": "workspace:*",
     "@nestposts/retry-policy": "workspace:*",
     "@nestposts/transport-eventbus": "workspace:*",
+    "@nestposts/users": "workspace:*",
     "@nestposts/validated-dto": "workspace:*",
+    "clsx": "catalog:",
+    "firebase-admin": "catalog:",
+    "flydrive": "catalog:",
+    "html-to-text": "catalog:",
+    "nodemailer": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "react-email": "catalog:",
+    "tailwind-merge": "catalog:",
     "zod": "catalog:"
   },
   "nx": {
@@ -26,30 +40,45 @@
       "build": {
         "executor": "nx:run-commands",
         "cache": true,
-        "dependsOn": [
-          "^build"
-        ],
         "inputs": [
           "production",
-          "^production"
+          "^production",
+          "{workspaceRoot}/apps/migrator/src/migrations/tenant/**/*.ts",
+          "{workspaceRoot}/tools/webpack/**/*"
         ],
         "outputs": [
           "{projectRoot}/dist"
         ],
         "options": {
           "cwd": "{projectRoot}",
-          "command": "nest build"
+          "command": "webpack-cli build",
+          "args": [
+            "--config-node-env=production"
+          ]
+        },
+        "configurations": {
+          "development": {
+            "args": [
+              "--config-node-env=development"
+            ]
+          }
         }
       },
       "serve": {
-        "executor": "nx:run-commands",
         "continuous": true,
-        "dependsOn": [
-          "^build"
-        ],
+        "executor": "@nx/js:node",
+        "defaultConfiguration": "development",
         "options": {
-          "cwd": "{projectRoot}",
-          "command": "nest start --watch"
+          "buildTarget": "@nestposts/notificator:build",
+          "runBuildTargetDependencies": false
+        },
+        "configurations": {
+          "development": {
+            "buildTarget": "@nestposts/notificator:build:development"
+          },
+          "production": {
+            "buildTarget": "@nestposts/notificator:build:production"
+          }
         }
       },
       "docker:build": {
@@ -70,6 +99,7 @@
     }
   },
   "devDependencies": {
-    "@camcima/nestjs-memory-microservices": "^0.3.0"
+    "@camcima/nestjs-memory-microservices": "^0.3.0",
+    "@nestposts/migrator": "workspace:*"
   }
 }

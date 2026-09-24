@@ -35,28 +35,38 @@ The rule for what belongs here is that it must be understandable without a domai
   whole thing would have made this package depend on `@nestposts/users` and on `graphql`, and
   `@nestposts/users` already depends on this one.
 
-## `postgresDatabase`: one connection, one schema per service
+## `postgresDatabase`: one connection, and the schema every table is pinned to
 
 ```ts
-export const mikroOrmConfig = (schema = process.env.POSTS_SCHEMA ?? POSTS_SCHEMA) =>
-  postgresDatabase(schema, { subscribers: [new SoftDeleteSubscriber()], extensions: [SeedManager] });
+export const mikroOrmConfig = () =>
+  postgresDatabase(SYSTEM_SCHEMA, { subscribers: [new SoftDeleteSubscriber()] });
 ```
 
-Both services share one Postgres — `POSTGRES_URL` — and what separates them is the **schema**:
-`posts` and `tagging`, each with its own tables and its own `mikro_orm_migrations`. It reads
-`MIKRO_ORM_DEBUG`, validates what it got through `DatabaseConfigSchema`, and sets
-`ensureDatabase: { create: false }`: the *database* is made sure of, the *schema* is not, because the
-schema belongs to `apps/migrator`. A service whose migrations have not run fails with
-`relation … does not exist`, which is the honest answer.
+Every service shares one Postgres — `POSTGRES_URL` — and the connection points at `public`. What
+decides where a table lives is the entity that maps it, `defineEntity({ schema })`, with one of three
+pins:
 
-Anything after `schema` overrides what it decided, which is how the migrator adds its `Migrator` and
-how a spec asks for `allowGlobalContext`.
+| pin | lives in | |
+|---|---|---|
+| `SYSTEM_SCHEMA` (`'public'`) | `public` | Better Auth's and the organizations' tables |
+| `TRANSPORT_SCHEMA` (`@nestposts/transport-eventbus`) | `transport` | the inbox and the event log |
+| `TENANT_SCHEMA` (`'*'`) | `tenant_<name>` | everything else — MikroORM's wildcard: the schema of the entity manager a query runs on |
+
+It reads `MIKRO_ORM_DEBUG`, validates what it got through `DatabaseConfigSchema`, and sets
+`ensureDatabase: { create: false }`: the *database* is made sure of, the *system schema* is not,
+because it belongs to `apps/migrator`. A service whose system migrations have not run fails with
+`relation … does not exist`, which is the honest answer. Anything after `schema` overrides what it
+decided. `DatabaseModule.forRoot` turns `@mikro-orm/nestjs`'s own request-context middleware off:
+the context is `TenancyModule`'s to open, on the tenant's entity manager, and a second one opened on
+the global manager would put every wildcard table in `public`.
 
 ## `testing/`: a schema is what `:memory:` used to be
 
 `@nestposts/database/testing` is the other half, and it exists because Postgres has no in-memory mode.
 `testDatabase(options)` gives a spec an ORM on a schema nobody else will pick, with its tables already
-created, and `closeTestDatabase(orm)` takes both away. `TestSchemaModule.forRoot()` is the same thing
+created, and `closeTestDatabase(orm)` takes both away. Every pinned table — system, transport,
+wildcard — is rewritten onto that one schema (`everyTableIn`, a `discovery.onMetadata` on the
+discovery's own copy of the metadata), so no two specs ever share `public`. `TestSchemaModule.forRoot()` is the same thing
 for a spec that boots Nest: it creates the schema on `init()` and drops it on `close()`, from
 `beforeApplicationShutdown`, which is the last hook that still has a connection. `metadataOnly(entities)`
 is for a domain spec that needs an ORM only so a `Collection` can find its owner's metadata.
@@ -64,7 +74,10 @@ is for a domain spec that needs an ORM only so a `Collection` can find its owner
 `startPostgres()` is what the Vitest global setup calls: it uses the server already listening —
 `docker compose up -d postgres`, or whatever `POSTGRES_URL` points at — and starts a throwaway
 container when there is none. A project opts in with `database: true` in its `vitest.config.mts`; one
-of pure domain rules leaves it off and needs no infrastructure at all.
+of pure domain rules leaves it off and needs no infrastructure at all. `database: 'own'` also creates
+a DATABASE for the run, and drops it after (`POSTGRES_OWN_DATABASE`): it is for the specs that use the
+real layout by name — `public`, `tenant_root` — which a schema of their own cannot give them, and
+which must never touch the development database `docker compose` publishes on the same server.
 
 Which of the two it is costs a `select 1`. `MikroORM.init` resolves without reaching the server, so a
 probe that only initialises says "already listening" to a dead port — and to **another project's**
@@ -92,34 +105,60 @@ The registry behind `forFeature` is **process-wide**, which is worth knowing bef
 that boots two different databases in one process: every `forFeature` ever called in that process is
 in the union `forRoot` builds. `apps/migrator` passes its entities explicitly for exactly that reason.
 
-## `tenancy/`: the tenant a request belongs to, and the entity manager that follows
+## `tenancy/`: the tenant a request belongs to, its schema, and the entity manager that follows
 
-`TenancyModule.forRoot()` is the whole wiring. It answers one question — *whose data is this request
-about?* — and turns the answer into a MikroORM context, for every way into a service.
+`TenancyModule.forRoot({ migrations, resolver })` is the whole wiring. It answers one question —
+*whose data is this request about?* — and turns the answer into a MikroORM context on that tenant's
+schema, migrated, for every way into a service.
 
 ```
 HTTP / GraphQL   ──▶  TenantMiddleware    ──┐
-WebSocket / RPC  ──▶  TenantInterceptor   ──┴──▶  RequestContext.create(em of the tenant, …)
+RPC (a message)  ──▶  TenantInterceptor   ──┴──▶  TenantEntityManagerService
+                                                     .createAndMigrateTenantEntityManager(tenant)
+                                                     ──▶  RequestContext.create(em on tenant_<name>, …)
 ```
 
 **Both halves, because neither covers everything.** Middleware runs before the guards, so an HTTP
 request is already in the right entity manager by the time a guard reads the session or a pipe loads
-an aggregate — but a message off a broker and a field resolved inside a subscription never pass
-through Express at all, and `allowGlobalContext: false` refuses their first query. The interceptor
-**defers to a context that already exists**, which is what makes running both safe: one request is
-one entity manager, never two.
+an aggregate — but a message off a broker never passes through HTTP at all, and
+`allowGlobalContext: false` refuses its first query. The interceptor **defers to a context that
+already exists**, which is what makes running both safe: one request is one entity manager, never two.
 
-**The tenant is a name, not a schema.** `TenantSchemas` is the policy that turns one into the other,
-and the default (`SharedSchemaTenants`) returns nothing at all: every tenant reads the connection's
-own tables, the tenant still travels, still scopes the context and still shows up in the logs.
-`SchemaPerTenant` is the other shape. Whichever is chosen, **no schema is created here** — DDL is
-`apps/migrator`'s, so a policy naming a schema nobody migrated fails on the first query, which is the
-same honest answer a service whose migrations never ran already gets.
+**A tenant is a schema: `tenant_<name>`**, and `tenant_root` for whoever names none
+(`Tenant.schemaOf`). `TenantEntityManagerService` is `tmp/organization`'s service, in this
+repository's shape:
 
-**`normalizeTenant` turns `'undefined'` into the root tenant**, and that is not paranoia: a producer
+- it forks `orm.em` with `{ schema }` — the wildcard tables follow it, the pinned ones do not;
+- **the first time the process meets a tenant, it migrates the schema**: `MikroORM.init` with the
+  connection's own options, `schema` set to the tenant's and the tenant `migrations` this module was
+  given, `migrator.up()`, close. The migrator's tracking table lives in that schema too;
+- the entity manager is then **remembered for as long as the process lives** — the promise, so two
+  simultaneous first requests migrate once; a failure is forgotten, so the next request tries again;
+- two PROCESSES meeting a new tenant at once are serialised by a transaction-level advisory lock on
+  the schema's name: the second waits, then finds nothing pending;
+- no snapshot is written: it would introspect the whole database and write a file into the bundle's
+  directory, on a tenant's first request;
+- **a schema that does not exist is not migrated** — only `tenant_root` and a schema its
+  organization's trigger made are. Migrating on a header's say-so would let any caller create
+  schemas by naming them; an unknown tenant's queries fail honestly instead, and a guard refuses it
+  first (`libs/organizations`);
+- `provision(tenant)` migrates now, whether or not a request has named it: what the organization
+  plugin's hook gives a new organization, and what `apps/migrator` runs for every tenant on deploy.
+
+**Where the migrations come from is the `TENANT_MIGRATIONS` token**, MikroORM's own `migrations`
+option. An application bundle carries them as files, `{ path: join(__dirname, 'migrations', 'tenant') }`
+— its webpack build emits one per migration of `apps/migrator`; a runtime with no directory to read
+(the web, bundled by Turbopack; a spec under Vitest) passes `{ migrationsList }` instead, and a suite
+overrides the token.
+
+**`Tenant.normalize` turns `'undefined'` into the root tenant**, and that is not paranoia: a producer
 that interpolates a missing tenant into a header sends the four letters rather than nothing, and the
 far side then looks for a schema named after them. It is the kind of bug that surfaces three services
 away from where it was caused.
+
+**`Tenant.stamp(event, tenant)` / `Tenant.of(event)`** mark an object as belonging to a tenant, for
+whoever has nothing else to tell it by: the transport's event log stamps every event it reads back
+with the tenant its row was written in, and a subscription filters on it.
 
 **Where the tenant is read from is a token, and it takes three shapes.** `TENANT_RESOLVER` accepts a
 plain `(context: ExecutionContext) => string`, a ready-made instance, or an injectable class — and a
@@ -127,8 +166,8 @@ class is **registered by the module itself**, so whatever it injects resolves fr
 has to be provided from outside:
 
 ```ts
-TenancyModule.forRoot({ resolver: (context) => context.switchToHttp().getRequest().tenant })
-TenancyModule.forRoot({ resolver: TransportTenantResolver })   // injects IncomingRequest
+TenancyModule.forRoot({ migrations, resolver: (context) => context.switchToHttp().getRequest().tenant })
+TenancyModule.forRoot({ migrations, resolver: TransportTenantResolver })   // injects IncomingRequest
 ```
 
 A token rather than an abstract class because the answer is usually one expression, and a class to
@@ -138,13 +177,12 @@ rule with no injector to reach a resolver through. A message carries the tenant 
 metadata** instead, and decoding that belongs to `@nestposts/transport-eventbus` — which is why
 `TransportTenantResolver` lives there and this package knows nothing about envelopes.
 
-**The schema itself is created by a trigger on the organization row** — `libs/auth` carries it, as a
-MikroORM `trigger` emitted into a migration, so `tenant_<slug>` exists exactly as long as its
-organization does. That is where `TENANT_SCHEMA_PREFIX` is shared from: the policy that routes queries
-there and the trigger that creates it have to agree, and a rename that only half lands would route to
-a schema nobody makes.
+**The schema itself is created by a trigger on the organization row** — `libs/organizations`
+carries it, as a MikroORM `trigger` emitted into a system migration, so `tenant_<slug>` exists
+exactly as long as its organization does. That is where `TENANT_SCHEMA_PREFIX` is shared from: the
+service that routes queries there and the trigger that creates it have to agree.
 
-**What this package does NOT do is put the tenant on the wire.** That is the application's request
-context: `PostRequest.toAttributes()` writes `x-tenant`, the codec rebuilds it, and the whole chain
-is described in the root `README.md`. What crosses a broker is what the application calls a request,
-and this package has no opinion about that.
+**What this package does NOT do is put the tenant on the wire**, nor decide who may name one. The
+first is the application's request context: `PostRequest.toAttributes()` writes `x-tenant`, the
+codec rebuilds it. The second is `TenantMembershipGuard`, in `libs/organizations`, because a tenant
+is an organization and only that library knows what a member is.

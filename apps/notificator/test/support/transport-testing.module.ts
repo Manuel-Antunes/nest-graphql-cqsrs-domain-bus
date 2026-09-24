@@ -1,6 +1,9 @@
 import { type DynamicModule } from '@nestjs/common';
 import { DatabaseModule } from '@nestposts/database';
-import { TestSchemaModule, testSchema } from '@nestposts/database/testing';
+import {
+  TestSchemaModule,
+  testDatabaseConfig,
+} from '@nestposts/database/testing';
 import {
   TransportEventBusModule,
   TransportIdentity,
@@ -9,7 +12,7 @@ import {
 import { mikroOrmConfig } from '../../src/infrastructure/persistence/mikro-orm.config';
 
 export const persistenceTesting = (): DynamicModule[] => [
-  DatabaseModule.forRoot(mikroOrmConfig(testSchema('notificator'))),
+  DatabaseModule.forRoot(testDatabaseConfig(mikroOrmConfig(), 'notificator')),
   TestSchemaModule.forRoot(),
 ];
 

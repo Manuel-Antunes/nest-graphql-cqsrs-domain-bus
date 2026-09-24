@@ -2,11 +2,7 @@ import { join } from 'node:path';
 import { Migrator } from '@mikro-orm/migrations';
 import { SeedManager } from '@mikro-orm/seeder';
 import type { DatabaseEntities, PostgresOptions } from '@nestposts/database';
-import {
-  POSTS_SCHEMA,
-  postgresDatabase,
-  TAGGING_SCHEMA,
-} from '@nestposts/database';
+import { postgresDatabase, SYSTEM_SCHEMA } from '@nestposts/database';
 import { notificationsEntities } from '@nestposts/notifications/infrastructure/notifications-infrastructure.module';
 import { OrganizationEntities } from '@nestposts/organizations/infrastructure/persistence/organization-entities';
 import { SoftDeleteSubscriber } from '@nestposts/platform/infrastructure/persistence/soft-delete/soft-delete.subscriber';
@@ -15,67 +11,42 @@ import { eventLogEntities } from '@nestposts/transport-eventbus/persistence/even
 import { transportEntities } from '@nestposts/transport-eventbus/persistence/message-inbox.entity';
 import { usersEntities } from '@nestposts/users/infrastructure/users-infrastructure.module';
 
-import { postsMigrations } from '../migrations/posts';
-import { taggingMigrations } from '../migrations/tagging';
+import { systemMigrations } from '../migrations/system';
+import { tenantMigrations } from '../migrations/tenant';
 import { DatabaseSeeder } from '../seeders/database.seeder';
-import { DefaultTagSeeder } from '../seeders/default-tag.seeder';
+import { OAuthResourcesSeeder } from '../seeders/oauth-resources.seeder';
 import { TestUsersSeeder } from '../seeders/test-users.seeder';
 
-/**
- * Where `migration:create` writes and what it diffs against. `migrationsList` is what `up()` runs —
- * a glob has no meaning in a bundle — but the CLI still needs somewhere to put a new file.
- */
-const migrationFiles = (folder: string) => ({
-  path: join(__dirname, '..', 'migrations', folder),
-  pathTs: join(__dirname, '..', '..', 'src', 'migrations', folder),
-  glob: '!(*.d).{js,ts,cjs}',
+export type MigrationSet = 'system' | 'tenant';
+
+export const migrationFiles = (set: MigrationSet) => ({
+  path: join(__dirname, '..', 'migrations', set),
+  pathTs: join(__dirname, '..', '..', 'src', 'migrations', set),
+  glob: '!(*.d|index).{js,ts,cjs}',
   emit: 'ts' as const,
   snapshot: false,
+  migrationsList: set === 'system' ? systemMigrations : tenantMigrations,
 });
 
-export const postsSchema = (): string =>
-  process.env.POSTS_SCHEMA ?? POSTS_SCHEMA;
-
-export const taggingSchema = (): string =>
-  process.env.TAGGING_SCHEMA ?? TAGGING_SCHEMA;
-
-export const postsTables = (): DatabaseEntities => [
+export const migratorTables = (): DatabaseEntities => [
+  ...OrganizationEntities.withAuth(),
   ...postsEntities,
   ...usersEntities,
   ...notificationsEntities,
-  ...OrganizationEntities.withAuth(),
   ...transportEntities,
   ...eventLogEntities,
 ];
 
-export const taggingTables = (): DatabaseEntities => [
-  ...postsEntities,
-  ...usersEntities,
-  ...transportEntities,
-  ...eventLogEntities,
-];
-
-export const postsConnection = (): PostgresOptions =>
-  postgresDatabase(postsSchema(), {
+export const systemConnection = (): PostgresOptions =>
+  postgresDatabase(SYSTEM_SCHEMA, {
     preferTs: false,
-    entities: [...postsTables()],
+    entities: [...migratorTables()],
     subscribers: [new SoftDeleteSubscriber()],
     extensions: [Migrator, SeedManager],
-    migrations: { ...migrationFiles('posts'), migrationsList: postsMigrations },
+    migrations: migrationFiles('system'),
     seeder: {
-      seedersList: [DatabaseSeeder, DefaultTagSeeder, TestUsersSeeder],
+      seedersList: [DatabaseSeeder, OAuthResourcesSeeder, TestUsersSeeder],
       defaultSeeder: 'DatabaseSeeder',
       emit: 'ts',
-    },
-  });
-
-export const taggingConnection = (): PostgresOptions =>
-  postgresDatabase(taggingSchema(), {
-    preferTs: false,
-    entities: [...taggingTables()],
-    extensions: [Migrator],
-    migrations: {
-      ...migrationFiles('tagging'),
-      migrationsList: taggingMigrations,
     },
   });

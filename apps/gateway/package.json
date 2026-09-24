@@ -1,0 +1,94 @@
+{
+  "name": "@nestposts/gateway",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "@nestposts/federation-gateway": "workspace:*",
+    "@nestposts/lambda": "workspace:*",
+    "@nestposts/observability": "workspace:*"
+  },
+  "nx": {
+    "targets": {
+      "build": {
+        "executor": "nx:run-commands",
+        "cache": true,
+        "inputs": [
+          "production",
+          "^production",
+          "{workspaceRoot}/apps/posts-api/src/graphql/**/*.graphql",
+          "{workspaceRoot}/apps/notificator/src/graphql/**/*.graphql",
+          "{workspaceRoot}/tools/webpack/**/*"
+        ],
+        "outputs": [
+          "{projectRoot}/dist"
+        ],
+        "options": {
+          "cwd": "{projectRoot}",
+          "command": "webpack-cli build",
+          "args": [
+            "--config-node-env=production"
+          ]
+        },
+        "configurations": {
+          "development": {
+            "args": [
+              "--config-node-env=development"
+            ]
+          }
+        }
+      },
+      "supergraph": {
+        "executor": "nx:run-commands",
+        "cache": true,
+        "dependsOn": [
+          "build"
+        ],
+        "inputs": [
+          "production",
+          "^production",
+          "{workspaceRoot}/apps/posts-api/src/graphql/**/*.graphql",
+          "{workspaceRoot}/apps/notificator/src/graphql/**/*.graphql"
+        ],
+        "outputs": [
+          "{projectRoot}/dist/supergraph"
+        ],
+        "options": {
+          "cwd": "{projectRoot}",
+          "command": "node dist/compose.js"
+        }
+      },
+      "serve": {
+        "continuous": true,
+        "executor": "@nx/js:node",
+        "defaultConfiguration": "development",
+        "options": {
+          "buildTarget": "@nestposts/gateway:build",
+          "runBuildTargetDependencies": false
+        },
+        "configurations": {
+          "development": {
+            "buildTarget": "@nestposts/gateway:build:development"
+          },
+          "production": {
+            "buildTarget": "@nestposts/gateway:build:production"
+          }
+        }
+      },
+      "docker:build": {
+        "options": {
+          "args": [
+            "--file apps/gateway/Dockerfile",
+            "--tag nestposts/gateway:dev"
+          ]
+        },
+        "parallelism": false
+      },
+      "docker:run": {
+        "options": {
+          "cwd": ".",
+          "command": "docker run {args} nestposts/gateway:dev"
+        }
+      }
+    }
+  }
+}

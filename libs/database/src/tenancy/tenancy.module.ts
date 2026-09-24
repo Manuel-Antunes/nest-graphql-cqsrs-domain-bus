@@ -2,8 +2,6 @@ import type {
   DynamicModule,
   MiddlewareConsumer,
   NestModule,
-  Provider,
-  Type,
 } from '@nestjs/common';
 import { Inject, Module } from '@nestjs/common';
 import { APP_INTERCEPTOR } from '@nestjs/core';
@@ -12,12 +10,19 @@ import { TenantInterceptor } from './tenant.interceptor';
 import { TenantMiddleware } from './tenant.middleware';
 import type { TenantResolverLike } from './tenant.resolver';
 import { TENANT_RESOLVER, TenantResolverProviders } from './tenant.resolver';
-import { TenantEntityManagers } from './tenant-entity-managers';
-import { SharedSchemaTenants, TenantSchemas } from './tenant-schemas';
+import type { TenantMigrations } from './tenant-entity-manager.service';
+import {
+  TENANT_MIGRATIONS,
+  TenantEntityManagerService,
+} from './tenant-entity-manager.service';
 
 export interface TenancyOptions {
-  /** Where a tenant's rows live. Default: {@link SharedSchemaTenants} — the connection's own schema. */
-  schemas?: Provider<TenantSchemas> | Type<TenantSchemas>;
+  /**
+   * The tenant migrations every tenant's schema is brought up to, as MikroORM's `migrations` option —
+   * `{ path: join(__dirname, 'migrations', 'tenant') }` beside a bundle, `{ migrationsList }` where
+   * there is no directory. Bound to {@link TENANT_MIGRATIONS}, which is what a suite overrides.
+   */
+  migrations: TenantMigrations;
   /**
    * Where the tenant is read from — a class, an instance, or a plain
    * `(context: ExecutionContext) => string`. A class is registered by this module, so whatever it
@@ -30,7 +35,7 @@ export interface TenancyOptions {
    * off and keeps only the interceptor, which is what its messages go through.
    */
   http?: boolean;
-  /** Extra modules the policy or the resolver need — the transport's, typically. */
+  /** Extra modules the resolver needs — the transport's, typically. */
   imports?: DynamicModule['imports'];
 }
 
@@ -38,12 +43,12 @@ export interface TenancyOptions {
 export const TENANCY_OPTIONS = 'TENANCY_OPTIONS';
 
 /**
- * **Tenancy: the request's tenant, and the entity manager that follows from it.**
+ * **Tenancy: the request's tenant, its schema, and the entity manager that follows from it.**
  *
- * `TenancyModule.forRoot()` is the whole wiring — the middleware for HTTP, the interceptor for
- * everything else, and the two policies ({@link TenantSchemas}, {@link TENANT_RESOLVER}) that decide
- * what a tenant means here. It is global so a resolver, a handler or a saga can inject
- * {@link TenantEntityManagers} without importing anything.
+ * `TenancyModule.forRoot({ migrations })` is the whole wiring — the middleware for HTTP, the
+ * interceptor for everything else, {@link TenantEntityManagerService} that forks and migrates a
+ * tenant's schema, and the resolver that says where the tenant is read from. It is global so a
+ * resolver, a handler or a hook can inject the service without importing anything.
  *
  * What it does NOT do is put the tenant on the wire: that is the application's request context
  * (`PostRequest.toAttributes()`), because what crosses a broker is what the application calls a
@@ -55,30 +60,21 @@ export class TenancyModule implements NestModule {
     @Inject(TENANCY_OPTIONS) private readonly options: TenancyOptions,
   ) {}
 
-  static forRoot(options: TenancyOptions = {}): DynamicModule {
+  static forRoot(options: TenancyOptions): DynamicModule {
     return {
       module: TenancyModule,
       global: true,
       imports: options.imports ?? [],
       providers: [
         { provide: TENANCY_OPTIONS, useValue: options },
-        TenancyModule.schemaProvider(options.schemas),
+        { provide: TENANT_MIGRATIONS, useValue: options.migrations },
         ...TenantResolverProviders.for(options.resolver),
-        TenantEntityManagers,
+        TenantEntityManagerService,
         TenantMiddleware,
         { provide: APP_INTERCEPTOR, useClass: TenantInterceptor },
       ],
-      exports: [TenantEntityManagers, TenantSchemas, TENANT_RESOLVER],
+      exports: [TenantEntityManagerService, TENANT_RESOLVER],
     };
-  }
-
-  private static schemaProvider(schemas: TenancyOptions['schemas']): Provider {
-    if (!schemas) {
-      return { provide: TenantSchemas, useClass: SharedSchemaTenants };
-    }
-    return typeof schemas === 'function'
-      ? { provide: TenantSchemas, useClass: schemas as Type<TenantSchemas> }
-      : schemas;
   }
 
   configure(consumer: MiddlewareConsumer): void {

@@ -14,6 +14,7 @@ import { lastValueFrom, merge } from 'rxjs';
 import { isExcludedLocally } from './decorators/exclude-def.decorator';
 import { EventForwarder } from './outbound/event-forwarder';
 import { EventLog } from './persistence/event-log/event-log';
+import { EventTrace } from './tracing';
 
 /**
  * **The integration point: an `IEventBus` that publishes locally and through the transports.**
@@ -101,6 +102,7 @@ export class TransportEventBusService implements IEventBus, OnModuleDestroy {
     const staged = [...(events ?? [])];
     staged.forEach((event) => {
       this.attach(event as object, context);
+      EventTrace.stamp(event as object);
     });
 
     const unit = UnitOfWork.current();

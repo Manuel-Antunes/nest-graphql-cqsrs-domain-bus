@@ -31,8 +31,12 @@ export interface ProjectTestOptions {
    * already listening — `docker compose up -d postgres` — and starts a throwaway container when there
    * is none, publishing the result as `POSTGRES_URL`. A project of pure domain rules leaves it off and
    * needs no infrastructure at all.
+   *
+   * `'own'` goes one step further: a DATABASE created for this run on that server, and dropped after
+   * it. It is for the specs that use the real layout by name — `public`, `tenant_root` — which a
+   * schema of their own cannot give them.
    */
-  database?: boolean;
+  database?: boolean | 'own';
 }
 
 /**
@@ -115,6 +119,14 @@ const coverageExclude = [
 
 const POSTGRES_SETUP = 'libs/database/src/testing/postgres.ts';
 
+/**
+ * The database a project that asked for its own gets: named after the project and the run, and set on
+ * THIS process's environment, which is where the global setup reads it and what the workers inherit.
+ */
+const ownDatabaseFor = (name: string): void => {
+  process.env.POSTGRES_OWN_DATABASE ??= `nestposts_${name.toLowerCase().replace(/\W+/g, '_')}_${Date.now().toString(36)}`;
+};
+
 export const testProject = ({
   name,
   include = ['src/**/*.spec.ts'],
@@ -122,8 +134,11 @@ export const testProject = ({
   testTimeout = 15000,
   coverageExclude: extraExcludes = [],
   database = false,
-}: ProjectTestOptions): ViteUserConfig =>
-  defineConfig({
+}: ProjectTestOptions): ViteUserConfig => {
+  if (database === 'own') {
+    ownDatabaseFor(name);
+  }
+  return defineConfig({
     test: {
       name,
       globalSetup: database ? [join(import.meta.dirname, POSTGRES_SETUP)] : [],
@@ -148,3 +163,4 @@ export const testProject = ({
     resolve: { alias: workspaceAliases() },
     plugins: swcPlugins(),
   });
+};

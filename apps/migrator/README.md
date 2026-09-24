@@ -1,204 +1,143 @@
 # migrator
 
-The only thing in this repository that writes DDL, and the only thing that seeds.
+The only thing in this repository that writes system DDL, the author of every tenant migration, and
+the only thing that seeds. Its shape follows `tmp/migrator`: a system set and a tenant set of
+migrations, a CLI config for each, and a generator that makes a tenant migration run in any tenant.
 
-Before it existed, both applications created their own schema on boot — `ensureDatabase: { create:
-true }` — and `apps/posts-api` carried a `DefaultTagSeeder` provider that ran on
-`onApplicationBootstrap`. That works until the first column has to change on a database that already
-holds rows, at which point the schema generator has no answer and the boot-time seeder has no ledger.
-Both jobs now live here, as MikroORM's own `Migrator` and `SeedManager`.
+## The layout it migrates
 
-## The two schemas
+One Postgres — `POSTGRES_URL` — laid out by tenancy, not by service. Every table is pinned by the
+entity that maps it (`defineEntity({ schema })`):
 
-One Postgres — `POSTGRES_URL` — and a schema per service, which is what keeps one from reading the
-other's tables by accident. They do not share a migration history either: each gets a config, a folder
-of migrations and a `mikro_orm_migrations` table of its own, inside its own schema.
-
-| config | schema | migrations | seeders |
+| pin | schema | tables | migrations |
 |---|---|---|---|
-| `src/posts-mikro-orm.config.ts` | `POSTS_SCHEMA` (default `posts`) | `src/migrations/posts` | yes |
-| `src/tagging-mikro-orm.config.ts` | `TAGGING_SCHEMA` (default `tagging`) | `src/migrations/tagging` | **no** |
+| `SYSTEM_SCHEMA` | `public` | Better Auth's (`auth_user`, `session`, `account`, the OAuth ones…) and the organizations' (`organization`, `member`, `invitation`, `team`…) | `src/migrations/system` |
+| `TRANSPORT_SCHEMA` | `transport` | the transport's inbox and event log | `src/migrations/system` |
+| `TENANT_SCHEMA` (`*`) | `tenant_<name>` | posts, tags, users, authors, notifications, deliveries, devices | `src/migrations/tenant` |
 
-**A migration is bound to the schema it was generated in.** The emitted SQL is qualified —
-`create table "posts"."account"` — so pointing `POSTS_SCHEMA` at another name does not move the
-migration there. A throwaway schema is built from the entities (`TestSchemaModule`, in the suites),
-never from the migrations.
+`tenant_root` is the root tenant — whoever names none. An organization is a tenant, `tenant_<slug>`:
+the trigger on its row creates the schema and drops it `cascade`, and the applications migrate it
+(`libs/database`'s `TenantEntityManagerService`). The `posts` and `tagging` schemas of the previous
+layout are gone; services share tenants, and the transport's tables are one per system.
 
-`schemaGenerator.ignoreSchema` is enumerated from the live connection on every run, so every schema
-that is not this config's own is invisible to the diff. Without it a leftover test schema is diffed
-too, and `migration:create` emits `create schema`/`create table` for someone else's leftovers.
+## Two configs, and the system always first
 
-`apps/tagging` keeps no read model: the `posts`, `tags`, `users` and `authors` tables exist in its
-database because it rehydrates a `Post` through their *mapping*, and they are meant to stay empty.
-Its config therefore registers `Migrator` and not `SeedManager` — running a seeder against it is not a
-mistake worth making convenient.
+| config | target | writes into | ignores |
+|---|---|---|---|
+| `src/system-mikro-orm.config.ts` | `public` (and `transport`, pinned) | `src/migrations/system` | every other schema |
+| `src/tenant-mikro-orm.config.ts` | `tenant_root`, the template | `src/migrations/tenant` | `public`, `transport` and every other schema; the system tables are skipped |
+
+The tenant config rewrites every wildcard entity onto `tenant_root` (`discovery.onMetadata`, on the
+discovery's own copy of the metadata) and generates through `TenantMigrationGenerator`
+(`src/generators`), ported from `tmp/migrator`: every `"tenant_root"` in the diff becomes `${schema}`,
+read at run time from the connection the migration runs on — **quoted**, because a slug may carry a
+dash and `tenant_acme-corp` is no identifier unquoted — and a reference to a system table is pointed
+at the system schema. One file therefore migrates `tenant_root`, `tenant_acme` and every tenant after
+them.
+
+`ignoreSchema` is enumerated from the live connection on every run: a development database
+accumulates tenants, and a diff that saw them would emit DDL for somebody else's leftovers.
+
+**The system migrations run before any tenant's**, always: `migrate()` is `migrateSystem()` then
+`migrateTenants()`, and `migrateTenants()` provisions `tenant_root` and every `tenant_*` schema that
+exists, through the same `TenantEntityManagerService` the applications use — so a deploy brings every
+tenant up to date, and the service still migrates, on its first request, a tenant created after it.
+
+The default tag is a tenant migration (`Migration…_default_tag`), not a seeder: the saga cannot complete
+without it, and a tenant born at runtime — when its organization is — never runs a seeder.
 
 ## Where the entity list comes from
 
-Nowhere in this app is a table or a column named. Each config composes the arrays that the modules
-owning those tables already export:
+Nowhere in this app is a table or a column named. `app/connections.ts` composes the arrays the
+modules owning those tables already export — `OrganizationEntities.withAuth()`, `postsEntities`,
+`usersEntities`, `notificationsEntities`, `transportEntities`, `eventLogEntities` — and
+`app/migrator.module.ts` imports those modules, exactly as an application does. The CLI configs boot
+it, read the entity list off the container and hand back a plain config.
 
-```ts
-entities: [...postsEntities, ...usersEntities, ...betterAuthEntities, ...transportEntities]
-```
-
-`postsEntities` is the same constant `PostsInfrastructureModule` passes to `DatabaseModule.forFeature`,
-`transportEntities` the same one `TransportEventBusModule` declares when `inbox` is on, and so on. A
-new table reaches the migrator by being added to its own module's array — which is the edit that makes
-it reach the applications too.
-
-**It boots Nest to discover them**, which is what the section below is about: each database's module
-imports the modules that own its tables, and the ORM the container builds is the one the migrations
-and the seeders run on. What it does **not** import is an application: `apps/posts-api`'s `AppModule`
-cannot be started as an application context at all, because `GraphQLModule.forRoot` wants an HTTP
-adapter `NestFactory.createApplicationContext` does not create. So the migrator keeps modules of its
-own, and Yoga and the AMQP client stay out of whatever is deployed to run a migration.
+It boots Nest because `TestUsersSeeder` needs the **real** `BETTER_AUTH`: a seeded credential is one
+Better Auth issued, with the hash its own version produces. What it does **not** import is an
+application — `GraphQLModule` wants an HTTP adapter an application context does not create, and Yoga
+and the AMQP client have no business in whatever runs a migration.
 
 ## Commands
 
-Every command below has a root-level script (`pnpm db:*`) and an Nx target. The Nx targets take a
-configuration, `posts` by default:
+Every command has a root-level script (`pnpm db:*`) and an Nx target; the targets take a
+configuration:
 
 ```bash
-pnpm db:setup                    # migrate both databases, then seed — what `pnpm dev` runs first
-pnpm db:migrate                  # migration:up, posts
-pnpm db:migrate:tagging          # migration:up, tagging
-pnpm db:revert                   # migration:down, one step, posts
-pnpm db:fresh                    # drop, remigrate and seed, posts
-pnpm db:seed                     # seeder:run, posts
-pnpm db:migration:create -- --name add-something
-pnpm db:migration:create:tagging -- --name add-something
+pnpm db:setup                          # migrate (system, then every tenant), then the OAuth resources
+pnpm db:migrate                        # the same without seeding
+pnpm db:migrate:system                 # mikro-orm migration:up on the system config
+pnpm db:migrate:tenant                 # mikro-orm migration:up on tenant_root only
+nx run @nestposts/migrator:migrate:tenants     # every tenant_* schema
+pnpm db:revert                         # migration:down, one step, tenant_root   (:system for public)
+pnpm db:fresh                          # drop every tenant_* and the system tables, migrate, seed
+pnpm db:seed                           # DatabaseSeeder, through the container
+pnpm db:migration:create -- --name add-something          # a TENANT migration
+pnpm db:migration:create:system -- --name add-something   # a SYSTEM migration
 pnpm db:seeder:create -- --name SomeThing
-nx run @nestposts/migrator:pending            # migration:list
-nx run @nestposts/migrator:pending:tagging
+nx run @nestposts/migrator:pending     # migration:pending, tenant (:system)
 ```
 
 ### Changing an entity
 
 ```bash
+pnpm db:migrate                                  # the diff is taken against the live database
 pnpm db:migration:create -- --name add-post-slug
-pnpm db:migrate
 ```
 
-The generated file lands in `src/migrations/<database>/` as TypeScript, and the build compiles it into
-`dist/migrations/<database>/` — `migrations.path` is the compiled folder and `migrations.pathTs` the
-source one. `.snapshot-*.json` lands next to the TypeScript, which is why it is a committed file: the
-diff a colleague gets for the same entity change is the diff you got.
+Then **add the new class to `src/migrations/<set>/index.ts`** — see below — and migrate again. There
+is no snapshot (`snapshot: false`): the diff is always against the live schema, which is why the
+database has to be migrated before a migration is created.
 
 ### Compiled, and never TypeScript
 
-Every target depends on `build`, and the CLI is pointed at `dist/*.config.js`, so nothing here needs
-`ts-node`, `tsx` or any other loader — which is also what the CLI's warning about `oxc`/`swc`/`tsx` is
-about, and why it can be ignored.
+Every target depends on `build` (`tsc`), and the CLI is pointed at `dist/*.config.js`, so nothing here
+needs a TypeScript loader. `preferTs: false` is not decoration: MikroORM decides between `path` and
+`pathTs` with `config.get('preferTs', Utils.detectTypeScriptSupport())`, Node 22+ reports
+type-stripping support whether or not the code being run is TypeScript, and left to the default the
+CLI would load sources whose extensionless imports Node cannot resolve.
 
-`preferTs: false` is not decoration. MikroORM decides between `path` and `pathTs` with
-`config.get('preferTs', Utils.detectTypeScriptSupport())`, and Node 22+ reports type-stripping support
-whether or not the code being run is TypeScript. Left to the default, `seeder:run` would load the
-**sources**, and Node's type stripping cannot resolve their extensionless relative imports:
-`ERR_MODULE_NOT_FOUND` on a file that is plainly there.
+## The migrations are a list, not a folder
+
+`src/migrations/system/index.ts` and `src/migrations/tenant/index.ts` export the migrations **by
+class**, and that list is what `migrationsList` receives. Creating a migration writes the file; adding
+it to the list is what makes it exist — the same rule as `seedersList` and the CQRS handlers.
+
+The reason is concrete: `path` is a glob over the file system, and a **bundled** runtime has no such
+folder. On AWS the migrator once found zero migrations, `up()` succeeded, and the first query said
+`relation "posts.tags" does not exist`. The Nest applications are the other case, by design: their
+webpack build emits every tenant migration as a file of its own under `dist/migrations/tenant`, and
+`TenancyModule` reads that folder — which is why a tenant migration must stay a plain `Migration` with
+no import but `@mikro-orm/migrations`.
 
 ## Seeders
 
-`DatabaseSeeder` is the default chain, and it calls `DefaultTagSeeder`. `TestUsersSeeder` is not in
-that chain — see below for why, and for what it does that an `insert` cannot.
+`DatabaseSeeder` is the deployment chain: `OAuthResourcesSeeder` (the gateway as a resource an OAuth
+token may be issued for) and `TestUsersSeeder`. `seeder.seedersList` names every class explicitly.
 
-The default tag is not sample data. `CompletePostCommand` throws `TagNotFoundException` when the tag
-the tagging decision names is absent, and `DEFAULT_TAG_ID` is a domain constant that `apps/tagging`
-reaches for without ever asking `apps/posts-api` about it — so the row is a precondition for the saga
-to complete at all. What makes it a seeder rather than a migration is that it is *data*: it is written
-through the domain factory (`Tag.create`, with its events dropped by `uncommit()`) rather than as an
-`insert` frozen into a migration file, and it is idempotent, so re-running it converges instead of
-failing.
+`TestUsersSeeder` does **not** insert rows: it resolves `BETTER_AUTH` from the container, calls
+`signUpEmail` and promotes the author through `IdentityProvider`. A seeder that resolves a provider
+reaches the container through `seederContainer()`, because MikroORM constructs seeder classes itself;
+run one through the MikroORM CLI and it says so.
 
-`seeder.seedersList` names every class explicitly, so `seeder:run` resolves them from the config
-instead of globbing a folder — **a new seeder is registered there or it does not exist**, the same rule
-the CQRS handlers follow. `seeder:create` still writes into `src/seeders/`.
-
-Seeders run in three places:
-
-- `pnpm db:seed`, and `pnpm db:setup` after the migrations;
-- anywhere holding a `MikroORM` instance, since both applications register `SeedManager`:
-  `await orm.seeder.seed(DefaultTagSeeder)`;
-- `apps/posts-api`'s e2e suite, which does exactly that — it runs against a schema built from the
-  entities, and the seeding is an explicit line in `beforeAll` instead of a provider that fires on
-  every boot in production.
+**`setup` does not seed users**: `apps/web-e2e` runs `setup` and then registers its own accounts
+through the web's sign-up endpoint, which is the path worth exercising. The deployed chain is
+`seed:deployment`, which is what the `Seed` lambda runs.
 
 ## Running it somewhere else
 
 `dist/main.js` is a module before it is a script:
 
 ```ts
-const { migrate, migratePosts, migrateTagging, seed, setup } = require('@nestposts/migrator');
+const { migrate, migrateSystem, migrateTenants, seed, setup, fresh } = require('@nestposts/migrator');
 ```
 
-Each function opens its own ORM, does the work and closes it, so a Lambda handler is a call and a
-`return`. As a script it takes the same names as arguments (`node dist/main.js migrate`), which is
-what the Nx `setup` target and `docker/e2e/run.sh` use.
+Each function boots its container, does the work and closes it, so a Lambda handler is a call and a
+`return`. As a script it takes the same names (`node dist/main.js migrate`), which is what the Nx
+targets, the Docker image and `apps/web-e2e` use. `lambda.ts` exports `handler` (migrate) and
+`seedHandler` (seed), and `infra/aws` gives each a function of its own.
 
-The build is `tsc`, not a bundler — the same rule as the two applications. MikroORM derives an entity's
-name from its class, so a minifier that renames `Post` renames its table.
-
-## A Nest container per database, and the entity list comes from it
-
-There is no configuration object describing "a migrated database" any more. Each database is a **Nest
-module** that imports the modules owning its tables, exactly as an application does:
-
-```
-app/posts.module.ts     PostsInfrastructureModule, UsersInfrastructureModule, BetterAuthModule
-                        (with the organization plugin), plus the transport's and the feed's tables
-app/tagging.module.ts   the Post's MAPPING, the users', the transport's and the event store's
-app/bootstrap.ts        withPosts / withTagging: boot, hand over `{ app, orm }`, close
-app/connections.ts      where each one lives, and the migrations and seeders it registers
-```
-
-`main.ts` is the surface both callers use: `migrate`, `migratePosts`, `migrateTagging`, `seed`,
-`seedUsers`, `seedDeployment` and `setup`, as functions **and** as `node dist/main.js <command>`.
-`lambda.ts` exports two handlers over the same functions — `handler` migrates, `seedHandler` seeds —
-and `infra/aws` gives each one a function of its own.
-
-The two MikroORM CLI configs boot their module, read the entity list off the container and hand back
-a plain config, so `migration:create` and `migration:list` see exactly what the application sees.
-
-**`exclusive: true` on `DatabaseModule.forRoot` is what keeps the two apart.** The entity registry in
-`@nestposts/database` is filled when a module is **imported**, not when it is booted, so in this one
-process — the only one that has two composition roots — it holds the union of both by the time
-either boots. Exclusive, each connection takes the list its own module declared, and `tagging` does
-not grow an `auth_user` it has no business owning.
-
-## The seeders, and why the users go through Better Auth
-
-`DefaultTagSeeder` is a domain fact every environment needs. `TestUsersSeeder` is the accounts a
-deployed stage should have, and it does **not** insert rows: it resolves the real `BETTER_AUTH`
-instance from the container and calls `signUpEmail`, then promotes the author through
-`IdentityProvider`. That is the whole reason this app boots a container at all — a seeded credential
-is one Better Auth issued, with the hash its own version produces, so it still signs in after an
-upgrade that changes the algorithm. `test-users.seeder.spec.ts` asserts exactly that, by signing in.
-
-A seeder that resolves a provider reaches the container through `seederContainer()`, because
-MikroORM constructs seeder classes itself and has no injector. Run one through the MikroORM CLI and
-it says so instead of failing obscurely.
-
-**`setup` does not seed users**, and that is deliberate: `apps/web-e2e` runs `setup` and then
-registers its own accounts through the web's sign-up endpoint, which is the path worth exercising.
-The deployment chain is `seed:deployment` (`DatabaseSeeder` + `TestUsersSeeder`), which is what the
-`Seed` lambda runs.
-
-## What the applications still do
-
-`ensureDatabase: { create: false }` is all they ask for: the database is made sure of, the schema is
-not. If the migrations have not run, the first query fails with `relation … does not exist`, which is
-the correct answer to that question and the reason the failure is not a table quietly appearing with
-whatever shape the entities have today. The suites are the exception, and they build their schema from
-the entities on purpose — see `libs/database/README.md`.
-
-## As migrations são uma lista, não uma pasta
-
-`src/migrations/posts/index.ts` (e o gémeo do `tagging`) exportam as migrations **por classe**, e é
-essa lista que o `migrationsList` da configuração recebe. Criar uma migration com
-`pnpm db:migration:create` escreve o ficheiro; adicioná-la à lista é o que a faz existir — a mesma
-regra do `seedersList`, e a mesma dos handlers de CQRS.
-
-A razão é concreta. O `path` é um glob sobre o sistema de ficheiros, e um runtime **empacotado** não
-tem essa pasta: na AWS o migrator encontrava zero migrations, o `up()` respondia com sucesso, e a
-primeira consulta dizia `relation "posts.tags" does not exist`. Não falhava — não fazia nada, que é
-pior.
+The specs run against a DATABASE of their own (`testProject({ database: 'own' })`) and the real
+`migrate()`: `migrations.spec.ts` asserts the layout above and that a second pass applies nothing,
+`tenant-migration.generator.spec.ts` the rewrite a generated file goes through.

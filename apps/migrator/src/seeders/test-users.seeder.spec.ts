@@ -2,12 +2,11 @@ import { AuthUser } from '@nestposts/auth/domain/auth/auth-user.entity';
 import type { BetterAuth } from '@nestposts/auth/infrastructure/better-auth/init-auth';
 import { BETTER_AUTH } from '@nestposts/auth/infrastructure/better-auth/tokens';
 import { inRequestContext } from '@nestposts/database';
-import { dropTestSchema, ensureTestSchema } from '@nestposts/database/testing';
 import { Email } from '@nestposts/users/domain/user/vo/email';
 
 import type { MigratorContext } from '../app/bootstrap';
 import { bootstrap } from '../app/bootstrap';
-import { PostsMigratorModule } from '../app/posts.module';
+import { migrateSystem } from '../main';
 import { withSeederContainer } from './container';
 import {
   SEED_PASSWORD,
@@ -36,19 +35,18 @@ describe('seeding the users the system should have', () => {
         }[]
       >(
         `select u.email, u.role, a.provider_id, a.password
-         from "${context.orm.config.get('schema')}".auth_user u
-         join "${context.orm.config.get('schema')}".account a on a.user_id = u.id
+         from public.auth_user u
+         join public.account a on a.user_id = u.id
         order by u.email`,
       );
 
   beforeAll(async () => {
-    context = await bootstrap(PostsMigratorModule);
-    await ensureTestSchema(context.orm);
+    await migrateSystem();
+    context = await bootstrap();
     await runSeeder();
   });
 
   afterAll(async () => {
-    await dropTestSchema(context.orm);
     await context.app.close();
   });
 

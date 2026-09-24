@@ -7,6 +7,7 @@ import type {
   Type,
 } from '@nestjs/common';
 import { mixin } from '@nestjs/common';
+import { EventTrace } from '@nestposts/transport-eventbus';
 import type { Observable } from 'rxjs';
 import { map } from 'rxjs';
 
@@ -62,8 +63,8 @@ export const MapSubscriptionInterceptor = <
     ): Observable<AsyncIterable<TDestination>> {
       const mapper = this.mapper;
       const mapped = (stream: AsyncIterable<TSource>) =>
-        this.mapAsyncIterable(stream, (event) =>
-          mapper.mapAsync(event, from, to),
+        this.mapAsyncIterable(stream, async (event) =>
+          EventTrace.carry(event, await mapper.mapAsync(event, from, to)),
         );
 
       return next.handle().pipe(map(mapped));

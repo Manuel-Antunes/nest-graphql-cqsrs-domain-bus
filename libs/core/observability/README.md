@@ -14,8 +14,10 @@ That split is the whole design:
 | a library (`transport-eventbus`) | `@opentelemetry/api` | a no-op until something registers an SDK, so it costs a function call and changes no behaviour |
 | an application (`posts-api`, `tagging`, the Lambda) | this package | the SDK is a process-wide decision, and a process has exactly one |
 
-What this package provides is therefore two things and not one: `startTelemetry` (the SDK) and
-`loggingModule` (the logger), because on their own each is half of what an operator needs.
+What this package provides is therefore three things: `startTelemetry` (the SDK), `loggingModule`
+(the logger), because on their own each is half of what an operator needs, and `useGraphQLTracing`
+(`@nestposts/observability/graphql-tracing`), because a GraphQL server's spans come from the server
+and not from a patched module.
 
 ## Using it
 
@@ -81,15 +83,59 @@ CloudWatch is read by a collector.
 
 ## What it instruments
 
-Six, written out rather than taken from `@opentelemetry/auto-instrumentations-node` — which would
-bring about forty packages to patch six, and a Lambda pays for what it bundles:
+Written out rather than taken from `@opentelemetry/auto-instrumentations-node` — which would bring
+about forty packages to patch a handful, and a Lambda pays for what it bundles:
 
-`http` (health checks excluded, or a poll a second buries everything), `nestjs-core`, `graphql`,
-`pg`, `amqplib` and `aws-sdk`. The last is what turns an SNS publish and an SQS receive into spans of
-their own; the link between them and the far side's work is the `traceparent` the transport writes
+`http` (health checks excluded, or a poll a second buries everything), `nestjs-core`, `pg`,
+`amqplib`, `aws-sdk` and `pino`. `aws-sdk` is what turns an SNS publish and an SQS receive into spans
+of their own; the link between them and the far side's work is the `traceparent` the transport writes
 onto the envelope.
 
+**In a Lambda, `http` is not on this list**: `infra/lambda/otel-preload.cjs` registers it, before
+the runtime loads anything. The preload's Lambda instrumentation installs the `require` hook every
+instrumentation shares, the hook caches each module it sees, and `https` is required before
+`startTelemetry` runs — registered here, `HttpInstrumentation` finds it cached and unpatched, and
+the gateway's calls to its subgraphs leave with no `traceparent`.
+
 `instrumentations` replaces the list entirely, for a process that instruments less.
+
+## GraphQL: a Yoga plugin, not an instrumentation
+
+```ts
+GraphQLModule.forRoot<YogaFederationDriverConfig>({
+  // …
+  plugins: [useGraphQLTracing({ originOf: EventTrace.of })],
+});
+```
+
+`@opentelemetry/instrumentation-graphql` is not used, because it cannot see Yoga execute: it patches
+`graphql-js`'s `execute`, and Yoga executes with `@graphql-tools/executor` — what it produced was a
+parse and a validate per operation and a root span for every schema parsed at boot. Where `graphql`
+is bundled, on Lambda, it produced nothing. `useGraphQLTracing` is called by the server itself:
+
+```
+mutation CreatePost                 graphql.operation.type/name, graphql.document (literals as *)
+├── graphql.parse
+├── graphql.validate
+└── graphql.execute
+    └── Mutation.createPost         what the resolver did — pg, SNS, an HTTP call — is inside it
+        └── Post.tags               nested by response path
+```
+
+- Every phase runs **inside** its span, so what an instrumentation opens underneath is its child.
+- A resolver gets a span only if the schema declares one: the default resolver's fields never do.
+  `resolvers: false` turns them off, for a gateway, whose every stitched field has a proxying one.
+- A result with errors marks the operation span `ERROR`, with an `exception` event per error carrying
+  its `extensions.code` and path.
+- **A subscription event is delivered in the trace that produced it.** The subscription's own span
+  ends when the stream is set up. Each event gets `subscription OnPostCreated event` (a consumer
+  span), a child of `originOf(payload)` and linked to the subscription, and its result carries that
+  span's `traceparent` in `extensions` — which is what a gateway in front continues. posts-api's
+  `originOf` is `EventTrace.of` (`@nestposts/transport-eventbus`); the gateway's is
+  `subgraphEventOrigin` (`@nestposts/federation-gateway`).
+
+It does not use `isObjectType`, or any other `instanceof` of `graphql`'s: under Vitest a Nest
+application's schema is built by the CommonJS `graphql` and this module loads the ESM one.
 
 ## In a Lambda, the collector does the batching
 

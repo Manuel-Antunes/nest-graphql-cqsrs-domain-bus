@@ -7,10 +7,9 @@ import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { FastifyAdapter } from '@nestjs/platform-fastify';
 import { Test } from '@nestjs/testing';
 import { SubscriptionBus } from '@nestposts/cqsrs';
-import { TestSchemaModule } from '@nestposts/database/testing';
-import { DefaultTagSeeder } from '@nestposts/migrator/seeders/default-tag.seeder';
-import { Device } from '@nestposts/notifications/domain/device/device.entity';
-import { NotificationRecord } from '@nestposts/notifications/domain/notification/notification-record.entity';
+import { ROOT_TENANT_SCHEMA, TENANT_MIGRATIONS } from '@nestposts/database';
+import { migrate } from '@nestposts/migrator/main';
+import { tenantMigrations } from '@nestposts/migrator/migrations/tenant/index';
 import {
   AUTHOR_ROLE,
   Authorship,
@@ -31,7 +30,9 @@ describe('posts (e2e)', () => {
   let eventBus: EventBus;
   let identities: IdentityProvider;
   let credentialId: string;
-  const profileCount = () => app.get(MikroORM).em.fork().count(User);
+  const rootEm = () =>
+    app.get(MikroORM).em.fork({ schema: ROOT_TENANT_SCHEMA });
+  const profileCount = () => rootEm().count(User);
   let profilesAfterSignUp: number;
   const subscribers = () => eventBus.subject$.observers.length;
   const asked: unknown[] = [];
@@ -96,15 +97,18 @@ describe('posts (e2e)', () => {
   };
 
   beforeAll(async () => {
+    await migrate();
     const module = await Test.createTestingModule({
-      imports: [AppModule, TestSchemaModule.forRoot()],
+      imports: [AppModule],
       providers: [TaggingStandIn],
-    }).compile();
+    })
+      .overrideProvider(TENANT_MIGRATIONS)
+      .useValue({ migrationsList: tenantMigrations })
+      .compile();
     app = module.createNestApplication<NestFastifyApplication>(
       new FastifyAdapter(),
     );
     await app.listen(0, '127.0.0.1');
-    await app.get(MikroORM).seeder.seed(DefaultTagSeeder);
     client = await GraphqlClient.for(app);
     credentialId = await client.signUp('manuel@example.com', 'manuel');
     profilesAfterSignUp = await profileCount();
@@ -128,7 +132,7 @@ describe('posts (e2e)', () => {
     });
 
     it('conceder o papel pela porta promove o mesmo perfil, sem abrir outro', async () => {
-      const em = app.get(MikroORM).em.fork();
+      const em = rootEm();
 
       const author = await em.findOneOrFail(User, {
         email: Email.parse('manuel@example.com'),
@@ -451,7 +455,7 @@ describe('posts (e2e)', () => {
     it('o id é o do perfil ativo de quem está logado', async () => {
       const { data } = await client.execute(`{ me { id } }`);
 
-      const em = app.get(MikroORM).em.fork();
+      const em = rootEm();
       const active = await em.findOneOrFail(User, {
         email: Email.parse('manuel@example.com'),
       });
@@ -809,143 +813,114 @@ describe('posts (e2e)', () => {
     });
   });
 
-  describe('notifications', () => {
-    const signedIn = () =>
-      app
-        .get(MikroORM)
-        .em.fork()
-        .findOneOrFail(User, { email: Email.parse('manuel@example.com') });
+  describe('tenancy', () => {
+    const TENANT = 'acme-corp';
+    const TENANT_SCHEMA = `tenant_${TENANT}`;
+    const FIRST_POSTS = '{ posts(first: 100) { edges { node { id title } } } }';
+    let outsider: GraphqlClient;
+    let visitor: GraphqlClient;
 
-    const givenANotification = async (
-      notifiable: Pick<User, 'notifiableType' | 'notifiableId'>,
-      title: string,
-      at: Date,
-    ) => {
-      const record = NotificationRecord.draft('posts.PostCreated', { title });
-      record.addressTo(
-        {
-          notifiableType: notifiable.notifiableType,
-          notifiableId: notifiable.notifiableId,
-          notifiableName: null,
-          routeNotificationFor: () => undefined,
-        },
-        at,
-      );
-      await app.get(MikroORM).em.fork().persist(record).flush();
-      return record;
+    const titlesIn = async (by: GraphqlClient): Promise<string[]> => {
+      const { data, errors } = await by.execute<{
+        posts: { edges: { node: { title: string } }[] };
+      }>(FIRST_POSTS);
+      expect(errors, JSON.stringify(errors)).toBeUndefined();
+      return data!.posts.edges.map((edge) => edge.node.title);
     };
 
-    it('lists the signed-in user’s notifications, newest first, and marks one as read', async () => {
-      const me = await signedIn();
-      const older = await givenANotification(
-        me,
-        'older',
-        new Date('2026-09-01T00:00:00Z'),
-      );
-      const newer = await givenANotification(
-        me,
-        'newer',
-        new Date('2026-09-02T00:00:00Z'),
-      );
-      await givenANotification(
-        { notifiableType: 'users.User', notifiableId: 'somebody-else' },
-        'not mine',
-        new Date(),
-      );
+    const tablesOf = async (schema: string): Promise<string[]> =>
+      (
+        await app
+          .get(MikroORM)
+          .em.fork()
+          .getConnection()
+          .execute<{ table_name: string }[]>(
+            'select table_name from information_schema.tables where table_schema = ?',
+            [schema],
+          )
+      ).map((row: { table_name: string }) => row.table_name);
 
-      const listed = await client.execute(
-        '{ notifications { id type data read readAt createdAt } }',
-      );
-      expect(listed.errors).toBeUndefined();
-      expect(listed.data!.notifications).toEqual([
-        expect.objectContaining({
-          id: newer.id.value,
-          type: 'posts.PostCreated',
-          data: { title: 'newer' },
-          read: false,
-          readAt: null,
-        }),
-        expect.objectContaining({
-          id: older.id.value,
-          data: { title: 'older' },
-        }),
-      ]);
+    const refusalOf = async (by: GraphqlClient) =>
+      (await by.execute(FIRST_POSTS)).errors?.[0]?.extensions?.code;
 
-      const marked = await client.execute(
-        'mutation($id: ID!) { markNotificationAsRead(id: $id) { id read readAt } }',
-        { id: older.id.value },
-      );
-      expect(marked.errors).toBeUndefined();
-      expect(marked.data!.markNotificationAsRead).toMatchObject({
-        id: older.id.value,
-        read: true,
-      });
-
-      const unread = await client.execute(
-        '{ notifications(unreadOnly: true) { id } }',
-      );
-      expect(unread.data!.notifications).toEqual([{ id: newer.id.value }]);
+    beforeAll(async () => {
+      await client.createOrganization('Acme Corp', TENANT);
+      outsider = await GraphqlClient.for(app);
+      await outsider.signUp('outsider@example.com', 'outsider');
+      visitor = await GraphqlClient.for(app);
     });
 
-    it('answers somebody else’s notification as if it did not exist', async () => {
-      const theirs = await givenANotification(
-        { notifiableType: 'users.User', notifiableId: 'somebody-else' },
-        'not mine',
-        new Date(),
-      );
-
-      const read = await client.execute(
-        'query($id: ID!) { notification(id: $id) { id } }',
-        { id: theirs.id.value },
-      );
-      const marked = await client.execute(
-        'mutation($id: ID!) { markNotificationAsRead(id: $id) { id } }',
-        { id: theirs.id.value },
-      );
-
-      expect(read.data!.notification).toBeNull();
-      expect(marked.errors?.[0].extensions).toEqual({ code: 'NOT_FOUND' });
+    afterEach(() => {
+      client.inTenant(undefined);
     });
 
-    it('registers a push token for the signed-in user, and forgets it', async () => {
-      const me = await signedIn();
-
-      const registered = await client.execute(
-        'mutation($input: RegisterDeviceInput!) { registerDevice(input: $input) { id deviceId platform } }',
-        {
-          input: { token: 'fcm-e2e', deviceId: 'pixel-8', platform: 'android' },
-        },
-      );
-      expect(registered.errors).toBeUndefined();
-      expect(registered.data!.registerDevice).toMatchObject({
-        deviceId: 'pixel-8',
-        platform: 'android',
-      });
-      const stored = await app
-        .get(MikroORM)
-        .em.fork()
-        .findOneOrFail(Device, { token: 'fcm-e2e' });
-      expect(stored.isOwnedBy(me)).toBe(true);
-
-      const removed = await client.execute(
-        'mutation { removeDevice(token: "fcm-e2e") }',
-      );
-      const again = await client.execute(
-        'mutation { removeDevice(token: "fcm-e2e") }',
-      );
-      expect(removed.data!.removeDevice).toBe(true);
-      expect(again.data!.removeDevice).toBe(false);
+    afterAll(async () => {
+      await outsider.dispose();
+      await visitor.dispose();
     });
 
-    it('requires a session', async () => {
-      const anonymous = await GraphqlClient.for(app);
+    it('a new organization is a tenant: its schema is made and migrated when the organization is', async () => {
+      expect(await tablesOf(TENANT_SCHEMA)).toEqual(
+        expect.arrayContaining(['posts', 'tags', 'users', 'notifications']),
+      );
+    });
 
-      const result = await anonymous.execute('{ notifications { id } }');
+    it('what is written in a tenant is read in that tenant, and nowhere else', async () => {
+      await createCompletePost('only in root');
+      client.inTenant(TENANT);
+      await createCompletePost('only in acme');
 
-      expect(result.errors?.[0].extensions).toMatchObject({
-        code: 'UNAUTHENTICATED',
+      const acme = await titlesIn(client);
+      client.inTenant(undefined);
+      const root = await titlesIn(client);
+
+      expect(acme).toContain('only in acme');
+      expect(acme).not.toContain('only in root');
+      expect(root).toContain('only in root');
+      expect(root).not.toContain('only in acme');
+    });
+
+    it('the saga closes inside the tenant: the post is completed with the tenant’s own default tag', async () => {
+      client.inTenant(TENANT);
+      const post = await createCompletePost('tagged in acme');
+
+      const { data } = await client.execute(
+        `{ post(id: "${post.id}") { ${POST_FIELDS} } }`,
+      );
+
+      expect(data!.post).toMatchObject({
+        version: 2,
+        tags: { edges: [{ node: { name: 'Untagged' } }] },
       });
-      await anonymous.dispose();
+    });
+
+    it('a subscription hears its own tenant, and not the others', async () => {
+      client.inTenant(TENANT);
+      const acme = await subscribeCreated();
+      client.inTenant(undefined);
+      const elsewhere = await createCompletePost('in root, for nobody in acme');
+      client.inTenant(TENANT);
+      const mine = await createCompletePost('in acme, for acme');
+
+      const event = await acme.waitForMatch(
+        (received) => received.onPostCreated?.id === mine.id,
+      );
+
+      expect(event.onPostCreated.title).toBe('in acme, for acme');
+      expect(
+        acme.received.map((received) => received.onPostCreated?.id),
+      ).not.toContain(elsewhere.id);
+      await acme.release();
+    });
+
+    it('refuses whoever is not a member of the organization, signed in or not', async () => {
+      expect(await refusalOf(outsider.inTenant(TENANT))).toBe('FORBIDDEN');
+      expect(await refusalOf(visitor.inTenant(TENANT))).toBe('FORBIDDEN');
+    });
+
+    it('creates nothing for a tenant a header merely names', async () => {
+      expect(await refusalOf(outsider.inTenant('ghost'))).toBe('FORBIDDEN');
+      expect(await tablesOf('tenant_ghost')).toEqual([]);
     });
   });
 });

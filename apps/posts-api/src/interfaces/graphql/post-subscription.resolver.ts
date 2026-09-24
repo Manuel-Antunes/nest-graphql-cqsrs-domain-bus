@@ -8,6 +8,7 @@ import { AllowAnonymous } from '@thallesp/nestjs-better-auth';
 import { OnPostCreatedSubscription } from '../../application/post/subscription/on-post-created.subscription';
 import { OnPostUpdatedSubscription } from '../../application/post/subscription/on-post-updated.subscription';
 import { PostView } from '../../dto/graphql/post.view';
+import { CurrentTenant } from '../decorators/current-tenant.decorator';
 import { MapSubscriptionInterceptor } from '../interceptors/map-subscription.interceptor';
 
 @AllowAnonymous()
@@ -17,21 +18,24 @@ export class PostSubscriptionResolver {
 
   @Subscription('onPostCreated', { resolve: (payload: PostView) => payload })
   @UseInterceptors(MapSubscriptionInterceptor(PostCreatedEvent, PostView))
-  onPostCreated(): AsyncIterable<PostCreatedEvent> {
+  onPostCreated(
+    @CurrentTenant() tenantId: string,
+  ): AsyncIterable<PostCreatedEvent> {
     return subscribeAsAsyncIterable(
       this.subscriptionBus,
-      new OnPostCreatedSubscription.OnPostCreated(),
+      new OnPostCreatedSubscription.OnPostCreated({ tenantId }),
     );
   }
 
   @Subscription('onPostUpdated', { resolve: (payload: PostView) => payload })
   @UseInterceptors(MapSubscriptionInterceptor(PostUpdatedEvent, PostView))
   onPostUpdated(
+    @CurrentTenant() tenantId: string,
     @Args('postId') postId?: string | null,
   ): AsyncIterable<PostUpdatedEvent> {
     return subscribeAsAsyncIterable(
       this.subscriptionBus,
-      new OnPostUpdatedSubscription.OnPostUpdated({ postId }),
+      new OnPostUpdatedSubscription.OnPostUpdated({ tenantId, postId }),
     );
   }
 }

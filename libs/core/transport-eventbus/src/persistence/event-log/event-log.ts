@@ -1,6 +1,6 @@
 import { EntityManager } from '@mikro-orm/core';
 import { Injectable, Logger } from '@nestjs/common';
-import { inRequestContext } from '@nestposts/database';
+import { inRequestContext, TENANT_SCHEMA, Tenant } from '@nestposts/database';
 import {
   eventTagsOf,
   eventTypeOf,
@@ -17,12 +17,18 @@ import {
   TRANSPORT_TIMESTAMP,
 } from '../../outbound/event-envelope';
 import { identifierOf } from '../../outbound/transport-metadata';
+import type { TraceCarrier } from '../../tracing';
+import { EventTrace, injectTraceContext } from '../../tracing';
 import { LoggedEvent } from './event-log.entity';
 
 /** One event as the log gives it back: the real class, and where it sits in the one order. */
 export interface LoggedRecord {
   readonly position: string;
   readonly event: object;
+  /** The tenant the event was appended in, or `null` where there are none. */
+  readonly tenant: string | null;
+  /** The trace the event was appended in, as W3C headers, or `null` when nothing was tracing. */
+  readonly traceContext: TraceCarrier | null;
 }
 
 /**
@@ -125,22 +131,22 @@ export class MikroOrmEventLog extends EventLog {
   ): Promise<LoggedRecord[]> {
     return this.at(async () => {
       const em = this.em.getContext();
-      const rows = await em
-        .getConnection()
-        .execute<(StoredRow & { position: string })[]>(
-          `select position, identifier, message_type as "messageType", payload,
-                occurred_at as "occurredAt"
+      const rows = await em.getConnection().execute<LoggedRow[]>(
+        `select position, identifier, message_type as "messageType", payload,
+                occurred_at as "occurredAt", tenant, trace_context as "traceContext"
            from ${table(em)}
           where position > ? or position = any(?::bigint[])
           order by position asc
           limit ?`,
-          [position, `{${gaps.join(',')}}`, limit],
-          'all',
-          em.getTransactionContext(),
-        );
-      return rows.map((row: StoredRow & { position: string }) => ({
+        [position, `{${gaps.join(',')}}`, limit],
+        'all',
+        em.getTransactionContext(),
+      );
+      return rows.map((row: LoggedRow) => ({
         position: row.position,
         event: eventOf(row),
+        tenant: row.tenant,
+        traceContext: row.traceContext,
       }));
     });
   }
@@ -185,8 +191,8 @@ export class MikroOrmEventLog extends EventLog {
 
     await em.getConnection().execute(
       `insert into ${table(em)}
-              (stream_id, sequence, identifier, message_type, payload, occurred_at)
-       values (?, ?, ?, ?, ?, ?)
+              (stream_id, sequence, identifier, message_type, payload, occurred_at, tenant, trace_context)
+       values (?, ?, ?, ?, ?, ?, ?, ?)
        on conflict (identifier) do nothing`,
       [
         streamId ?? null,
@@ -195,6 +201,8 @@ export class MikroOrmEventLog extends EventLog {
         messageType,
         JSON.stringify(encodeData(event)),
         (event as { occurredAt?: Date }).occurredAt ?? new Date(),
+        Tenant.ofSchema(em.schema) ?? null,
+        traceContextOf(event),
       ],
       'run',
       em.getTransactionContext(),
@@ -237,6 +245,21 @@ interface StoredRow {
   occurredAt: Date;
 }
 
+interface LoggedRow extends StoredRow {
+  position: string;
+  tenant: string | null;
+  traceContext: TraceCarrier | null;
+}
+
+/**
+ * The event's own stamp — where it was published — or, for one nobody stamped, the trace this
+ * append runs in: an ingestion appends what arrived inside the span that received it.
+ */
+const traceContextOf = (event: object): string | null => {
+  const carrier = EventTrace.carrierOf(event) ?? injectTraceContext({});
+  return Object.keys(carrier).length > 0 ? JSON.stringify(carrier) : null;
+};
+
 const eventOf = (row: StoredRow): object =>
   reconstruct(
     new EventEnvelope(
@@ -256,8 +279,9 @@ const table = (em: EntityManager): string => {
   const metadata = em.getMetadata().find(LoggedEvent);
   const platform = em.getPlatform();
   const name = platform.quoteIdentifier(metadata?.tableName ?? 'event_log');
-  const schema = metadata?.schema ?? em.config.get('schema');
-  return schema && schema !== '*'
-    ? `${platform.quoteIdentifier(schema)}.${name}`
-    : name;
+  const schema =
+    !metadata?.schema || metadata.schema === TENANT_SCHEMA
+      ? (em.schema ?? em.config.get('schema'))
+      : metadata.schema;
+  return schema ? `${platform.quoteIdentifier(schema)}.${name}` : name;
 };

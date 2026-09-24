@@ -1,8 +1,15 @@
 import { Test } from '@nestjs/testing';
-import { inRequestContext, MikroORM } from '@nestposts/database';
+import {
+  inRequestContext,
+  MikroORM,
+  ROOT_TENANT_SCHEMA,
+  TENANT_MIGRATIONS,
+} from '@nestposts/database';
 import { MailSender } from '@nestposts/mail/mail-sender';
 import type { CapturingMailSender } from '@nestposts/mail/testing/capturing-mail-sender';
 import { capturingMailSender } from '@nestposts/mail/testing/capturing-mail-sender';
+import { migrate } from '@nestposts/migrator/main';
+import { tenantMigrations } from '@nestposts/migrator/migrations/tenant/index';
 import { NotificationDelivery } from '@nestposts/notifications/domain/delivery/notification-delivery';
 import { NotificationReceivedEvent } from '@nestposts/notifications/domain/notification/event/notification-received.event';
 import { NotificationRecord } from '@nestposts/notifications/domain/notification/notification-record.entity';
@@ -81,14 +88,14 @@ describe('the notificator service', () => {
   const recordsOf = (notificationId: string) =>
     notificator.app
       .get(MikroORM)
-      .em.fork()
+      .em.fork({ schema: ROOT_TENANT_SCHEMA })
       .find(NotificationRecord, { id: NotificationId.parse(notificationId) });
 
   const deliveriesOf = async (notificationId: string) =>
     (
       await notificator.app
         .get(MikroORM)
-        .em.fork()
+        .em.fork({ schema: ROOT_TENANT_SCHEMA })
         .find(
           NotificationDelivery,
           { notificationId },
@@ -102,11 +109,15 @@ describe('the notificator service', () => {
       .filter((mail) => mail.to.some((to) => to.address === address));
 
   beforeAll(async () => {
+    await migrate();
     notificator = await startInProcessService(
       await Test.createTestingModule({ imports: [AppModule] })
         .overrideProvider(MailSender)
         .useFactory(capturingMailSender)
+        .overrideProvider(TENANT_MIGRATIONS)
+        .useValue({ migrationsList: tenantMigrations })
         .compile(),
+      { createSchema: false },
     );
     postsApi = new MemoryClient({
       servers: [notificator.server],

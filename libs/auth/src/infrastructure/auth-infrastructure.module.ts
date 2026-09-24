@@ -16,9 +16,22 @@ import { BETTER_AUTH } from './better-auth/tokens';
  * top of this one — `@nestposts/organizations` — contributes its plugin and its tables in one place,
  * at the composition root, without this package ever naming it.
  */
+export interface AuthInfrastructureModuleOptions
+  extends BetterAuthModuleOptions {
+  /**
+   * Whether this application SERVES `/api/auth/*`. On by default; a service that only needs to know
+   * who is calling — a subgraph behind the gateway — turns it off and keeps the global guard, which
+   * reads the session through the same Better Auth instance either way.
+   */
+  readonly routes?: boolean;
+}
+
 @Module({})
 export class AuthInfrastructureModule {
-  static forRoot(options: BetterAuthModuleOptions = {}): DynamicModule {
+  static forRoot({
+    routes = true,
+    ...options
+  }: AuthInfrastructureModuleOptions = {}): DynamicModule {
     const betterAuth = BetterAuthModule.forRoot(options);
 
     return {
@@ -26,6 +39,7 @@ export class AuthInfrastructureModule {
       imports: [
         betterAuth,
         NestBetterAuthModule.forRootAsync({
+          disableControllers: !routes,
           imports: [betterAuth],
           inject: [BETTER_AUTH, MikroORM],
           useFactory: (auth: BetterAuth, orm: MikroORM) => ({

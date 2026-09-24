@@ -16,7 +16,10 @@ import { usersEntities } from '@nestposts/users/infrastructure/users-infrastruct
 import { CompleteOnPostPreCreated } from './application/complete-on-post-pre-created.saga';
 import { CompletePostWithDefaultTagCommand } from './application/complete-post-with-default-tag.command';
 import { PostEventsPublisher } from './infrastructure/outbox/post-events.publisher';
-import { mikroOrmConfig } from './infrastructure/persistence/mikro-orm.config';
+import {
+  mikroOrmConfig,
+  tenantMigrations,
+} from './infrastructure/persistence/mikro-orm.config';
 import { exceptionProducer } from './infrastructure/transport/exceptionProducer';
 import { postEventsClient } from './infrastructure/transport/postEventsClient';
 import {
@@ -32,7 +35,11 @@ import { PostEventsController } from './interfaces/messaging/post-events.control
     CqsrsModule.forRoot({ aggregatePublisher: TRANSPORT_EVENT_BUS_PUBLISHER }),
     DatabaseModule.forRoot(mikroOrmConfig()),
     DatabaseModule.forFeature([...postsEntities, ...usersEntities]),
-    TenancyModule.forRoot({ http: false, resolver: TransportTenantResolver }),
+    TenancyModule.forRoot({
+      http: false,
+      resolver: TransportTenantResolver,
+      migrations: tenantMigrations(),
+    }),
     RetryPolicyModule.forRootAsync({
       useFactory: () => ({
         exceptionProducer: exceptionProducer(),

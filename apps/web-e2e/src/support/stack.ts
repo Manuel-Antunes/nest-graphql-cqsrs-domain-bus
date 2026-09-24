@@ -8,12 +8,15 @@ import { WORKSPACE_ROOT } from './docker';
 import { HttpHealth, nextApplication, Service } from './service';
 import { e2eTransport } from './transport';
 
-export const POSTS_SCHEMA = process.env.POSTS_SCHEMA ?? 'posts';
-export const TAGGING_SCHEMA = process.env.TAGGING_SCHEMA ?? 'tagging';
+export const ROOT_TENANT = 'root';
 
 export const WEB_PORT = Number(process.env.WEB_PORT ?? 4300);
 
 export const WEB_URL = process.env.WEB_URL ?? `http://localhost:${WEB_PORT}`;
+
+/** The federation gateway, as the host reaches it — published by the global setup. */
+export const gatewayUrl = (): string =>
+  process.env.GATEWAY_URL ?? 'http://localhost:4000/graphql';
 
 export const AUTH_SECRET =
   process.env.AUTH_SECRET ?? 'nestposts-web-e2e-secret';
@@ -22,8 +25,8 @@ export const AUTH_SECRET =
  * **The whole system, provisioned once**: a browser's worth of it.
  *
  * Everything the browser does not run is a **container**, from the images `apps/<app>/Dockerfile` build —
- * Postgres, RabbitMQ, Mailpit, the migrator as a one-shot, and then `posts-api`, `tagging` and
- * `notificator`. They share a
+ * Postgres, RabbitMQ, Mailpit, the migrator as a one-shot, and then `posts-api`, `tagging`,
+ * `notificator` and the `gateway` that federates the first and the last. They share a
  * network and address each other by alias, so the suite never has to teach one of them a port.
  *
  * `apps/web` is the exception, and deliberately: it is the thing under the browser, it is served by
@@ -43,8 +46,8 @@ export class Stack {
   readonly logDirectory =
     process.env.E2E_LOGS ?? join(WORKSPACE_ROOT, 'apps/web-e2e/target/logs');
 
-  readonly postsStore = new ServiceDatabase(POSTS_SCHEMA);
-  readonly taggingStore = new ServiceDatabase(TAGGING_SCHEMA);
+  readonly postsStore = ServiceDatabase.ofTenant(ROOT_TENANT);
+  readonly taggingStore = ServiceDatabase.ofTenant(ROOT_TENANT);
 
   private readonly containers = new ContainerStack();
   private web?: Service;
@@ -54,11 +57,10 @@ export class Stack {
     const endpoints = await this.containers.up({
       transport: e2eTransport(),
       apiPort: await FreePort.pick(),
+      gatewayPort: await FreePort.pick(),
       storagePort: await FreePort.pick(),
       webUrl: WEB_URL,
       authSecret: AUTH_SECRET,
-      postsSchema: POSTS_SCHEMA,
-      taggingSchema: TAGGING_SCHEMA,
       logs: (line) =>
         appendFileSync(join(this.logDirectory, 'containers.log'), line),
     });
@@ -89,6 +91,7 @@ export class Stack {
   private publish(endpoints: Endpoints): void {
     process.env.POSTGRES_URL = endpoints.postgresUrl;
     process.env.API_URL = endpoints.apiUrl;
+    process.env.GATEWAY_URL = endpoints.gatewayUrl;
     process.env.E2E_STORAGE_URL = endpoints.storageUrl;
     process.env.E2E_MAILBOX_URL = endpoints.mailboxUrl;
     if (endpoints.managementUrl) {
@@ -106,11 +109,12 @@ export class Stack {
       new HttpHealth(() => this.isWebUp(), WEB_URL),
       {
         POSTGRES_URL: endpoints.postgresUrl,
-        POSTS_SCHEMA,
-        TAGGING_SCHEMA,
         AUTH_SECRET,
         WEB_URL,
         NEXT_PUBLIC_API_URL: endpoints.apiUrl,
+        NEXT_PUBLIC_GATEWAY_URL: endpoints.gatewayUrl,
+        POSTS_SUBGRAPH_URL: `${endpoints.apiUrl}/graphql`,
+        GATEWAY_URL: endpoints.gatewayUrl,
         PORT: String(WEB_PORT),
         MIKRO_ORM_DEBUG: 'false',
         AUTH_RATE_LIMIT: 'false',

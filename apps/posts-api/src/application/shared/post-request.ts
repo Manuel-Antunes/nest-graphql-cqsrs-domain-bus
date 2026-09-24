@@ -1,5 +1,5 @@
 import { AsyncContext } from '@nestjs/cqrs';
-import { ROOT_TENANT, TENANT_HEADER } from '@nestposts/database';
+import { ROOT_TENANT, TENANT_HEADER, Tenant } from '@nestposts/database';
 import type { PostId } from '@nestposts/posts/domain/post/vo/post-id';
 import type { ContextAttributes } from '@nestposts/transport-eventbus';
 
@@ -18,6 +18,10 @@ export class PostRequest extends AsyncContext implements ContextAttributes {
   static override of(message: object): PostRequest | undefined {
     const context = AsyncContext.of(message);
     return context instanceof PostRequest ? context : undefined;
+  }
+
+  static tenantOf(event: object): string {
+    return PostRequest.of(event)?.tenantId ?? Tenant.of(event) ?? ROOT_TENANT;
   }
 
   toAttributes(): Record<string, string> {

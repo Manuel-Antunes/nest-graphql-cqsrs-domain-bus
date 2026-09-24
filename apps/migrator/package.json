@@ -7,11 +7,13 @@
     "./package.json": "./package.json",
     ".": {
       "@nestposts/source": "./src/main.ts",
+      "types": "./dist/main.d.ts",
       "require": "./dist/main.js",
       "default": "./dist/main.js"
     },
     "./*": {
       "@nestposts/source": "./src/*.ts",
+      "types": "./dist/*.d.ts",
       "require": "./dist/*.js",
       "default": "./dist/*.js"
     }
@@ -51,13 +53,19 @@
         "dependsOn": [
           "build"
         ],
-        "defaultConfiguration": "posts",
+        "defaultConfiguration": "all",
         "configurations": {
-          "posts": {
-            "command": "pnpm exec mikro-orm migration:up --config ./apps/migrator/dist/posts-mikro-orm.config.js"
+          "all": {
+            "command": "node apps/migrator/dist/main.js migrate"
           },
-          "tagging": {
-            "command": "pnpm exec mikro-orm migration:up --config ./apps/migrator/dist/tagging-mikro-orm.config.js"
+          "system": {
+            "command": "pnpm exec mikro-orm migration:up --config ./apps/migrator/dist/system-mikro-orm.config.js"
+          },
+          "tenant": {
+            "command": "pnpm exec mikro-orm migration:up --config ./apps/migrator/dist/tenant-mikro-orm.config.js"
+          },
+          "tenants": {
+            "command": "node apps/migrator/dist/main.js migrate:tenants"
           }
         }
       },
@@ -66,13 +74,13 @@
         "dependsOn": [
           "build"
         ],
-        "defaultConfiguration": "posts",
+        "defaultConfiguration": "tenant",
         "configurations": {
-          "posts": {
-            "command": "pnpm exec mikro-orm migration:down --config ./apps/migrator/dist/posts-mikro-orm.config.js"
+          "tenant": {
+            "command": "pnpm exec mikro-orm migration:down --config ./apps/migrator/dist/tenant-mikro-orm.config.js"
           },
-          "tagging": {
-            "command": "pnpm exec mikro-orm migration:down --config ./apps/migrator/dist/tagging-mikro-orm.config.js"
+          "system": {
+            "command": "pnpm exec mikro-orm migration:down --config ./apps/migrator/dist/system-mikro-orm.config.js"
           }
         }
       },
@@ -81,14 +89,8 @@
         "dependsOn": [
           "build"
         ],
-        "defaultConfiguration": "posts",
-        "configurations": {
-          "posts": {
-            "command": "pnpm exec mikro-orm migration:fresh --seed --config ./apps/migrator/dist/posts-mikro-orm.config.js"
-          },
-          "tagging": {
-            "command": "pnpm exec mikro-orm migration:fresh --config ./apps/migrator/dist/tagging-mikro-orm.config.js"
-          }
+        "options": {
+          "command": "node apps/migrator/dist/main.js fresh"
         }
       },
       "pending": {
@@ -96,13 +98,13 @@
         "dependsOn": [
           "build"
         ],
-        "defaultConfiguration": "posts",
+        "defaultConfiguration": "tenant",
         "configurations": {
-          "posts": {
-            "command": "pnpm exec mikro-orm migration:list --config ./apps/migrator/dist/posts-mikro-orm.config.js"
+          "tenant": {
+            "command": "pnpm exec mikro-orm migration:pending --config ./apps/migrator/dist/tenant-mikro-orm.config.js"
           },
-          "tagging": {
-            "command": "pnpm exec mikro-orm migration:list --config ./apps/migrator/dist/tagging-mikro-orm.config.js"
+          "system": {
+            "command": "pnpm exec mikro-orm migration:pending --config ./apps/migrator/dist/system-mikro-orm.config.js"
           }
         }
       },
@@ -111,14 +113,14 @@
         "dependsOn": [
           "build"
         ],
-        "defaultConfiguration": "posts",
+        "defaultConfiguration": "tenant",
         "configurations": {
-          "posts": {
-            "command": "pnpm exec mikro-orm migration:create --config ./apps/migrator/dist/posts-mikro-orm.config.js",
+          "tenant": {
+            "command": "pnpm exec mikro-orm migration:create --config ./apps/migrator/dist/tenant-mikro-orm.config.js",
             "forwardAllArgs": true
           },
-          "tagging": {
-            "command": "pnpm exec mikro-orm migration:create --config ./apps/migrator/dist/tagging-mikro-orm.config.js",
+          "system": {
+            "command": "pnpm exec mikro-orm migration:create --config ./apps/migrator/dist/system-mikro-orm.config.js",
             "forwardAllArgs": true
           }
         }
@@ -129,7 +131,7 @@
           "build"
         ],
         "options": {
-          "command": "pnpm exec mikro-orm seeder:create --config ./apps/migrator/dist/posts-mikro-orm.config.js",
+          "command": "pnpm exec mikro-orm seeder:create --config ./apps/migrator/dist/system-mikro-orm.config.js",
           "forwardAllArgs": true
         }
       },
@@ -139,7 +141,7 @@
           "build"
         ],
         "options": {
-          "command": "pnpm exec mikro-orm seeder:run --config ./apps/migrator/dist/posts-mikro-orm.config.js --class DatabaseSeeder"
+          "command": "node apps/migrator/dist/main.js seed"
         }
       },
       "setup": {

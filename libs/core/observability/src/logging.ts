@@ -59,8 +59,22 @@ export const loggingParams = (options: LoggingOptions): Params => {
        * looking for. The same requests `HttpInstrumentation` leaves untraced.
        */
       autoLogging: { ignore: (request) => HEALTH.test(request.url ?? '') },
+      /**
+       * Credentials never reach a log. A session cookie or a bearer token in a record is a working
+       * credential in whatever stores the record — CloudWatch, the collector's destination — and a
+       * gateway forwards both on every request it routes.
+       */
+      redact: { paths: REDACTED_PATHS, censor: '[redacted]' },
     },
   };
 };
+
+/** The request and response headers that carry a credential. */
+export const REDACTED_PATHS = [
+  'req.headers.cookie',
+  'req.headers.authorization',
+  'req.headers["x-api-key"]',
+  'res.headers["set-cookie"]',
+];
 
 const inLambda = (): boolean => Boolean(process.env.AWS_LAMBDA_FUNCTION_NAME);

@@ -34,8 +34,17 @@ export interface InProcessService {
  * Which is how a spec replaces a destination's client: `Test.createTestingModule({ imports: [AppModule]
  * }).overrideProvider(POST_EVENTS_CLIENT).useFactory(...)` and then `startInProcessService(module)`.
  */
+export interface InProcessServiceOptions {
+  /**
+   * Whether the service's schema is created from its entities on start and dropped on close. On by
+   * default, for a spec on a schema of its own; off for one whose tables the real migrations made.
+   */
+  readonly createSchema?: boolean;
+}
+
 export const startInProcessService = async (
   source: ModuleMetadata | TestingModule,
+  { createSchema = true }: InProcessServiceOptions = {},
 ): Promise<InProcessService> => {
   const server = new MemoryServer();
   const module = isCompiled(source)
@@ -47,7 +56,7 @@ export const startInProcessService = async (
 
   await app.listen();
 
-  const orm = ormOf(app);
+  const orm = createSchema ? ormOf(app) : undefined;
   if (orm) {
     await ensureTestSchema(orm);
   }

@@ -1,5 +1,4 @@
-import { ROOT_TENANT, Tenant } from './tenant';
-import { SchemaPerTenant, SharedSchemaTenants } from './tenant-schemas';
+import { ROOT_TENANT, ROOT_TENANT_SCHEMA, Tenant } from './tenant';
 
 describe('the tenant a request names', () => {
   describe('normalizing what arrived', () => {
@@ -33,18 +32,14 @@ describe('the tenant a request names', () => {
   });
 
   describe('where a tenant rows live', () => {
-    it('shared: every tenant reads the connection own schema', () => {
-      const schemas = new SharedSchemaTenants();
-
-      expect(schemas.schemaFor(ROOT_TENANT)).toBeUndefined();
-      expect(schemas.schemaFor('acme')).toBeUndefined();
+    it('a schema each, named after the tenant', () => {
+      expect(Tenant.schemaOf('acme')).toBe('tenant_acme');
+      expect(Tenant.schemaOf('  Globex ')).toBe('tenant_globex');
     });
 
-    it('per tenant: a schema each, and the root one stays where the connection points', () => {
-      const schemas = new SchemaPerTenant('posts');
-
-      expect(schemas.schemaFor('acme')).toBe('posts_acme');
-      expect(schemas.schemaFor(ROOT_TENANT)).toBeUndefined();
+    it('and the root tenant has one too, which is where whoever names none reads', () => {
+      expect(Tenant.schemaOf(ROOT_TENANT)).toBe(ROOT_TENANT_SCHEMA);
+      expect(Tenant.schemaOf('undefined')).toBe('tenant_root');
     });
   });
 });

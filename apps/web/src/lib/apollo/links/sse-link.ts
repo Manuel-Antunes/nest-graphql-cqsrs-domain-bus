@@ -4,6 +4,8 @@ import type { Client } from 'graphql-sse';
 import { createClient } from 'graphql-sse';
 import { Observable } from 'rxjs';
 
+import { TenantHeader } from '../tenant';
+
 const CONNECT_DEADLINE_MS = 45_000;
 
 const connections = new EventTarget();
@@ -30,7 +32,8 @@ export function onSseConnected(
  *
  * It goes straight to the API and not through `/api/graphql`: a Next route handler answers a request,
  * and a subscription is a stream that stays open. The subscriptions here are `@AllowAnonymous`, so
- * there is nothing to forward.
+ * there is no session to forward — only the tenant, the active organization's slug, because a
+ * subscription only hears what happens in its own tenant.
  */
 export class GraphQLSSELink extends ApolloLink {
   private readonly client: Client;
@@ -41,6 +44,7 @@ export class GraphQLSSELink extends ApolloLink {
       url,
       singleConnection: false,
       retryAttempts: 5,
+      headers: () => TenantHeader.headers(),
     });
   }
 

@@ -82,13 +82,19 @@ export const sharedEnvironment = {
   BETTER_STACK_API_KEY: betterStackApiKey,
 };
 
+/**
+ * **The gateway's GraphQL URL, and the resource every OAuth access token is issued for.** Each Better
+ * Auth instance reads it as the audience a bearer JWT must carry, and the migrator registers it as an
+ * `oauthResource` — so it is one value, derived once, for all of them.
+ */
+export const gatewayUrl = $interpolate`${router.url}/graphql`;
+
 export const postsEnvironment = {
   ...sharedEnvironment,
   OTEL_SERVICE_NAME: 'posts-api',
   POSTS_TRANSPORT: 'aws',
   POSTS_TOPIC_ARN: postEvents.arn,
   POSTS_COMPLETED_QUEUE_URL: completed.url,
-  POSTS_SCHEMA: 'posts',
   /**
    * **How long an SSE subscription is allowed to live**, well under the function's 300s timeout.
    *
@@ -112,6 +118,7 @@ export const postsEnvironment = {
   AUTH_URL: router.url,
   WEB_URL: router.url,
   AUTH_TRUSTED_ORIGINS: router.url,
+  GATEWAY_URL: gatewayUrl,
   DRIVE_BUCKET: bucket.name,
   DRIVE_CDN_URL: filesUrl,
 };
@@ -122,21 +129,23 @@ export const taggingEnvironment = {
   TAGGING_TRANSPORT: 'aws',
   TAGGING_TOPIC_ARN: postEvents.arn,
   TAGGING_QUEUE_URL: taggingEvents.url,
-  TAGGING_SCHEMA: 'tagging',
 };
 
 /**
- * **The notificator lives in the `posts` schema**, beside the users it notifies and the tables its
- * notifications are read from — which is the one exception to a schema per service, and why it has no
- * schema variable of its own. It sends email through SES, in the function's own region, as the
- * identity `mail/email.ts` creates — with the IAM that identity's link carries.
+ * **The notificator works in the tenant a message or a request names**, like every service here: its
+ * notifications live in that tenant's schema, beside the users they are for. It sends email through
+ * SES, in the function's own region, as the identity `mail/email.ts` creates — with the IAM that
+ * identity's link carries.
  */
 export const notificatorEnvironment = {
   ...sharedEnvironment,
   OTEL_SERVICE_NAME: 'notificator',
   NOTIFICATOR_TRANSPORT: 'aws',
   NOTIFICATOR_QUEUE_URL: notificatorNotifications.url,
-  POSTS_SCHEMA: 'posts',
+  AUTH_SECRET: authSecret.value,
+  AUTH_URL: router.url,
+  WEB_URL: router.url,
+  GATEWAY_URL: gatewayUrl,
   MAIL_TRANSPORT: 'ses',
   MAIL_FROM: mailFrom,
 };
@@ -154,19 +163,31 @@ export const seedEnvironment: Record<string, string> = Object.fromEntries(
 );
 
 /**
- * The migrator boots a Nest container per database, and the `posts` one carries the **real Better
- * Auth stack** — which is how `TestUsersSeeder` creates a credential instead of inserting a password
- * hash it made up. So it needs the same `AUTH_SECRET` as everything else that reads a session.
+ * The migrator boots a Nest container that carries the **real Better Auth stack** — which is how
+ * `TestUsersSeeder` creates a credential instead of inserting a password hash it made up. So it needs
+ * the same `AUTH_SECRET` as everything else that reads a session.
  */
 export const migratorEnvironment = {
   ...sharedEnvironment,
   OTEL_SERVICE_NAME: 'migrator',
-  POSTS_SCHEMA: 'posts',
-  TAGGING_SCHEMA: 'tagging',
   AUTH_SECRET: authSecret.value,
   AUTH_URL: router.url,
   WEB_URL: router.url,
+  GATEWAY_URL: gatewayUrl,
   ...seedEnvironment,
+};
+
+/**
+ * The gateway holds no database and no Better Auth: it composes the SDL copied beside its bundle,
+ * forwards each caller's cookie and bearer, and reads the issuer's published keys through the router
+ * only to derive who a bearer token is for.
+ */
+export const gatewayEnvironment = {
+  ...sharedEnvironment,
+  OTEL_SERVICE_NAME: 'gateway',
+  GATEWAY_URL: gatewayUrl,
+  WEB_URL: router.url,
+  AUTH_URL: router.url,
 };
 
 /** What every function is allowed to reach. The queues and the topic carry the IAM with them. */

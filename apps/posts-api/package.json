@@ -12,6 +12,10 @@
     }
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "catalog:",
+    "@aws-sdk/lib-storage": "catalog:",
+    "@aws-sdk/s3-request-presigner": "catalog:",
+    "@nestjs-modules/mailer": "catalog:",
     "@nestposts/asset": "workspace:*",
     "@nestposts/auth": "workspace:*",
     "@nestposts/cqsrs": "workspace:*",
@@ -26,37 +30,61 @@
     "@nestposts/posts": "workspace:*",
     "@nestposts/transport-eventbus": "workspace:*",
     "@nestposts/users": "workspace:*",
-    "@nestposts/validated-dto": "workspace:*"
+    "@nestposts/validated-dto": "workspace:*",
+    "clsx": "catalog:",
+    "firebase-admin": "catalog:",
+    "flydrive": "catalog:",
+    "html-to-text": "catalog:",
+    "nodemailer": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "react-email": "catalog:",
+    "tailwind-merge": "catalog:"
   },
   "nx": {
     "targets": {
       "build": {
         "executor": "nx:run-commands",
         "cache": true,
-        "dependsOn": [
-          "^build"
-        ],
         "inputs": [
           "production",
-          "^production"
+          "^production",
+          "{workspaceRoot}/apps/migrator/src/migrations/tenant/**/*.ts",
+          "{workspaceRoot}/tools/webpack/**/*"
         ],
         "outputs": [
           "{projectRoot}/dist"
         ],
         "options": {
           "cwd": "{projectRoot}",
-          "command": "nest build"
+          "command": "webpack-cli build",
+          "args": [
+            "--config-node-env=production"
+          ]
+        },
+        "configurations": {
+          "development": {
+            "args": [
+              "--config-node-env=development"
+            ]
+          }
         }
       },
       "serve": {
-        "executor": "nx:run-commands",
         "continuous": true,
-        "dependsOn": [
-          "^build"
-        ],
+        "executor": "@nx/js:node",
+        "defaultConfiguration": "development",
         "options": {
-          "cwd": "{projectRoot}",
-          "command": "nest start --watch"
+          "buildTarget": "@nestposts/posts-api:build",
+          "runBuildTargetDependencies": false
+        },
+        "configurations": {
+          "development": {
+            "buildTarget": "@nestposts/posts-api:build:development"
+          },
+          "production": {
+            "buildTarget": "@nestposts/posts-api:build:production"
+          }
         }
       },
       "test-e2e": {

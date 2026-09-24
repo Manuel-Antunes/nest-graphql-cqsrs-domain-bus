@@ -2,10 +2,11 @@ import type { EntityManager } from '@mikro-orm/core';
 import { MikroORM, RequestContext } from '@mikro-orm/core';
 import type { IEvent } from '@nestjs/cqrs';
 import { EventBus, ofType, Saga } from '@nestjs/cqrs';
+import { Tenant } from '@nestposts/database';
 import { closeTestDatabase, testDatabase } from '@nestposts/database/testing';
 import { EventType } from '@nestposts/platform/domain/shared/event-type';
 import type { Observable } from 'rxjs';
-import { EMPTY, firstValueFrom, map, timeout } from 'rxjs';
+import { EMPTY, firstValueFrom, map, take, timeout, toArray } from 'rxjs';
 
 import { EventEnvelopeFactory } from '../outbound/event-envelope.factory';
 import { MikroOrmEventLog } from '../persistence/event-log/event-log';
@@ -14,6 +15,7 @@ import {
   LoggedEvent,
 } from '../persistence/event-log/event-log.entity';
 import { CorrelatedRequestContext } from '../request-context';
+import { EventTrace } from '../tracing';
 import { TransportEventBusService } from '../transport-event-bus.service';
 import { TransportIdentity } from '../transport-identity';
 import { EventSourcedEventBus } from './event-sourced-event-bus';
@@ -267,6 +269,58 @@ describe('the EventBus, event sourced', () => {
 
       expect(seen).toContain('fast');
       expect(seen).toContain('slow');
+    });
+  });
+
+  describe('one log, every tenant', () => {
+    it('says which tenant each event was appended in', async () => {
+      const source = containerThatSubscribes();
+      const arrived = firstValueFrom(
+        source.pipe(
+          ofType(PostCompletedEvent),
+          take(2),
+          toArray(),
+          timeout(4000),
+        ),
+      );
+      await settle();
+
+      for (const tenant of ['acme', 'globex']) {
+        await RequestContext.create(
+          orm.em.fork({ schema: Tenant.schemaOf(tenant) }),
+          () =>
+            log.append([
+              new PostCompletedEvent(`in-${tenant}`, 'Nest', new Date()),
+            ]),
+        );
+      }
+
+      expect(
+        (await arrived).map((event) => [event.postId, Tenant.of(event)]),
+      ).toEqual([
+        ['in-acme', 'acme'],
+        ['in-globex', 'globex'],
+      ]);
+    });
+
+    it('and which trace', async () => {
+      const traceparent =
+        '00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01';
+      const source = containerThatSubscribes();
+      const arrived = firstValueFrom(
+        source.pipe(ofType(PostCompletedEvent), timeout(4000)),
+      );
+      await settle();
+
+      await RequestContext.create(orm.em.fork(), () =>
+        log.append([
+          EventTrace.stamp(new PostCompletedEvent('p-1', 'Nest', new Date()), {
+            traceparent,
+          }),
+        ]),
+      );
+
+      expect(EventTrace.carrierOf(await arrived)).toEqual({ traceparent });
     });
   });
 });

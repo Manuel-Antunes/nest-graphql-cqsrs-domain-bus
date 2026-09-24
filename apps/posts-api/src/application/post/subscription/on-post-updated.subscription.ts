@@ -4,14 +4,20 @@ import { Subscription, SubscriptionHandler } from '@nestposts/cqsrs';
 import { PostUpdatedEvent } from '@nestposts/posts/domain/post/event/post-updated.event';
 import type { Observable } from 'rxjs';
 
+import { PostRequest } from '../../shared/post-request';
+
 export namespace OnPostUpdatedSubscription {
   export interface Criteria {
+    readonly tenantId: string;
     readonly postId?: string | null;
   }
 
   export class OnPostUpdated extends Subscription<PostUpdatedEvent, Criteria> {
     override match(event: PostUpdatedEvent): boolean {
-      return !this.criteria.postId || event.postId === this.criteria.postId;
+      return (
+        PostRequest.tenantOf(event) === this.criteria.tenantId &&
+        (!this.criteria.postId || event.postId === this.criteria.postId)
+      );
     }
   }
 

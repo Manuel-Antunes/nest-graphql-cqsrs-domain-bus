@@ -31,6 +31,14 @@ export class MikroOrmNotificationRecordRepository extends NotificationRecordRepo
     await this.em.persist(record).flush();
   }
 
+  async saveAll(records: readonly NotificationRecord[]): Promise<void> {
+    await this.em.persist([...records]).flush();
+  }
+
+  async remove(record: NotificationRecord): Promise<void> {
+    await this.em.remove(record).flush();
+  }
+
   findById(id: NotificationId): Promise<NotificationRecord | null> {
     return inRequestContext(this.em, () =>
       this.em.findOne(NotificationRecord, { id }),
@@ -52,6 +60,29 @@ export class MikroOrmNotificationRecordRepository extends NotificationRecordRepo
         },
         { orderBy: { createdAt: 'desc', id: 'desc' }, limit },
       ),
+    );
+  }
+
+  findUnreadByNotifiable(
+    notifiableType: string,
+    notifiableId: string,
+  ): Promise<NotificationRecord[]> {
+    return inRequestContext(this.em, () =>
+      this.em.find(NotificationRecord, {
+        notifiableType,
+        notifiableId,
+        readAt: null,
+      }),
+    );
+  }
+
+  countUnread(notifiableType: string, notifiableId: string): Promise<number> {
+    return inRequestContext(this.em, () =>
+      this.em.count(NotificationRecord, {
+        notifiableType,
+        notifiableId,
+        readAt: null,
+      }),
     );
   }
 }

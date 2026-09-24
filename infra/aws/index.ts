@@ -9,7 +9,9 @@
  * three.
  */
 import {
+  gateway,
   migrator,
+  notificationsSubgraph,
   notificatorWorker,
   postsInbox,
   seeder,
@@ -34,6 +36,10 @@ export const outputs = {
   graphql: $interpolate`${router.url}/graphql`,
 
   stream: streaming.url,
+
+  gateway: gateway.url,
+
+  notificationsSubgraph: notificationsSubgraph.url,
 
   web: web.url,
 

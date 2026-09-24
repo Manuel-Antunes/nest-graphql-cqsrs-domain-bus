@@ -87,10 +87,28 @@ The first says the session has not picked an organization; the second says the c
 do not belong to. `requireActiveMember()` throws them apart on purpose and
 `AuthExceptionFilter` gives them different codes — one is a prompt, the other a refusal.
 
-## The tenant schema
+## An organization is a tenant
 
-`Organization` carries a MikroORM `trigger` that creates `tenant_<slug>` on insert and drops it
-`cascade` on delete, emitted into a migration like any other DDL. It quotes with `%I`: a slug may
-contain a dash, and `tenant_acme-corp` is not a valid unquoted identifier. See
-`libs/database/README.md` for what routes queries there, and `libs/auth/README.md` for the rest of
-the Better Auth wiring.
+A tenant's rows live in a schema of its own, `tenant_<slug>` — see `libs/database/README.md` for the
+entity manager that routes there, and the root `CLAUDE.md` for the whole path. This library owns the
+three things that make an organization one:
+
+- **The schema is created with the row.** `Organization` carries a MikroORM `trigger` that creates
+  `tenant_<slug>` on insert and drops it `cascade` on delete, emitted into a system migration like any
+  other DDL. It quotes with `%I`: a slug may contain a dash, and `tenant_acme-corp` is not a valid
+  unquoted identifier.
+- **The schema is migrated when the organization is created.** The plugin's
+  `organizationHooks.afterCreateOrganization` calls `TenantEntityManagerService.provision(slug)` — an
+  optional dependency, `{ token, optional: true }`, which `BetterAuthPlugins.build` resolves to nothing
+  where there is no tenancy (the migrator). Whichever process served the creation migrates it; if that
+  fails it is logged and not thrown, because the schema exists and the tenant's first request migrates
+  it anyway. Creating an organization also makes it the active one (Better Auth's default), which is
+  what the web names as the tenant from then on.
+- **Only an organization's members work in its tenant.** `TenantMembershipGuard`, installed by
+  `TenantMembershipModule` as a global guard in a subgraph, reads the tenant a request names
+  (`HeaderTenantResolver`), lets anybody into the root tenant, and anybody else only if the session's
+  user is a member of the organization with that slug (`OrganizationRepository.findAllOf`). The
+  session is the one the authentication guard put on the request when it ran first, and asked for
+  otherwise; the verdict is remembered per request, because a guard on field resolvers runs once per
+  field. A message passes: its publisher checked the tenant it carries. It is also what keeps an
+  unknown tenant from being created — a header naming one is refused before any query runs.

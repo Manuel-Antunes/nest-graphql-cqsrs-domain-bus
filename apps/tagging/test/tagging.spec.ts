@@ -1,6 +1,8 @@
 import { MikroORM } from '@mikro-orm/core';
 import { Test } from '@nestjs/testing';
-import { inRequestContext } from '@nestposts/database';
+import { inRequestContext, TENANT_MIGRATIONS } from '@nestposts/database';
+import { migrate } from '@nestposts/migrator/main';
+import { tenantMigrations } from '@nestposts/migrator/migrations/tenant/index';
 import { PostCreatedEvent } from '@nestposts/posts/domain/post/event/post-created.event';
 import { PostPreCreatedEvent } from '@nestposts/posts/domain/post/event/post-pre-created.event';
 import { Post } from '@nestposts/posts/domain/post/post.entity';
@@ -84,11 +86,15 @@ describe('the tagging service', () => {
   const envelopeOf = (index = 0) => envelopeFrom(completions()[index].data);
 
   beforeAll(async () => {
+    await migrate();
     tagging = await startInProcessService(
       await Test.createTestingModule({ imports: [AppModule] })
         .overrideProvider(POST_EVENTS_CLIENT)
         .useValue(new RecordingClient())
+        .overrideProvider(TENANT_MIGRATIONS)
+        .useValue({ migrationsList: tenantMigrations })
         .compile(),
+      { createSchema: false },
     );
     postsApi = new MemoryClient({
       servers: [tagging.server],

@@ -5,9 +5,11 @@ import { BetterAuthModule } from '@nestposts/auth/infrastructure/better-auth/bet
 import { CqsrsModule } from '@nestposts/cqsrs';
 import {
   DatabaseModule,
-  POSTS_SCHEMA,
   postgresDatabase,
+  SYSTEM_SCHEMA,
+  TenancyModule,
 } from '@nestposts/database';
+import { tenantMigrations } from '@nestposts/migrator/migrations/tenant/index';
 import { PublishingOnDemandNotifications } from '@nestposts/notifications/infrastructure/on-demand/publishing-on-demand-notifications';
 import { organizationAuthPluginProviders } from '@nestposts/organizations/infrastructure/better-auth/organization-better-auth.plugin';
 import { OrganizationsInfrastructureModule } from '@nestposts/organizations/infrastructure/organizations-infrastructure.module';
@@ -37,6 +39,9 @@ import { WEB_EVENTS_CLIENT, webEventsClient, webIdentity } from './transport';
  * is talking to. The SECRET and the database are the posts-api's, which is what makes the cookie this
  * writes one that the posts-api resolves.
  *
+ * An organization created here is a tenant created here: `TenancyModule` is what the organization
+ * plugin's hook migrates the new tenant's schema with, from the migrations the migrator lists.
+ *
  * It PUBLISHES, too, and only that: the emails Better Auth asks for — a verification link, a reset,
  * a one-time code — are notifications, and they leave through the transport for `apps/notificator`
  * to deliver. No inbox and no event log, because nothing arrives here.
@@ -44,9 +49,11 @@ import { WEB_EVENTS_CLIENT, webEventsClient, webIdentity } from './transport';
 @Module({
   imports: [
     CqsrsModule.forRoot({ aggregatePublisher: TRANSPORT_EVENT_BUS_PUBLISHER }),
-    DatabaseModule.forRoot(
-      postgresDatabase(process.env.POSTS_SCHEMA ?? POSTS_SCHEMA),
-    ),
+    DatabaseModule.forRoot(postgresDatabase(SYSTEM_SCHEMA)),
+    TenancyModule.forRoot({
+      http: false,
+      migrations: { migrationsList: tenantMigrations },
+    }),
     TransportEventBusModule.forRoot({
       identity: webIdentity(),
       publishers: [

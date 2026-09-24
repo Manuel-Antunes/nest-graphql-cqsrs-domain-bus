@@ -1,9 +1,6 @@
 import { MapMemberError } from '@automapper/core';
 import type { ArgumentsHost, ExceptionFilter } from '@nestjs/common';
 import { Catch } from '@nestjs/common';
-import { DeviceNotOwnedException } from '@nestposts/notifications/domain/device/exception/device-not-owned.exception';
-import { InvalidDeviceException } from '@nestposts/notifications/domain/device/exception/invalid-device.exception';
-import { NotificationNotFoundException } from '@nestposts/notifications/domain/notification/exception/notification-not-found.exception';
 import { AlreadyDeletedException } from '@nestposts/platform/domain/shared/soft-delete/already-deleted.exception';
 import { NotDeletedException } from '@nestposts/platform/domain/shared/soft-delete/not-deleted.exception';
 import { InvalidPostException } from '@nestposts/posts/domain/post/exception/invalid-post.exception';
@@ -27,9 +24,6 @@ import { UploadNotOwnedException } from '../../application/asset/upload-area';
   AlreadyDeletedException,
   NotDeletedException,
   UploadNotOwnedException,
-  NotificationNotFoundException,
-  InvalidDeviceException,
-  DeviceNotOwnedException,
   ZodError,
   MapMemberError,
 )
@@ -51,13 +45,9 @@ export class DomainExceptionFilter implements ExceptionFilter {
   private static codeOf(exception: Error): string {
     if (
       exception instanceof PostNotFoundException ||
-      exception instanceof TagNotFoundException ||
-      exception instanceof NotificationNotFoundException
+      exception instanceof TagNotFoundException
     ) {
       return 'NOT_FOUND';
-    }
-    if (exception instanceof DeviceNotOwnedException) {
-      return 'FORBIDDEN';
     }
     if (
       exception instanceof PostAlreadyExistsException ||

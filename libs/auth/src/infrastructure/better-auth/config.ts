@@ -5,6 +5,8 @@ export const AuthConfigSchema = z.object({
   basePath: z.string().startsWith('/'),
   secret: z.string().min(1),
   webUrl: z.url(),
+  issuer: z.url(),
+  oauthResources: z.array(z.url()).min(1),
   trustedOrigins: z.array(z.string()),
   cookieDomain: z.string().optional(),
   secure: z.boolean(),
@@ -24,6 +26,8 @@ export const DEFAULT_AUTH_SECRET =
 export const DEFAULT_AUTH_BASE_PATH = '/api/auth';
 
 export const DEFAULT_WEB_URL = 'http://localhost:4200';
+
+export const DEFAULT_GATEWAY_URL = 'http://localhost:4000/graphql';
 
 export class AuthConfiguration {
   private static readonly LOOPBACK = ['localhost', '127.0.0.1', '[::1]', '::1'];
@@ -77,6 +81,10 @@ export class AuthConfiguration {
       basePath: env.AUTH_BASE_PATH ?? DEFAULT_AUTH_BASE_PATH,
       secret: env.AUTH_SECRET ?? DEFAULT_AUTH_SECRET,
       webUrl,
+      issuer: env.AUTH_ISSUER ?? webUrl,
+      oauthResources: env.AUTH_OAUTH_RESOURCES
+        ? AuthConfiguration.CSV.parse(env.AUTH_OAUTH_RESOURCES)
+        : [env.GATEWAY_URL ?? DEFAULT_GATEWAY_URL],
       trustedOrigins: [...new Set(trustedOrigins)],
       googleClientId: env.AUTH_GOOGLE_ID,
       googleClientSecret: env.AUTH_GOOGLE_SECRET,

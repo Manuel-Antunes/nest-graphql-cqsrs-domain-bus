@@ -1,6 +1,11 @@
 /// <reference path="../../../.sst/platform/config.d.ts" />
 
-import { authSecret, sharedEnvironment } from '../compute/environment';
+import { streaming } from '../compute';
+import {
+  authSecret,
+  gatewayUrl,
+  sharedEnvironment,
+} from '../compute/environment';
 import { router } from '../edge';
 import { postEvents } from '../messaging';
 import { vpc } from '../network';
@@ -45,12 +50,16 @@ export const web = new sst.aws.Nextjs('Web', {
   environment: {
     ...sharedEnvironment,
     OTEL_SERVICE_NAME: 'web',
-    POSTS_SCHEMA: 'posts',
     AUTH_SECRET: authSecret.value,
     AUTH_URL: router.url,
     WEB_URL: router.url,
     AUTH_TRUSTED_ORIGINS: router.url,
     NEXT_PUBLIC_API_URL: router.url,
+    NEXT_PUBLIC_GATEWAY_URL: gatewayUrl,
+    POSTS_SUBGRAPH_URL: streaming.url.apply(
+      (url) => `${url.replace(/\/$/, '')}/graphql`,
+    ),
+    GATEWAY_URL: gatewayUrl,
     WEB_TRANSPORT: 'aws',
     WEB_TOPIC_ARN: postEvents.arn,
   },

@@ -54,6 +54,7 @@ const RUNTIME = 'nodejs22.x';
 const INSTALLED_PACKAGES = [
   '@mikro-orm/core',
   '@mikro-orm/postgresql',
+  '@mikro-orm/migrations',
   '@mikro-orm/decorators',
   'better-auth',
   'better-auth-mikro-orm',
@@ -69,7 +70,6 @@ const INSTALLED_PACKAGES = [
   '@opentelemetry/instrumentation',
   '@opentelemetry/instrumentation-http',
   '@opentelemetry/instrumentation-nestjs-core',
-  '@opentelemetry/instrumentation-graphql',
   '@opentelemetry/instrumentation-pg',
   '@opentelemetry/instrumentation-amqplib',
   '@opentelemetry/instrumentation-aws-sdk',
@@ -234,7 +234,7 @@ export interface LambdaPlatform {
 
 export interface NodeFunctionArgs {
   readonly platform: LambdaPlatform;
-  /** `apps/tagging/dist/lambda/sqs.handler` — the file `nest build` emitted, and its export. */
+  /** `apps/tagging/dist/lambda/sqs.handler` — the entry the application's webpack build emitted, and its export. */
   readonly handler: string;
   readonly timeout?: $util.Input<
     | `${number} second`
@@ -260,9 +260,9 @@ export interface NodeFunctionArgs {
  *   `design:type` metadata `tsc` emitted and look classes up by **name**. Minifying renames them,
  *   the metadata then describes types nothing can resolve, and the build still succeeds — the
  *   failure is a provider that resolves to `undefined` at runtime, far from the cause. It is the
- *   same reason `nest build` stays on `tsc` and no bundler is allowed near the applications.
- * - **the handler points at `dist/`**, which `nest build` already compiled, decorators included. So
- *   esbuild only ever bundles here; it never transpiles a decorator, which it cannot do.
+ *   same reason each application's webpack build compiles with `tsc` and never minifies.
+ * - **the handler points at `dist/`**, which the application's build already compiled, decorators
+ *   included. So esbuild only ever bundles here; it never transpiles a decorator, which it cannot do.
  * - **`install`**, above.
  */
 export class NodeFunction extends $util.ComponentResource {

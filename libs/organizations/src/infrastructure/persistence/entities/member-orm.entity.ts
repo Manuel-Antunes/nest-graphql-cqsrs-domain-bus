@@ -1,5 +1,10 @@
 import { AuthUserEntitySchema } from '@nestposts/auth/infrastructure/persistence/entities/auth-user-orm.entity';
-import { defineEntity, p, valueObjectType } from '@nestposts/database';
+import {
+  defineEntity,
+  p,
+  SYSTEM_SCHEMA,
+  valueObjectType,
+} from '@nestposts/database';
 
 import { Member } from '../../../domain/organization/member.entity';
 import { MEMBER_ID_MAX_LENGTH } from '../../../domain/organization/schemas/member-id.schema';
@@ -19,6 +24,7 @@ export const MemberRoleType = valueObjectType(MemberRole, {
 export const MemberEntitySchema = defineEntity({
   class: Member,
   tableName: 'member',
+  schema: SYSTEM_SCHEMA,
   forceConstructor: true,
   properties: {
     id: p.type(MemberIdType).primary(),

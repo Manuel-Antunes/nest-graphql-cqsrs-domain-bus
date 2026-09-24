@@ -1,9 +1,13 @@
+import { mergeConfig } from 'vitest/config';
+
 import { testProject } from '../../vitest.shared.mts';
 
-export default testProject({
-  name: '@nestposts/migrator',
-  include: ['src/**/*.spec.ts'],
-  database: true,
-  testTimeout: 60000,
-  env: { POSTS_SCHEMA: `spec_migrator_${Date.now().toString(36)}` },
-});
+export default mergeConfig(
+  testProject({
+    name: '@nestposts/migrator',
+    include: ['src/**/*.spec.ts'],
+    database: 'own',
+    testTimeout: 60000,
+  }),
+  { test: { fileParallelism: false } },
+);

@@ -23,6 +23,7 @@ export const INNGEST_IMAGE = 'inngest/inngest:latest';
 
 const TAGGING_PORT = 3001;
 const NOTIFICATOR_PORT = 3002;
+const GATEWAY_PORT = 4000;
 
 export const MAIL_FROM = 'Nest Posts <no-reply@nestposts.test>';
 
@@ -34,6 +35,8 @@ export const POSTGRES_DB = 'nestposts';
 export interface Endpoints {
   readonly postgresUrl: string;
   readonly apiUrl: string;
+  /** The federation gateway — where the web sends every operation. */
+  readonly gatewayUrl: string;
   readonly storageUrl: string;
   /** Mailpit's API: every email the notificator sent. */
   readonly mailboxUrl: string;
@@ -73,11 +76,11 @@ export interface ContainerStackOptions {
   /** Which transport this run drives the system over — see `support/transport.ts`. */
   readonly transport: E2eTransport;
   readonly apiPort: number;
+  /** Chosen up front: the gateway's URL is the audience every OAuth access token is issued for. */
+  readonly gatewayPort: number;
   readonly storagePort: number;
   readonly webUrl: string;
   readonly authSecret: string;
-  readonly postsSchema: string;
-  readonly taggingSchema: string;
   readonly logs: (line: string) => void;
 }
 
@@ -108,6 +111,7 @@ export class ContainerStack {
   private postsApi?: StartedTestContainer;
   private tagging?: StartedTestContainer;
   private notificator?: StartedTestContainer;
+  private gateway?: StartedTestContainer;
 
   async up(options: ContainerStackOptions): Promise<Endpoints> {
     this.network = await new Network().start();
@@ -129,6 +133,7 @@ export class ContainerStack {
 
   async down(): Promise<void> {
     for (const container of [
+      this.gateway,
       this.postsApi,
       this.tagging,
       this.notificator,
@@ -243,9 +248,8 @@ export class ContainerStack {
       .withNetwork(this.network!)
       .withEnvironment({
         POSTGRES_URL: this.internalPostgresUrl,
-        POSTS_SCHEMA: options.postsSchema,
-        TAGGING_SCHEMA: options.taggingSchema,
         AUTH_SECRET: options.authSecret,
+        GATEWAY_URL: this.gatewayUrl(options),
       })
       .withCommand(['setup'])
       .withWaitStrategy(Wait.forOneShotStartup())
@@ -261,9 +265,9 @@ export class ContainerStack {
       POSTGRES_URL: this.internalPostgresUrl,
       RABBITMQ_URL: this.internalRabbitmqUrl,
       INNGEST_BASE_URL: 'http://inngest:8288',
-      POSTS_SCHEMA: options.postsSchema,
-      TAGGING_SCHEMA: options.taggingSchema,
       AUTH_SECRET: options.authSecret,
+      WEB_URL: options.webUrl,
+      GATEWAY_URL: this.gatewayUrl(options),
       MIKRO_ORM_DEBUG: 'false',
       LOG_LEVEL: process.env.E2E_LOG_LEVEL ?? 'info',
     };
@@ -333,6 +337,29 @@ export class ContainerStack {
         stream.on('data', (line) => options.logs(`posts-api ${line}`)),
       )
       .start();
+
+    this.gateway = await new GenericContainer('nestposts/gateway:dev')
+      .withNetwork(this.network!)
+      .withNetworkAliases('gateway')
+      .withExposedPorts({ container: GATEWAY_PORT, host: options.gatewayPort })
+      .withEnvironment({
+        GATEWAY_PORT: String(GATEWAY_PORT),
+        GATEWAY_URL: this.gatewayUrl(options),
+        POSTS_SUBGRAPH_URL: 'http://posts-api:3000/graphql',
+        NOTIFICATIONS_SUBGRAPH_URL: `http://notificator:${NOTIFICATOR_PORT}/graphql`,
+        WEB_URL: options.webUrl,
+        AUTH_URL: 'http://posts-api:3000',
+        LOG_LEVEL: process.env.E2E_LOG_LEVEL ?? 'info',
+      })
+      .withWaitStrategy(Wait.forLogMessage(/gateway at http/))
+      .withLogConsumer((stream) =>
+        stream.on('data', (line) => options.logs(`gateway ${line}`)),
+      )
+      .start();
+  }
+
+  private gatewayUrl(options: ContainerStackOptions): string {
+    return `http://localhost:${options.gatewayPort}/graphql`;
   }
 
   /**
@@ -367,6 +394,7 @@ export class ContainerStack {
     return {
       postgresUrl: this.postgres!.getConnectionUri(),
       apiUrl: `http://localhost:${options.apiPort}`,
+      gatewayUrl: this.gatewayUrl(options),
       storageUrl: this.storageUrl(options),
       mailboxUrl: `http://${this.mailpit!.getHost()}:${this.mailpit!.getMappedPort(MAILPIT_API_PORT)}`,
       ...(this.rabbitmq

@@ -104,10 +104,19 @@ export class WebAuth {
     return carried.length > 0 ? carried.join('; ') : null;
   }
 
-  /** The tenant this request named, forwarded unchanged to whatever this server calls next. */
+  /**
+   * The tenant this request works in: the one it named, or else the organization active in its
+   * session, whose schema is where that organization's posts are. The subgraph checks the claim.
+   */
   static async tenantHeader(): Promise<Record<string, string>> {
     const auth = await WebAuth.auth();
-    const tenant = auth.headers.get(TENANT_HEADER);
-    return tenant ? { [TENANT_HEADER]: tenant } : {};
+    const named = auth.headers.get(TENANT_HEADER);
+    if (named) {
+      return { [TENANT_HEADER]: named };
+    }
+    const active = await (await WebAuth.organizations())
+      .activeOrganization()
+      .catch(() => null);
+    return active ? { [TENANT_HEADER]: active.slug.value } : {};
   }
 }

@@ -40,6 +40,9 @@
     },
     {
       "path": "../../libs/core/cqsrs/tsconfig.lib.json"
+    },
+    {
+      "path": "../migrator/tsconfig.app.json"
     }
   ]
 }

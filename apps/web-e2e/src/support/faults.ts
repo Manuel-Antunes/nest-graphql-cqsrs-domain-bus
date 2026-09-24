@@ -1,10 +1,12 @@
 import type { ServiceDatabase } from './database';
 
+const EVENT_LOG_SCHEMA = '"transport"';
+
 export class AppendFaults {
   constructor(private readonly store: ServiceDatabase) {}
 
   private get schema(): string {
-    return `"${this.store.schema}"`;
+    return EVENT_LOG_SCHEMA;
   }
 
   async failAppendsOf(messageType: string, times: number): Promise<void> {

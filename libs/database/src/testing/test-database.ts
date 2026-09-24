@@ -1,4 +1,4 @@
-import type { MikroORM } from '@mikro-orm/core';
+import type { EntityMetadata, MikroORM } from '@mikro-orm/core';
 import { MikroORM as PostgresMikroORM } from '@mikro-orm/postgresql';
 
 import type { PostgresOptions } from '../config/database.config';
@@ -17,11 +17,37 @@ let taken = 0;
 export const testSchema = (prefix = 'spec'): string =>
   `${prefix}_${process.pid.toString(36)}_${Date.now().toString(36)}_${taken++}`;
 
-/** The config for a spec that boots Nest. Pair it with {@link ensureTestSchema} after `module.init()`. */
+/**
+ * Every table in ONE schema — the spec's.
+ *
+ * A system table is pinned to `public`, a tenant table to the wildcard and the transport's to a
+ * schema of its own, which in a running application is exactly right and in a spec would be schemas
+ * every spec of the run shares. The pins are rewritten on the discovery's own copy of the metadata,
+ * so the entities themselves — and any other ORM in the same process — keep theirs.
+ */
+export const everyTableIn =
+  (schema: string) =>
+  (meta: EntityMetadata): void => {
+    if (meta.schema) {
+      meta.schema = schema;
+    }
+  };
+
+/**
+ * The config for a spec that boots Nest, on a schema of its own with every table in it. Pair it with
+ * {@link ensureTestSchema} after `module.init()` — or with `TestSchemaModule`, which does that.
+ */
 export const testDatabaseConfig = (
   options: PostgresOptions = {},
   prefix?: string,
-): PostgresOptions => postgresDatabase(testSchema(prefix), options);
+): PostgresOptions => {
+  const schema = testSchema(prefix);
+  return postgresDatabase(schema, {
+    ...options,
+    schema,
+    discovery: { ...options.discovery, onMetadata: everyTableIn(schema) },
+  });
+};
 
 /** Creates the schema this ORM was configured with, and everything its entities map. */
 export const ensureTestSchema = async (orm: AnyMikroORM): Promise<void> => {
@@ -68,7 +94,11 @@ export async function metadataOnly(
   entities: NonNullable<PostgresOptions['entities']>,
 ): Promise<AnyMikroORM> {
   return (await PostgresMikroORM.init(
-    postgresDatabase('metadata', { entities, ensureDatabase: false }),
+    postgresDatabase('metadata', {
+      entities,
+      ensureDatabase: false,
+      discovery: { onMetadata: everyTableIn('metadata') },
+    }),
   )) as AnyMikroORM;
 }
 
@@ -83,7 +113,5 @@ export const tableIn = (orm: AnyMikroORM, table: string): string => {
   const schema = orm.config.get('schema');
   const platform = orm.em.getPlatform();
   const name = platform.quoteIdentifier(table);
-  return schema && schema !== '*'
-    ? `${platform.quoteIdentifier(schema)}.${name}`
-    : name;
+  return schema ? `${platform.quoteIdentifier(schema)}.${name}` : name;
 };

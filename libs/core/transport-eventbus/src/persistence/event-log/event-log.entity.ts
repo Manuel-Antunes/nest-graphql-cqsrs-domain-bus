@@ -1,5 +1,7 @@
 import { defineEntity, p } from '@mikro-orm/core';
 
+import { TRANSPORT_SCHEMA } from '../transport-schema';
+
 /**
  * **One row per event this service knows, in one order, filed under the aggregate it is about.**
  *
@@ -24,6 +26,17 @@ import { defineEntity, p } from '@mikro-orm/core';
  * belong to and is still a fact this service published: it gets a position and no stream, so a
  * subscriber sees it and no replay is confused by it. Postgres allows many rows with a null in a
  * unique index, which is what makes `(stream_id, sequence)` still enforce one sequence per stream.
+ *
+ * ## Why it keeps the trace it was appended in
+Because whoever reads the row back is not whoever appended it. A subscription is usually served by
+another container than the one that did the work, and without the `traceparent` of the append its
+delivery would start a trace of its own; with it, the delivery is one more span in the trace of the
+request that caused the event (see `EventTrace`).
+
+## Why it says which tenant
+ * Because it is one log for every tenant, in the transport's own schema, and a subscription must only
+ * hear its own tenant's events. The column is the tenant whose entity manager the event was appended
+ * in — null for a service that knows no tenants.
  */
 export class LoggedEvent {
   position!: string;
@@ -33,11 +46,14 @@ export class LoggedEvent {
   messageType!: string;
   payload!: string;
   occurredAt!: Date;
+  tenant!: string | null;
+  traceContext!: Record<string, string> | null;
 }
 
 export const LoggedEventEntitySchema = defineEntity({
   class: LoggedEvent,
   tableName: 'event_log',
+  schema: TRANSPORT_SCHEMA,
   properties: {
     position: p.bigint('string').primary().autoincrement(),
     streamId: p.string().nullable(),
@@ -46,6 +62,8 @@ export const LoggedEventEntitySchema = defineEntity({
     messageType: p.string(),
     payload: p.text(),
     occurredAt: p.datetime(),
+    tenant: p.string().nullable(),
+    traceContext: p.json<Record<string, string>>().nullable(),
   },
   uniques: [{ properties: ['streamId', 'sequence'] }],
 });

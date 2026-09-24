@@ -1,5 +1,10 @@
 import { AuthUserEntitySchema } from '@nestposts/auth/infrastructure/persistence/entities/auth-user-orm.entity';
-import { defineEntity, p, valueObjectType } from '@nestposts/database';
+import {
+  defineEntity,
+  p,
+  SYSTEM_SCHEMA,
+  valueObjectType,
+} from '@nestposts/database';
 import { Email } from '@nestposts/users/domain/user/vo/email';
 
 import { Invitation } from '../../../domain/organization/invitation.entity';
@@ -23,6 +28,7 @@ const EmailType = valueObjectType(Email, { columnType: 'varchar(320)' });
 export const InvitationEntitySchema = defineEntity({
   class: Invitation,
   tableName: 'invitation',
+  schema: SYSTEM_SCHEMA,
   forceConstructor: true,
   properties: {
     id: p.type(InvitationIdType).primary(),

@@ -110,6 +110,9 @@ send.
   that succeeded are skipped. An email cannot be rolled back, which is why this is a ledger and not a
   transaction.
 - **The record is stored once.** `saveIfAbsent` is `insert … on conflict do nothing`.
+- **A deleted record stays deleted.** `NotificationRecordRepository.remove` deletes the row and
+  nothing else. The ledger keeps its `database` row, so a redelivery of the same event skips that
+  channel instead of storing the notification again.
 
 What is still at-least-once is the gap between a channel delivering and its ledger row: a crash there
 resends that one channel.

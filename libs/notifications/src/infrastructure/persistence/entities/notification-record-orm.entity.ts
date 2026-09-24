@@ -1,4 +1,9 @@
-import { defineEntity, p, valueObjectType } from '@nestposts/database';
+import {
+  defineEntity,
+  p,
+  TENANT_SCHEMA,
+  valueObjectType,
+} from '@nestposts/database';
 
 import type { NotificationData } from '../../../domain/notification/notification-record.entity';
 import { NotificationRecord } from '../../../domain/notification/notification-record.entity';
@@ -11,6 +16,7 @@ const NotificationIdType = valueObjectType(NotificationId, {
 export const NotificationRecordEntitySchema = defineEntity({
   class: NotificationRecord,
   tableName: 'notifications',
+  schema: TENANT_SCHEMA,
   forceConstructor: true,
   properties: {
     id: p.type(NotificationIdType).primary(),

@@ -1,5 +1,6 @@
 import { EntityManager } from '@mikro-orm/core';
 import { Injectable } from '@nestjs/common';
+import { TENANT_SCHEMA } from '@nestposts/database';
 
 import { TransportMessage } from './message-inbox.entity';
 
@@ -151,10 +152,11 @@ const table = (em: EntityManager): string => {
   const name = platform.quoteIdentifier(
     metadata?.tableName ?? 'transport_message_inbox',
   );
-  const schema = metadata?.schema ?? em.config.get('schema');
-  return schema && schema !== '*'
-    ? `${platform.quoteIdentifier(schema)}.${name}`
-    : name;
+  const schema =
+    !metadata?.schema || metadata.schema === TENANT_SCHEMA
+      ? (em.schema ?? em.config.get('schema'))
+      : metadata.schema;
+  return schema ? `${platform.quoteIdentifier(schema)}.${name}` : name;
 };
 
 /**

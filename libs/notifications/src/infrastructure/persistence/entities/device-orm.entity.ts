@@ -1,4 +1,9 @@
-import { defineEntity, p, valueObjectType } from '@nestposts/database';
+import {
+  defineEntity,
+  p,
+  TENANT_SCHEMA,
+  valueObjectType,
+} from '@nestposts/database';
 
 import { Device } from '../../../domain/device/device.entity';
 import type { DevicePlatform } from '../../../domain/device/schemas/device-platform.schema';
@@ -10,6 +15,7 @@ const DeviceIdType = valueObjectType(DeviceId, { columnType: 'varchar(36)' });
 export const DeviceEntitySchema = defineEntity({
   class: Device,
   tableName: 'devices',
+  schema: TENANT_SCHEMA,
   forceConstructor: true,
   properties: {
     id: p.type(DeviceIdType).primary(),

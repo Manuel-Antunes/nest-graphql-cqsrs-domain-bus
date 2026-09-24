@@ -33,6 +33,7 @@ export const OAuthProviderBetterAuthPluginProvider = {
         shouldRedirect: () => false,
       },
       scopes: OAUTH_SCOPES,
+      enforcePerClientResources: false,
       clientPrivileges: ({ action, user }) =>
         READ_ONLY.has(action) ||
         rolesOf(user?.role).includes(SYSTEM_ADMIN_ROLE),

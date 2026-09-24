@@ -3,6 +3,7 @@ import { EmailOtpBetterAuthPluginProvider } from './email-otp-better-auth.plugin
 import { JwtBetterAuthPluginProvider } from './jwt-better-auth.plugin';
 import { MagicLinkBetterAuthPluginProvider } from './magic-link-better-auth.plugin';
 import { MultiSessionBetterAuthPluginProvider } from './multi-session-better-auth.plugin';
+import { OAuthBearerSessionBetterAuthPluginProvider } from './oauth-bearer-session-better-auth.plugin';
 import { OAuthProviderBetterAuthPluginProvider } from './oauth-provider-better-auth.plugin';
 import { OpenApiBetterAuthPluginProvider } from './open-api-better-auth.plugin';
 import { TwoFactorBetterAuthPluginProvider } from './two-factor-better-auth.plugin';
@@ -16,6 +17,7 @@ export const coreBetterAuthPluginProviders = [
   EmailOtpBetterAuthPluginProvider,
   TwoFactorBetterAuthPluginProvider,
   MultiSessionBetterAuthPluginProvider,
+  OAuthBearerSessionBetterAuthPluginProvider,
 ] as const;
 
 type PluginOf<TProvider> = TProvider extends {
@@ -89,8 +91,12 @@ export class BetterAuthPlugins {
     const resolved = new Map<unknown, unknown>(dependencies);
 
     return providers.map((provider) => {
-      const args = (provider.inject ?? []).map((token) => {
+      const args = (provider.inject ?? []).map((dependency) => {
+        const { token, optional } = BetterAuthPlugins.dependencyOf(dependency);
         if (!resolved.has(token)) {
+          if (optional) {
+            return undefined;
+          }
           throw new Error(
             `no standalone value registered for the better-auth plugin dependency ${String(token)}`,
           );
@@ -99,5 +105,24 @@ export class BetterAuthPlugins {
       });
       return provider.useFactory(...args);
     }) as PluginsOf<TProviders>;
+  }
+
+  /** A token, or Nest's `{ token, optional: true }` — which is what an optional dependency is written as. */
+  private static dependencyOf(dependency: unknown): {
+    token: unknown;
+    optional: boolean;
+  } {
+    if (
+      typeof dependency === 'object' &&
+      dependency !== null &&
+      'token' in dependency
+    ) {
+      const { token, optional } = dependency as {
+        token: unknown;
+        optional?: boolean;
+      };
+      return { token, optional: optional === true };
+    }
+    return { token: dependency, optional: false };
   }
 }

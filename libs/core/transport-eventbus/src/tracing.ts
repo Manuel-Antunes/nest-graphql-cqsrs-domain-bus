@@ -1,6 +1,8 @@
+import type { Context } from '@opentelemetry/api';
 import {
   context as activeContext,
   propagation,
+  ROOT_CONTEXT,
   SpanKind,
   SpanStatusCode,
   trace,
@@ -31,6 +33,63 @@ export const injectTraceContext = (
 /** The trace an arriving message belongs to, or the current one when it carries none. */
 export const traceContextOf = (metadata: EnvelopeMetadata) =>
   propagation.extract(activeContext.active(), metadata);
+
+/** A trace context written as W3C headers: `traceparent`, and `tracestate`/`baggage` when present. */
+export type TraceCarrier = Readonly<Record<string, string>>;
+
+const carriers = new WeakMap<object, TraceCarrier>();
+
+/**
+ * **The trace an event was published in, carried with the event** — the way `Tenant.stamp` carries
+ * its tenant.
+ *
+ * An event outlives the request that raised it: it is appended to the log, read back by another
+ * container, handed to every subscriber that is listening. By then the context that was active when
+ * it was published is long gone, and whatever reacts to it would start a trace of its own. Stamped,
+ * the reaction can be a child of the work that caused it — which is how a subscription's delivery of
+ * `PostCreated` ends up in the trace of the `createPost` that started it.
+ *
+ * `TransportEventBusService` stamps what it publishes, the event log stores the stamp beside the
+ * event (`trace_context`), and `EventSourcedEventBus` stamps what it reads back.
+ */
+export class EventTrace {
+  /**
+   * Records `carrier` — the **active** trace when none is given — as the event's, unless it already
+   * has one: the first stamp is where the event was published, and a later one would only be where
+   * it passed through.
+   */
+  static stamp<T extends object>(
+    event: T,
+    carrier: TraceCarrier | null | undefined = injectTraceContext({}),
+  ): T {
+    if (carrier && Object.keys(carrier).length > 0 && !carriers.has(event)) {
+      carriers.set(event, carrier);
+    }
+    return event;
+  }
+
+  /** The stamp, as the headers it was written as — what the event log stores. */
+  static carrierOf(event: object): TraceCarrier | undefined {
+    return carriers.get(event);
+  }
+
+  /** The stamp, as a context a span can be started in; `undefined` for anything unstamped. */
+  static of(event: unknown): Context | undefined {
+    const carrier =
+      typeof event === 'object' && event !== null
+        ? carriers.get(event)
+        : undefined;
+    return carrier ? propagation.extract(ROOT_CONTEXT, carrier) : undefined;
+  }
+
+  /**
+   * Gives `to` the stamp `from` has, for what an event becomes on its way out — a view mapped from
+   * it, a payload built for a subscriber.
+   */
+  static carry<T extends object>(from: object, to: T): T {
+    return EventTrace.stamp(to, carriers.get(from) ?? null);
+  }
+}
 
 /**
  * **One span per ingested message, as a child of whatever published it.**

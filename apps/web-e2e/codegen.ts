@@ -1,7 +1,7 @@
 import type { CodegenConfig } from '@graphql-codegen/cli';
 
 const config: CodegenConfig = {
-  schema: '../posts-api/src/graphql/**/*.graphql',
+  schema: '../gateway/dist/supergraph/api.graphql',
   documents: ['src/**/*.ts', '!src/gql/**/*'],
   ignoreNoDocuments: true,
   generates: {

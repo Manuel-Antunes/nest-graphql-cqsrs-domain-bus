@@ -1,4 +1,5 @@
 import type { SubscriptionBus } from '@nestposts/cqsrs';
+import { ROOT_TENANT } from '@nestposts/database';
 import { PostCreatedEvent } from '@nestposts/posts/domain/post/event/post-created.event';
 import { PostUpdatedEvent } from '@nestposts/posts/domain/post/event/post-updated.event';
 import { PostId } from '@nestposts/posts/domain/post/vo/post-id';
@@ -50,18 +51,21 @@ describe('PostSubscriptionResolver', () => {
     );
 
   describe('onPostCreated', () => {
-    it('pede ao bus a subscription sem critério, e não espera nada', () => {
+    it('asks the bus for the subscription of the caller’s tenant, and waits for nothing', () => {
       const { resolver, asked } = fixture();
 
-      const stream = resolver.onPostCreated();
+      const stream = resolver.onPostCreated('acme');
 
       expect(stream[Symbol.asyncIterator]).toBeTypeOf('function');
       expect(asked[0]).toBeInstanceOf(OnPostCreatedSubscription.OnPostCreated);
+      expect(
+        (asked[0] as OnPostCreatedSubscription.OnPostCreated).criteria,
+      ).toEqual({ tenantId: 'acme' });
     });
 
     it('entrega o PostCreated que passou pelo bus', async () => {
       const { resolver, source } = fixture();
-      const stream = resolver.onPostCreated();
+      const stream = resolver.onPostCreated(ROOT_TENANT);
       const first = stream[Symbol.asyncIterator]().next();
       const event = created();
 
@@ -76,31 +80,31 @@ describe('PostSubscriptionResolver', () => {
     it('monta o critério com o postId do protocolo', () => {
       const { resolver, asked } = fixture();
 
-      resolver.onPostUpdated(postId.value);
+      resolver.onPostUpdated(ROOT_TENANT, postId.value);
 
       expect(asked[0]).toBeInstanceOf(OnPostUpdatedSubscription.OnPostUpdated);
       expect(
         (asked[0] as OnPostUpdatedSubscription.OnPostUpdated).criteria,
-      ).toEqual({ postId: postId.value });
+      ).toEqual({ tenantId: ROOT_TENANT, postId: postId.value });
     });
 
     it('sem postId, o critério é o de todos os posts', () => {
       const { resolver, asked } = fixture();
 
-      resolver.onPostUpdated();
-      resolver.onPostUpdated(null);
+      resolver.onPostUpdated(ROOT_TENANT);
+      resolver.onPostUpdated(ROOT_TENANT, null);
 
       expect(
         (asked[0] as OnPostUpdatedSubscription.OnPostUpdated).criteria,
-      ).toEqual({ postId: undefined });
+      ).toEqual({ tenantId: ROOT_TENANT, postId: undefined });
       expect(
         (asked[1] as OnPostUpdatedSubscription.OnPostUpdated).criteria,
-      ).toEqual({ postId: null });
+      ).toEqual({ tenantId: ROOT_TENANT, postId: null });
     });
 
     it('entrega o PostUpdated que passou pelo bus', async () => {
       const { resolver, source } = fixture();
-      const stream = resolver.onPostUpdated(postId.value);
+      const stream = resolver.onPostUpdated(ROOT_TENANT, postId.value);
       const first = stream[Symbol.asyncIterator]().next();
       const event = updated(4);
 
@@ -113,7 +117,7 @@ describe('PostSubscriptionResolver', () => {
     it('não filtra por conta própria: entrega o que o bus mandou', async () => {
       const { resolver, source } = fixture();
       const outroPost = PostId.generate();
-      const stream = resolver.onPostUpdated(postId.value);
+      const stream = resolver.onPostUpdated(ROOT_TENANT, postId.value);
       const first = stream[Symbol.asyncIterator]().next();
 
       source.next(
@@ -136,7 +140,7 @@ describe('PostSubscriptionResolver', () => {
 
     it('quando o cliente vai embora, o iterador fecha e larga o stream', async () => {
       const { resolver, source } = fixture();
-      const stream = resolver.onPostUpdated();
+      const stream = resolver.onPostUpdated(ROOT_TENANT);
       const iterator = stream[Symbol.asyncIterator]();
       const pending = iterator.next();
       expect(source.observed).toBe(true);

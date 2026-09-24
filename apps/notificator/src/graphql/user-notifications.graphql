@@ -1,0 +1,17 @@
+"""
+A user, as the notifications subgraph knows one: by id alone. The posts subgraph owns the interface
+and its implementations; this subgraph contributes what the user was told
+"""
+type IUser @key(fields: "id") @interfaceObject {
+  id: ID!
+
+  """
+  The user's notifications, newest first; empty to anybody but that user
+  """
+  notifications(unreadOnly: Boolean = false, first: Int = 50): [Notification!]!
+
+  """
+  How many of the user's notifications are unread; zero to anybody but that user
+  """
+  unreadNotificationCount: Int!
+}

@@ -131,6 +131,51 @@ describe('NotificationRecordRepository', () => {
       records.findById(NotificationId.generate()),
     ).resolves.toBeNull();
   });
+
+  it('counts and finds every unread notification of a notifiable, and marks them all in one go', async () => {
+    const unread = Array.from({ length: 3 }, (_, index) =>
+      recordFor(`2026-09-0${index + 1}T00:00:00Z`),
+    );
+    const read = recordFor('2026-09-05T00:00:00Z');
+    read.markAsRead(new Date('2026-09-06T00:00:00Z'));
+    for (const record of [...unread, read]) {
+      await records.saveIfAbsent(record);
+    }
+
+    await expect(records.countUnread('users.User', 'ana')).resolves.toBe(3);
+    await expect(records.countUnread('users.User', 'bia')).resolves.toBe(0);
+
+    await inContext(async () => {
+      const found = await records.findUnreadByNotifiable('users.User', 'ana');
+      expect(found.map((record) => record.id.value).sort()).toEqual(
+        unread.map((record) => record.id.value).sort(),
+      );
+      for (const record of found) {
+        record.markAsRead(new Date('2026-09-07T00:00:00Z'));
+      }
+      await records.saveAll(found);
+    });
+
+    await expect(records.countUnread('users.User', 'ana')).resolves.toBe(0);
+  });
+
+  it('removes a record for good, and leaves the delivery ledger as it was', async () => {
+    const record = recordFor('2026-09-23T12:00:00Z');
+    await records.saveIfAbsent(record);
+    await deliveries.record(
+      NotificationDelivery.of(record.id, 'database', new Date()),
+    );
+
+    await inContext(async () => {
+      const stored = await records.findById(record.id);
+      await records.remove(stored as NotificationRecord);
+    });
+
+    await expect(records.findById(record.id)).resolves.toBeNull();
+    await expect(deliveries.deliveredChannels(record.id)).resolves.toEqual(
+      new Set(['database']),
+    );
+  });
 });
 
 describe('NotificationDeliveryRepository', () => {

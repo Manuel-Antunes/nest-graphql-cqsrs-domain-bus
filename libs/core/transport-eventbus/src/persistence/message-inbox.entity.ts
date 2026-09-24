@@ -1,5 +1,7 @@
 import { defineEntity, p } from '@mikro-orm/core';
 
+import { TRANSPORT_SCHEMA } from './transport-schema';
+
 /**
  * One row per message received from the broker.
  *
@@ -19,6 +21,7 @@ export class TransportMessage {
 export const TransportMessageEntitySchema = defineEntity({
   class: TransportMessage,
   tableName: 'transport_message_inbox',
+  schema: TRANSPORT_SCHEMA,
   properties: {
     identifier: p.string().primary(),
     messageType: p.string(),

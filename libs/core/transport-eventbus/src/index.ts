@@ -55,6 +55,7 @@ export * from './persistence/event-log/event-log.providers';
 export * from './persistence/event-log/event-sourced.repository';
 export * from './persistence/message-inbox';
 export * from './persistence/message-inbox.entity';
+export * from './persistence/transport-schema';
 export * from './request-context';
 export * from './subscriptions/event-sourced-event-bus';
 export * from './tracing';

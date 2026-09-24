@@ -111,24 +111,20 @@ test.describe
     });
 
     /**
-     * Cada serviço só ingere o que o OUTRO produziu, e o inbox é onde isso fica registrado com nome.
+     * Each service only ingests what ANOTHER one produced, and the inbox is where that is recorded by
+     * name.
      *
-     * A asserção é sobre TODAS as linhas e não sobre uma: é o que a marca de origem promete — um evento
-     * que este serviço produziu e recebeu de volta é descartado — e o que continua verdade por mais
-     * posts que os outros specs escrevam. A contagem "uma linha por mensagem" é do teste de reentrega,
-     * que a mede pelo identificador.
-     *
-     * The `posts` schema's inbox is shared with `notificator`, which lives in that schema too, so its
-     * rows are split by namespace: `posts.*` is what posts-api ingested, `notifications.*` is what the
-     * notificator did — and each side only ever ingests what somebody else produced. Notifications
-     * come from two publishers: posts-api (a post is live) and the web, whose Better Auth sent the
-     * verification emails the accounts were created with.
+     * The inbox is the transport's, one table in its own schema for every service, so its rows are
+     * told apart by what they are and who sent them: a `posts.PostCreated` from tagging is what
+     * posts-api ingested, any other `posts.*` from posts-api is what tagging did, and a
+     * `notifications.*` is the notificator's — from posts-api (a post is live) and from the web, whose
+     * Better Auth sent the verification emails the accounts were created with. The assertion is about
+     * EVERY row: a service that ingested its own echo would leave one that fits none of the three.
      */
     test('cada serviço só ingere o que o outro produziu: a marca de origem corta o laço', async ({
       postsStore,
-      taggingStore,
     }) => {
-      const ingestedInPosts =
+      const inbox =
         (await until(async () => {
           const rows = await postsStore.inbox();
           return rows.some(
@@ -139,28 +135,31 @@ test.describe
             ? rows
             : undefined;
         }, 20_000)) ?? (await postsStore.inbox());
-      const ingestedHere = ingestedInPosts.filter((row) =>
-        row.message_type.startsWith('posts.'),
+      const ingestedByPosts = inbox.filter(
+        (row) =>
+          row.message_type.startsWith(CREATED) && row.origin === 'tagging',
       );
-      const deliveredByNotificator = ingestedInPosts.filter((row) =>
+      const ingestedByTagging = inbox.filter(
+        (row) =>
+          row.message_type.startsWith('posts.') && row.origin === 'posts-api',
+      );
+      const deliveredByNotificator = inbox.filter((row) =>
         row.message_type.startsWith('notifications.'),
       );
-      const ingestedThere = await taggingStore.inbox();
 
-      expect(ingestedHere.length + deliveredByNotificator.length).toBe(
-        ingestedInPosts.length,
-      );
       expect(
-        ingestedHere.length,
+        ingestedByPosts.length +
+          ingestedByTagging.length +
+          deliveredByNotificator.length,
+      ).toBe(inbox.length);
+      expect(
+        ingestedByPosts.length,
         'a posts-api não ingeriu nada',
       ).toBeGreaterThan(0);
-      expect([...new Set(ingestedHere.map((row) => row.origin))]).toEqual([
-        'tagging',
-      ]);
       expect(
-        ingestedHere.every((row) => row.message_type.startsWith(CREATED)),
-      ).toBe(true);
-
+        ingestedByTagging.length,
+        'o tagging não ingeriu nada',
+      ).toBeGreaterThan(0);
       expect(
         deliveredByNotificator.length,
         'the notificator ingested nothing',
@@ -173,14 +172,6 @@ test.describe
           row.message_type.startsWith('notifications.NotificationReceived'),
         ),
       ).toBe(true);
-
-      expect(
-        ingestedThere.length,
-        'o tagging não ingeriu nada',
-      ).toBeGreaterThan(0);
-      expect([...new Set(ingestedThere.map((row) => row.origin))]).toEqual([
-        'posts-api',
-      ]);
     });
 
     test('reentregar a MESMA mensagem não produz uma segunda decisão', async ({
@@ -272,23 +263,39 @@ test.describe
      * mutation, o broker, o outro processo, e volta nos headers da decisão dele. É o caminho inteiro da
      * propagação, com um cliente de verdade em cada ponta.
      *
-     * O `fetch` é do navegador porque o contexto com o header é dele, mas a query que ele manda é a
-     * mesma tipada do resto: impressa aqui, no Node, e passada como argumento.
+     * The tenant is an organization, and only its members may name it: a fresh author creates one,
+     * and the browser names it in capitals to prove the header is normalised on the way.
      */
     test('o x-tenant do navegador chega aos dois processos, e volta na decisão do outro', async ({
       browser,
-      accounts,
+      freshAccount,
+      postsStore,
       messages,
     }) => {
       const wire = messages('nestposts.e2e.tenant-spy');
       await wire.watch('posts.#');
+      const author = await freshAccount('Tenanted');
+      await postsStore.promoteToAuthor(author.credentialId);
+      const slug = `acme-${Date.now()}`;
 
       const context = await browser.newContext({
-        extraHTTPHeaders: { 'x-tenant': 'Acme' },
+        extraHTTPHeaders: { 'x-tenant': slug.toUpperCase() },
       });
       const page = await context.newPage();
-      await signInThroughTheForm(page, accounts.author);
-      await expect(page.getByText(accounts.author.email).first()).toBeVisible();
+      await signInThroughTheForm(page, author);
+      await expect(page.getByText(author.email).first()).toBeVisible();
+      const organization = await page.evaluate(
+        async ([name, organizationSlug]) => {
+          const response = await fetch('/api/auth/organization/create', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ name, slug: organizationSlug }),
+          });
+          return response.status;
+        },
+        [`Acme ${slug}`, slug] as const,
+      );
+      expect(organization).toBe(200);
 
       const created = await page.evaluate<TenantPostAnswer, string>(
         async (query) => {
@@ -310,15 +317,22 @@ test.describe
       expect(
         born?.['x-tenant'],
         'o header do navegador entrou na PostRequest',
-      ).toBe('acme');
+      ).toBe(slug);
       expect(
         completed?.['x-tenant'],
         'o tagging republicou sob o contexto que recebeu: o tenant atravessou os dois processos',
-      ).toBe('acme');
+      ).toBe(slug);
       expect(
         completed?.['cqrs-transport-origin'],
         'e mesmo carregando o tenant do outro serviço, a autoria continua sendo a sua',
       ).toBe('tagging');
+      expect(
+        await postsStore.query(
+          `select id from "tenant_${slug}".posts where id = ?`,
+          created.data?.createPost.id,
+        ),
+        'the post was written in the organization’s own schema',
+      ).toHaveLength(1);
 
       await context.close();
     });

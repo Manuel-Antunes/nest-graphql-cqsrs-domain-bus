@@ -20,6 +20,7 @@
         "cache": true,
         "inputs": [
           "{workspaceRoot}/apps/posts-api/src/graphql/**/*.graphql",
+          "{workspaceRoot}/apps/notificator/src/graphql/**/*.graphql",
           "{projectRoot}/codegen.ts",
           "{projectRoot}/src/**/*.ts"
         ],
@@ -29,7 +30,15 @@
         "options": {
           "cwd": "{projectRoot}",
           "command": "graphql-codegen --config codegen.ts"
-        }
+        },
+        "dependsOn": [
+          {
+            "projects": [
+              "@nestposts/gateway"
+            ],
+            "target": "supergraph"
+          }
+        ]
       },
       "typecheck": {
         "executor": "nx:run-commands",
@@ -52,7 +61,8 @@
               "@nestposts/migrator",
               "@nestposts/posts-api",
               "@nestposts/tagging",
-              "@nestposts/notificator"
+              "@nestposts/notificator",
+              "@nestposts/gateway"
             ],
             "target": "docker:build"
           },

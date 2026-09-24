@@ -1,0 +1,95 @@
+"""
+Any JSON value: a notification's data is whatever its type carries
+"""
+scalar JSON
+
+"""
+Something a user was told, as the database channel stored it
+"""
+type Notification {
+  id: ID!
+
+  """
+  What kind of notification it is, such as posts.PostCreated
+  """
+  type: String!
+
+  """
+  What the notification says; its shape depends on type
+  """
+  data: JSON!
+  read: Boolean!
+  readAt: DateTime
+  createdAt: DateTime!
+}
+
+enum DevicePlatform {
+  ios
+  android
+  web
+  unknown
+}
+
+"""
+An app installation that receives push notifications for the signed-in user
+"""
+type Device {
+  id: ID!
+
+  """
+  The installation's own identifier, as the app reported it
+  """
+  deviceId: String!
+  platform: DevicePlatform!
+  createdAt: DateTime!
+}
+
+input RegisterDeviceInput {
+  """
+  The push token the platform issued, such as an FCM registration token
+  """
+  token: String!
+  deviceId: String!
+  platform: DevicePlatform
+}
+
+extend type Query {
+  """
+  The signed-in user's notifications, newest first
+  """
+  notifications(unreadOnly: Boolean = false, first: Int = 50): [Notification!]!
+
+  """
+  One of the signed-in user's notifications; null when it is not theirs
+  """
+  notification(id: ID!): Notification
+
+  """
+  How many of the signed-in user's notifications are unread
+  """
+  unreadNotificationCount: Int!
+}
+
+extend type Mutation {
+  markNotificationAsRead(id: ID!): Notification!
+
+  """
+  Marks every unread notification of the signed-in user as read; answers how many it marked
+  """
+  markAllNotificationsAsRead: Int!
+
+  """
+  Deletes one of the signed-in user's notifications for good; answers its id
+  """
+  deleteNotification(id: ID!): ID!
+
+  """
+  Registers a push token for the signed-in user; a token already known moves to them
+  """
+  registerDevice(input: RegisterDeviceInput!): Device!
+
+  """
+  Forgets a push token; false when it was not registered
+  """
+  removeDevice(token: String!): Boolean!
+}

@@ -58,6 +58,7 @@ describe('the better-auth plugin registry', () => {
       'email-otp',
       'two-factor',
       'multi-session',
+      'oauth-bearer-session',
     ]);
   });
 

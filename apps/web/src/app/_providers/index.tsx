@@ -4,6 +4,7 @@ import type { DehydratedState } from '@tanstack/react-query';
 import { ApolloProvider } from './apollo-provider';
 import { AuthProviders } from './auth-providers';
 import { SessionProvider } from './session-provider';
+import { TenantSync } from './tenant-sync';
 
 export function Providers({
   socialProviders,
@@ -20,7 +21,9 @@ export function Providers({
       dehydratedState={dehydratedState}
     >
       <SessionProvider>
-        <ApolloProvider>{children}</ApolloProvider>
+        <ApolloProvider>
+          <TenantSync>{children}</TenantSync>
+        </ApolloProvider>
       </SessionProvider>
     </AuthProviders>
   );

@@ -7,7 +7,7 @@ import { firstValueFrom, of } from 'rxjs';
 import type { AnyMikroORM } from '../testing/test-database';
 import { metadataOnly } from '../testing/test-database';
 import { TenancyModule } from './tenancy.module';
-import { ROOT_TENANT, TENANT_HEADER } from './tenant';
+import { ROOT_TENANT, TENANT_HEADER, Tenant } from './tenant';
 import { TenantInterceptor } from './tenant.interceptor';
 import type { TenantResolver } from './tenant.resolver';
 import {
@@ -15,8 +15,7 @@ import {
   TENANT_RESOLVER,
   TenantResolverProviders,
 } from './tenant.resolver';
-import { TenantEntityManagers } from './tenant-entity-managers';
-import { SchemaPerTenant, SharedSchemaTenants } from './tenant-schemas';
+import { TenantEntityManagerService } from './tenant-entity-manager.service';
 
 type Headers = Record<string, string | string[] | undefined>;
 
@@ -95,29 +94,6 @@ describe('putting a request inside its tenant', () => {
     });
   });
 
-  describe('the entity manager the tenant names', () => {
-    it('shares the connection one when the policy says every tenant does', () => {
-      const tenants = new TenantEntityManagers(orm, new SharedSchemaTenants());
-
-      expect(tenants.forTenant('acme')).toBe(orm.em);
-    });
-
-    it('binds a schema per tenant, and hands the SAME root back for the same tenant', () => {
-      const tenants = new TenantEntityManagers(
-        orm,
-        new SchemaPerTenant('posts'),
-      );
-
-      const first = tenants.forTenant('acme');
-      const second = tenants.forTenant('acme');
-
-      expect(first).toBe(second);
-      expect(first).not.toBe(orm.em);
-      expect(first.schema).toBe('posts_acme');
-      expect(tenants.forTenant('globex')).not.toBe(first);
-    });
-  });
-
   describe('what may be configured as the resolver', () => {
     const tenantFrom = async (
       resolver: Parameters<typeof TenantResolverProviders.for>[0],
@@ -132,7 +108,7 @@ describe('putting a request inside its tenant', () => {
       const moduleRef = await Test.createTestingModule({
         imports: [
           FakeOrmModule,
-          TenancyModule.forRoot({ resolver, http: false }),
+          TenancyModule.forRoot({ resolver, http: false, migrations: {} }),
         ],
       }).compile();
 
@@ -161,7 +137,7 @@ describe('putting a request inside its tenant', () => {
     it('a class, which the module registers itself — so its dependencies resolve from here', async () => {
       @Injectable()
       class DependentResolver implements TenantResolver {
-        constructor(private readonly tenants: TenantEntityManagers) {}
+        constructor(private readonly tenants: TenantEntityManagerService) {}
 
         tenantOf(): string {
           return this.tenants
@@ -183,15 +159,22 @@ describe('putting a request inside its tenant', () => {
   describe('the interceptor', () => {
     const _handler = (): CallHandler => ({ handle: () => of('answered') });
 
-    const interceptorFor = (tenantId: string) =>
-      new TenantInterceptor(
-        new TenantEntityManagers(orm, new SchemaPerTenant('posts')),
-        {
-          tenantOf: () => tenantId,
-        },
-      );
+    const migrated: string[] = [];
+    const tenants = {
+      createAndMigrateTenantEntityManager: async (tenantId: string) => {
+        migrated.push(tenantId);
+        return orm.em.fork({ schema: Tenant.schemaOf(tenantId) });
+      },
+    } as unknown as TenantEntityManagerService;
 
-    it('opens a context for a message, which never passed through the middleware', async () => {
+    const interceptorFor = (tenantId: string) =>
+      new TenantInterceptor(tenants, { tenantOf: () => tenantId });
+
+    beforeEach(() => {
+      migrated.length = 0;
+    });
+
+    it('opens a context for a message, on its tenant’s migrated schema', async () => {
       const seen: (string | undefined)[] = [];
       const interceptor = interceptorFor('acme');
       const next: CallHandler = {
@@ -205,7 +188,8 @@ describe('putting a request inside its tenant', () => {
         interceptor.intercept(executionContext('rpc'), next),
       );
 
-      expect(seen).toEqual(['posts_acme']);
+      expect(seen).toEqual(['tenant_acme']);
+      expect(migrated).toEqual(['acme']);
     });
 
     it('reads the tenant through the token, whatever was bound to it', async () => {
@@ -221,12 +205,12 @@ describe('putting a request inside its tenant', () => {
         }),
       );
 
-      expect(seen).toEqual(['posts_globex']);
+      expect(seen).toEqual(['tenant_globex']);
     });
 
     it('defers to a context that already exists, so one request is never two entity managers', async () => {
       const interceptor = interceptorFor('acme');
-      const root = orm.em.fork({ schema: 'posts_root' });
+      const root = orm.em.fork({ schema: 'tenant_root' });
 
       const seen = await RequestContext.create(root, async () =>
         firstValueFrom(
@@ -236,7 +220,8 @@ describe('putting a request inside its tenant', () => {
         ),
       );
 
-      expect(seen).toBe('posts_root');
+      expect(seen).toBe('tenant_root');
+      expect(migrated).toEqual([]);
     });
   });
 });

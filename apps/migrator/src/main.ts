@@ -1,52 +1,88 @@
 import type { MikroORM } from '@mikro-orm/postgresql';
 import type { Seeder } from '@mikro-orm/seeder';
+import {
+  ROOT_TENANT,
+  TENANT_SCHEMA_PREFIX,
+  Tenant,
+  TenantEntityManagerService,
+} from '@nestposts/database';
 
 import type { MigratorContext } from './app/bootstrap';
-import { withPosts, withTagging } from './app/bootstrap';
+import { liveSchemas, withMigrator } from './app/bootstrap';
+import { migrationFiles } from './app/connections';
 import { withSeederContainer } from './seeders/container';
 import { DatabaseSeeder } from './seeders/database.seeder';
-import { DefaultTagSeeder } from './seeders/default-tag.seeder';
+import { OAuthResourcesSeeder } from './seeders/oauth-resources.seeder';
 import { TestUsersSeeder } from './seeders/test-users.seeder';
 
 export type SeederClass = new () => Seeder;
 
-const applyMigrations = async ({ orm }: MigratorContext): Promise<void> => {
-  await orm.schema.ensureDatabase();
-  await orm.schema.createNamespace(orm.config.get('schema'));
-  await (orm as MikroORM).migrator.up();
+const TENANT_SCHEMA = new RegExp(`^${TENANT_SCHEMA_PREFIX}_(.+)$`);
+
+export const tenantsIn = async (orm: MikroORM): Promise<string[]> => {
+  const tenants = (await liveSchemas(orm))
+    .map((schema) => TENANT_SCHEMA.exec(schema)?.[1])
+    .filter((tenant): tenant is string => Boolean(tenant));
+  return [ROOT_TENANT, ...tenants.filter((tenant) => tenant !== ROOT_TENANT)];
 };
 
-export const migratePosts = (): Promise<void> => withPosts(applyMigrations);
+const applySystemMigrations = async ({ orm }: MigratorContext) => {
+  await orm.schema.ensureDatabase();
+  await orm.migrator.up();
+};
 
-export const migrateTagging = (): Promise<void> => withTagging(applyMigrations);
+const applyTenantMigrations = async ({ orm }: MigratorContext) => {
+  const tenants = new TenantEntityManagerService(orm, migrationFiles('tenant'));
+  for (const tenant of await tenantsIn(orm)) {
+    await tenants.provision(tenant);
+  }
+};
+
+export const migrateSystem = (): Promise<void> =>
+  withMigrator(applySystemMigrations);
+
+export const migrateTenants = (): Promise<void> =>
+  withMigrator(applyTenantMigrations);
 
 export async function migrate(): Promise<void> {
-  await migratePosts();
-  await migrateTagging();
+  await migrateSystem();
+  await migrateTenants();
 }
 
 export const seed = (
   seeders: SeederClass[] = [DatabaseSeeder],
 ): Promise<void> =>
-  withPosts(({ app, orm }) =>
-    withSeederContainer(app, () => (orm as MikroORM).seeder.seed(...seeders)),
+  withMigrator(({ app, orm }) =>
+    withSeederContainer(app, () => orm.seeder.seed(...seeders)),
   );
 
 export const seedUsers = (): Promise<void> => seed([TestUsersSeeder]);
 
 export const seedDeployment = (): Promise<void> => seed([DatabaseSeeder]);
 
+export const fresh = async (): Promise<void> => {
+  await withMigrator(async ({ orm }) => {
+    for (const tenant of await tenantsIn(orm)) {
+      await orm.em
+        .fork()
+        .getConnection()
+        .execute(`drop schema if exists "${Tenant.schemaOf(tenant)}" cascade`);
+    }
+    await orm.schema.drop({ dropMigrationsTable: true });
+  });
+  await migrate();
+  await seed();
+};
+
 export async function setup(): Promise<void> {
   await migrate();
-  await seed([DefaultTagSeeder]);
+  await seed([OAuthResourcesSeeder]);
 }
 
-export { bootstrap, withPosts, withTagging } from './app/bootstrap';
-export { postsSchema, taggingSchema } from './app/connections';
-export { PostsMigratorModule } from './app/posts.module';
-export { TaggingMigratorModule } from './app/tagging.module';
+export { bootstrap, withMigrator } from './app/bootstrap';
+export { MigratorModule } from './app/migrator.module';
 export { DatabaseSeeder } from './seeders/database.seeder';
-export { DefaultTagSeeder } from './seeders/default-tag.seeder';
+export { OAuthResourcesSeeder } from './seeders/oauth-resources.seeder';
 export {
   SEED_PASSWORD,
   seededUsers,
@@ -54,9 +90,10 @@ export {
 } from './seeders/test-users.seeder';
 
 const commands: Record<string, () => Promise<unknown>> = {
+  fresh,
   migrate,
-  'migrate:posts': migratePosts,
-  'migrate:tagging': migrateTagging,
+  'migrate:system': migrateSystem,
+  'migrate:tenants': migrateTenants,
   'seed': () => seed(),
   'seed:users': seedUsers,
   'seed:deployment': seedDeployment,

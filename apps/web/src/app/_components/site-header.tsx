@@ -6,6 +6,7 @@ import { Badge } from '@nestposts/ui/components/ui/badge';
 import { buttonVariants } from '@nestposts/ui/components/ui/button';
 import { RadioIcon, ShieldCheckIcon, UsersIcon } from 'lucide-react';
 
+import { NotificationBell } from '@/app/_components/notification-bell';
 import { useSession } from '@/app/_providers/session-provider';
 import { OrganizationSwitcher } from '@/components/auth/organization/organization-switcher';
 import { UserButton } from '@/components/auth/user/user-button';
@@ -61,6 +62,7 @@ export function SiteHeader() {
           </Badge>
           {session ? (
             <>
+              <NotificationBell />
               <OrganizationSwitcher align="end" />
               <span className="text-muted-foreground text-xs">
                 {session.user.email}

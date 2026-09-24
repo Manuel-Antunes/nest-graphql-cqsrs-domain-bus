@@ -3,7 +3,7 @@ import type { OnApplicationBootstrap } from '@nestjs/common';
 import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import { EventBus } from '@nestjs/cqrs';
-import { inRequestContext } from '@nestposts/database';
+import { inRequestContext, Tenant } from '@nestposts/database';
 import type { Observable } from 'rxjs';
 import {
   concatMap,
@@ -18,6 +18,7 @@ import {
 
 import type { LoggedRecord } from '../persistence/event-log/event-log';
 import { EventLog } from '../persistence/event-log/event-log';
+import { EventTrace } from '../tracing';
 
 /** How the log is read: how often, and how much at a time. */
 export const EVENT_LOG_OPTIONS = Symbol('EventLogOptions');
@@ -141,6 +142,11 @@ const DEFAULT_MAX_GAP_OFFSET = 1_000;
  * onto every container's bus it would be written as many times as there are containers. A
  * subscription is the opposite — the container holding the stream open is usually not the one that
  * did the work, so it must see what the others did.
+ *
+ * ## One log, every tenant
+ * The log is the transport's, in a schema of its own, and holds every tenant's events: each row says
+ * which tenant it was written in, and every event read back is stamped with it (`Tenant.of(event)`),
+ * which is the only way a subscription can tell one tenant's `PostCreated` from another's.
  */
 @Injectable()
 export class EventSourcedEventBus implements OnApplicationBootstrap {
@@ -259,7 +265,16 @@ export class EventSourcedEventBus implements OnApplicationBootstrap {
               cursor = highest;
             }
           }),
-          mergeMap((records) => from(records.map((record) => record.event))),
+          mergeMap((records) =>
+            from(
+              records.map((record) => {
+                EventTrace.stamp(record.event, record.traceContext);
+                return record.tenant
+                  ? Tenant.stamp(record.event, record.tenant)
+                  : record.event;
+              }),
+            ),
+          ),
         );
       }),
     );

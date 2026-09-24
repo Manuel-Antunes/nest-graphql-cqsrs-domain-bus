@@ -2,7 +2,10 @@ import { MikroORM } from '@mikro-orm/core';
 import { inRequestContext } from '@nestposts/database';
 import { closeTestDatabase, testDatabase } from '@nestposts/database/testing';
 import { EventType } from '@nestposts/platform/domain/shared/event-type';
+import { context, propagation, trace } from '@opentelemetry/api';
+import { node } from '@opentelemetry/sdk-node';
 
+import { EventTrace } from '../../tracing';
 import { MikroOrmEventLog } from './event-log';
 import { eventLogEntities, LoggedEvent } from './event-log.entity';
 
@@ -141,6 +144,57 @@ describe('the event log', () => {
 
       expect(records).toHaveLength(1);
       expect(records[0].event).toBeInstanceOf(NothingHappenedEvent);
+    });
+  });
+
+  describe('the trace an event was appended in', () => {
+    const provider = new node.NodeTracerProvider();
+    const tracer = trace.getTracer('spec');
+
+    beforeAll(() => provider.register());
+
+    afterAll(async () => {
+      await provider.shutdown();
+      trace.disable();
+      context.disable();
+      propagation.disable();
+    });
+
+    it('is kept beside the event, and read back with it', async () => {
+      const span = await tracer.startActiveSpan('ingest', async (active) => {
+        await at(() => log.append([new PostCreatedEvent('p-1', 'traced')]));
+        active.end();
+        return active;
+      });
+
+      const [record] = await at(() => log.readAfter('0', 10));
+
+      expect(record.traceContext?.traceparent).toContain(
+        `${span.spanContext().traceId}-${span.spanContext().spanId}`,
+      );
+    });
+
+    it('is the one the event was stamped with, when it was', async () => {
+      const traceparent =
+        '00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01';
+      const event = EventTrace.stamp(new PostCreatedEvent('p-1', 'stamped'), {
+        traceparent,
+      });
+
+      await tracer.startActiveSpan('append', async (active) => {
+        await at(() => log.append([event]));
+        active.end();
+      });
+
+      const [record] = await at(() => log.readAfter('0', 10));
+      expect(record.traceContext).toEqual({ traceparent });
+    });
+
+    it('is nothing when nothing was tracing', async () => {
+      await at(() => log.append([new PostCreatedEvent('p-1', 'untraced')]));
+
+      const [record] = await at(() => log.readAfter('0', 10));
+      expect(record.traceContext).toBeNull();
     });
   });
 

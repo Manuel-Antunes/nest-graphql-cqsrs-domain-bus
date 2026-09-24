@@ -1,0 +1,21 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "out-tsc/app",
+    "tsBuildInfoFile": "out-tsc/app/tsconfig.app.tsbuildinfo"
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/**/*.spec.ts"],
+  "references": [
+    {
+      "path": "../../libs/core/observability/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/core/lambda/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/core/federation-gateway/tsconfig.lib.json"
+    }
+  ]
+}

@@ -11,11 +11,11 @@
 // `AWS_LAMBDA_EXEC_WRAPPER=/opt/otel-handler`. This file runs before the Lambda runtime itself, so
 // the hook is in place long before the handler is loaded.
 //
-// WHY IT REGISTERS THE INSTRUMENTATION AND NOT THE WHOLE SDK
-// =========================================================
-// Only this one instrumentation has to precede the handler; everything else is patched as the
-// application's own imports are resolved, which `startTelemetry` (`@nestposts/observability`) already
-// covers. Keeping the SDK there keeps ONE list of instrumentations, one exporter choice and one
+// WHY IT REGISTERS TWO INSTRUMENTATIONS AND NOT THE WHOLE SDK
+// ==========================================================
+// Only these two have to precede the handler — this one, and `http` for the reason given below;
+// everything else is patched as the application's own imports are resolved, which `startTelemetry`
+// (`@nestposts/observability`) already covers. Keeping the SDK there keeps ONE list of instrumentations, one exporter choice and one
 // place that decides `SimpleSpanProcessor` on Lambda — a second bootstrap here would be a second
 // list to keep in step.
 //
@@ -29,11 +29,35 @@ const { registerInstrumentations } = require('@opentelemetry/instrumentation');
 const {
   AwsLambdaInstrumentation,
 } = require('@opentelemetry/instrumentation-aws-lambda');
+const { HttpInstrumentation } = require('@opentelemetry/instrumentation-http');
 
-// No options: the default event context extractor reads `event.headers`, which is what carries the
-// `traceparent` the Next server put there — so the invocation span is already a child of the
-// browser-side request rather than the root of a trace of its own. The X-Ray header is only
-// consulted for SQS span links, so it never competes with that.
+// WHY `http` IS REGISTERED HERE TOO
+// =================================
+// Registering the Lambda instrumentation installs the ONE `require` hook every instrumentation
+// shares, and that hook caches each module it sees — patched or not. `https` is required long before
+// `startTelemetry` runs (the OTLP exporter needs it), so an `HttpInstrumentation` registered there
+// finds `https` already cached, unpatched, and is never given it again. Measured on the deployed
+// gateway: not one HTTP client span in three days, and every subgraph started a trace of its own,
+// because the call carried no `traceparent`. Registered here, it is in place before anything asks
+// for `http` or `https`, and `startTelemetry` leaves it out of its own list in a Lambda.
+//
+// The runtime's own long poll of the Runtime API is not a request anybody wants a span for.
+const RUNTIME_API = process.env.AWS_LAMBDA_RUNTIME_API;
+const toRuntimeApi = (request) => {
+  const host = request.hostname ?? request.host ?? '';
+  return (
+    Boolean(RUNTIME_API) &&
+    (host.includes(':') ? host : `${host}:${request.port}`) === RUNTIME_API
+  );
+};
+
+// No options on the Lambda instrumentation: the default event context extractor reads
+// `event.headers`, which is what carries the `traceparent` the caller put there — so the invocation
+// span is already a child of the request that made it rather than the root of a trace of its own.
+// The X-Ray header is only consulted for SQS span links, so it never competes with that.
 registerInstrumentations({
-  instrumentations: [new AwsLambdaInstrumentation()],
+  instrumentations: [
+    new AwsLambdaInstrumentation(),
+    new HttpInstrumentation({ ignoreOutgoingRequestHook: toRuntimeApi }),
+  ],
 });

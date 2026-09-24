@@ -3,6 +3,7 @@ import {
   databaseConfig,
   postgresDatabase,
   postgresUrl,
+  SYSTEM_SCHEMA,
 } from './database.config';
 
 describe('postgresDatabase', () => {
@@ -13,16 +14,18 @@ describe('postgresDatabase', () => {
     delete process.env.MIKRO_ORM_DEBUG;
   });
 
-  it('puts the service in a schema of its own on the shared connection', () => {
-    expect(postgresDatabase('posts')).toMatchObject({
-      schema: 'posts',
+  it('connects to the system schema unless told otherwise', () => {
+    expect(postgresDatabase()).toMatchObject({
+      schema: SYSTEM_SCHEMA,
       clientUrl: postgresUrl(),
     });
-    expect(postgresDatabase('tagging')).toMatchObject({ schema: 'tagging' });
+    expect(postgresDatabase('elsewhere')).toMatchObject({
+      schema: 'elsewhere',
+    });
   });
 
   it('leaves the schema to the migrations, and only makes sure the database is there', () => {
-    expect(postgresDatabase('posts')).toMatchObject({
+    expect(postgresDatabase()).toMatchObject({
       ensureDatabase: { create: false },
     });
   });
@@ -34,15 +37,15 @@ describe('postgresDatabase', () => {
   });
 
   it('reads the debug flag off the environment', () => {
-    expect(databaseConfig('posts').debug).toBe(false);
+    expect(databaseConfig().debug).toBe(false);
 
     process.env.MIKRO_ORM_DEBUG = 'true';
 
-    expect(databaseConfig('posts').debug).toBe(true);
+    expect(databaseConfig().debug).toBe(true);
   });
 
   it('lets the caller override anything it decided', () => {
-    const config = postgresDatabase('posts', {
+    const config = postgresDatabase(SYSTEM_SCHEMA, {
       ensureDatabase: false,
       allowGlobalContext: true,
     });

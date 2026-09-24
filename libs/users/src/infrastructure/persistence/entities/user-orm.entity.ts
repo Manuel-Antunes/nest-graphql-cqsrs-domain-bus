@@ -1,4 +1,9 @@
-import { defineEntity, p, valueObjectType } from '@nestposts/database';
+import {
+  defineEntity,
+  p,
+  TENANT_SCHEMA,
+  valueObjectType,
+} from '@nestposts/database';
 import { ZodEntity } from '@nestposts/platform/domain/shared/zod-entity';
 import { referencesServeDelegations } from '@nestposts/platform/infrastructure/persistence/delegation/delegated-reference';
 import {
@@ -23,6 +28,7 @@ const UserNameType = valueObjectType(UserName, { columnType: 'varchar(100)' });
 export const UserEntitySchema = defineEntity({
   class: User,
   tableName: 'users',
+  schema: TENANT_SCHEMA,
   forceConstructor: true,
   properties: {
     id: p.type(UserIdType).primary(),
@@ -41,6 +47,7 @@ export const UserEntitySchema = defineEntity({
 export const AuthorshipEntitySchema = defineEntity({
   class: Authorship,
   tableName: 'authors',
+  schema: TENANT_SCHEMA,
   forceConstructor: true,
   properties: {
     user: () =>

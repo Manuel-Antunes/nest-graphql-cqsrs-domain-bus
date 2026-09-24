@@ -1,7 +1,7 @@
 import type { CodegenConfig } from '@graphql-codegen/cli';
 
 const config: CodegenConfig = {
-  schema: ['../posts-api/src/graphql/**/*.graphql', 'federation.graphql'],
+  schema: ['../gateway/dist/supergraph/api.graphql', 'federation.graphql'],
   documents: ['src/**/*.{ts,tsx}', '!src/gql/**/*'],
   ignoreNoDocuments: true,
   generates: {

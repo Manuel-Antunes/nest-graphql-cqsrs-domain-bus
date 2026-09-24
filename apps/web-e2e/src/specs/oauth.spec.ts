@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 
 import { expect, signInThroughTheForm, test } from '../fixtures/test';
-import { WEB_URL } from '../support/stack';
+import { gatewayUrl, WEB_URL } from '../support/stack';
 
 const CALLBACK = new URL(
   '/oauth-callback',
@@ -15,6 +15,10 @@ const CALLBACK = new URL(
  * and a user authorizes it: Better Auth sends the browser to the consent screen with a signed query,
  * the user allows, and the browser lands on the client's redirect with a code. The code, exchanged
  * with the PKCE verifier, is an access token that answers for that user at `userinfo`.
+ *
+ * Asked for the gateway as its resource (RFC 8707), the token is a JWT addressed to it — and it is a
+ * session everywhere past the gateway: the gateway forwards the bearer, and each subgraph verifies it
+ * locally against the keys in the shared database.
  */
 test.describe('the OAuth provider', () => {
   test('a user authorizes an application on the consent screen, and its token answers for them', async ({
@@ -57,6 +61,7 @@ test.describe('the OAuth provider', () => {
       redirect_uri: CALLBACK,
       scope: 'openid profile email read:posts',
       state: 'e2e-state',
+      resource: gatewayUrl(),
       code_challenge: createHash('sha256').update(verifier).digest('base64url'),
       code_challenge_method: 'S256',
     }).toString();
@@ -81,6 +86,7 @@ test.describe('the OAuth provider', () => {
         redirect_uri: CALLBACK,
         client_id: clientId,
         code_verifier: verifier,
+        resource: gatewayUrl(),
       }),
     });
     expect(tokens.status).toBe(200);
@@ -93,6 +99,32 @@ test.describe('the OAuth provider', () => {
     });
     expect(await userinfo.json()).toMatchObject({
       email: accounts.reader.email,
+    });
+
+    const [, payload] = accessToken.split('.');
+    const { aud } = JSON.parse(
+      Buffer.from(payload, 'base64url').toString(),
+    ) as {
+      aud: string | string[];
+    };
+    expect([aud].flat()).toContain(gatewayUrl());
+
+    const federated = await fetch(gatewayUrl(), {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({
+        query:
+          '{ me { email unreadNotificationCount } unreadNotificationCount }',
+      }),
+    });
+    expect(await federated.json()).toEqual({
+      data: {
+        me: { email: accounts.reader.email, unreadNotificationCount: 0 },
+        unreadNotificationCount: 0,
+      },
     });
   });
 });

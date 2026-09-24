@@ -1,17 +1,21 @@
 /// <reference path="../../../.sst/platform/config.d.ts" />
 
-import { streaming } from '../compute';
+import { gateway, streaming } from '../compute';
 import { router } from './router';
 
-const origin = streaming.url.apply((url) => url.replace(/\/$/, ''));
+const originOf = (url: $util.Output<string>) =>
+  url.apply((value) => value.replace(/\/$/, ''));
 
 /**
- * The API answers on two paths and the web application on everything else.
+ * `/graphql` is the federation gateway, `/api/auth` is Better Auth in the posts API, and the web
+ * application is everything else. The subgraphs keep their own function URLs, which only the gateway
+ * — and the web's federation page, playing the router on purpose — call directly.
  *
- * `readTimeout` is raised because a streamed GraphQL response — and an SSE subscription, if one is
- * ever opened here — outlives CloudFront's default: the connection stays open precisely because
- * there is more to come.
+ * `readTimeout` is raised because a streamed GraphQL response — and an SSE subscription — outlives
+ * CloudFront's default: the connection stays open precisely because there is more to come.
  */
-router.route('/graphql', origin, { readTimeout: '60 seconds' });
+router.route('/graphql', originOf(gateway.url), { readTimeout: '60 seconds' });
 
-router.route('/api/auth', origin, { readTimeout: '60 seconds' });
+router.route('/api/auth', originOf(streaming.url), {
+  readTimeout: '60 seconds',
+});

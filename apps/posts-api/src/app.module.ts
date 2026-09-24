@@ -11,10 +11,13 @@ import { CqsrsModule } from '@nestposts/cqsrs';
 import { DatabaseModule, TenancyModule } from '@nestposts/database';
 import { PublishingOnDemandNotifications } from '@nestposts/notifications/infrastructure/on-demand/publishing-on-demand-notifications';
 import { loggingModule } from '@nestposts/observability';
+import { useGraphQLTracing } from '@nestposts/observability/graphql-tracing';
 import { organizationAuthPluginProviders } from '@nestposts/organizations/infrastructure/better-auth/organization-better-auth.plugin';
 import { OrganizationsInfrastructureModule } from '@nestposts/organizations/infrastructure/organizations-infrastructure.module';
 import { OrganizationEntities } from '@nestposts/organizations/infrastructure/persistence/organization-entities';
+import { TenantMembershipModule } from '@nestposts/organizations/infrastructure/tenancy/tenant-membership.module';
 import {
+  EventTrace,
   MikroOrmMessageInbox,
   TRANSPORT_EVENT_BUS_PUBLISHER,
   TransportEventBusModule,
@@ -23,14 +26,16 @@ import {
 
 import { PostRequestContextCodec } from './application/shared/post-request-context.codec';
 import { PostEventsPublisher } from './infrastructure/outbox/post-events.publisher';
-import { mikroOrmConfig } from './infrastructure/persistence/mikro-orm.config';
+import {
+  mikroOrmConfig,
+  tenantMigrations,
+} from './infrastructure/persistence/mikro-orm.config';
 import {
   POST_EVENTS_CLIENT,
   postEventsClient,
   postsApiIdentity,
   subscriptionsFromFeed,
 } from './infrastructure/transport/transport.config';
-import { GraphQLJSON } from './interfaces/graphql/json.scalar';
 import {
   subscriptionDeadline,
   subscriptionMaxSeconds,
@@ -46,23 +51,30 @@ import { validatedDtoClasses } from './interfaces/mapper/validated-dto.strategy'
     }),
     CqsrsModule.forRoot({ aggregatePublisher: TRANSPORT_EVENT_BUS_PUBLISHER }),
     DatabaseModule.forRoot(mikroOrmConfig()),
-    TenancyModule.forRoot({ resolver: TransportTenantResolver }),
+    TenancyModule.forRoot({
+      resolver: TransportTenantResolver,
+      migrations: tenantMigrations(),
+    }),
     AuthInfrastructureModule.forRoot({
       plugins: organizationAuthPluginProviders,
       entities: OrganizationEntities.withAuth(),
       imports: [OrganizationsInfrastructureModule],
       notifications: PublishingOnDemandNotifications,
     }),
+    TenantMembershipModule,
     GraphQLModule.forRoot<YogaFederationDriverConfig>({
       driver: YogaFederationDriver,
       typePaths: [join(__dirname, 'graphql', '**/*.graphql')],
-      resolvers: { DateTime: GraphQLISODateTime, JSON: GraphQLJSON },
+      resolvers: { DateTime: GraphQLISODateTime },
       fieldResolverEnhancers: ['interceptors'],
       graphiql: true,
       maskedErrors: false,
-      plugins: subscriptionMaxSeconds()
-        ? [subscriptionDeadline(subscriptionMaxSeconds())]
-        : [],
+      plugins: [
+        useGraphQLTracing({ originOf: EventTrace.of }),
+        ...(subscriptionMaxSeconds()
+          ? [subscriptionDeadline(subscriptionMaxSeconds())]
+          : []),
+      ],
     }),
     AutomapperModule.forRoot({
       strategyInitializer: validatedDtoClasses(),

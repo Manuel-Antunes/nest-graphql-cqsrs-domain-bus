@@ -767,7 +767,7 @@ pnpm test:all    # as suites unitárias, e depois os dois níveis de e2e
 - `author.pipe.spec` / `session-user.pipe.spec` — a guarda da borda agora que ela é um pipe: o cast devolve o mesmo objeto já como `Author` e recusa nomeando o usuário quem não tem o papel — ou quem tem o papel e **não** tem a linha delegada, que é o caso que só um cast de verdade distingue; e a tradução da sessão aceita a entrada **ainda como Promise**, que é como o Nest a entrega ao primeiro pipe. O pipe entrega hoje um **id de credencial**, e não mais email/nome/papel copiados do cookie.
 - `user-provisioning.hooks.spec` — a borda por onde o Better Auth chama para dentro: o id cru vira `CredentialId`, um id inválido não chega ao serviço, e uma falha ao provisionar **não** derruba o sign-up — o que é a regra que sustenta o desenho (autenticar é do provedor, provisionar é nosso).
 - `mikro-orm-exception.filter.spec` — a outra tabela, a de violação de integridade → erro de usuário: FK vira `BAD_USER_INPUT` com mensagem **vaga** (distinguir "não existe" de "é leitor" seria um oráculo), unique vira `CONFLICT`, e nenhuma mensagem de driver vaza.
-- `posts.e2e-spec` — o smoke test como teste: sobe o `AppModule` num schema próprio (`POSTS_SCHEMA` no `vitest.e2e.config.mts`, criado pelo `TestSchemaModule`), fala HTTP para queries/mutations e SSE para subscriptions — o mesmo endereço, com `accept: text/event-stream`. Confere a ordem command → evento → entrega, que o `createPost` responde **pré-criado** (v1, sem tag) e que o post **completo** (v2, com a tag) chega por `onPostCreated`, o filtro por tópico (o assinante filtrado vê só o seu post; o global vê tudo), os erros com código, as duas connections — que desassinar tira o assinante do `EventBus` na hora, contando os `observers` do `Subject`, e que **dois assinantes do mesmo tópico compartilham um stream só**: o `EventBus` não passa de um assinante, os dois recebem o mesmo payload, e a fonte só cai quando o segundo sai. E, pendurado no `EventBus`, que a `PostRequest` criada no resolver sobrevive ao caminho de verdade (Fastify → Yoga → `CommandBus` → saga): todos os eventos daquela mutation carregam o mesmo objeto. O `author` de toda selection deste ficheiro é o `type Author` (`author { id name email }`), subscriptions incluídas — então a resolução do campo está exercitada por todos os testes, e o bloco `Post.author` acrescenta o que só ela permite: navegar `post → author → posts → author` e fechar o ciclo, o autor de um post ser o **mesmo** que o `me` devolve, a resolução funcionar dentro do stream da subscription (sem o contexto aberto no adapter o cliente receberia `data: null`), e uma leitura anónima alcançar o autor. O bloco `me` é o polimorfismo ponta a ponta, com três clientes HTTP de verdade: o autor casa com `... on Author` e pagina os posts dele (Posts completos, `tags` aninhadas inclusive), um segundo cliente que fez sign-up **sem papel** vem como `User` e a resposta sai sem `posts` — não com `posts` vazio —, pedir `posts` num `User` é erro de schema, e um terceiro que nunca autenticou leva `UNAUTHENTICATED` do guard global, antes de o resolver existir.
+- `posts.e2e-spec` — o smoke test como teste: sobe o `AppModule` num banco próprio (`database: 'own'` no `vitest.e2e.config.mts`, migrado pelo `migrate()` de verdade do migrator — `public`, `transport` e `tenant_root`), fala HTTP para queries/mutations e SSE para subscriptions — o mesmo endereço, com `accept: text/event-stream`. Confere a ordem command → evento → entrega, que o `createPost` responde **pré-criado** (v1, sem tag) e que o post **completo** (v2, com a tag) chega por `onPostCreated`, o filtro por tópico (o assinante filtrado vê só o seu post; o global vê tudo), os erros com código, as duas connections — que desassinar tira o assinante do `EventBus` na hora, contando os `observers` do `Subject`, e que **dois assinantes do mesmo tópico compartilham um stream só**: o `EventBus` não passa de um assinante, os dois recebem o mesmo payload, e a fonte só cai quando o segundo sai. E, pendurado no `EventBus`, que a `PostRequest` criada no resolver sobrevive ao caminho de verdade (Fastify → Yoga → `CommandBus` → saga): todos os eventos daquela mutation carregam o mesmo objeto. O `author` de toda selection deste ficheiro é o `type Author` (`author { id name email }`), subscriptions incluídas — então a resolução do campo está exercitada por todos os testes, e o bloco `Post.author` acrescenta o que só ela permite: navegar `post → author → posts → author` e fechar o ciclo, o autor de um post ser o **mesmo** que o `me` devolve, a resolução funcionar dentro do stream da subscription (sem o contexto aberto no adapter o cliente receberia `data: null`), e uma leitura anónima alcançar o autor. O bloco `me` é o polimorfismo ponta a ponta, com três clientes HTTP de verdade: o autor casa com `... on Author` e pagina os posts dele (Posts completos, `tags` aninhadas inclusive), um segundo cliente que fez sign-up **sem papel** vem como `User` e a resposta sai sem `posts` — não com `posts` vazio —, pedir `posts` num `User` é erro de schema, e um terceiro que nunca autenticou leva `UNAUTHENTICATED` do guard global, antes de o resolver existir.
 
 And the suites that came with the monorepo and the transport:
 
@@ -1160,10 +1160,12 @@ Uma consequência que ficou por decidir: o `authorName` dos eventos já **não �
 - **graphql 16.** O `@nestjs/graphql` 14 aceita 16 e 17; ficou o 16 por compatibilidade com o ecossistema de subscriptions.
 - **O `@automapper/nestjs` 9 declara peer de `@nestjs/*` 10 ou 11**, e este projeto está no 12. O pnpm avisa; o pacote usa só `Module`, `mixin`, `Inject` e `Optional`, que não mudaram — e o e2e exercita o `MapPipe` e o `MapInterceptor` no caminho real.
 - **`fieldResolverEnhancers: ['interceptors']` não é opcional aqui.** Por padrão o @nestjs/graphql liga guards/filters/interceptors só nos resolvers de raiz e os **desliga** nos `@ResolveField`. Sem essa linha, `Post.author` e `Author.posts` devolveriam o agregado cru — e o sintoma é um `Cannot return null for non-nullable field PostConnection.edges`, que não aponta para lugar nenhum.
-- **No bundler.** Each application builds with `nest build` (which runs `tsc`) and each library with
-  `tsc --build`; the `@nx/nest` generator would have put a `webpack.config.js` there, and a bundler
-  mangles class names and drops the `design:type` metadata AutoMapper reads — mapping breaks at
-  runtime while the build still succeeds.
+- **A bundler, configured not to break what a bundler usually breaks.** Each Nest application builds
+  with webpack the way Nx sets up a Nest app (`NxAppWebpackPlugin`), with `compiler: 'tsc'` — which
+  emits the `design:type` metadata AutoMapper and Nest's DI read — and `optimization: false`, so no
+  class is renamed. The libraries are compiled into the bundle from source, which is what lets
+  `nx serve` restart on a change in any of them; every package from `node_modules` stays external.
+  The libraries themselves still build with `tsc --build`.
 - **A native statement is not resolved against the connection's schema.** `insert into
   transport_message_inbox` reaches whatever the `search_path` finds, which in a service that lives in
   a schema of its own is nothing at all. Raw SQL asks the metadata where its table is —
@@ -1287,7 +1289,7 @@ flowing. So `toAttributes()` carries the application's attributes and refuses an
 asserting `x-tenant` on the AMQP headers of both events — the second one published by the other
 process.
 
-## One trace across the saga, and the four ways it silently was not
+## One trace across the saga, and the ways it silently was not
 
 A choreographed saga is the case a trace is *for*: the work leaves the process that started it, and
 the only way to read it afterwards is if every hop hangs off the same trace. What that looks like
@@ -1356,6 +1358,28 @@ instrumentation that patches on `require` is a bet that nothing pulled the modul
 barrel is the easiest way to lose that bet without writing a line of code. Hence the rule —
 `@nestposts/observability/telemetry`, never the barrel — and `import '../telemetry'` as the first
 statement of every Lambda entry point.
+
+**The gateway broke the chain, and the preload was why.** Once `apps/gateway` stood between the web
+and the subgraphs, a post's trace was two: the web and the gateway in one, posts-api, tagging and the
+notificator in the other. The gateway sent no `traceparent` because it made no HTTP client span —
+not one, in any service, in three days. `otel-preload.cjs` registers the Lambda instrumentation
+before anything else, and that installs the one `require` hook every instrumentation shares, a hook
+that caches each module it sees whether or not anything patched it. `https` was required between the
+preload and `startTelemetry` — by the OTLP exporter — so when `HttpInstrumentation` registered, the
+hook handed back the cached, unpatched module and never asked it again. Running the deployed
+artifact locally, with the same `--require`, reproduced it exactly; the preload now registers `http`
+as well, and `startTelemetry` leaves it out in a Lambda.
+
+**And there was no GraphQL at all.** `@opentelemetry/instrumentation-graphql` was on the list, and on
+Lambda `graphql` is bundled — but even unbundled it saw a parse and a validate, because Yoga executes
+through `@graphql-tools/executor` and never calls the `execute` it patches. GraphQL is traced by
+`useGraphQLTracing` now, a Yoga plugin in `libs/core/observability`: the server calls it, so bundling
+cannot take it away. It names the operation span after the operation, nests every resolver by response
+path with its queries inside, and — the part no off-the-shelf plugin did — delivers each subscription
+event as a child of the trace that produced it. The event log keeps the trace each event was
+appended in, the subgraph hands the delivery's `traceparent` to the gateway in the event's
+`extensions`, and the gateway's delivery is a child of that. A post's trace now reads from the click
+in the browser to the subscriber that heard about it.
 
 **What proved it.** Nothing local could: the SDK does not start unless `OTEL_EXPORTER_OTLP_ENDPOINT`
 is set, and Vitest loads modules through a runner of its own, so the patching this all depends on

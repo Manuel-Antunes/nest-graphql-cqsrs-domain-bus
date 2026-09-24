@@ -25,14 +25,23 @@ const positional = (sql: string): string => {
 };
 
 /**
- * What one service durably kept, read from outside it.
+ * What the services durably kept in one tenant, read from outside them.
  *
- * The two services share a Postgres and are separated by their **schema**, so the schema is the whole
- * address: `search_path` is set per connection and every statement below is written as if its tables
- * were the only ones there.
+ * Every service shares one Postgres laid out by tenancy: the tenant's own tables in `tenant_<name>`,
+ * the inbox and the event log in `transport`, the system tables in `public`. The `search_path` names
+ * all three, in that order, and every statement below is written as if its tables were the only ones
+ * there.
  */
 export class ServiceDatabase {
-  constructor(readonly schema: string) {}
+  constructor(readonly schemas: readonly string[]) {}
+
+  static ofTenant(tenant: string): ServiceDatabase {
+    return new ServiceDatabase([`tenant_${tenant}`, 'transport', 'public']);
+  }
+
+  get schema(): string {
+    return this.schemas[0] ?? 'public';
+  }
 
   async query<T = Record<string, unknown>>(
     sql: string,
@@ -41,7 +50,9 @@ export class ServiceDatabase {
     const client = new Client({ connectionString: postgresUrl() });
     await client.connect();
     try {
-      await client.query(`set search_path to "${this.schema}"`);
+      await client.query(
+        `set search_path to ${this.schemas.map((schema) => `"${schema}"`).join(', ')}`,
+      );
       const { rows } = await client.query(positional(sql), parameters);
       return rows as T[];
     } finally {

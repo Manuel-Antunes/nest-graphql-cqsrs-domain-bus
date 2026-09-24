@@ -1,6 +1,7 @@
 import {
   defineEntity,
   p,
+  SYSTEM_SCHEMA,
   TENANT_SCHEMA_PREFIX,
   valueObjectType,
 } from '@nestposts/database';
@@ -30,6 +31,7 @@ export const ORGANIZATION_TENANT_SCHEMA_TRIGGER = 'organization_tenant_schema';
 export const OrganizationEntitySchema = defineEntity({
   class: Organization,
   tableName: 'organization',
+  schema: SYSTEM_SCHEMA,
   forceConstructor: true,
   properties: {
     id: p.type(OrganizationIdType).primary(),

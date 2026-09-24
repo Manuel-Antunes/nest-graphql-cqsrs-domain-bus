@@ -1,5 +1,10 @@
 import { attachment } from '@nestposts/asset/infrastructure/database/types/attachment-database.type';
-import { defineEntity, p, valueObjectType } from '@nestposts/database';
+import {
+  defineEntity,
+  p,
+  TENANT_SCHEMA,
+  valueObjectType,
+} from '@nestposts/database';
 import { ZodEntity } from '@nestposts/platform/domain/shared/zod-entity';
 import {
   activeFilter,
@@ -26,6 +31,7 @@ const PostContentType = valueObjectType(PostContent, { columnType: 'text' });
 export const PostEntitySchema = defineEntity({
   class: Post,
   tableName: 'posts',
+  schema: TENANT_SCHEMA,
   forceConstructor: true,
   properties: {
     id: p.type(PostIdType).primary(),

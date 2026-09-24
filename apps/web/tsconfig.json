@@ -46,6 +46,9 @@
       "path": "../../libs/notifications"
     },
     {
+      "path": "../migrator"
+    },
+    {
       "path": "../../libs/core/microservices-inngest"
     },
     {

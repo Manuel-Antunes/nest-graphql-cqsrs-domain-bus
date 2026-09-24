@@ -1,5 +1,10 @@
 import type { EntitySchema } from '@nestposts/database';
-import { defineEntity, p, UnderscoreNamingStrategy } from '@nestposts/database';
+import {
+  defineEntity,
+  p,
+  SYSTEM_SCHEMA,
+  UnderscoreNamingStrategy,
+} from '@nestposts/database';
 import type { BetterAuthOptions } from 'better-auth';
 import { getAuthTables } from 'better-auth/db';
 
@@ -53,6 +58,7 @@ export class BetterAuthSchema {
         defineEntity({
           name: BetterAuthSchema.entityNameOf(table.modelName),
           tableName: BetterAuthSchema.tableNameOf(table.modelName),
+          schema: SYSTEM_SCHEMA,
           properties: {
             id: p.string().primary().length(BetterAuthSchema.ID_LENGTH),
             ...Object.fromEntries(

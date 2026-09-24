@@ -27,28 +27,49 @@ trap 'rm -f "$JAR"' EXIT
 echo "    api = $TARGET"
 echo "    as  = $AUTHOR_EMAIL"
 
-# `$3` is "signed" when the request should carry the session cookie the sign-in step stored.
+# `$3` is "signed" when the request should carry the session cookie the sign-in step stored, and
+# `$TENANT`, when set, is the tenant the request names.
 gql() {
-  local body vars
+  local body vars tenant=()
   vars="${2:-}"
   [ -n "$vars" ] || vars='{}'
   body="$(jq -nc --arg q "$1" --argjson v "$vars" '{query:$q,variables:$v}')"
+  [ -z "${TENANT:-}" ] || tenant=(-H "x-tenant: $TENANT")
   if [ "${3:-}" = signed ]; then
     curl -sS -X POST "$TARGET/graphql" -H 'content-type: application/json' \
-      -H "origin: $TARGET" -b "$JAR" -d "$body"
+      -H "origin: $TARGET" -b "$JAR" ${tenant[@]+"${tenant[@]}"} -d "$body"
   else
-    curl -sS -X POST "$TARGET/graphql" -H 'content-type: application/json' -d "$body"
+    curl -sS -X POST "$TARGET/graphql" -H 'content-type: application/json' ${tenant[@]+"${tenant[@]}"} -d "$body"
   fi
+}
+
+# Better Auth, through the router, as the signed-in author.
+auth() {
+  curl -sS -X POST "$TARGET/api/auth/$1" -H 'content-type: application/json' \
+    -H "origin: $TARGET" -b "$JAR" -c "$JAR" -d "$2"
+}
+
+# The posts subgraph itself, by its function URL: what only the gateway — a router — talks to.
+subgraph() {
+  local vars body
+  vars="${2:-}"
+  [ -n "$vars" ] || vars='{}'
+  body="$(jq -nc --arg q "$1" --argjson v "$vars" '{query:$q,variables:$v}')"
+  curl -sS -X POST "${STREAM%/}/graphql" -H 'content-type: application/json' -d "$body"
 }
 
 fail() { echo "FAILED: $*" >&2; exit 1; }
 
 echo
-echo "==> 1. the schema is served, and the subgraph declares itself"
-SDL=$(gql '{ _service { sdl } }' | jq -r '.data._service.sdl // empty')
+echo "==> 1. the gateway serves the composed schema, and the posts subgraph declares itself"
+: "${STREAM:?no function URL for the posts subgraph — is it deployed?}"
+API_SCHEMA=$(curl -sS "$TARGET/graphql/schema.graphql")
+echo "$API_SCHEMA" | grep -q 'unreadNotificationCount' \
+  || fail "the gateway's schema carries nothing from the notifications subgraph"
+SDL=$(subgraph '{ _service { sdl } }' | jq -r '.data._service.sdl // empty')
 [ -n "$SDL" ] || fail "_service { sdl } did not answer"
 echo "$SDL" | grep -q '@key' || fail 'the SDL carries no @key — federation is not on'
-echo "    OK: SDL served, federation directives included"
+echo "    OK: the supergraph composes both subgraphs; the posts SDL carries its federation directives"
 
 echo
 echo "==> 2. a public query answers with NO session"
@@ -118,7 +139,7 @@ echo "    OK: version=$V3"
 
 echo
 echo "==> 8. the post is reachable by its federation key alone"
-BY_KEY=$(gql 'query($r:[_Any!]!){ _entities(representations:$r){ __typename ... on Post { id version } } }' \
+BY_KEY=$(subgraph 'query($r:[_Any!]!){ _entities(representations:$r){ __typename ... on Post { id version } } }' \
   "$(jq -nc --arg id "$POST_ID" '{r:[{__typename:"Post",id:$id}]}')")
 echo "$BY_KEY" | jq -e --arg id "$POST_ID" '.data._entities[0].id == $id' >/dev/null \
   || fail "_entities did not resolve the post: $BY_KEY"
@@ -217,6 +238,75 @@ echo "$READ" | jq -e '.data.markNotificationAsRead.read == true' >/dev/null \
   || fail "markNotificationAsRead failed: $READ"
 echo "    OK: marked as read"
 
+echo
+echo "==> 11. one operation, two subgraphs: the author from posts, what they were told from the notificator"
+ME=$(gql '{ me { email unreadNotificationCount } unreadNotificationCount }' '' signed)
+echo "$ME" | jq -e --arg e "$AUTHOR_EMAIL" \
+  '.data.me.email == $e and .data.me.unreadNotificationCount == .data.unreadNotificationCount' >/dev/null \
+  || fail "the federated query did not answer as the author: $ME"
+echo "    OK: $(echo "$ME" | jq -c .data)"
+
+echo
+echo "==> 12. an organization is a tenant: its schema, its saga, its notifications — and nobody else's"
+SLUG="e2e-$(date +%s)"
+ORGANIZATION=$(auth organization/create "$(jq -nc --arg s "$SLUG" '{name:("E2E " + $s),slug:$s}')")
+ORGANIZATION_ID=$(echo "$ORGANIZATION" | jq -r '.id // empty')
+[ -n "$ORGANIZATION_ID" ] || fail "organization/create failed: $ORGANIZATION"
+cleanup_organization() {
+  auth organization/delete "$(jq -nc --arg id "$ORGANIZATION_ID" '{organizationId:$id}')" >/dev/null || true
+}
+trap 'cleanup_organization; rm -f "$JAR" "$RED" "$BLUE"' EXIT
+echo "    organization=$SLUG — its schema made by the trigger and migrated by the plugin's hook"
+
+TENANT="$SLUG"
+IN_TENANT=$(gql 'mutation($i:CreatePostInput!){ createPost(input:$i){ id version } }' \
+  "$(jq -nc --arg t "post in $SLUG" '{i:{title:$t,content:"written in an organization"}}')" signed)
+TENANT_POST=$(echo "$IN_TENANT" | jq -r '.data.createPost.id // empty')
+[ -n "$TENANT_POST" ] || fail "createPost in the tenant failed: $IN_TENANT"
+DEADLINE=$((SECONDS + 180))
+V=0
+while [ $SECONDS -lt $DEADLINE ]; do
+  V=$(gql 'query($id:ID!){ post(id:$id){ version } }' "$(jq -nc --arg id "$TENANT_POST" '{id:$id}')" signed \
+    | jq -r '.data.post.version // 0')
+  [ "$V" = "2" ] && break
+  printf '.'
+  sleep 5
+done
+[ "$V" = "2" ] || fail "the saga did not close inside the tenant in 180s (last version seen: $V)"
+echo "    OK: the saga closed inside $SLUG — tagging and posts-api migrated the tenant on its first message"
+
+ELSEWHERE=$(TENANT='' gql 'query($id:ID!){ post(id:$id){ id } }' "$(jq -nc --arg id "$TENANT_POST" '{id:$id}')" signed)
+echo "$ELSEWHERE" | jq -e '.data.post == null' >/dev/null \
+  || fail "the root tenant sees a post written in $SLUG: $ELSEWHERE"
+ROOT_FROM_TENANT=$(gql 'query($id:ID!){ post(id:$id){ id } }' "$(jq -nc --arg id "$POST_ID" '{id:$id}')" signed)
+echo "$ROOT_FROM_TENANT" | jq -e '.data.post == null' >/dev/null \
+  || fail "$SLUG sees a post written in the root tenant: $ROOT_FROM_TENANT"
+echo "    OK: neither tenant reads the other's post"
+
+STRANGER=$(gql '{ posts(first: 1) { edges { node { id } } } }')
+echo "$STRANGER" | jq -e '.errors[0].extensions.code == "FORBIDDEN"' >/dev/null \
+  || fail "a caller who is not a member read $SLUG: $STRANGER"
+echo "    OK: FORBIDDEN to whoever is not a member"
+
+DEADLINE=$((SECONDS + 180))
+TOLD=''
+while [ $SECONDS -lt $DEADLINE ]; do
+  TOLD=$(gql '{ notifications(first: 20) { id type data } }' '' signed | jq -r --arg p "$TENANT_POST" \
+    '[.data.notifications[]? | select(.type == "posts.PostCreated" and .data.postId == $p)][0].id // empty')
+  [ -n "$TOLD" ] && break
+  printf '.'
+  sleep 5
+done
+[ -n "$TOLD" ] || fail "no notification of $TENANT_POST inside $SLUG in 180s"
+echo "    OK: notification=$TOLD stored in $SLUG by the notificator"
+TENANT=''
+
+DELETED_ORGANIZATION=$(auth organization/delete "$(jq -nc --arg id "$ORGANIZATION_ID" '{organizationId:$id}')")
+echo "$DELETED_ORGANIZATION" | jq -e '(type != "object") or (has("code") | not)' >/dev/null \
+  || fail "organization/delete failed: $DELETED_ORGANIZATION"
+trap 'rm -f "$JAR" "$RED" "$BLUE"' EXIT
+echo "    OK: the organization is deleted, and its schema with it"
+
 if aws --version >/dev/null 2>&1; then
   echo
   echo "==> queues"
@@ -230,5 +320,6 @@ fi
 
 echo
 echo "================================================================"
-echo "  THE SAGA CLOSED ON AWS, A FILE WENT THE WHOLE WAY, AND THE AUTHOR WAS TOLD. post=$POST_ID"
+echo "  THE SAGA CLOSED ON AWS — IN THE ROOT TENANT AND IN AN ORGANIZATION'S —, A FILE WENT THE WHOLE"
+echo "  WAY, AND THE AUTHOR WAS TOLD. post=$POST_ID"
 echo "================================================================"

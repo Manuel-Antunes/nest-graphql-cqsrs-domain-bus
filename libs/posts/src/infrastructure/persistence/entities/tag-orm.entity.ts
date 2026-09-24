@@ -1,4 +1,9 @@
-import { defineEntity, p, valueObjectType } from '@nestposts/database';
+import {
+  defineEntity,
+  p,
+  TENANT_SCHEMA,
+  valueObjectType,
+} from '@nestposts/database';
 
 import { TAG_NAME_MAX_LENGTH } from '../../../domain/tag/schemas/tag-name.schema';
 import { Tag } from '../../../domain/tag/tag.entity';
@@ -13,6 +18,7 @@ const TagNameType = valueObjectType(TagName, {
 export const TagSchema = defineEntity({
   class: Tag,
   tableName: 'tags',
+  schema: TENANT_SCHEMA,
   forceConstructor: true,
   properties: {
     id: p.type(TagIdType).primary(),

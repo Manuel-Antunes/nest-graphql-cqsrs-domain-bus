@@ -12,7 +12,7 @@ import type { Messages } from '../support/messages';
 import { messagesOf } from '../support/messages';
 import { PostsApi } from '../support/posts-api';
 import { RunningStack } from '../support/running-stack';
-import { POSTS_SCHEMA, TAGGING_SCHEMA, WEB_URL } from '../support/stack';
+import { ROOT_TENANT, WEB_URL } from '../support/stack';
 import { Storage } from '../support/storage';
 
 export type SignIn = (account: Account) => Promise<void>;
@@ -80,11 +80,11 @@ export const test = base.extend<Fixtures>({
   },
 
   postsStore: async ({}, use) => {
-    await use(new ServiceDatabase(POSTS_SCHEMA));
+    await use(ServiceDatabase.ofTenant(ROOT_TENANT));
   },
 
   taggingStore: async ({}, use) => {
-    await use(new ServiceDatabase(TAGGING_SCHEMA));
+    await use(ServiceDatabase.ofTenant(ROOT_TENANT));
   },
 
   broker: async ({}, use) => {

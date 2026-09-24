@@ -15,6 +15,7 @@ import { Loader2Icon, NetworkIcon, PlayIcon } from 'lucide-react';
 
 import { ErrorNotice } from '@/app/_components/error-notice';
 import { useSession } from '@/app/_providers/session-provider';
+import { TO_POSTS_SUBGRAPH } from '@/lib/env';
 
 import { EntitiesQuery, FederationSeedQuery } from '../query';
 
@@ -35,6 +36,7 @@ export function EntitiesProbe() {
     },
     skip: !representations,
     fetchPolicy: 'network-only',
+    context: TO_POSTS_SUBGRAPH,
   });
 
   const nodes = (seed.data?.posts.edges ?? []).map((edge) => edge.node);

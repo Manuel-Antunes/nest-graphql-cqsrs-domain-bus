@@ -1,6 +1,8 @@
-# O broker e o banco. Os dois serviços guardam o que é deles no MESMO Postgres, cada um no seu
-# SCHEMA (`posts` e `tagging`) — e cada schema leva o seu próprio `mikro_orm_migrations`, porque
-# quem cria tabela aqui é o `apps/migrator` e mais ninguém.
+# The broker and the database. Every service shares ONE Postgres, laid out by tenancy rather than by
+# service: `public` holds the system tables (Better Auth, organizations), `transport` the inbox and
+# the event log, and `tenant_<name>` a tenant's own tables — `tenant_root` for whoever names none.
+# The migrator creates the first three; a service migrates an organization's schema on its first
+# request, from the tenant migrations its bundle carries.
 #
 # POR QUE UMA FILA POR SERVIÇO, E NÃO UMA COMPARTILHADA
 # ====================================================
@@ -73,6 +75,7 @@ services:
     environment:
       POSTGRES_URL: postgresql://${POSTGRES_USER:-nestposts}:${POSTGRES_PASSWORD:-nestposts}@postgres:5432/${POSTGRES_DB:-nestposts}
       AUTH_SECRET: ${AUTH_SECRET:-nestposts-compose-secret}
+      GATEWAY_URL: http://localhost:${GATEWAY_PORT:-4000}/graphql
     depends_on:
       postgres:
         condition: service_healthy
@@ -98,6 +101,7 @@ services:
       AUTH_URL: http://localhost:${API_PORT:-3000}
       WEB_URL: http://localhost:${WEB_PORT:-4300}
       AUTH_TRUSTED_ORIGINS: http://localhost:${API_PORT:-3000},http://localhost:${WEB_PORT:-4300}
+      GATEWAY_URL: http://localhost:${GATEWAY_PORT:-4000}/graphql
       DRIVE_BUCKET: ${DRIVE_BUCKET:-local}
       DRIVE_AWS_REGION: ${DRIVE_AWS_REGION:-us-east-1}
       DRIVE_AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-sail}
@@ -183,6 +187,9 @@ services:
       INNGEST_BASE_URL: http://inngest:8288
       INNGEST_SERVE_ORIGIN: http://notificator:3002
       NOTIFICATOR_PORT: "3002"
+      AUTH_SECRET: ${AUTH_SECRET:-nestposts-compose-secret}
+      WEB_URL: http://localhost:${WEB_PORT:-4300}
+      GATEWAY_URL: http://localhost:${GATEWAY_PORT:-4000}/graphql
       MAIL_SMTP_URL: smtp://mailpit:1025
       MAIL_FROM: ${MAIL_FROM:-Nest Posts <no-reply@nestposts.local>}
     depends_on:
@@ -222,9 +229,35 @@ services:
       AUTH_SECRET: ${AUTH_SECRET:-nestposts-compose-secret}
       WEB_URL: http://localhost:${WEB_PORT:-4300}
       NEXT_PUBLIC_API_URL: http://posts-api:3000
+      NEXT_PUBLIC_GATEWAY_URL: http://gateway:4000/graphql
+      POSTS_SUBGRAPH_URL: http://posts-api:3000/graphql
+      GATEWAY_URL: http://localhost:${GATEWAY_PORT:-4000}/graphql
       RABBITMQ_URL: amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672
       WEB_TRANSPORT: ${WEB_TRANSPORT:-inngest}
       INNGEST_BASE_URL: http://inngest:8288
+    depends_on:
+      gateway:
+        condition: service_started
+
+  # The federation gateway: the one GraphQL endpoint a client talks to. It composes the supergraph
+  # from the subgraphs' SDL, baked into its image, and forwards each caller's cookie and bearer to
+  # every subgraph an operation reaches.
+  gateway:
+    profiles: ["apps"]
+    image: nestposts/gateway:dev
+    build:
+      context: .
+      dockerfile: apps/gateway/Dockerfile
+    container_name: nestposts-gateway
+    ports:
+      - "${GATEWAY_PORT:-4000}:4000"
+    environment:
+      GATEWAY_PORT: "4000"
+      GATEWAY_URL: http://localhost:${GATEWAY_PORT:-4000}/graphql
+      POSTS_SUBGRAPH_URL: http://posts-api:3000/graphql
+      NOTIFICATIONS_SUBGRAPH_URL: http://notificator:3002/graphql
+      WEB_URL: http://localhost:${WEB_PORT:-4300}
+      AUTH_URL: http://posts-api:3000
     depends_on:
       posts-api:
         condition: service_started

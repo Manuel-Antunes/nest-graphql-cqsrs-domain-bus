@@ -6,6 +6,7 @@ import { createClient } from 'graphql-sse';
 export class GraphqlClient {
   private readonly sse: Client;
   private cookie = '';
+  private tenant: string | undefined;
 
   constructor(
     private readonly url: string,
@@ -15,8 +16,7 @@ export class GraphqlClient {
       url,
       singleConnection: false,
       retryAttempts: 5,
-      headers: (): Record<string, string> =>
-        this.cookie ? { cookie: this.cookie } : {},
+      headers: (): Record<string, string> => this.headers(),
     });
   }
 
@@ -51,6 +51,36 @@ export class GraphqlClient {
     this.cookie = '';
   }
 
+  inTenant(tenant: string | undefined): this {
+    this.tenant = tenant;
+    return this;
+  }
+
+  async createOrganization(name: string, slug: string): Promise<string> {
+    const response = await fetch(
+      `${this.origin}/api/auth/organization/create`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', cookie: this.cookie },
+        body: JSON.stringify({ name, slug }),
+      },
+    );
+    if (!response.ok) {
+      throw new Error(
+        `organization/create failed (${response.status}): ${await response.text()}`,
+      );
+    }
+    const { id } = (await response.json()) as { id: string };
+    return id;
+  }
+
+  private headers(): Record<string, string> {
+    return {
+      ...(this.cookie ? { cookie: this.cookie } : {}),
+      ...(this.tenant ? { 'x-tenant': this.tenant } : {}),
+    };
+  }
+
   // biome-ignore lint/suspicious/noExplicitAny: ExecutionResult is generic, but we don't need to specify the type here
   async execute<T = Record<string, any>>(
     query: string,
@@ -58,10 +88,7 @@ export class GraphqlClient {
   ): Promise<ExecutionResult<T>> {
     const response = await fetch(this.url, {
       method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        ...(this.cookie ? { cookie: this.cookie } : {}),
-      },
+      headers: { 'content-type': 'application/json', ...this.headers() },
       body: JSON.stringify({ query, variables }),
     });
     return (await response.json()) as ExecutionResult<T>;

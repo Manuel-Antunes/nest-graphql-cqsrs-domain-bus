@@ -8,9 +8,8 @@ import { testProject } from '../../vitest.shared.mts';
 export default testProject({
   name: '@nestposts/posts-api:e2e',
   include: ['test/**/*.e2e-spec.ts'],
-  database: true,
+  database: 'own',
   env: {
-    POSTS_SCHEMA: `e2e_${Date.now().toString(36)}`,
     POSTS_TRANSPORT: 'memory',
     AUTH_REQUIRE_EMAIL_VERIFICATION: 'false',
   },

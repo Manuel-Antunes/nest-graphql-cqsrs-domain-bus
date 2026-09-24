@@ -4,7 +4,6 @@ import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 import type { Instrumentation } from '@opentelemetry/instrumentation';
 import { AmqplibInstrumentation } from '@opentelemetry/instrumentation-amqplib';
 import { AwsInstrumentation } from '@opentelemetry/instrumentation-aws-sdk';
-import { GraphQLInstrumentation } from '@opentelemetry/instrumentation-graphql';
 import { HttpInstrumentation } from '@opentelemetry/instrumentation-http';
 import { NestInstrumentation } from '@opentelemetry/instrumentation-nestjs-core';
 import { PgInstrumentation } from '@opentelemetry/instrumentation-pg';
@@ -138,23 +137,34 @@ export const flushTelemetry = async (): Promise<void> => {
 };
 
 /**
- * The seven the system is made of. `ignoreIncomingRequestHook` keeps the health checks out: a poll
- * every second is a trace every second, and it buries the requests somebody cares about.
+ * What the system is made of. `ignoreIncomingRequestHook` keeps the health checks out: a poll every
+ * second is a trace every second, and it buries the requests somebody cares about.
  *
  * `PinoInstrumentation` is what joins the two halves: it puts the current `trace_id` and `span_id`
  * on every log record, so a log line and the span it happened inside are the same story told twice
  * rather than two things to correlate by timestamp.
+ *
+ * **GraphQL is not on the list**: Yoga executes with `@graphql-tools/executor`, which
+ * `@opentelemetry/instrumentation-graphql` never sees, so a server traces its operations with
+ * `useGraphQLTracing` (`@nestposts/observability/graphql-tracing`) instead.
+ *
+ * **Nor is `http`, in a Lambda.** There `infra/lambda/otel-preload.cjs` registers it before the
+ * runtime loads anything, and it has to: the preload's `AwsLambdaInstrumentation` installs the
+ * `require` hook that every instrumentation shares, and that hook remembers each module it has seen.
+ * `https` is required before this function runs — by the exporter it is about to create — so an
+ * `HttpInstrumentation` registered here finds it already remembered, unpatched, and never patches it:
+ * no client span for a call to a subgraph, and no `traceparent` on it.
  */
 const defaultInstrumentations = (): Instrumentation[] => [
-  new HttpInstrumentation({
-    ignoreIncomingRequestHook: (request) =>
-      (request.url ?? '').startsWith('/health'),
-  }),
+  ...(inLambda()
+    ? []
+    : [
+        new HttpInstrumentation({
+          ignoreIncomingRequestHook: (request) =>
+            (request.url ?? '').startsWith('/health'),
+        }),
+      ]),
   new NestInstrumentation(),
-  new GraphQLInstrumentation({
-    allowValues: false,
-    ignoreTrivialResolveSpans: true,
-  }),
   new PgInstrumentation(),
   new AmqplibInstrumentation(),
   new AwsInstrumentation(),

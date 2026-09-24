@@ -68,6 +68,12 @@
     },
     {
       "path": "./libs/ui"
+    },
+    {
+      "path": "./libs/core/federation-gateway"
+    },
+    {
+      "path": "./apps/gateway"
     }
   ]
 }

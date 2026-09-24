@@ -3,11 +3,13 @@ import type { TestingModule } from '@nestjs/testing';
 import { Test } from '@nestjs/testing';
 import { SubscriptionBus } from '@nestposts/cqsrs';
 import { CqsrsModule } from '@nestposts/cqsrs/cqsrs.module';
+import { ROOT_TENANT, Tenant } from '@nestposts/database';
 import { PostCreatedEvent } from '@nestposts/posts/domain/post/event/post-created.event';
 import { PostUpdatedEvent } from '@nestposts/posts/domain/post/event/post-updated.event';
 import { PostId } from '@nestposts/posts/domain/post/vo/post-id';
 import { UserId } from '@nestposts/users/domain/user/vo/user-id';
 
+import { PostRequest } from '../../shared/post-request';
 import { OnPostCreatedSubscription } from './on-post-created.subscription';
 
 describe('OnPostCreatedSubscription', () => {
@@ -31,10 +33,10 @@ describe('OnPostCreatedSubscription', () => {
       now,
     );
 
-  const collect = () => {
+  const collect = (tenantId = ROOT_TENANT) => {
     const received: PostCreatedEvent[] = [];
     const stream = bus.subscribe<PostCreatedEvent>(
-      new OnPostCreatedSubscription.OnPostCreated(),
+      new OnPostCreatedSubscription.OnPostCreated({ tenantId }),
     );
     active.push(stream.subscribe((event) => received.push(event)));
     return received;
@@ -102,10 +104,31 @@ describe('OnPostCreatedSubscription', () => {
   });
 
   it('duas assinaturas pedem a mesma coisa e recebem o mesmo stream', () => {
-    const first = bus.subscribe(new OnPostCreatedSubscription.OnPostCreated());
-    const second = bus.subscribe(new OnPostCreatedSubscription.OnPostCreated());
+    const first = bus.subscribe(
+      new OnPostCreatedSubscription.OnPostCreated({ tenantId: ROOT_TENANT }),
+    );
+    const second = bus.subscribe(
+      new OnPostCreatedSubscription.OnPostCreated({ tenantId: ROOT_TENANT }),
+    );
 
     expect(second).toBe(first);
+  });
+
+  it('hears only its own tenant, whether the event carries the request or the log’s stamp', () => {
+    const acme = collect('acme');
+    const root = collect();
+
+    const fromAcme = created();
+    new PostRequest(postId, 'acme').attachTo(fromAcme);
+    const fromGlobexLog = Tenant.stamp(created(PostId.generate()), 'globex');
+    const fromRoot = created(PostId.generate());
+
+    eventBus.publish(fromAcme);
+    eventBus.publish(fromGlobexLog);
+    eventBus.publish(fromRoot);
+
+    expect(acme).toEqual([fromAcme]);
+    expect(root).toEqual([fromRoot]);
   });
 
   it('quem assina depois não recebe o que já passou', () => {

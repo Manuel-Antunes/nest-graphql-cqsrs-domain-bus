@@ -1,4 +1,9 @@
-import { defineEntity, p, valueObjectType } from '@nestposts/database';
+import {
+  defineEntity,
+  p,
+  SYSTEM_SCHEMA,
+  valueObjectType,
+} from '@nestposts/database';
 import { CREDENTIAL_ID_MAX_LENGTH } from '@nestposts/users/domain/user/schemas/credential-id.schema';
 import { CredentialId } from '@nestposts/users/domain/user/vo/credential-id';
 import { Email } from '@nestposts/users/domain/user/vo/email';
@@ -17,6 +22,7 @@ const UserNameType = valueObjectType(UserName, { columnType: 'varchar(100)' });
 export const AuthUserEntitySchema = defineEntity({
   class: AuthUser,
   tableName: 'auth_user',
+  schema: SYSTEM_SCHEMA,
   forceConstructor: true,
   properties: {
     id: p.type(CredentialIdType).primary(),

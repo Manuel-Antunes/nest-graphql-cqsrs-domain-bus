@@ -6,3 +6,34 @@
   --font-sans: var(--font-inter), Inter, system-ui, sans-serif;
   --font-mono: var(--font-jetbrains-mono), 'JetBrains Mono', monospace;
 }
+
+@theme {
+  --animate-notification-settle: notification-settle 2.6s ease-out both;
+
+  @keyframes notification-settle {
+    0%,
+    35% {
+      background-color: var(--notification-fresh);
+    }
+
+    100% {
+      background-color: transparent;
+    }
+  }
+}
+
+:root {
+  --notification-fresh: color-mix(
+    in oklab,
+    var(--color-amber-200) 70%,
+    transparent
+  );
+}
+
+.dark {
+  --notification-fresh: color-mix(
+    in oklab,
+    var(--color-amber-400) 22%,
+    transparent
+  );
+}

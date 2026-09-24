@@ -96,7 +96,7 @@ export default function Home() {
         </p>
         <dl className="grid gap-2 pt-2 text-muted-foreground text-xs sm:grid-cols-2">
           <div>
-            <dt className="font-medium text-foreground">Subgraph</dt>
+            <dt className="font-medium text-foreground">Gateway</dt>
             <dd className="break-all font-mono">{GRAPHQL_UPSTREAM}</dd>
           </div>
           <div>

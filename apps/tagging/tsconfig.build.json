@@ -7,7 +7,8 @@
     "declaration": false,
     "declarationMap": false,
     "emitDeclarationOnly": false,
-    "customConditions": []
+    "customConditions": [],
+    "jsx": "react-jsx"
   },
   "include": ["src/**/*.ts"],
   "exclude": ["src/**/*.spec.ts"],

@@ -421,6 +421,14 @@ Two answers ship with the library, and a service picks one:
 | nothing (the default is `NoDurableState`) | a service whose state is a read model fed by its own projections: there is nothing to make durable, the projections are handlers like any other |
 | `eventStore: [Aggregate]` | a service that **decides about an aggregate it has no table for**: what arrives is appended to that aggregate's stream, and the next decision is taken against the whole history |
 
+**The inbox and the event log live in a schema of their own, `transport`** (`TRANSPORT_SCHEMA`),
+created by the system migrations. They are the transport's bookkeeping, not a tenant's data: one inbox
+for every message the system receives — keyed by message id, so two services binding the SAME event
+would have the second one's delivery dropped as a duplicate, which nothing here does — and one log for
+every event, each row recording the tenant it was appended in (the schema of the entity manager the
+append ran on). Their native statements ask the metadata where the table is, so a service keeps
+working whatever tenant its request is in.
+
 Whatever the sink writes lands in the same transaction as the inbox row. The event reaches the local
 bus **after** that transaction commits — a handler triggered from inside it would inherit the
 transaction through the async store and then find it gone (`Transaction is already committed`).
@@ -889,6 +897,17 @@ One option turns it on, and it binds the `EventBus` token to `EventSourcedEventB
 ```ts
 TransportEventBusModule.forRoot({ /* … */ subscriptions: true }),
 ```
+
+**Every tenant's events are in the one log**, and each is handed out stamped with the tenant its row
+records (`Tenant.of(event)`, from `@nestposts/database`) — which is what lets a subscription hear only
+its own tenant, where the event carries no request of its own.
+
+**And each carries the trace it was appended in.** `TransportEventBusService` stamps what it
+publishes with the active trace (`EventTrace.stamp`), the log stores it beside the event
+(`trace_context`, or the trace the append ran in for an event nobody stamped), and the bus stamps it
+back on what it reads. `EventTrace.of(event)` is then a context a span can start in — which is what
+lets a subscriber's delivery be part of the trace of the request that caused the event, in another
+container, seconds later. `EventTrace.carry(event, view)` passes it on to what the event becomes.
 
 ### The three readers of a bus are not the same reader
 

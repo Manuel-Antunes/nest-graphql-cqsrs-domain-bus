@@ -3,7 +3,6 @@ import { join } from 'node:path';
 import { ModulesContainer } from '@nestjs/core';
 import type { TestingModule } from '@nestjs/testing';
 import { Test } from '@nestjs/testing';
-import { TestSchemaModule } from '@nestposts/database/testing';
 import { NOTIFICATIONS_NAMESPACE } from '@nestposts/notifications/domain/notifications.namespace';
 import { registeredEventTypes } from '@nestposts/platform/domain/shared/event-type';
 import { POSTS_NAMESPACE } from '@nestposts/posts/domain/post/event/posts.namespace';
@@ -39,7 +38,7 @@ describe('the wiring that fails silently', () => {
 
   beforeAll(async () => {
     module = await Test.createTestingModule({
-      imports: [AppModule, TestSchemaModule.forRoot()],
+      imports: [AppModule],
     }).compile();
     await module.init();
   });

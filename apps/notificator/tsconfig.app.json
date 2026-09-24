@@ -12,6 +12,9 @@
       "path": "../../libs/core/validated-dto/tsconfig.lib.json"
     },
     {
+      "path": "../../libs/users/tsconfig.lib.json"
+    },
+    {
       "path": "../../libs/core/transport-eventbus/tsconfig.lib.json"
     },
     {
@@ -52,6 +55,9 @@
     },
     {
       "path": "../../libs/auth/tsconfig.lib.json"
+    },
+    {
+      "path": "../migrator/tsconfig.app.json"
     }
   ]
 }

@@ -38,8 +38,9 @@ The only exceptions:
    — they were stripped on arrival, as every registry file is — and its CSS keeps its own.
 3. **The in-house libraries** — `libs/core/cqsrs`, `libs/database`, `libs/core/validated-dto`,
    `libs/core/transport-eventbus`, `libs/core/microservices-aws`,
-   `libs/core/microservices-inngest`, `libs/core/mail`, `libs/notifications`, `libs/asset`,
-   `libs/auth` and `libs/organizations` — may
+   `libs/core/microservices-inngest`, `libs/core/mail`, `libs/core/federation-gateway`,
+   `libs/core/observability`, `libs/notifications`, `libs/asset`, `libs/auth` and
+   `libs/organizations` — may
    carry **JSDoc**, and only JSDoc
    (`/** … */`), as usage documentation of their public API. These are
    general-purpose libraries that happen to live in this repository: their callers read the signature
@@ -172,9 +173,9 @@ Package manager is **pnpm** (pinned: `pnpm@10.28.0`), workspace orchestrated by 
 
 ```bash
 pnpm install
-pnpm db:setup                  # apps/migrator: migrations on both databases, then the seeders
-pnpm dev                       # db:setup, then nx run-many -t serve: the two applications at once
-pnpm build                     # every project; each app builds with `nest build` (tsc, no bundler)
+pnpm db:setup                  # apps/migrator: the system migrations, then every tenant's, then the seeders
+pnpm dev                       # db:setup, then nx run-many -t serve: every app, rebuilt and restarted on any change — libs included
+pnpm build                     # every project; each Nest app is a webpack bundle (NxAppWebpackPlugin, tsc), the libs compiled in from source
 pnpm typecheck                 # nx run-many -t typecheck: tsc --build per project
 pnpm test                      # nx run-many -t test: every project's Vitest suite
 pnpm test:e2e                  # EVERY app's test-e2e, one at a time: posts-api, then the browser
@@ -184,6 +185,7 @@ pnpm lint                      # biome check . — format, lint and import order
 pnpm lint:fix                  # the same with --write
 pnpm format / format:check     # biome format, alone
 pnpm graph                     # the project graph, which is also the layer graph
+npx nx run @nestposts/gateway:supergraph   # dist/supergraph/{supergraph,api}.graphql — what the web's codegen reads
 
 docker compose up -d localstack   # SNS + SQS, with the topology docker/localstack/init creates
 docker compose up -d minio createbuckets   # the bucket a post keeps its file in, with its policies
@@ -194,14 +196,17 @@ npx sst deploy --stage <name>     # the topic, the queues and apps/tagging as a 
 pnpm graph:stack <name>           # the DEPLOYED graph: sst state export → pulumi stack graph
 ```
 
-The schema is **never** created by an application (see `apps/migrator/README.md`):
+The system schema is **never** created by an application, and a tenant's only by its own first
+request (see `apps/migrator/README.md` and **Tenancy** below):
 
 ```bash
-pnpm db:migrate                                 # migration:up, posts     (:tagging for the other)
-pnpm db:migration:create -- --name add-a-thing  # writes apps/migrator/src/migrations/posts/*.ts
-pnpm db:seed                                    # seeder:run, posts
-pnpm db:fresh                                   # drop, remigrate, seed
-pnpm db:revert                                  # migration:down, one step
+pnpm db:migrate                                        # the system migrations, THEN tenant_root and every tenant_* there is
+pnpm db:migrate:system                                 # public + transport only (:tenant for tenant_root only)
+pnpm db:migration:create -- --name add-a-thing         # a TENANT migration: apps/migrator/src/migrations/tenant/*.ts
+pnpm db:migration:create:system -- --name add-a-thing  # a SYSTEM migration: apps/migrator/src/migrations/system/*.ts
+pnpm db:seed                                           # the seeders, through the migrator's container
+pnpm db:fresh                                          # drop every tenant_* and the system tables, remigrate, seed
+pnpm db:revert                                         # migration:down, one step, on tenant_root (:system for public)
 ```
 
 One project, one file or one test:
@@ -220,8 +225,7 @@ Environment variables, per application:
 | | posts-api | tagging | notificator |
 |---|---|---|---|
 | database | one Postgres for both: `POSTGRES_URL` (default `postgresql://nestposts:nestposts@localhost:5432/nestposts`) | idem | idem |
-| schema | `POSTS_SCHEMA` (default `posts`) | `TAGGING_SCHEMA` (default `tagging`) | **`POSTS_SCHEMA`** — it lives in the `posts` schema, beside the users it notifies (see Notifications) |
-| | the same variables address `apps/migrator`, which is what creates those schemas | | |
+| schema | none: the connection points at `public`, and a request's tables are its tenant's, `tenant_<x-tenant>` (see Tenancy) | idem | idem |
 | transport | `POSTS_TRANSPORT` = `inngest` (default) \| `rabbitmq` \| `memory` \| `aws` | `TAGGING_TRANSPORT`, same | `NOTIFICATOR_TRANSPORT`, same |
 | inngest | `INNGEST_BASE_URL` (default `http://localhost:8288`), `INNGEST_SERVE_ORIGIN`, `INNGEST_DEV`, `INNGEST_EVENT_KEY`, `INNGEST_SIGNING_KEY` | idem, plus `TAGGING_PORT` (default 3001) | idem, plus `NOTIFICATOR_PORT` (default 3002) |
 | publishing | `POSTS_PUBLISH_EVENTS=false` turns the outbound half off | `TAGGING_PUBLISH_EVENTS` | — (it publishes nothing) |
@@ -238,6 +242,15 @@ Environment variables, per application:
 | push | — | — | `FIREBASE_CREDENTIALS` (the service account's JSON); unset, the `push` channel sends nothing |
 | other | `PORT`, `MIKRO_ORM_DEBUG=true` | `MIKRO_ORM_DEBUG=true` | `MIKRO_ORM_DEBUG=true` |
 
+`apps/gateway` reads `GATEWAY_PORT` (default 4000), `GATEWAY_URL`, `POSTS_SUBGRAPH_URL`,
+`NOTIFICATIONS_SUBGRAPH_URL`, `GATEWAY_SUBGRAPHS_DIR`, `GATEWAY_CORS_ORIGINS` (default `WEB_URL`),
+`AUTH_JWKS_URL` and `AUTH_ISSUER` — see `apps/gateway/README.md`. Every process that holds a Better
+Auth instance — posts-api, the notificator, `apps/web`, the migrator — reads **`GATEWAY_URL`** too
+(default `http://localhost:4000/graphql`): it is the audience an OAuth access token must carry to be
+a session, and the resource the migrator registers. `AUTH_ISSUER` (default `WEB_URL`) is the one
+`iss` they all sign and verify with. The notificator now reads `AUTH_SECRET`, `AUTH_URL` and
+`WEB_URL` as well: it authenticates the callers of its subgraph.
+
 `apps/web` takes the auth and database variables of the posts-api (it holds the same Better Auth) and
 a transport of its own, because it **publishes** the emails its Better Auth asks for:
 `WEB_TRANSPORT` = `inngest` (default) \| `rabbitmq` \| `memory` \| `aws`, with `INNGEST_BASE_URL`,
@@ -247,7 +260,7 @@ turn it off.
 ## Architecture
 
 DDD/CQRS proof of concept: an Nx monorepo with **two NestJS 12 applications** talking over
-**RabbitMQ**, on `@nestjs/cqrs` 12 + MikroORM 7 (PostgreSQL, one schema per service) + `@nestjs/graphql` 14 (**Yoga**,
+**RabbitMQ**, on `@nestjs/cqrs` 12 + MikroORM 7 (PostgreSQL, one schema per TENANT) + `@nestjs/graphql` 14 (**Yoga**,
 **schema-first**). A TypeScript rewrite of `axon-graphql-posts` (Axon 5 + Quarkus) — the README carries
 the Axon → Nest translation table, which is worth reading whenever a choice looks arbitrary.
 
@@ -263,7 +276,8 @@ exists, which query answers what, which event chains into the next step — and 
 libs/platform            domain/shared (aggregate root, soft delete, delegation, @EventType)
                          infrastructure/persistence (delegated references, soft delete's ORM half)
 libs/database            the one door to MikroORM: the connection, DatabaseModule, valueObjectType,
-                         inRequestContext, what a driver exception means (see below)
+                         inRequestContext, what a driver exception means (see below), and TENANCY:
+                         the tenant's schema, migrated on its first request (see Tenancy)
 libs/users               domain/user + its ORM mapping and repositories, wired by
                          UsersInfrastructureModule. It knows nothing about Better Auth
 libs/auth                authentication: the Better Auth server instance and its CORE plugin
@@ -274,7 +288,8 @@ libs/auth                authentication: the Better Auth server instance and its
 libs/organizations       organizations, members and invitations: the three tables, their domain and
                          repositories, the OrganizationService port, the invitation email, and the
                          `organization` plugin (teams on) it CONTRIBUTES to the instance libs/auth
-                         builds. Both have READMEs
+                         builds — whose hook migrates a new organization's tenant — and the guard
+                         that lets only its members into that tenant. Both have READMEs
 libs/posts               domain/post + domain/tag + their ORM mappings and repositories,
                          wired by PostsInfrastructureModule
 libs/notifications       notifications as a domain concept: Notification (via, and the channel
@@ -299,31 +314,39 @@ libs/core/microservices-inngest  Inngest as a plain Nest transport: InngestClien
 libs/core/retry-policy   @RetryPolicy for an @EventPattern handler, and one ExceptionProducer per
                          transport (SQS, Inngest, RabbitMQ with its dead-letter topology) — see its
                          README
-libs/core/observability  the one door to observability: startTelemetry (the OTel SDK) and
-                         loggingModule (pino, with trace_id on every record). A library depends on
-                         @opentelemetry/api; an application depends on this. Import
+libs/core/observability  the one door to observability: startTelemetry (the OTel SDK),
+                         loggingModule (pino, with trace_id on every record) and useGraphQLTracing
+                         (a Yoga plugin: GraphQL spans). A library depends on @opentelemetry/api;
+                         an application depends on this. Import
                          @nestposts/observability/telemetry, NEVER the barrel — see Observability
 libs/core/lambda         how AWS enters a Nest application: bootOnce (one boot per container),
                          streamingHandler (HTTP over a Function URL) and queueHandler (SQS)
+libs/core/federation-gateway  a federation gateway as a Nest module: local composition from the
+                         subgraphs' SDL, execution by @graphql-tools/federation (subscriptions over
+                         SSE), @interfaceObject, credential forwarding. It has a README
 libs/ui                  the design system: shadcn base-nova primitives (Base UI, not Radix), the
                          components built on them, the hooks and the theme. A SOURCE package — Next
                          compiles it with apps/web (transpilePackages); it has a README
 
+apps/gateway             the one GraphQL endpoint: federates the posts and notifications subgraphs
+                         and forwards every caller's cookie and bearer. See "The gateway" below
 apps/posts-api           application + interfaces (GraphQL, messaging), a HYBRID application:
-                         HTTP (GraphQL, and subscriptions over SSE) and a microservice, one process
+                         HTTP (the `posts` subgraph, subscriptions over SSE) and a microservice
 apps/tagging             one step of the saga, a FULL microservice: no HTTP port at all
-apps/notificator         delivers notifications — the database, email, push — through a command, a
-                         FULL microservice like tagging, in the posts schema (see Notifications)
-apps/migrator            the migrations and the seeders of both schemas — the only thing that
-                         writes DDL, and the only thing that seeds (see below)
+apps/notificator         delivers notifications — the database, email, push — through a command, and
+                         serves the `notifications` subgraph: a HYBRID application (see
+                         Notifications)
+apps/migrator            the SYSTEM and the TENANT migrations and the seeders — the only thing that
+                         writes system DDL, the author of every tenant migration, and the only thing
+                         that seeds (see below)
 infra/aws                the deployed shape: the topic, the queues, the four functions, the bucket
                          and the router, in SST. `infra/aws/README.md` is the guide — read it before
                          touching a filter policy or the bundling options
 apps/web-e2e             the whole system through a BROWSER: Playwright over three processes and a
                          real broker — authentication, authorization, the reading path and the saga
-apps/web                 a Next.js client, to see the API from outside (not part of the saga). It boots
-                         a Nest CONTAINER of its own, holds the same Better Auth and serves its
-                         screens — better-auth-ui's — and PUBLISHES the emails they send — see below
+apps/web                 a Next.js client of the GATEWAY (not part of the saga). It boots a Nest
+                         CONTAINER of its own, holds the same Better Auth and serves its screens —
+                         better-auth-ui's — and PUBLISHES the emails they send — see below
 ```
 
 What that buys, concretely: `apps/tagging` imports `libs/posts` and gets the `Post`, its events, its
@@ -570,9 +593,9 @@ ProjectPostCompletion        ◀──  posts.PostCreated.<postId>      ◀─�
   `notifications.NotificationReceived`, goes out through the same publisher, and `apps/notificator`
   delivers it. See **Notifications**.
 - The default tag's id is a **domain fact** (`DEFAULT_TAG_ID` in `libs/posts`), which is what makes two
-  services arrive at the same id instead of keeping two constants in step by hand. The row itself is
-  `DefaultTagSeeder` in `apps/migrator`, run by `pnpm db:seed` — and, in the e2e, by an explicit
-  `orm.seeder.seed(DefaultTagSeeder)` in `beforeAll`.
+  services arrive at the same id instead of keeping two constants in step by hand. The row itself is a
+  **tenant migration** (`Migration…_default_tag`), not a seeder: a tenant is born at runtime, when its
+  organization is, and nothing runs a seeder then — a migration is what every tenant gets.
 
 ### Notifications: the domain notifies, `apps/notificator` delivers
 
@@ -594,12 +617,29 @@ ProjectPostCompletion        ◀──  posts.PostCreated.<postId>      ◀─�
   throws fails the ingestion, and the transport's retry (`@RetryPolicy`) delivers only what did not
   go out. The notification id is derived from its key and its notifiable, so a retried `notify` is the
   same notification.
-- **The `posts` schema is shared, and that is an exception.** The notification tables are read and
-  written by `apps/posts-api` (the GraphQL `notifications`, `markNotificationAsRead`, `registerDevice`,
-  `removeDevice`) and written by the notificator, so they live beside the users, in `posts`, and the
-  notificator connects there. Its inbox shares `transport_message_inbox` with posts-api's: the rows are
-  keyed by message id and the two services bind different events, so they cannot collide — until one
-  of them binds what the other does.
+- **The notification tables are tenant tables, beside the users they are for.** They are written by
+  the notificator's delivery and read and written by its subgraph (`notifications`,
+  `unreadNotificationCount`, `markNotificationAsRead`, `markAllNotificationsAsRead`,
+  `deleteNotification`, `registerDevice`, `removeDevice`), and the subgraph finds the caller's `User`
+  by the session's email — in the tenant the request names, like every other read. It never
+  provisions a profile: a session whose user posts-api has not provisioned yet reads no notifications
+  and a count of zero, rather than an error the bell would show on every page. Its inbox is the
+  transport's one `transport_message_inbox`, shared with every service: the rows are keyed by
+  message id and the services bind different events, so they cannot collide — until two of them bind
+  the same one, when the second would drop it as a duplicate.
+- **The notifications subgraph contributes to `IUser`, and only to its owner.** `IUser` is an
+  `@interfaceObject` there (`user-notifications.graphql`), so `me { notifications }` is one operation
+  across two subgraphs. `_entities` reaches `IUser.notifications` for ANY user a query names
+  (`post { author { notifications } }`), so the resolver answers only when the representation's id is
+  the caller's own, and `[]`/`0` otherwise; `fieldResolverEnhancers` includes `guards` there, which is
+  what puts the session on a field resolver at all.
+- **The bell in `apps/web`'s header is the `database` channel, read.** It polls
+  `unreadNotificationCount` for the dot, loads `notifications` when opened, marks everything read with
+  `markAllNotificationsAsRead` as it opens — highlighting what was new with the
+  `notification-settle` animation in `globals.css` — and deletes with `deleteNotification`.
+  **Deleting removes the row and leaves `notification_deliveries` alone**, on purpose: the ledger is
+  what makes a redelivered `NotificationReceived` skip the `database` channel, so emptying it would
+  bring a deleted notification back.
 - **A `.tsx` in a library** needs `jsx: react-jsx` and `.tsx` in `include` in its tsconfigs, and
   `vitest.shared.mts` runs two SWC instances — `.ts` as TypeScript, `.tsx` as TSX — because
   unplugin-swc turns TSX on for a whole project whose tsconfig sets `jsx`, and TSX cannot parse a
@@ -634,22 +674,68 @@ services it travels as the metadata `PostRequest.toAttributes()` declares, and
 `PostRequestContextCodec` rebuilds it on the other side. An `execute` without that context compiles,
 passes the happy path and breaks the saga — hence the dedicated tests in `post-request.spec.ts`.
 
-### Tenancy: `x-tenant` is the worked example of what "the request travels" buys
+### Tenancy: a tenant is an organization, and a schema
 
-`TenancyModule.forRoot()` (`@nestposts/database`) puts every request inside its tenant's entity
-manager — `TenantMiddleware` for HTTP and GraphQL, `TenantInterceptor` for a subscription or a message,
-the second deferring to a context the first already opened. `libs/database/README.md` is the guide.
+Every table is pinned to a schema by the entity that maps it, `defineEntity({ schema })`, and there
+are three kinds:
+
+| pin | where | what |
+|---|---|---|
+| `SYSTEM_SCHEMA` (`public`) | `public` | Better Auth's tables and the organizations' — `libs/auth`, `libs/organizations` |
+| `TRANSPORT_SCHEMA` | `transport` | the transport's bookkeeping: the inbox and the event log (`libs/core/transport-eventbus`) |
+| `TENANT_SCHEMA` (`*`, MikroORM's wildcard) | `tenant_<name>` | everything else: posts, tags, users, notifications, devices |
+
+A wildcard table exists once per tenant, and which copy a query reaches is the schema of the entity
+manager it runs on. `tenant_root` is the root tenant's — whoever names no tenant, the visitor who never
+signed in included. An organization is a tenant: `tenant_<slug>`. `libs/database/README.md` and
+`apps/migrator/README.md` are the guides; the essentials:
+
+- **`TenancyModule.forRoot({ migrations, resolver })`** puts every request inside its tenant's entity
+  manager — `TenantMiddleware` for HTTP and GraphQL, `TenantInterceptor` for a message, the second
+  deferring to a context the first already opened — through `TenantEntityManagerService`, which forks
+  `orm.em` for `tenant_<name>` and **migrates the schema the first time this process meets the
+  tenant**: a `MikroORM.init` with `schema` set, running the tenant migrations, then remembered for as
+  long as the process lives. It is the shape of `tmp/organization`'s service, with two additions: a
+  transaction-level advisory lock on the schema's name, so two processes meeting a new tenant at once
+  migrate it once, and **no migration for a schema that does not exist** — only the root tenant and a
+  tenant whose organization made its schema are migrated, so a header cannot create schemas.
+- **The tenant migrations travel beside each bundle.** Each Nest app's webpack build emits
+  `dist/migrations/tenant/<Migration>.js`, one entry per file of `apps/migrator/src/migrations/tenant`,
+  and `TenancyModule` is given `{ path: join(__dirname, 'migrations', 'tenant') }`. A spec, and the
+  web, which Turbopack bundles, use `{ migrationsList }` instead — through the `TENANT_MIGRATIONS`
+  token, which is what a suite overrides.
+- **An organization's schema is created with it.** The `Organization` row's trigger creates
+  `tenant_<slug>` on insert and drops it `cascade` on delete (with `%I`: a slug may carry a dash), and
+  the organization plugin's `afterCreateOrganization` hook provisions it — migrates it — right away, in
+  whichever process served the request (the web, usually). A hook that fails only logs: the schema
+  exists, and the tenant's first request migrates it. Creating an organization also makes it the
+  active one, which is Better Auth's default.
+- **The tenant a request names is checked.** `TenantMembershipGuard` (`libs/organizations`, installed
+  by `TenantMembershipModule` in posts-api and the notificator) lets anybody into the root tenant and
+  only an organization's members into its tenant; a message passes, because its publisher checked. The
+  verdict is remembered per request — a guard on field resolvers runs once per field.
+- **The web names the active organization.** `/api/graphql` and the server's Apollo client send
+  `x-tenant` = the session's active organization's slug (an explicit header from the browser wins,
+  and is checked like any other), and the SSE link sends the same slug, which `TenantSync` keeps; when
+  the active organization changes, it resets Apollo's cache and refreshes the server components.
+- **A subscription only hears its tenant.** `OnPostCreated`/`OnPostUpdated` take the tenant as a
+  criterion and match it against `PostRequest.tenantOf(event)`: the request the event carries, or the
+  tenant the event log stamped on it (`Tenant.of(event)`) — the log is one table for every tenant,
+  and each row records the tenant it was appended in.
+- **A sign-up provisions its profile in the root tenant**; any other tenant provisions the caller's
+  profile on its first request there, through the session pipe, as before.
 
 The tenant then **rides the request the whole way**, and that path is worth following because it is the
 same one everything else takes:
 
 ```
-x-tenant: Acme  ──▶  @CurrentTenant()  ──▶  new PostRequest(postId, 'acme')
+x-tenant: acme  ──▶  @CurrentTenant()  ──▶  new PostRequest(postId, 'acme')
                                               │ toAttributes()
                                               ▼
                                        AMQP header x-tenant  ──▶  apps/tagging
                                                                     │ TransportTenantResolver
-                                                                    │ reads it off the envelope
+                                                                    │ reads it off the envelope,
+                                                                    │ TenantInterceptor opens tenant_acme
                                                                     ▼
                                                             its own decision goes back out
                                                             carrying the SAME x-tenant
@@ -667,15 +753,8 @@ x-tenant: Acme  ──▶  @CurrentTenant()  ──▶  new PostRequest(postId, 
   under `TRANSPORT_METADATA_PREFIX`: re-emitting `cqrs-transport-origin` would republish somebody
   else's authorship, the far side would read its own name and drop the message as its echo, and the
   saga would stop dead with every message still flowing. `tagging.spec` catches exactly that.
-- The proof is `pnpm test:web`, which asserts `x-tenant` on the AMQP headers of **both** events —
-  the one posts-api published and the one tagging decided.
-- **An organization's schema is created by a trigger, not by code.** `Organization` carries a MikroORM
-  `trigger` (`defineEntity({ triggers })`) that creates `tenant_<slug>` on insert and drops it
-  `cascade` on delete, emitted into a migration like any other DDL — so the schema's existence is a
-  property of the row. It quotes with `%I`, not `%s`: a slug may carry a dash and `tenant_acme-corp`
-  is not a valid unquoted identifier. The schema is somewhere for a `SchemaPerTenant` policy to point;
-  what goes INSIDE it would still be `apps/migrator`'s, and the default policy here is
-  `SharedSchemaTenants`.
+- The proof is `pnpm test:web`: `x-tenant` on the AMQP headers of **both** events, and a browser that
+  creates two organizations, writes in each, and sees the feed change as it switches between them.
 
 ### The domain decides and evolves; the application orchestrates
 
@@ -736,6 +815,32 @@ This applies to the libraries' `domain/` only. The GraphQL DTO schemas under
 `apps/posts-api/src/dto/graphql/` are a different layer with a different job (they carry
 `AUTOMAP_REGISTRY` decorator metadata) and stay where they are.
 
+### The gateway: one endpoint, two subgraphs
+
+`apps/gateway` is the only GraphQL endpoint a client calls — `apps/web` included, through its
+`/api/graphql` proxy on the server and directly for SSE subscriptions in the browser.
+`libs/core/federation-gateway/README.md` is the guide; the essentials:
+
+- **Execution is `@graphql-tools/federation`, served by `YogaDriver` — not `YogaGatewayDriver`.**
+  The latter is Apollo's gateway, which refuses to execute subscriptions; a stitched schema runs
+  them over SSE (`federated-subscriptions.spec.ts`).
+- **The supergraph is composed at boot from SDL FILES**, copied into `dist/subgraphs/<name>` by the
+  gateway's webpack build (assets listed by `scripts/subgraph-sources.mjs`) — never by introspecting
+  running subgraphs, which on
+  Lambda makes one cold start cascade into the next. Both subgraphs are schema-first, so their
+  `src/graphql` IS their SDL. `test/supergraph.spec.ts` fails when they stop composing.
+- **The web's codegen reads the composed API schema** (`dist/supergraph/api.graphql`, the
+  `supergraph` target its `codegen` depends on), plus `federation.graphql` for `_entities` — which the
+  gateway does not expose, so the federation page sends that one operation to the posts subgraph
+  itself (`context: TO_POSTS_SUBGRAPH`, `/api/graphql/posts`).
+- **Credentials are forwarded, and decided by each subgraph.** Cookie, bearer and `x-tenant` go to
+  every subgraph an operation reaches; each authenticates with its own Better Auth instance. A bearer
+  is verified at the gateway only to know who it is for — see `libs/auth`'s "An OAuth access token is
+  a session".
+- **A request log never carries a credential.** `loggingModule` redacts `cookie`, `authorization` and
+  `set-cookie`: a gateway forwards both on every request, and a record is a working session token in
+  whatever stores it.
+
 ### Persistence: the domain carries no ORM decorator
 
 The mapping lives in `libs/*/src/infrastructure/persistence/entities/*-orm.entity.ts`, via
@@ -789,32 +894,36 @@ layer says what to tell the client about it.
 
 ### The schema is `apps/migrator`'s, and so is the seed
 
-`apps/migrator/README.md` is the guide; the essentials:
+`apps/migrator/README.md` is the guide; it follows `tmp/migrator`'s shape. The essentials:
 
-- **No application creates a schema.** `postgresDatabase` sets `ensureDatabase: { create: false }` —
-  the database is made sure of, the schema is not — so a service whose migrations have not run fails
-  with `relation ... does not exist`, which is the honest answer.
-- **One schema per service, one config, one migration history.** `posts-mikro-orm.config.ts` and
-  `tagging-mikro-orm.config.ts`, each with its own `src/migrations/<folder>` and its own
-  `mikro_orm_migrations` table inside its own schema. Only the posts one registers `SeedManager`:
-  `apps/tagging` keeps no rows of its own.
-- **A migration is bound to the schema it was generated in.** The SQL is qualified
-  (`create table "posts"."account"`), so pointing `POSTS_SCHEMA` somewhere else does **not** move a
-  migration there. A throwaway schema is built from the entities — `TestSchemaModule` in the suites —
-  never from the migrations, which is why `apps/web-e2e` drops and rebuilds `posts` and `tagging`
-  instead of inventing names.
-- **The migrator is a Nest container per database.** `apps/migrator/src/app/{posts,tagging}.module.ts`
-  import the modules that own their tables, `bootstrap.ts` hands over `{ app, orm }`, and both the
-  MikroORM CLI configs and the lambda handlers run on that. It is what lets `TestUsersSeeder` resolve
-  the **real** `BETTER_AUTH` and create a credential rather than insert a password hash of its own.
-  `DatabaseModule.forRoot({ exclusive: true })` is load-bearing there: the entity registry is filled
-  when a module is **imported**, not when it is booted, so in the one process with two composition
-  roots it already holds the union — and `tagging` would be handed `posts`' `auth_user`.
-- **It depends only on the libraries**, never on the two applications — which is what keeps Yoga,
-  Better Auth and the AMQP client out of whatever runs a migration, and what lets
-  `apps/posts-api`'s e2e depend on the migrator for `DefaultTagSeeder` without a cycle.
-- `dist/main.js` is a module as well as a script: `migrate()`, `seed()`, `setup()`.
-  `apps/web-e2e`'s stack calls `node apps/migrator/dist/main.js setup` before starting either service.
+- **Two migration sets, two CLI configs.** `system-mikro-orm.config.ts` diffs the pinned tables —
+  `public` and `transport` — into `src/migrations/system`; `tenant-mikro-orm.config.ts` rewrites every
+  wildcard entity onto `tenant_root` (the template), skips the system tables and generates into
+  `src/migrations/tenant` through `TenantMigrationGenerator`, which replaces `"tenant_root"` with
+  `${schema}` — read off the connection, quoted — so one file migrates any tenant. Each config ignores
+  every schema but its own, because a development database accumulates tenants the diff must not see.
+- **System first, always.** `migrate()` runs the system migrations, then provisions `tenant_root` and
+  every `tenant_*` schema there is, through the same `TenantEntityManagerService` the applications use.
+  A tenant's tables may reference a system table (the generator points such a reference at `public`),
+  never the other way round.
+- **No application creates the system schema.** `postgresDatabase` sets
+  `ensureDatabase: { create: false }`, so a service whose system migrations have not run fails with
+  `relation ... does not exist`, which is the honest answer. A TENANT schema is the exception, by
+  design: it is migrated by the first process that serves it (see Tenancy).
+- **A throwaway schema is built from the entities** — `TestSchemaModule`, `testDatabase` — with every
+  pinned table rewritten onto the spec's own schema (`everyTableIn`), so specs never share `public`.
+  A spec that needs the real layout by name uses a DATABASE of its own (`testProject({ database:
+  'own' })`) and runs the real `migrate()` — the migrator's, posts-api's e2e, tagging's and the
+  notificator's specs do.
+- **The migrator is one Nest container** (`MigratorModule`): the modules that own every table,
+  `bootstrap.ts` hands over `{ app, orm }`, and the CLI configs and the lambda handlers run on that. It
+  is what lets `TestUsersSeeder` resolve the **real** `BETTER_AUTH` and create a credential rather than
+  insert a password hash of its own.
+- **It depends only on the libraries**, never on the applications — which is what keeps Yoga, Better
+  Auth's HTTP surface and the AMQP client out of whatever runs a migration, and what lets the
+  applications' specs and the web depend on it for `tenantMigrations` without a cycle.
+- `dist/main.js` is a module as well as a script: `migrate()`, `migrateSystem()`, `migrateTenants()`,
+  `seed()`, `setup()`, `fresh()`. `apps/web-e2e`'s stack runs `setup` before starting any service.
 
 ### GraphQL edge
 
@@ -896,17 +1005,43 @@ layer says what to tell the client about it.
 
 ### Observability: what may not be bundled, and what has to load first
 
-One trace covers the whole saga — `apps/web` → `apps/posts-api` → `apps/tagging` → back — and every
-rule below exists because breaking it produces **no error at all**: the system works, the trace is
-just wrong or absent, and only on AWS.
+One trace covers a post's whole life — `apps/web` → `apps/gateway` → `apps/posts-api` →
+`apps/tagging` → `apps/posts-api` → `apps/notificator`, and back through the posts subgraph and the
+gateway to whoever is subscribed — and every rule below exists because breaking it produces **no
+error at all**: the system works, the trace is just wrong or absent, and only on AWS.
 
 - **An instrumentation patches a module as it is `require`d, so anything it patches must not be
   bundled.** That is the whole reason `INSTALLED_PACKAGES` (`infra/aws/support/functions.ts`) exists,
   and why `pg`, `pino`, `@opentelemetry/instrumentation-pino` and the logs SDK are on it. The
-  converse is accepted and worth knowing: `graphql`, `@nestjs/graphql` and `@nestjs/core` **are**
-  bundled, so `GraphQLInstrumentation` and `NestInstrumentation` produce nothing on Lambda. They stay
-  bundled because `@apollo/subgraph` must share the bundle's `graphql`, and because `@nestjs/core`
-  external with `@nestjs/common` bundled is two halves of one DI container.
+  converse is accepted and worth knowing: `@nestjs/graphql` and `@nestjs/core` **are** bundled, so
+  `NestInstrumentation` produces nothing on Lambda — bundled because `@nestjs/core` external with
+  `@nestjs/common` bundled is two halves of one DI container.
+- **GraphQL is traced by a Yoga plugin, `useGraphQLTracing`, and not by
+  `@opentelemetry/instrumentation-graphql`.** That instrumentation patches `graphql-js`'s `execute`,
+  and Yoga executes with `@graphql-tools/executor`: locally it produced a parse and a validate per
+  operation and a root span per schema parsed at boot, and on Lambda (`graphql` bundled) nothing.
+  The plugin is called by the server, so it is the same everywhere: an operation span named
+  `mutation CreatePost` with `graphql.operation.*` and the document (literals masked), `parse`,
+  `validate` and `execute` inside it, and a span per resolver the schema declares, nested by response
+  path, with the resolver's queries inside it. posts-api, the notificator and the gateway install it
+  (the gateway with `resolvers: false`: every stitched field has a proxying resolver).
+- **The Lambda preload registers `http` too, and it has to.** `AwsLambdaInstrumentation` installs the
+  one `require` hook every instrumentation shares, and that hook caches each module it sees, patched
+  or not. `https` is required before `startTelemetry` runs, so an `HttpInstrumentation` registered
+  there found it cached and never patched it — measured: not one HTTP client span in three days, and
+  every gateway → subgraph call without a `traceparent`, so each subgraph opened a trace of its own.
+  `startTelemetry` leaves `http` out of its list in a Lambda; the preload owns it.
+- **The gateway traces each call to a subgraph** — `subgraph posts`, a client span around the
+  executor (`tracedExecutor`, `libs/core/federation-gateway`) with the HTTP request, and its
+  `traceparent`, inside it.
+- **A subscription delivers each event in the trace that produced it.** The event log stores the
+  trace each event was appended in (`transport.event_log.trace_context`), `EventSourcedEventBus`
+  stamps it back on what it reads (`EventTrace`, beside `Tenant.stamp`), `MapSubscriptionInterceptor`
+  carries it onto the view, and the plugin opens `subscription OnPostCreated event` as a **child** of
+  it, **linked** to the subscription. The event's result carries that span's `traceparent` in its
+  `extensions`, the gateway's executor remembers it for the event's objects (`subgraphEventOrigin`),
+  and the gateway's own delivery is one more child. A subscription's operation span ends when the
+  stream is set up; only the events are in the mutation's trace.
 - **`startTelemetry` has to run before anything it instruments is loaded — including as a side
   effect of its own import.** `apps/*/src/telemetry.ts` imports
   `@nestposts/observability/telemetry`, **never the package barrel**: the barrel is
@@ -947,6 +1082,15 @@ because the handlers commit through the transport publisher and a suite publishe
 (attached to the `EventBus`) proves what was published. Because handlers are request-scoped, tests
 dispatch through the `CommandBus` with a `PostRequest`.
 
+A spec's schema holds EVERY table it maps: `testDatabaseConfig` rewrites the `public`, `transport` and
+wildcard pins onto it (`everyTableIn`), so no two specs share a system table. A spec that needs the
+real layout by name — `public`, `transport`, `tenant_root`, and an organization's schema made by its
+trigger — asks for a database of its own with `testProject({ database: 'own' })`: the global setup
+creates it for the run and drops it after, and the spec runs the migrator's real `migrate()` and
+overrides `TENANT_MIGRATIONS` with the migrator's `tenantMigrations` list, because under Vitest there
+is no `dist/migrations` to read. posts-api's e2e, tagging, the notificator, the migrator, the
+organizations and the database libraries do.
+
 Where a spec lives follows one rule: **next to what it covers, in the project that can see it**. A
 spec that needs more than its own library — the persistence integration specs, the delegation over
 Post and Author, the exceptions of three modules — lives in `apps/posts-api/test/`, which is the
@@ -965,8 +1109,8 @@ Four levels, and each answers something the others cannot:
 `apps/web-e2e`, which is the whole reason `pnpm test:e2e` can be `nx run-many` and reach both. A new
 one is called `test-e2e` or that command does not know it exists — the same rule the CQRS handlers
 follow. (`e2e` is not free: `@nx/playwright` infers a target and `nx.json` names it `e2e-ci`.) They run
-`--parallel=1`, because both want the same Postgres and the same broker, and a suite that drops the
-`posts` schema while another is reading it fails for a reason that has nothing to do with the code.
+`--parallel=1`, because both want the same broker, and the browser suite the published Postgres
+ports its containers are given.
 
 `pnpm test:web` runs the **same suite over both transports**, one after the other — Inngest first,
 because it is the default, then RabbitMQ — and nothing is skipped in either. What differs is only
@@ -1026,11 +1170,20 @@ DTOs count.
   `require(esm)`. Jest cannot do that — hence **Vitest + `unplugin-swc`** (Vite's esbuild does not emit
   `emitDecoratorMetadata`, which Nest's DI needs). The ORM decorators (`@CreateRequestContext`,
   `@Transactional`) come from `@mikro-orm/decorators/legacy`.
-- **The build must stay on a non-bundling builder.** Each application builds with `nest build`, which
-  runs `tsc` (`nest-cli.json` sets no `builder`/`webpack`), and the libraries with
-  `tsc --build tsconfig.lib.json`. A bundler mangles class names and drops the `design:type` metadata
-  AutoMapper reads, which silently breaks mapping at runtime while the build still succeeds. **Do not
-  let an `@nx/nest` or `@nx/webpack` generator put a `webpack.config.js` back.**
+- **Each Nest application is a webpack bundle, set up the way Nx sets up a Nest app** — and its two
+  settings that are not defaults are the ones that keep it correct. `webpack.config.js` is
+  `tools/webpack/nest-application.js`: `NxAppWebpackPlugin` with `compiler: 'tsc'` (ts-loader, which
+  emits the `design:type` metadata Nest's DI and AutoMapper read — esbuild and SWC-without-metadata do
+  not) and `optimization: false` (a minifier renames classes, and MikroORM and `@EventType` identify
+  them by name). What it adds to Nx's defaults: the `@nestposts/*` packages are compiled IN, from
+  source (the `@nestposts/source` condition), and every other package stays external — which is what
+  makes `nx serve` (`@nx/js:node`, continuous) rebuild and restart on a change in ANY library, not
+  only in the app. The price is that an app declares the third-party dependencies of the libraries it
+  bundles (`react-email`, the S3 SDK, `firebase-admin`…): an external `require` now runs from
+  `apps/<app>/dist`, and pnpm only links what that app declares. A package missing there fails at
+  RUNTIME, with `Cannot find module`, not at build. The libraries still build with
+  `tsc --build tsconfig.lib.json`, for the web and for their own typecheck. `@nx/js:node` restarts
+  through the Nx daemon: with `NX_DAEMON=false` it builds once and never again.
 - **`INestMicroservice.init()` runs the bootstrap hooks twice** (Nest 12.0.3: `super.init()` calls
   them, and the `registerModules()` that follows calls them again). Twice through
   `onApplicationBootstrap` is twice through the CQRS explorer, so every `@EventsHandler` is bound
@@ -1047,11 +1200,14 @@ DTOs count.
 - **TypeScript is pinned to `^6`**: 7 does not expose the programmatic API the Nest CLI uses. Each
   project has three tsconfigs — `tsconfig.json` (the solution), `tsconfig.lib.json`/`tsconfig.app.json`
   (composite, what `typecheck` builds) and, for applications, `tsconfig.build.json` (non-composite,
-  what `nest build` uses, resolving the workspace packages through their built `dist`).
+  the compiler options the webpack build's ts-loader transpiles with — `jsx` included, for the React
+  Email templates the libraries bring in).
 - **`nx sync` after adding a dependency between projects**, or `typecheck` refuses to run: the TS
   project references are generated from the `package.json` dependencies.
-- The `.graphql` files are **assets** copied by `apps/posts-api/nest-cli.json`; `typePaths` uses
-  `__dirname` (so `src/` under Vitest, `dist/` in production).
+- The `.graphql` files are **assets** the webpack build copies into `dist/graphql`; `typePaths` uses
+  `__dirname` (so `src/` under Vitest, `dist/` in production). The tenant migrations are ENTRIES of
+  the same build, one bundle per file under `dist/migrations/tenant`, each requiring the installed
+  `@mikro-orm/migrations`.
 - **MikroORM picks `pathTs` over `path` whenever the runtime *could* read TypeScript.** The check is
   `config.get('preferTs', Utils.detectTypeScriptSupport())`, and Node 22+ reports type-stripping
   support regardless of what is actually running. Left alone, `seeder:run` on a compiled config loads
@@ -1238,6 +1394,17 @@ DTOs count.
   through the flows the sign-up form does not cover. `UserName.from(given, email)` names it after the
   email's local part; `init-auth`'s `databaseHooks.user.create.before` applies it to every new user,
   and `BetterAuthIdentityProvider` to the rows that already exist.
+- **A schema-first subgraph's SDL is its files MERGED, not concatenated.** posts-api declares
+  `type Mutation` in more than one file; Nest merges them (`mergeTypeDefs`) and composition, handed
+  the text, reports `There can be only one type named "Mutation"`. `readSubgraphSdl` merges the way
+  Nest does.
+- **`@apollo/federation-internals` has a `graphql` of its own.** It is CommonJS, and under Vitest
+  `graphql` also loads as ESM: printing its schema with `graphql`'s `printSchema` fails with
+  `Cannot use GraphQLObjectType "Post" from another module or realm`. It is printed with that
+  package's own `printSchema`.
+- **Two apps whose specs share one schema run their files in sequence.** The migrator and the
+  notificator boot their real `AppModule` against the schema their Vitest config names once per run,
+  and two files creating and dropping it in parallel fail each other — `fileParallelism: false`.
 - **A session need not have a user agent.** One Better Auth creates on the server's own behalf — the
   seeder, a script calling `auth.api` — records an empty one, and better-auth-ui's session list ran
   `Bowser.parse('')`, which throws: on AWS `/settings/security` failed to load for anyone holding such

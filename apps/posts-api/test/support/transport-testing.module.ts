@@ -1,6 +1,9 @@
 import { type DynamicModule } from '@nestjs/common';
 import { DatabaseModule } from '@nestposts/database';
-import { TestSchemaModule, testSchema } from '@nestposts/database/testing';
+import {
+  TestSchemaModule,
+  testDatabaseConfig,
+} from '@nestposts/database/testing';
 import {
   MikroOrmMessageInbox,
   TransportEventBusModule,
@@ -12,7 +15,7 @@ import { mikroOrmConfig } from '../../src/infrastructure/persistence/mikro-orm.c
 
 /** This application's connection, on a schema of its own. Every table arrives through the module that owns it. */
 export const persistenceTesting = (): DynamicModule[] => [
-  DatabaseModule.forRoot(mikroOrmConfig(testSchema('posts_api'))),
+  DatabaseModule.forRoot(testDatabaseConfig(mikroOrmConfig(), 'posts_api')),
   TestSchemaModule.forRoot(),
 ];
 

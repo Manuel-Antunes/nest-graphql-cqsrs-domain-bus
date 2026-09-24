@@ -1,12 +1,18 @@
+import { mergeConfig } from 'vitest/config';
+
 import { testProject } from '../../vitest.shared.mts';
 
-export default testProject({
-  name: '@nestposts/notificator',
-  include: ['src/**/*.spec.ts', 'test/**/*.spec.ts'],
-  database: true,
-  env: {
-    POSTS_SCHEMA: `spec_notificator_${Date.now().toString(36)}`,
-    NOTIFICATOR_TRANSPORT: 'memory',
-    MAIL_TRANSPORT: 'json',
-  },
-});
+export default mergeConfig(
+  testProject({
+    name: '@nestposts/notificator',
+    include: ['src/**/*.spec.ts', 'test/**/*.spec.ts'],
+    database: 'own',
+    env: {
+      NOTIFICATOR_TRANSPORT: 'memory',
+      MAIL_TRANSPORT: 'json',
+      AUTH_REQUIRE_EMAIL_VERIFICATION: 'false',
+      AUTH_RATE_LIMIT: 'false',
+    },
+  }),
+  { test: { fileParallelism: false } },
+);

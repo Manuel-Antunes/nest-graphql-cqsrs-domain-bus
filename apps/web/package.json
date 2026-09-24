@@ -22,6 +22,7 @@
     "@nestposts/database": "workspace:*",
     "@nestposts/microservices-aws": "workspace:*",
     "@nestposts/microservices-inngest": "workspace:*",
+    "@nestposts/migrator": "workspace:*",
     "@nestposts/notifications": "workspace:*",
     "@nestposts/organizations": "workspace:*",
     "@nestposts/transport-eventbus": "workspace:*",
@@ -81,6 +82,7 @@
         "cache": true,
         "inputs": [
           "{workspaceRoot}/apps/posts-api/src/graphql/**/*.graphql",
+          "{workspaceRoot}/apps/notificator/src/graphql/**/*.graphql",
           "{projectRoot}/federation.graphql",
           "{projectRoot}/codegen.ts",
           "{projectRoot}/src/**/*.{ts,tsx}"
@@ -91,7 +93,15 @@
         "options": {
           "cwd": "{projectRoot}",
           "command": "graphql-codegen --config codegen.ts"
-        }
+        },
+        "dependsOn": [
+          {
+            "projects": [
+              "@nestposts/gateway"
+            ],
+            "target": "supergraph"
+          }
+        ]
       },
       "build": {
         "executor": "nx:run-commands",
@@ -103,7 +113,7 @@
         "inputs": [
           "production",
           {
-            "env": "NEXT_PUBLIC_GRAPHQL_URL"
+            "env": "NEXT_PUBLIC_GATEWAY_URL"
           }
         ],
         "outputs": [
