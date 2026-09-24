@@ -13,6 +13,7 @@ import {
 } from '@automapper/core';
 import { AutomapperProfile, InjectMapper } from '@automapper/nestjs';
 import { Injectable } from '@nestjs/common';
+import type { Asset } from '@nestposts/asset/domain/data-objects/asset';
 import { PostCreatedEvent } from '@nestposts/posts/domain/post/event/post-created.event';
 import { PostPreCreatedEvent } from '@nestposts/posts/domain/post/event/post-pre-created.event';
 import { PostUpdatedEvent } from '@nestposts/posts/domain/post/event/post-updated.event';
@@ -26,6 +27,7 @@ import { UserId } from '@nestposts/users/domain/user/vo/user-id';
 
 import { CreatePostCommand } from '../../application/post/command/create-post.command';
 import { UpdatePostCommand } from '../../application/post/command/update-post.command';
+import { AssetView } from '../../dto/graphql/asset.view';
 import { CreatePostInput } from '../../dto/graphql/create-post.input';
 import { PostView } from '../../dto/graphql/post.view';
 import { TagView } from '../../dto/graphql/tag.view';
@@ -34,6 +36,17 @@ import { valueObjectConverter } from './value-object.converter';
 
 const authorOf = (args: Record<string, unknown>): Author =>
   args.author as Author;
+
+const assetViewOf = (asset: Asset | null): AssetView | null =>
+  asset
+    ? new AssetView({
+        name: asset.name,
+        size: asset.size,
+        extname: asset.extname,
+        mimeType: asset.mimeType,
+        url: asset.toJSON().url ?? null,
+      })
+    : null;
 
 @Injectable()
 export class PostProfile extends AutomapperProfile {
@@ -57,12 +70,17 @@ export class PostProfile extends AutomapperProfile {
           (view) => view.tags,
           mapWith(TagView, Tag, (post) => post.tags.getItems()),
         ),
+        forMember(
+          (view) => view.asset,
+          mapFrom((post) => assetViewOf(post.asset)),
+        ),
       );
 
       createMap(
         mapper,
         PostPreCreatedEvent,
         PostView,
+        forMember((view) => view.asset, fromValue(null)),
         forMember(
           (view) => view.id,
           mapFrom((event) => new PostId(event.postId)),
@@ -86,6 +104,7 @@ export class PostProfile extends AutomapperProfile {
         mapper,
         PostCreatedEvent,
         PostView,
+        forMember((view) => view.asset, fromValue(null)),
         forMember(
           (view) => view.id,
           mapFrom((event) => new PostId(event.postId)),
@@ -112,6 +131,7 @@ export class PostProfile extends AutomapperProfile {
         mapper,
         PostUpdatedEvent,
         PostView,
+        forMember((view) => view.asset, fromValue(null)),
         forMember(
           (view) => view.id,
           mapFrom((event) => new PostId(event.postId)),
@@ -146,6 +166,10 @@ export class PostProfile extends AutomapperProfile {
           (command) => command.authorName,
           mapWithArguments((_input, args) => authorOf(args).name),
         ),
+        forMember(
+          (command) => command.asset,
+          mapFrom((input) => input.asset ?? null),
+        ),
       );
 
       createMap(
@@ -155,6 +179,14 @@ export class PostProfile extends AutomapperProfile {
         forMember(
           (command) => command.postId,
           mapFrom((input) => input.id.assertValid()),
+        ),
+        forMember(
+          (command) => command.asset,
+          mapFrom((input) => input.asset ?? null),
+        ),
+        forMember(
+          (command) => command.editorId,
+          mapWithArguments((_input, args) => authorOf(args).id),
         ),
       );
     };

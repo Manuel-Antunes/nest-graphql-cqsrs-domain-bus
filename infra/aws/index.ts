@@ -18,6 +18,7 @@ import {
 import { database } from './data';
 import { router } from './edge';
 import { completed, postEvents, taggingEvents } from './messaging';
+import { bucket, filesUrl } from './storage';
 import { web } from './web';
 
 export const outputs = {
@@ -37,6 +38,10 @@ export const outputs = {
     tagging: taggingWorker.functionName,
     postsInbox: postsInbox.functionName,
   },
+
+  files: filesUrl,
+
+  bucket: bucket.name,
 
   topic: postEvents.arn,
 

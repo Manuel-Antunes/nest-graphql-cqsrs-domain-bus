@@ -1,13 +1,15 @@
 'use client';
 
 import Link from 'next/link';
-import { FileQuestionIcon } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { FileQuestionIcon, Loader2Icon, Trash2Icon } from 'lucide-react';
+import { toast } from 'sonner';
 
 import { EmptyState } from '@/app/_components/empty-state';
 import { ErrorNotice } from '@/app/_components/error-notice';
 import { PostArticle } from '@/app/_components/post-article';
 import { useSession } from '@/app/_providers/session-provider';
-import { buttonVariants } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import {
   Card,
   CardContent,
@@ -15,14 +17,15 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import { cn } from '@/lib/utils';
+import { cn, errorShownByHookState } from '@/lib/utils';
 
 import { usePost } from '../_hooks/use-post';
 import { PostEditor } from './post-editor';
 
 export function PostView({ id }: { id: string }) {
-  const { post, error, update } = usePost(id);
+  const { post, error, update, remove } = usePost(id);
   const { session, isAuthor } = useSession();
+  const router = useRouter();
 
   if (error)
     return <ErrorNotice title="Não foi possível ler o post" error={error} />;
@@ -60,6 +63,32 @@ export function PostView({ id }: { id: string }) {
           </CardHeader>
           <CardContent className="space-y-5">
             <PostEditor post={post} update={update} />
+            {remove.error ? (
+              <ErrorNotice title="deletePost falhou" error={remove.error} />
+            ) : null}
+            <Button
+              variant="destructive"
+              size="sm"
+              disabled={remove.loading}
+              onClick={() => {
+                void remove
+                  .run()
+                  .then(() => {
+                    toast.success('Post excluído', {
+                      description: 'O anexo foi apagado do bucket.',
+                    });
+                    router.push('/feed');
+                  })
+                  .catch(errorShownByHookState);
+              }}
+            >
+              {remove.loading ? (
+                <Loader2Icon className="animate-spin" />
+              ) : (
+                <Trash2Icon />
+              )}
+              Excluir post
+            </Button>
           </CardContent>
         </Card>
       ) : null}

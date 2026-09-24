@@ -8,11 +8,21 @@ type Mutation {
   Despacha UpdatePostCommand e devolve o Post já gravado
   """
   updatePost(input: UpdatePostInput!): Post!
+
+  """
+  Dispatches DeletePostCommand: the post is deleted logically, and its file for good
+  """
+  deletePost(id: ID!): Boolean!
 }
 
 input CreatePostInput {
   title: String!
   content: String!
+
+  """
+  A file uploaded through generatePresignedUrl
+  """
+  asset: AssetInput
 }
 
 input UpdatePostInput {
@@ -27,4 +37,9 @@ input UpdatePostInput {
   null = manter o conteúdo atual
   """
   content: String
+
+  """
+  A file uploaded through generatePresignedUrl, replacing the current one; null keeps it
+  """
+  asset: AssetInput
 }

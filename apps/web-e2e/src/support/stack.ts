@@ -49,6 +49,7 @@ export class Stack {
     const endpoints = await this.containers.up({
       transport: e2eTransport(),
       apiPort: await FreePort.pick(),
+      storagePort: await FreePort.pick(),
       webUrl: WEB_URL,
       authSecret: AUTH_SECRET,
       postsSchema: POSTS_SCHEMA,
@@ -83,6 +84,7 @@ export class Stack {
   private publish(endpoints: Endpoints): void {
     process.env.POSTGRES_URL = endpoints.postgresUrl;
     process.env.API_URL = endpoints.apiUrl;
+    process.env.E2E_STORAGE_URL = endpoints.storageUrl;
     if (endpoints.managementUrl) {
       process.env.RABBITMQ_MANAGEMENT = endpoints.managementUrl;
     }

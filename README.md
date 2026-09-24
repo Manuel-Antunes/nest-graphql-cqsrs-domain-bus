@@ -6,7 +6,7 @@ Hoje é um **monorepo Nx com duas aplicações** que conversam por **RabbitMQ**:
 
 A ideia central: o `EventBus` do @nestjs/cqrs **é um `Observable`** do RxJS (um `Subject` por baixo) — o mesmo objeto em que os event handlers e as sagas se inscrevem. Uma subscription GraphQL é, no fundo, "devolva um async iterator". Então basta ligar um ao outro.
 
-Em cima disso, o projeto acrescenta a peça que o @nestjs/cqrs não tem: **CQSRS — Command, Query, *Subscription* Responsibility Segregation** (`libs/cqsrs`). Um bus próprio para a terceira mensagem, com `subscribe` no lugar de `execute`:
+Em cima disso, o projeto acrescenta a peça que o @nestjs/cqrs não tem: **CQSRS — Command, Query, *Subscription* Responsibility Segregation** (`libs/core/cqsrs`). Um bus próprio para a terceira mensagem, com `subscribe` no lugar de `execute`:
 
 | | mensagem | decorator | handler | bus | resultado |
 |---|---|---|---|---|---|
@@ -16,7 +16,7 @@ Em cima disso, o projeto acrescenta a peça que o @nestjs/cqrs não tem: **CQSRS
 
 E o filtro é da mensagem, não do transporte: toda `Subscription` tem um método `filter(event)`, e o critério que ele lê (`{ postId }`) **é também a chave** pela qual o bus acha o stream — dois assinantes de `onPostUpdated(postId: X)` recebem o mesmo `Observable` e custam **uma** inscrição no `EventBus`.
 
-E a request é uma só, do começo ao fim da cadeia. Os command handlers são `{ scope: Scope.REQUEST }`, a borda cria uma `PostRequest` cuja chave é o próprio `PostId`, e o [request scoping/propagation](https://docs.nestjs.com/recipes/cqrs#request-scoping) do @nestjs/cqrs a leva do command para os eventos, dos eventos para a saga, e da saga para os commands que ela despacha — inclusive os de outro agregado. É o `@TargetEntityId PostId postId` + `@EventTag` da versão Axon, em que um id gerado na borda roteava o command e marcava os eventos, dito com a ferramenta do Nest: um `createPost` produz `PostPreCreated` → `PostCreated` **carimbados com o mesmo objeto** — e a request atravessa também o **broker**, porque o passo do meio é de outro serviço (`libs/transport-eventbus` escreve no envelope o que ela representa, e o outro lado a reconstrói).
+E a request é uma só, do começo ao fim da cadeia. Os command handlers são `{ scope: Scope.REQUEST }`, a borda cria uma `PostRequest` cuja chave é o próprio `PostId`, e o [request scoping/propagation](https://docs.nestjs.com/recipes/cqrs#request-scoping) do @nestjs/cqrs a leva do command para os eventos, dos eventos para a saga, e da saga para os commands que ela despacha — inclusive os de outro agregado. É o `@TargetEntityId PostId postId` + `@EventTag` da versão Axon, em que um id gerado na borda roteava o command e marcava os eventos, dito com a ferramenta do Nest: um `createPost` produz `PostPreCreated` → `PostCreated` **carimbados com o mesmo objeto** — e a request atravessa também o **broker**, porque o passo do meio é de outro serviço (`libs/core/transport-eventbus` escreve no envelope o que ela representa, e o outro lado a reconstrói).
 
 Estado em **PostgreSQL** via MikroORM, um schema por aplicação; a `posts-api` tem read model e o `tagging` tem um event log próprio e nenhuma projeção.
 
@@ -106,9 +106,9 @@ wrong: import everything, or redeclare the event on the other side.
 | `libs/auth` | authentication: the Better Auth instance and its **core** plugin registry, `auth_user` and the tables Better Auth generates, `AuthService` and the `IdentityProvider` adapter. It names no organization |
 | `libs/organizations` | organizations, members and invitations: the three tables, their domain and repositories, `OrganizationService`, and the `organization` plugin it **contributes** to the instance `libs/auth` builds. Both have READMEs |
 | `libs/posts` | the post and tag aggregates, their ORM mappings and repositories |
-| `libs/cqsrs` | CQSRS: the third CQRS message. Knows nothing about GraphQL |
-| `libs/validated-dto` | the Zod → DTO / value object mixins |
-| `libs/transport-eventbus` | the CQRS event bus across services. Knows nothing about this domain |
+| `libs/core/cqsrs` | CQSRS: the third CQRS message. Knows nothing about GraphQL |
+| `libs/core/validated-dto` | the Zod → DTO / value object mixins |
+| `libs/core/transport-eventbus` | the CQRS event bus across services. Knows nothing about this domain |
 | `apps/posts-api` | the GraphQL API. A **hybrid application**: HTTP (subscriptions over SSE) plus a microservice in the same process |
 | `apps/tagging` | one step of the saga. A **full microservice**: no HTTP port at all |
 | `apps/migrator` | the migrations and the seeders of both schemas. The only thing that writes DDL, and the only thing that seeds |
@@ -252,16 +252,16 @@ apps/migrator/src                                    # sem Nest: só o ORM, as m
 ## Events across services
 
 The two applications talk over RabbitMQ, and neither names the other. What they share is the domain
-(`libs/posts`) and the mechanism (`libs/transport-eventbus`); everything else each of them declares
-for itself.
+(`libs/posts`) and the mechanism (`libs/core/transport-eventbus`); everything else each of them
+declares for itself.
 
 ### The library is vendored, not invented
 
-`libs/transport-eventbus` is a vendored and adapted copy of
+`libs/core/transport-eventbus` is a vendored and adapted copy of
 [nestjs-transport-eventbus](https://github.com/sergey-telpuk/nestjs-transport-eventbus) (MIT, Sergey
 Telpuk), plus an integration layer. Its own
-[`README.md`](libs/transport-eventbus/README.md) is the usage guide, and
-[`NOTICE.md`](libs/transport-eventbus/NOTICE.md) is the account: what came from upstream, what the new
+[`README.md`](libs/core/transport-eventbus/README.md) is the usage guide, and
+[`NOTICE.md`](libs/core/transport-eventbus/NOTICE.md) is the account: what came from upstream, what the new
 versions forced, and what this repository added.
 
 What came from upstream is the **integration point**, and it is the reason the library is built on it
@@ -403,7 +403,7 @@ the only thing it can read.
 `SqsStrategy` runs either as a long-polling loop in a process or driven by a Lambda invocation
 (`processSqsEvent`, which answers `batchItemFailures` instead of throwing on the first failure).
 
-`libs/transport-eventbus/README.md` is the guide, and `docker/localstack/init/10-messaging.sh` is the
+`libs/core/transport-eventbus/README.md` is the guide, and `docker/localstack/init/10-messaging.sh` is the
 same topology locally — the two are meant to be read side by side.
 
 ### And the whole thing runs on Lambda
@@ -498,8 +498,8 @@ with.
 | | where | what it proves |
 |---|---|---|
 | unit / slice | every project, beside the code | the rule, the handler, the mapping |
-| integration | `libs/transport-eventbus/src/**`, `apps/posts-api/test/persistence` | the envelope (a `Date` that survives the wire), the routing table's three refusals, the inbox's atomicity, the ORM mapping |
-| one hop, in process | `libs/transport-eventbus/src/in-memory/transport-loop.spec.ts` | two services over `MemoryServer` and `MemoryClient`, each able to reach the other: the real class arrives, the request is restored, one correlation id per request, a redelivery reaches nobody, the loop is cut |
+| integration | `libs/core/transport-eventbus/src/**`, `apps/posts-api/test/persistence` | the envelope (a `Date` that survives the wire), the routing table's three refusals, the inbox's atomicity, the ORM mapping |
+| one hop, in process | `libs/core/transport-eventbus/src/in-memory/transport-loop.spec.ts` | two services over `MemoryServer` and `MemoryClient`, each able to reach the other: the real class arrives, the request is restored, one correlation id per request, a redelivery reaches nobody, the loop is cut |
 | the whole system, in a browser | `pnpm test:web` (`apps/web-e2e`, **Playwright**) | **three processes over real RabbitMQ**, driven through Chromium: signing in and being refused, the three states of `/posts/new`, the polymorphic `me`, a post read by somebody who never signed in — and, in the same tests, what a browser cannot see: each service's durable state, both inboxes, idempotency through the broker's management API, the replica channel, **one correlation id for the whole saga**, and the `x-tenant` **of the browser** on the headers of both messages, each published by a different process |
 
 ```
@@ -852,7 +852,7 @@ And the suites that came with the monorepo and the transport:
 
 **Subscription é uma mensagem própria, não uma query.** A primeira versão modelava subscription como query: `OnPostUpdatedSubscription extends Query<Observable<PostUpdatedEvent>>`, e o `QueryBus.execute` devolvia o `Observable` inteiro porque um `Observable` não é *thenable* — `await` de um não-thenable devolve ele mesmo. Funcionava, mas por acidente: o contrato dizia "uma resposta e acabou" (`Promise<T>`) enquanto o valor era "um stream que fica aberto". E `execute` não é o verbo de quem se inscreve.
 
-Daí o `libs/cqsrs`: `Subscription<TEvent, TCriteria>`, `@SubscriptionHandler`, `ISubscriptionHandler` com `subscribe(): Observable<TEvent>` e um `SubscriptionBus` com a mesma anatomia do `QueryBus` (um `Map` de handlers por id de mensagem, um publisher, um explorer que varre os providers no bootstrap) mais o que só um stream precisa: um `Map` do que está no ar. Decidir quais eventos alimentam qual subscription continua sendo regra da aplicação; a interface só converte o stream para o transporte.
+Daí o `libs/core/cqsrs`: `Subscription<TEvent, TCriteria>`, `@SubscriptionHandler`, `ISubscriptionHandler` com `subscribe(): Observable<TEvent>` e um `SubscriptionBus` com a mesma anatomia do `QueryBus` (um `Map` de handlers por id de mensagem, um publisher, um explorer que varre os providers no bootstrap) mais o que só um stream precisa: um `Map` do que está no ar. Decidir quais eventos alimentam qual subscription continua sendo regra da aplicação; a interface só converte o stream para o transporte.
 
 **Uma factory, não duas.** `CqsrsModule.forRootAsync` tem um problema que o `forRoot` não tem: as opções servem a dois módulos — o `CqsrsModule` (que só quer o `subscriptionPublisher`) e o `CqrsModule` embaixo (que quer todo o resto). O caminho ingênuo é passar as `CqsrsModuleAsyncOptions` para os dois, e aí a `useFactory` de quem chamou roda **duas vezes** — o que é no mínimo surpreendente, e no pior caso abre duas conexões. A saída é resolver as opções num módulo só (`CqsrsOptionsModule`, que as exporta pelo token `CQSRS_MODULE_OPTIONS`) e dar ao `CqrsModule.forRootAsync` uma factory que apenas repassa o que já foi resolvido. O mesmo objeto de módulo dinâmico entra nas duas listas de `imports`: o Nest identifica um módulo dinâmico pelo par (classe, metadata), então as duas referências são o mesmo módulo, com uma instância só. O `cqsrs.module.spec` trava isso contando as chamadas.
 
@@ -1178,7 +1178,7 @@ Uma consequência que ficou por decidir: o `authorName` dos eventos já **não �
 - **`CqrsModule.forRoot()` is a dynamic, global module**, and a dynamic module is not the static class.
   A library that imports the static `CqrsModule` while the application uses `forRoot()` gets a *second*
   `EventBus`, whose handlers nobody registered — every local handler, saga and subscription stops being
-  called, silently. See `libs/transport-eventbus/NOTICE.md`.
+  called, silently. See `libs/core/transport-eventbus/NOTICE.md`.
 
 ## Próximos passos possíveis
 

@@ -16,7 +16,7 @@
       "path": "../../libs/users/tsconfig.lib.json"
     },
     {
-      "path": "../../libs/transport-eventbus/tsconfig.lib.json"
+      "path": "../../libs/core/transport-eventbus/tsconfig.lib.json"
     },
     {
       "path": "../../libs/posts/tsconfig.lib.json"

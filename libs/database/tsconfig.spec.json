@@ -11,7 +11,7 @@
       "path": "./tsconfig.lib.json"
     },
     {
-      "path": "../../libs/validated-dto/tsconfig.lib.json"
+      "path": "../../libs/core/validated-dto/tsconfig.lib.json"
     }
   ]
 }

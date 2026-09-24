@@ -22,5 +22,6 @@ runs:
         path: |
           apps/*/target/test-results/**
           libs/*/target/test-results/**
+          libs/core/*/target/test-results/**
         if-no-files-found: ignore
         retention-days: 7

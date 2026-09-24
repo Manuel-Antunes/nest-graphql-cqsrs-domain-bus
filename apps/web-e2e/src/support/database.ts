@@ -110,6 +110,14 @@ export class ServiceDatabase {
     return row;
   }
 
+  async attachmentOf(postId: string): Promise<StoredAttachment | undefined> {
+    const [row] = await this.query<StoredAttachment>(
+      'select asset, deleted_at from posts where id = ?',
+      postId,
+    );
+    return row;
+  }
+
   async tagsOf(postId: string): Promise<string[]> {
     const rows = await this.query<{ name: string }>(
       'select t.name from posts_tags pt join tags t on t.id = pt.tag_id where pt.post_id = ? order by t.name',
@@ -144,4 +152,15 @@ export interface StoredEvent {
 export interface IngestedMessage {
   message_type: string;
   origin: string | null;
+}
+
+export interface StoredAttachment {
+  asset: {
+    name: string;
+    size: number;
+    extname: string;
+    mimeType: string;
+    persisted: boolean;
+  } | null;
+  deleted_at: Date | null;
 }

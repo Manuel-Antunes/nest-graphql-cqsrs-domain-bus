@@ -40,8 +40,8 @@ each service keeps its own schema, and the client is Chromium.
 
 `src/support/stack.ts`, once, in Playwright's `globalSetup`:
 
-1. **A network, and everything but the web on it.** `src/support/containers.ts` starts Postgres and
-   RabbitMQ, runs `nestposts/migrator:dev` as a **one-shot** — waited on until it exits 0, so nothing
+1. **A network, and everything but the web on it.** `src/support/containers.ts` starts Postgres,
+   MinIO and RabbitMQ, runs `nestposts/migrator:dev` as a **one-shot** — waited on until it exits 0, so nothing
    comes up against a schema that does not exist — and then `nestposts/tagging:dev` and
    `nestposts/posts-api:dev`. Those are the images `apps/<app>/Dockerfile` build and
    `docker compose --profile apps` runs, so this suite drives what that profile serves.
@@ -51,6 +51,13 @@ each service keeps its own schema, and the client is Chromium.
    the suite reads the mapping back. The one exception is the API, bound to a host port picked up
    front by `FreePort` — it signs cookies against its own origin, so it has to know it before it
    boots, which is one round earlier than a mapped port exists.
+
+   **MinIO is the other one, for the same reason.** The services reach it as `minio:9000`, but the
+   browser uploads to it and loads a post's file from it, and a signed URL is bound to the host it
+   was signed for. So its host port is picked up front too, and handed to `posts-api` as
+   `DRIVE_S3_PUBLIC_ENDPOINT`: operations go to the alias, URLs go to the host. The bucket is created
+   by the suite (`src/support/storage.ts`) and answers anonymous reads under `assets/` only, where
+   a post keeps its file — what a bucket behind a CDN amounts to.
 
    **`apps/web` stays a process**, started by `next start` the way `nx` serves it everywhere else. It
    is the thing under the browser: keeping it out of an image keeps a failure one `tail` away.

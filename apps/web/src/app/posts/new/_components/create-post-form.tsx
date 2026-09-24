@@ -15,6 +15,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { graphql } from '@/gql';
+import type { UploadedFile } from '@/hooks/use-upload-file';
+import { useUploadFile } from '@/hooks/use-upload-file';
 import { cn, errorShownByHookState } from '@/lib/utils';
 
 const CreatePostMutation = graphql(`
@@ -31,6 +33,11 @@ export function CreatePostForm() {
   const { session, isAuthor } = useSession();
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
+  const [file, setFile] = useState<File | null>(null);
+  const [fileField, setFileField] = useState(0);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<unknown>(null);
+  const uploadFile = useUploadFile();
 
   const [createPost, { data, loading, error, reset }] = useMutation(
     CreatePostMutation,
@@ -74,10 +81,23 @@ export function CreatePostForm() {
     <div className="space-y-5">
       <form
         className="space-y-4"
-        onSubmit={(event) => {
+        onSubmit={async (event) => {
           event.preventDefault();
           reset();
-          void createPost({ variables: { input: { title, content } } })
+          setUploadError(null);
+          let asset: UploadedFile | undefined;
+          if (file) {
+            setUploading(true);
+            try {
+              asset = await uploadFile(file);
+            } catch (failure) {
+              setUploadError(failure);
+              return;
+            } finally {
+              setUploading(false);
+            }
+          }
+          void createPost({ variables: { input: { title, content, asset } } })
             .then((result) => {
               const post = result.data?.createPost;
               if (post) {
@@ -87,6 +107,8 @@ export function CreatePostForm() {
                 });
                 setTitle('');
                 setContent('');
+                setFile(null);
+                setFileField((field) => field + 1);
               }
             })
             .catch(errorShownByHookState);
@@ -122,10 +144,31 @@ export function CreatePostForm() {
           />
         </div>
 
+        <div className="space-y-2">
+          <Label htmlFor="attachment">Anexo</Label>
+          <Input
+            key={fileField}
+            id="attachment"
+            type="file"
+            onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+          />
+          <p className="text-[11px] text-muted-foreground">
+            Opcional. O arquivo vai direto para o bucket por uma URL assinada, e
+            só passa a ser do post quando ele é gravado.
+          </p>
+        </div>
+
+        {uploadError ? (
+          <ErrorNotice title="O upload do anexo falhou" error={uploadError} />
+        ) : null}
         {error ? <ErrorNotice title="createPost falhou" error={error} /> : null}
 
-        <Button type="submit" disabled={loading}>
-          {loading ? <Loader2Icon className="animate-spin" /> : <PenLineIcon />}
+        <Button type="submit" disabled={loading || uploading}>
+          {loading || uploading ? (
+            <Loader2Icon className="animate-spin" />
+          ) : (
+            <PenLineIcon />
+          )}
           Publicar
         </Button>
       </form>

@@ -12,6 +12,8 @@ import { TagNotFoundException } from '@nestposts/posts/domain/tag/exception/tag-
 import { GraphQLError } from 'graphql';
 import { ZodError, z } from 'zod';
 
+import { UploadNotOwnedException } from '../../application/asset/upload-area';
+
 @Catch(
   InvalidPostException,
   InvalidTagException,
@@ -21,6 +23,7 @@ import { ZodError, z } from 'zod';
   TagAlreadyExistsException,
   AlreadyDeletedException,
   NotDeletedException,
+  UploadNotOwnedException,
   ZodError,
   MapMemberError,
 )

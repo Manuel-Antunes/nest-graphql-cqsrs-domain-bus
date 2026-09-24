@@ -10,6 +10,7 @@ import { messagesOf } from '../support/messages';
 import { PostsApi } from '../support/posts-api';
 import { RunningStack } from '../support/running-stack';
 import { POSTS_SCHEMA, TAGGING_SCHEMA } from '../support/stack';
+import { Storage } from '../support/storage';
 
 export type SignIn = (account: Account) => Promise<void>;
 
@@ -23,6 +24,7 @@ interface Fixtures {
   postsStore: ServiceDatabase;
   taggingStore: ServiceDatabase;
   broker: Broker;
+  storage: Storage;
   /** What went on the wire, whichever wire this run used — see `support/messages.ts`. */
   messages: (queue: string) => Messages;
 }
@@ -54,6 +56,12 @@ export const test = base.extend<Fixtures>({
 
   broker: async ({}, use) => {
     await use(new Broker());
+  },
+
+  storage: async ({}, use) => {
+    const storage = new Storage();
+    await use(storage);
+    storage.close();
   },
 
   messages: async ({}, use) => {

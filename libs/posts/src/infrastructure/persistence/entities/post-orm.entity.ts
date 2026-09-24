@@ -1,3 +1,4 @@
+import { attachment } from '@nestposts/asset/infrastructure/database/types/attachment-database.type';
 import { defineEntity, p, valueObjectType } from '@nestposts/database';
 import { ZodEntity } from '@nestposts/platform/domain/shared/zod-entity';
 import {
@@ -30,6 +31,7 @@ export const PostEntitySchema = defineEntity({
     id: p.type(PostIdType).primary(),
     title: p.type(PostTitleType),
     content: p.type(PostContentType),
+    asset: attachment({ disk: 'public', folder: 'assets' }).nullable(),
     author: () => p.manyToOne(AuthorshipEntitySchema).ref(),
     createdAt: p.datetime(),
     updatedAt: p.datetime(),

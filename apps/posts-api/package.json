@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@nestposts/auth": "workspace:*",
+    "@nestposts/asset": "workspace:*",
     "@nestposts/cqsrs": "workspace:*",
     "@nestposts/database": "workspace:*",
     "@nestposts/lambda": "workspace:*",

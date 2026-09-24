@@ -1,7 +1,7 @@
 /// <reference path="../../../.sst/platform/config.d.ts" />
 
+import { SnsFilterPolicy } from '../../../libs/core/transport-eventbus/src/aws/sns-filter-policy';
 import { POSTS_NAMESPACE } from '../../../libs/posts/src/domain/post/event/posts.namespace';
-import { SnsFilterPolicy } from '../../../libs/transport-eventbus/src/aws/sns-filter-policy';
 import { completed, taggingEvents } from './queues';
 import { postEvents } from './topic';
 

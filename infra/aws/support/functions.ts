@@ -108,7 +108,7 @@ class InstalledPackages {
   private static roots(): string[] {
     const root = $cli.paths.root;
     const roots = [root];
-    for (const group of ['libs', 'apps']) {
+    for (const group of ['libs', 'libs/core', 'apps']) {
       const directory = join(root, group);
       if (!existsSync(directory)) continue;
       for (const entry of readdirSync(directory)) {
@@ -395,6 +395,8 @@ export class QueueWorker extends NodeFunction {
  * first there is no race to lose.
  */
 export class Migrator extends NodeFunction {
+  readonly invocation?: aws.lambda.Invocation;
+
   constructor(
     name: string,
     args: NodeFunctionArgs,
@@ -403,7 +405,7 @@ export class Migrator extends NodeFunction {
     super(name, { ...args, timeout: args.timeout ?? '15 minutes' }, opts);
 
     if (!$dev) {
-      new aws.lambda.Invocation(
+      this.invocation = new aws.lambda.Invocation(
         `${name}Invocation`,
         {
           functionName: this.fn.name,
@@ -463,7 +465,10 @@ class Fingerprint {
 export class Seeder extends NodeFunction {
   constructor(
     name: string,
-    args: NodeFunctionArgs & { readonly seeds: readonly string[] },
+    args: NodeFunctionArgs & {
+      readonly seeds: readonly string[];
+      readonly after?: Migrator;
+    },
     opts?: $util.ComponentResourceOptions,
   ) {
     super(name, { ...args, timeout: args.timeout ?? '5 minutes' }, opts);
@@ -478,7 +483,10 @@ export class Seeder extends NodeFunction {
             seeders: Fingerprint.of(args.seeds),
           }),
         },
-        { parent: this },
+        {
+          parent: this,
+          dependsOn: args.after?.invocation ? [args.after.invocation] : [],
+        },
       );
     }
   }

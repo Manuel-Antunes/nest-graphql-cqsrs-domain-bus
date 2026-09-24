@@ -1,4 +1,5 @@
 import type { TestingModule } from '@nestjs/testing';
+import { Asset } from '@nestposts/asset/domain/data-objects/asset';
 import { delegateRef } from '@nestposts/platform/domain/shared/delegation/delegate';
 import { Post } from '@nestposts/posts/domain/post/post.entity';
 import { PostId } from '@nestposts/posts/domain/post/vo/post-id';
@@ -29,6 +30,7 @@ export async function givenAPost(
     author?: Author;
     createdAt?: Date;
     tags?: Tag[];
+    asset?: Asset;
   } = {},
 ): Promise<Post> {
   const em = freshEm(module);
@@ -48,6 +50,7 @@ export async function givenAPost(
   for (const { id } of overrides.tags ?? []) {
     post.assignTag(await em.findOneOrFail(Tag, { id }), at);
   }
+  post.asset = overrides.asset ?? null;
   post.uncommit();
   await em.persist(post).flush();
   return post;

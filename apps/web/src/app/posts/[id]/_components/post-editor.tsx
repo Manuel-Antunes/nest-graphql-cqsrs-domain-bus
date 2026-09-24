@@ -11,6 +11,8 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import type { FragmentType } from '@/gql';
 import { getFragmentData, graphql } from '@/gql';
+import type { UploadedFile } from '@/hooks/use-upload-file';
+import { useUploadFile } from '@/hooks/use-upload-file';
 import { errorShownByHookState } from '@/lib/utils';
 
 export const PostEditor_post = graphql(`
@@ -24,7 +26,12 @@ export const PostEditor_post = graphql(`
 interface UpdateRunner {
   run: (options: {
     variables: {
-      input: { id: string; title?: string | null; content?: string | null };
+      input: {
+        id: string;
+        title?: string | null;
+        content?: string | null;
+        asset?: UploadedFile | null;
+      };
     };
   }) => Promise<unknown>;
   loading: boolean;
@@ -41,14 +48,33 @@ export function PostEditor({
   const current = getFragmentData(PostEditor_post, post);
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
+  const [file, setFile] = useState<File | null>(null);
+  const [fileField, setFileField] = useState(0);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<unknown>(null);
+  const uploadFile = useUploadFile();
 
-  const nothingToSend = title.trim() === '' && content.trim() === '';
+  const nothingToSend =
+    title.trim() === '' && content.trim() === '' && file === null;
 
   return (
     <form
       className="space-y-3"
-      onSubmit={(event) => {
+      onSubmit={async (event) => {
         event.preventDefault();
+        setUploadError(null);
+        let asset: UploadedFile | null = null;
+        if (file) {
+          setUploading(true);
+          try {
+            asset = await uploadFile(file);
+          } catch (failure) {
+            setUploadError(failure);
+            return;
+          } finally {
+            setUploading(false);
+          }
+        }
         void update
           .run({
             variables: {
@@ -56,15 +82,20 @@ export function PostEditor({
                 id: current.id,
                 title: title.trim() === '' ? null : title,
                 content: content.trim() === '' ? null : content,
+                asset,
               },
             },
           })
           .then(() => {
             toast.success('updatePost aceito', {
-              description: 'A versão do agregado subiu.',
+              description: asset
+                ? 'O anexo foi trocado, e o anterior apagado do bucket.'
+                : 'A versão do agregado subiu.',
             });
             setTitle('');
             setContent('');
+            setFile(null);
+            setFileField((field) => field + 1);
           })
           .catch(errorShownByHookState);
       }}
@@ -91,6 +122,19 @@ export function PostEditor({
         />
       </div>
 
+      <div className="space-y-2">
+        <Label htmlFor="new-attachment">Novo anexo</Label>
+        <Input
+          key={fileField}
+          id="new-attachment"
+          type="file"
+          onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+        />
+      </div>
+
+      {uploadError ? (
+        <ErrorNotice title="O upload do anexo falhou" error={uploadError} />
+      ) : null}
       {update.error ? (
         <ErrorNotice title="updatePost falhou" error={update.error} />
       ) : null}
@@ -98,9 +142,9 @@ export function PostEditor({
       <Button
         type="submit"
         size="sm"
-        disabled={update.loading || nothingToSend}
+        disabled={update.loading || uploading || nothingToSend}
       >
-        {update.loading ? (
+        {update.loading || uploading ? (
           <Loader2Icon className="animate-spin" />
         ) : (
           <SaveIcon />

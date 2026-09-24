@@ -1,32 +1,38 @@
 packages:
   - libs/*
+  - libs/core/*
   - apps/*
   - packages/*
 
 allowBuilds:
-  '@swc/core': true
+  "@swc/core": true
   esbuild: true
   nx: true
   sharp: true
 
 catalog:
-  '@biomejs/biome': ^2.5.14
-  '@graphql-tools/webpack-loader': ^7.0.1
-  '@nx/js': 23.2.1
-  '@nx/nest': 23.2.1
-  '@nx/next': 23.2.1
-  '@nx/playwright': 23.2.1
-  '@nx/workspace': 23.2.1
+  "@biomejs/biome": ^2.5.14
+  "@graphql-tools/webpack-loader": ^7.0.1
+  "@nx/js": 23.2.1
+  "@nx/nest": 23.2.1
+  "@nx/next": 23.2.1
+  flydrive: "^2.1.0"
+  "@aws-sdk/client-s3": "3.850.0"
+  "@aws-sdk/lib-storage": "3.850.0"
+  "@aws-sdk/s3-request-presigner": "3.850.0"
+  "@nx/playwright": 23.2.1
+  "@nx/workspace": 23.2.1
   nx: 23.2.1
   typescript: ^6.0.3
+  zod: "^4.5.4"
 
 catalogMode: strict
 
 onlyBuiltDependencies:
-  - '@swc/core'
+  - "@swc/core"
   - esbuild
   - nx
   - sharp
 
 overrides:
-  '@better-auth/utils': 0.4.2
+  "@better-auth/utils": 0.4.2

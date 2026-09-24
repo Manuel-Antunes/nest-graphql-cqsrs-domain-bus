@@ -1,4 +1,5 @@
 import { MikroORM } from '@mikro-orm/core';
+import { Asset } from '@nestposts/asset/domain/data-objects/asset';
 import { metadataOnly } from '@nestposts/database/testing';
 import type { DelegatedRef } from '@nestposts/platform/domain/shared/delegation/delegate';
 import { delegateRef } from '@nestposts/platform/domain/shared/delegation/delegate';
@@ -359,6 +360,21 @@ describe('Post', () => {
       expect(post.getUncommittedEvents()).toEqual([
         new PostDeletedEvent(id.value, 2, later),
       ]);
+    });
+
+    it('lets go of its attachment, so the file goes with the post', () => {
+      const post = aPost();
+      post.asset = new Asset({
+        name: 'assets/cover.png',
+        size: 4,
+        extname: 'png',
+        mimeType: 'image/png',
+        persisted: true,
+      });
+
+      post.softDelete(later);
+
+      expect(post.asset).toBeNull();
     });
 
     it('apagar duas vezes é recusado pela guarda do mixin, e nada é disparado', () => {

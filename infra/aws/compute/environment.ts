@@ -3,6 +3,7 @@
 import { postgresUrl } from '../data';
 import { router } from '../edge/router';
 import { completed, postEvents, taggingEvents } from '../messaging';
+import { bucket, filesUrl } from '../storage';
 import { BASE_NODE_OPTIONS } from '../support';
 
 /**
@@ -105,6 +106,8 @@ export const postsEnvironment = {
   AUTH_URL: router.url,
   WEB_URL: router.url,
   AUTH_TRUSTED_ORIGINS: router.url,
+  DRIVE_BUCKET: bucket.name,
+  DRIVE_CDN_URL: filesUrl,
 };
 
 export const taggingEnvironment = {

@@ -12,6 +12,9 @@ import { Author } from '@nestposts/users/domain/user/author.entity';
 import { UserId } from '@nestposts/users/domain/user/vo/user-id';
 import { UserName } from '@nestposts/users/domain/user/vo/user-name';
 
+import type { AssetUpload } from '../../asset/upload-area';
+import { UploadArea } from '../../asset/upload-area';
+
 export namespace CreatePostCommand {
   export class CreatePost extends Command<PostId> {
     @AutoMap(() => PostId)
@@ -24,6 +27,7 @@ export namespace CreatePostCommand {
     readonly authorId: UserId;
     @AutoMap(() => UserName)
     readonly authorName: UserName;
+    readonly asset: AssetUpload | null;
 
     constructor(
       postId: PostId,
@@ -31,6 +35,7 @@ export namespace CreatePostCommand {
       content: string,
       authorId: UserId,
       authorName: UserName,
+      asset: AssetUpload | null = null,
     ) {
       super();
       this.postId = postId;
@@ -38,6 +43,7 @@ export namespace CreatePostCommand {
       this.content = content;
       this.authorId = authorId;
       this.authorName = authorName;
+      this.asset = asset;
     }
   }
 
@@ -63,6 +69,9 @@ export namespace CreatePostCommand {
         ),
         this.request,
       );
+      if (command.asset) {
+        post.asset = UploadArea.stage(command.asset, command.authorId);
+      }
       await this.posts.save(post);
       post.commit();
       return post.id;

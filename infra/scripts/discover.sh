@@ -12,7 +12,7 @@
 #      carry — `MIGRATE` among them, because a function name is derived from an environment holding
 #      a secret and Pulumi therefore marks it secret in the export.
 #
-#   eval "$(./infra/scripts/discover.sh dev)"   # API, STREAM, MIGRATE
+#   eval "$(./infra/scripts/discover.sh dev)"   # API, STREAM, MIGRATE, BUCKET
 set -euo pipefail
 
 APP="${SST_APP:-nestposts}"
@@ -73,7 +73,7 @@ for resource in state.get("latest", {}).get("resources", []):
     if resource.get("type") != "pulumi:pulumi:Stack":
         continue
     outputs = resource.get("outputs", {})
-    for key in ("url", "stream", "graphql"):
+    for key in ("url", "stream", "graphql", "bucket"):
         value = outputs.get(key)
         if isinstance(value, str) and value:
             print(f"{key.upper()}={value.rstrip(chr(47))}")
@@ -83,12 +83,14 @@ for resource in state.get("latest", {}).get("resources", []):
 API=''
 STREAM=''
 GRAPHQL=''
+BUCKET=''
 while IFS='=' read -r key value; do
   [ -n "${key:-}" ] || continue
   case "$key" in
     URL) API="$value" ;;
     STREAM) STREAM="$value" ;;
     GRAPHQL) GRAPHQL="$value" ;;
+    BUCKET) BUCKET="$value" ;;
   esac
 done <<< "$(from_state)"
 
@@ -105,5 +107,6 @@ fi
 echo "export STREAM='$STREAM'"
 echo "export API='$API'"
 echo "export GRAPHQL='${GRAPHQL:-$API/graphql}'"
+echo "export BUCKET='$BUCKET'"
 echo "export MIGRATE='$MIGRATE'"
 echo "export SEED='$SEED'"

@@ -47,7 +47,7 @@ export interface ProjectTestOptions {
 const workspaceAliases = (): { find: RegExp; replacement: string }[] => {
   const root = import.meta.dirname;
   const aliases: { find: RegExp; replacement: string }[] = [];
-  for (const group of ['libs', 'apps']) {
+  for (const group of ['libs', 'libs/core', 'apps']) {
     for (const project of readdirSync(join(root, group))) {
       const manifest = join(root, group, project, 'package.json');
       if (!existsSync(manifest)) continue;

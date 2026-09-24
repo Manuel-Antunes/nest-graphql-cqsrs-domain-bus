@@ -126,7 +126,7 @@ describe('better-auth writing through the organization entities', () => {
   });
 
   it('a row better-auth wrote comes back as the domain entity, value objects included', async () => {
-    await givenAnOrganization('org_1', 'acme');
+    await givenAnOrganization('org_1', 'hooli');
 
     const organization = await found(Organization, {
       id: OrganizationId.parse('org_1'),
@@ -134,12 +134,12 @@ describe('better-auth writing through the organization entities', () => {
 
     expect(organization.id).toBeInstanceOf(OrganizationId);
     expect(organization.slug).toBeInstanceOf(OrganizationSlug);
-    expect(organization.slug.value).toBe('acme');
+    expect(organization.slug.value).toBe('hooli');
   });
 
   it('the two foreign keys better-auth names as ids arrive as references on the entity', async () => {
     await givenACredential('cred_2', 'ana@example.com');
-    await givenAnOrganization('org_2', 'globex');
+    await givenAnOrganization('org_2', 'soylent');
     await givenAMembership('member_2', 'org_2', 'cred_2', 'owner');
 
     const member = await found(Member, { id: 'member_2' }, [
@@ -150,7 +150,7 @@ describe('better-auth writing through the organization entities', () => {
     expect(member.belongsTo(OrganizationId.parse('org_2'))).toBe(true);
     expect(member.identifies(CredentialId.parse('cred_2'))).toBe(true);
     expect(member.isOwner()).toBe(true);
-    expect(member.organization.getEntity().slug.value).toBe('globex');
+    expect(member.organization.getEntity().slug.value).toBe('soylent');
     expect(member.user.getEntity()).toBeInstanceOf(AuthUser);
     expect(member.user.getEntity().email.value).toBe('ana@example.com');
   });

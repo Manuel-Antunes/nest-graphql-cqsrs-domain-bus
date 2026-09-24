@@ -9,6 +9,7 @@ import {
 } from '@nestposts/validated-dto/mixins';
 import { z } from 'zod';
 
+import { AssetView } from './asset.view';
 import { AUTOMAP_REGISTRY } from './automap.registry';
 import { TagView } from './tag.view';
 
@@ -41,8 +42,11 @@ const PostViewSchema = z.object({
 @InheritValidatedMetadata()
 export class PostView extends ValidatedDto<
   typeof PostViewSchema,
-  { tags: TagView[] }
+  { tags: TagView[]; asset?: AssetView | null }
 >(PostViewSchema, { DECORATOR_REGISTRY: AUTOMAP_REGISTRY }) {
   @AutoMap((): [typeof TagView] => [TagView])
   declare tags: TagView[];
+
+  @AutoMap(() => AssetView)
+  declare asset?: AssetView | null;
 }

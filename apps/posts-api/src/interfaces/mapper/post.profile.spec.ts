@@ -259,6 +259,27 @@ describe('PostProfile', () => {
   });
 
   describe('UpdatePostInput → UpdatePost', () => {
+    const byTheAuthor = { extraArgs: () => ({ author: anAuthor() }) };
+
+    it('carries the upload, with the session author as who uploaded it', () => {
+      const upload = {
+        name: `tmp/${anAuthor().id.value}/1-upload`,
+        size: 4,
+        extname: 'png',
+        mimeType: 'image/png',
+      };
+
+      const command = mapper.map(
+        { id: postId.value, asset: upload } as unknown as UpdatePostInput,
+        UpdatePostInput,
+        UpdatePostCommand.UpdatePost,
+        byTheAuthor,
+      );
+
+      expect(command.asset).toEqual(upload);
+      expect(command.editorId?.equals(anAuthor().id)).toBe(true);
+    });
+
     it('traduz o id e desembrulha os value objects para texto', () => {
       const command = mapper.map(
         {
@@ -268,6 +289,7 @@ describe('PostProfile', () => {
         } as unknown as UpdatePostInput,
         UpdatePostInput,
         UpdatePostCommand.UpdatePost,
+        byTheAuthor,
       );
 
       expect(command.postId.equals(postId)).toBe(true);
@@ -283,6 +305,7 @@ describe('PostProfile', () => {
         } as unknown as UpdatePostInput,
         UpdatePostInput,
         UpdatePostCommand.UpdatePost,
+        byTheAuthor,
       );
 
       expect(command.title).toBe('só o título');
@@ -295,6 +318,7 @@ describe('PostProfile', () => {
           { id: 'não-é-uuid', title: 'x' } as unknown as UpdatePostInput,
           UpdatePostInput,
           UpdatePostCommand.UpdatePost,
+          byTheAuthor,
         ),
       ).toThrow();
     });

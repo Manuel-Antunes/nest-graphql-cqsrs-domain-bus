@@ -1,5 +1,5 @@
 import { EntityManager, MikroORM, RequestContext } from '@mikro-orm/core';
-import type { Provider } from '@nestjs/common';
+import type { ModuleMetadata, Provider } from '@nestjs/common';
 import type { IEvent } from '@nestjs/cqrs';
 import { EventBus } from '@nestjs/cqrs';
 import type { TestingModule } from '@nestjs/testing';
@@ -16,6 +16,7 @@ import {
 
 export async function createCqrsTestingModule(
   providers: Provider[],
+  imports: NonNullable<ModuleMetadata['imports']> = [],
 ): Promise<TestingModule> {
   const module = await Test.createTestingModule({
     imports: [
@@ -26,6 +27,7 @@ export async function createCqrsTestingModule(
       transportTesting(),
       PostsInfrastructureModule,
       UsersInfrastructureModule,
+      ...imports,
     ],
     providers: [...providers],
   }).compile();

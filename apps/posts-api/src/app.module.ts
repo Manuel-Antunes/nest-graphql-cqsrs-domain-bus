@@ -4,6 +4,8 @@ import type { YogaFederationDriverConfig } from '@graphql-yoga/nestjs-federation
 import { YogaFederationDriver } from '@graphql-yoga/nestjs-federation';
 import { Module } from '@nestjs/common';
 import { GraphQLISODateTime, GraphQLModule } from '@nestjs/graphql';
+import { AssetInfrastructureModule } from '@nestposts/asset/infrastructure/asset-infrastructure.module';
+import { assetStorageOptionsFromEnv } from '@nestposts/asset/infrastructure/storage/asset-storage.options';
 import { AuthInfrastructureModule } from '@nestposts/auth/infrastructure/auth-infrastructure.module';
 import { CqsrsModule } from '@nestposts/cqsrs';
 import { DatabaseModule, TenancyModule } from '@nestposts/database';
@@ -63,6 +65,7 @@ import { validatedDtoClasses } from './interfaces/mapper/validated-dto.strategy'
       strategyInitializer: validatedDtoClasses(),
       errorHandler: new MapperErrorHandler(),
     }),
+    AssetInfrastructureModule.forRoot(assetStorageOptionsFromEnv()),
     TransportEventBusModule.forRoot({
       identity: postsApiIdentity(),
       inbox: MikroOrmMessageInbox,

@@ -22,10 +22,12 @@ import {
 } from '@nestposts/users/infrastructure/persistence/entities/user-orm.entity';
 
 import { CreatePostCommand } from '../../application/post/command/create-post.command';
+import { DeletePostCommand } from '../../application/post/command/delete-post.command';
 import { UpdatePostCommand } from '../../application/post/command/update-post.command';
 import { FindPostQuery } from '../../application/post/query/find-post.query';
 import { PostRequest } from '../../application/shared/post-request';
 import type { CreatePostInput } from '../../dto/graphql/create-post.input';
+import type { UpdatePostInput } from '../../dto/graphql/update-post.input';
 import { PostProfile } from '../mapper/post.profile';
 import { validatedDtoClasses } from '../mapper/validated-dto.strategy';
 import { PostMutationResolver } from './post-mutation.resolver';
@@ -77,8 +79,19 @@ describe('PostMutationResolver', () => {
       ...overrides,
     }) as unknown as CreatePostInput;
 
-  const anUpdateCommand = () =>
-    new UpdatePostCommand.UpdatePost(postId, 'editado');
+  const anUpdateInput = (overrides: Record<string, unknown> = {}) =>
+    ({
+      id: postId,
+      title: 'editado',
+      ...overrides,
+    }) as unknown as UpdatePostInput;
+
+  const anUpload = {
+    name: `tmp/${authorId.value}/1-upload`,
+    size: 4,
+    extname: 'png',
+    mimeType: 'image/png',
+  };
 
   const fixture = (found: Post | null = {} as Post) => {
     // biome-ignore lint/suspicious/noExplicitAny: resolve command
@@ -187,20 +200,82 @@ describe('PostMutationResolver', () => {
     });
   });
 
-  describe('updatePost', () => {
-    it('despacha o command que o MapPipe montou, sem tocá-lo', async () => {
+  describe('createPost with an attachment', () => {
+    it('hands the upload to the command as it came', async () => {
       const { resolver, commands } = fixture();
-      const command = anUpdateCommand();
 
-      await resolver.updatePost(command, anAuthor(), ROOT_TENANT);
+      await resolver.createPost(
+        anInput({ asset: anUpload }),
+        anAuthor(),
+        ROOT_TENANT,
+      );
 
-      expect(commands[0].command).toBe(command);
+      const command = commands[0].command as CreatePostCommand.CreatePost;
+      expect(command.asset).toEqual(anUpload);
+    });
+
+    it('leaves the command without one when the input has none', async () => {
+      const { resolver, commands } = fixture();
+
+      await resolver.createPost(anInput(), anAuthor(), ROOT_TENANT);
+
+      expect(
+        (commands[0].command as CreatePostCommand.CreatePost).asset,
+      ).toBeNull();
+    });
+  });
+
+  describe('deletePost', () => {
+    it('dispatches DeletePost within the post’s own request', async () => {
+      const { resolver, commands } = fixture();
+
+      const answer = await resolver.deletePost(
+        postId.value,
+        anAuthor(),
+        'acme',
+      );
+
+      expect(answer).toBe(true);
+      const command = commands[0].command as DeletePostCommand.DeletePost;
+      expect(command).toBeInstanceOf(DeletePostCommand.DeletePost);
+      expect(command.postId.equals(postId)).toBe(true);
+      const request = commands[0].context as PostRequest;
+      expect(request.postId.equals(postId)).toBe(true);
+      expect(request.tenantId).toBe('acme');
+    });
+
+    it('refuses an id that is not a post id before dispatching anything', async () => {
+      const { resolver, commands } = fixture();
+
+      await expect(
+        resolver.deletePost('not-a-post', anAuthor(), ROOT_TENANT),
+      ).rejects.toThrow();
+      expect(commands).toHaveLength(0);
+    });
+  });
+
+  describe('updatePost', () => {
+    it('builds the command from the input, with the session author as the uploader', async () => {
+      const { resolver, commands } = fixture();
+
+      await resolver.updatePost(
+        anUpdateInput({ asset: anUpload }),
+        anAuthor(),
+        ROOT_TENANT,
+      );
+
+      const command = commands[0].command as UpdatePostCommand.UpdatePost;
+      expect(command).toBeInstanceOf(UpdatePostCommand.UpdatePost);
+      expect(command.postId.equals(postId)).toBe(true);
+      expect(command.title).toBe('editado');
+      expect(command.asset).toEqual(anUpload);
+      expect(command.editorId?.equals(authorId)).toBe(true);
     });
 
     it('a PostRequest do update é a do post informado', async () => {
       const { resolver, commands } = fixture();
 
-      await resolver.updatePost(anUpdateCommand(), anAuthor(), ROOT_TENANT);
+      await resolver.updatePost(anUpdateInput(), anAuthor(), ROOT_TENANT);
 
       expect((commands[0].context as PostRequest).postId.equals(postId)).toBe(
         true,
@@ -211,7 +286,7 @@ describe('PostMutationResolver', () => {
       const { resolver, queries, found } = fixture();
 
       const post = await resolver.updatePost(
-        anUpdateCommand(),
+        anUpdateInput(),
         anAuthor(),
         ROOT_TENANT,
       );
@@ -226,7 +301,7 @@ describe('PostMutationResolver', () => {
       const { resolver } = fixture(null);
 
       await expect(
-        resolver.updatePost(anUpdateCommand(), anAuthor(), ROOT_TENANT),
+        resolver.updatePost(anUpdateInput(), anAuthor(), ROOT_TENANT),
       ).rejects.toThrow(PostNotFoundException);
     });
   });

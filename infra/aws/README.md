@@ -107,7 +107,7 @@ projects onto a row instead of appending to that stream.
 ```
 sst.config.ts        at the ROOT because that is where the CLI looks — and it holds no
                      infrastructure: app() plus `await import('./infra/aws')` inside run()
-infra/scripts/       discover.sh, migrate.sh, e2e.sh, stack-graph.sh
+infra/scripts/       discover.sh, migrate.sh, e2e.sh, stack-graph.sh, object-exists.mjs
 infra/aws/
   index.ts           the facade: load order and outputs. Creates nothing.
   support/           the DEFINITIONS — classes and types. Nothing here creates a resource on import.
@@ -115,6 +115,7 @@ infra/aws/
   network/           the VPC
   data/              the database — one instance, two schemas
   messaging/         topic.ts, queues.ts, routing.ts — the "exchange", translated
+  storage/           the bucket posts keep their files in, served by the router under /files
   compute/           the four functions
     platform.ts        where support/ finds the resources: network, links, environment, the build
     build.ts, environment.ts, api.ts, workers.ts, migrations.ts
@@ -148,6 +149,25 @@ silently when it is changed**, so that it cannot be forgotten by whoever adds th
 same cookie against the same row. On two domains that needs a cookie domain, a SameSite policy and a
 CORS list that all agree. Behind one router it needs nothing: `/graphql` and `/api/auth` go to the
 API function, everything else to the Next server, and the browser stays where it logged in.
+
+### Files: one bucket, served by the same router
+
+`storage/bucket.ts` is a private bucket (`access: 'cloudfront'`) that the router serves under
+`/files`, so a post's file is on the origin the browser is already on. The route **rewrites** the
+path: without it CloudFront would ask S3 for the key `files/assets/…`, which does not exist. The
+API gets the bucket as a link (the IAM comes with it, and only the two functions of the `posts`
+platform have it) and as `DRIVE_BUCKET`, and `DRIVE_CDN_URL` is `<router>/files/`, which is what the
+URL of a public attachment is built from.
+
+Uploads do not cross the API. The browser `PUT`s to a URL the API presigned — signed with the
+function role's own temporary credentials — which is why the bucket's CORS allows `PUT` from the
+router's origin and no other. What is uploaded waits under `tmp/`, which the lifecycle rule empties
+after a day, until a post takes it; the API only accepts a key it issued to the same user, because
+taking it MOVES the object.
+
+`e2e.sh` step 9 walks a file through all of it, and asks S3 itself — with `object-exists.mjs`, since
+the CDN would keep serving a deleted object from its cache — whether the replaced and the deleted
+files are really gone.
 
 ### The migrations run on their own
 
@@ -325,7 +345,7 @@ What the feed deliberately does **not** do is publish onto the local bus. If it 
 written as many times as there are containers. Projections stay on the local bus, in the container
 that did the work; only subscriptions read from the feed.
 
-`libs/transport-eventbus/src/subscriptions/event-feed.spec.ts` is that crossing as a test: one
+`libs/core/transport-eventbus/src/subscriptions/event-feed.spec.ts` is that crossing as a test: one
 container publishes, another's subscriber receives, as the real class.
 
 ## The stack graph

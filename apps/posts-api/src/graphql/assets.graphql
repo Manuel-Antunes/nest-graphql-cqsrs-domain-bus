@@ -1,0 +1,56 @@
+"""
+A file kept in storage, held by the entity it belongs to
+"""
+type Asset {
+  """
+  The object's key in the bucket
+  """
+  name: String!
+  size: Float!
+  extname: String!
+  mimeType: String!
+
+  """
+  Where the file is served from; null when it was not resolved
+  """
+  url: String
+}
+
+"""
+A file uploaded to a URL generatePresignedUrl handed out, still in the uploader's staging area
+"""
+input AssetInput {
+  """
+  The key generatePresignedUrl answered with
+  """
+  name: String!
+  size: Float!
+  extname: String!
+  mimeType: String!
+}
+
+input GeneratePresignedUrlInput {
+  """
+  The Content-Type the file will be uploaded with
+  """
+  mimeType: String!
+}
+
+type PresignedUpload {
+  """
+  PUT the file here, with the same Content-Type
+  """
+  url: String!
+
+  """
+  Where the upload lands: the name of the AssetInput that attaches it
+  """
+  key: String!
+}
+
+type Mutation {
+  """
+  A short-lived URL to upload one file to; nothing is stored until a post attaches it
+  """
+  generatePresignedUrl(input: GeneratePresignedUrlInput!): PresignedUpload!
+}

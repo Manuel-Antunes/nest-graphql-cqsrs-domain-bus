@@ -1,6 +1,8 @@
 import { ForeignKeyConstraintViolationException } from '@mikro-orm/core';
 import { CommandBus } from '@nestjs/cqrs';
 import type { TestingModule } from '@nestjs/testing';
+import type { TestStorage } from '@nestposts/asset/infrastructure/testing/test-storage';
+import { setupTestStorage } from '@nestposts/asset/infrastructure/testing/test-storage';
 import { PostPreCreatedEvent } from '@nestposts/posts/domain/post/event/post-pre-created.event';
 import { InvalidPostException } from '@nestposts/posts/domain/post/exception/invalid-post.exception';
 import { PostAlreadyExistsException } from '@nestposts/posts/domain/post/exception/post-already-exists.exception';
@@ -12,6 +14,12 @@ import { UserId } from '@nestposts/users/domain/user/vo/user-id';
 import { UserName } from '@nestposts/users/domain/user/vo/user-name';
 
 import {
+  attachmentsOn,
+  contentsOf,
+  givenAnUpload,
+  storedIn,
+} from '../../../../test/support/attachments';
+import {
   createCqrsTestingModule,
   freshEm,
   inRequestContext,
@@ -22,6 +30,7 @@ import {
   givenAPost,
   givenAUser,
 } from '../../../../test/support/post-fixtures';
+import { UploadNotOwnedException } from '../../asset/upload-area';
 import { PostRequest } from '../../shared/post-request';
 import { CreatePostCommand } from './create-post.command';
 
@@ -172,5 +181,78 @@ describe('CreatePostCommand.Handler', () => {
       );
       expect(await freshEm(module).findOne(Post, { id })).toBeNull();
     });
+  });
+});
+
+describe('CreatePostCommand.Handler, with an attachment', () => {
+  let storage: TestStorage;
+  let module: TestingModule;
+  let author: Awaited<ReturnType<typeof givenAnAuthor>>;
+
+  const execute = (command: CreatePostCommand.CreatePost) =>
+    inRequestContext(module, () =>
+      module.get(CommandBus).execute(command, new PostRequest(command.postId)),
+    );
+
+  beforeAll(async () => {
+    storage = await setupTestStorage();
+  });
+
+  afterAll(() => storage?.stop());
+
+  beforeEach(async () => {
+    module = await createCqrsTestingModule(
+      [CreatePostCommand.Handler],
+      attachmentsOn(storage),
+    );
+    author = await givenAnAuthor(module);
+  });
+
+  afterEach(() => module.close());
+
+  it('moves the upload out of staging and keeps it with the post', async () => {
+    const upload = await givenAnUpload(module, author.id);
+    const id = PostId.generate();
+
+    await execute(
+      new CreatePostCommand.CreatePost(
+        id,
+        'Com anexo',
+        'oi',
+        author.id,
+        author.name,
+        upload,
+      ),
+    );
+
+    const saved = await freshEm(module).findOneOrFail(Post, { id });
+    const stored = saved.asset?.name as string;
+    expect(stored).toMatch(/^assets\/[0-9a-f-]{36}\.png$/);
+    expect(saved.asset?.persisted).toBe(true);
+    expect(saved.asset?.url).toContain(stored);
+    await expect(contentsOf(module, stored)).resolves.toBe('image-bytes');
+    await expect(storedIn(module, upload.name)).resolves.toBe(false);
+  });
+
+  it('refuses an upload somebody else made, and stores nothing', async () => {
+    const somebodyElse = await givenAnAuthor(module);
+    const upload = await givenAnUpload(module, somebodyElse.id);
+    const id = PostId.generate();
+
+    await expect(
+      execute(
+        new CreatePostCommand.CreatePost(
+          id,
+          'Com anexo alheio',
+          'oi',
+          author.id,
+          author.name,
+          upload,
+        ),
+      ),
+    ).rejects.toThrow(UploadNotOwnedException);
+
+    expect(await freshEm(module).findOne(Post, { id })).toBeNull();
+    await expect(storedIn(module, upload.name)).resolves.toBe(true);
   });
 });

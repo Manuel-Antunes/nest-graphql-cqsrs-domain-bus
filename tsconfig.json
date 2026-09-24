@@ -4,10 +4,10 @@
   "files": [],
   "references": [
     {
-      "path": "./libs/validated-dto"
+      "path": "./libs/core/validated-dto"
     },
     {
-      "path": "./libs/cqsrs"
+      "path": "./libs/core/cqsrs"
     },
     {
       "path": "./libs/platform"
@@ -22,7 +22,7 @@
       "path": "./apps/posts-api"
     },
     {
-      "path": "./libs/transport-eventbus"
+      "path": "./libs/core/transport-eventbus"
     },
     {
       "path": "./apps/tagging"
@@ -40,19 +40,22 @@
       "path": "./libs/organizations"
     },
     {
-      "path": "./libs/observability"
+      "path": "./libs/core/observability"
     },
     {
-      "path": "./libs/lambda"
+      "path": "./libs/core/lambda"
     },
     {
-      "path": "./libs/retry-policy"
+      "path": "./libs/core/retry-policy"
     },
     {
-      "path": "./libs/microservices-aws"
+      "path": "./libs/core/microservices-aws"
     },
     {
-      "path": "./libs/microservices-inngest"
+      "path": "./libs/core/microservices-inngest"
+    },
+    {
+      "path": "./libs/asset"
     }
   ]
 }

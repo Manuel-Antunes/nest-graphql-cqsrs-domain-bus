@@ -5,6 +5,15 @@ import { PostgreSqlContainer } from '@testcontainers/postgresql';
 import type { StartedNetwork, StartedTestContainer } from 'testcontainers';
 import { GenericContainer, Network, Wait } from 'testcontainers';
 
+import {
+  MINIO_IMAGE,
+  MINIO_PORT,
+  STORAGE_BUCKET,
+  STORAGE_PASSWORD,
+  STORAGE_REGION,
+  STORAGE_USER,
+  Storage,
+} from './storage';
 import type { E2eTransport } from './transport';
 
 export const POSTGRES_IMAGE = 'postgres:18-alpine';
@@ -21,6 +30,7 @@ export const POSTGRES_DB = 'nestposts';
 export interface Endpoints {
   readonly postgresUrl: string;
   readonly apiUrl: string;
+  readonly storageUrl: string;
   /** The broker's management API, on the run that has a broker. */
   readonly managementUrl?: string;
   /** The Inngest dev server, on the run that has one — its `/v1/events` is that run's wire. */
@@ -55,6 +65,7 @@ export interface ContainerStackOptions {
   /** Which transport this run drives the system over — see `support/transport.ts`. */
   readonly transport: E2eTransport;
   readonly apiPort: number;
+  readonly storagePort: number;
   readonly webUrl: string;
   readonly authSecret: string;
   readonly postsSchema: string;
@@ -81,6 +92,7 @@ export interface ContainerStackOptions {
 export class ContainerStack {
   private network?: StartedNetwork;
   private postgres?: StartedPostgreSqlContainer;
+  private minio?: StartedTestContainer;
   private rabbitmq?: StartedTestContainer;
   private inngest?: StartedTestContainer;
   private postsApi?: StartedTestContainer;
@@ -98,7 +110,7 @@ export class ContainerStack {
         `http://${this.tagging?.getHost()}:${this.tagging?.getMappedPort(TAGGING_PORT)}`,
       );
     }
-    return this.endpoints(options.apiPort);
+    return this.endpoints(options);
   }
 
   async down(): Promise<void> {
@@ -107,6 +119,7 @@ export class ContainerStack {
       this.tagging,
       this.inngest,
       this.rabbitmq,
+      this.minio,
       this.postgres,
     ]) {
       await container?.stop({ timeout: 10 }).catch(() => undefined);
@@ -133,6 +146,8 @@ export class ContainerStack {
       .withPassword(POSTGRES_PASSWORD)
       .start();
 
+    await this.startStorage(options);
+
     if (options.transport !== 'rabbitmq') {
       return;
     }
@@ -143,6 +158,31 @@ export class ContainerStack {
       .withExposedPorts(5672, 15672)
       .withWaitStrategy(Wait.forLogMessage(/Server startup complete/))
       .start();
+  }
+
+  private async startStorage(options: ContainerStackOptions): Promise<void> {
+    this.minio = await new GenericContainer(MINIO_IMAGE)
+      .withNetwork(this.network!)
+      .withNetworkAliases('minio')
+      .withExposedPorts({ container: MINIO_PORT, host: options.storagePort })
+      .withEnvironment({
+        MINIO_ROOT_USER: STORAGE_USER,
+        MINIO_ROOT_PASSWORD: STORAGE_PASSWORD,
+      })
+      .withCommand(['server', '/data'])
+      .withWaitStrategy(Wait.forHttp('/minio/health/live', MINIO_PORT))
+      .start();
+
+    const storage = new Storage(this.storageUrl(options));
+    try {
+      await storage.prepare();
+    } finally {
+      storage.close();
+    }
+  }
+
+  private storageUrl(options: ContainerStackOptions): string {
+    return `http://localhost:${options.storagePort}`;
   }
 
   /**
@@ -232,6 +272,13 @@ export class ContainerStack {
         AUTH_URL: apiUrl,
         WEB_URL: options.webUrl,
         AUTH_TRUSTED_ORIGINS: `${apiUrl},${options.webUrl}`,
+        DRIVE_BUCKET: STORAGE_BUCKET,
+        DRIVE_AWS_REGION: STORAGE_REGION,
+        DRIVE_AWS_ACCESS_KEY_ID: STORAGE_USER,
+        DRIVE_AWS_SECRET_ACCESS_KEY: STORAGE_PASSWORD,
+        DRIVE_S3_ENDPOINT: `http://minio:${MINIO_PORT}`,
+        DRIVE_S3_PUBLIC_ENDPOINT: this.storageUrl(options),
+        DRIVE_S3_FORCE_PATH_STYLE: 'true',
       })
       .withWaitStrategy(
         Wait.forLogMessage(/Nest application successfully started/),
@@ -270,10 +317,11 @@ export class ContainerStack {
     }
   }
 
-  private endpoints(apiPort: number): Endpoints {
+  private endpoints(options: ContainerStackOptions): Endpoints {
     return {
       postgresUrl: this.postgres!.getConnectionUri(),
-      apiUrl: `http://localhost:${apiPort}`,
+      apiUrl: `http://localhost:${options.apiPort}`,
+      storageUrl: this.storageUrl(options),
       ...(this.rabbitmq
         ? {
             managementUrl: `http://${this.rabbitmq.getHost()}:${this.rabbitmq.getMappedPort(15672)}`,

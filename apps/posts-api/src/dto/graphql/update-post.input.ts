@@ -8,6 +8,7 @@ import {
 } from '@nestposts/validated-dto/mixins';
 import { z } from 'zod';
 
+import { AssetInputSchema } from './asset.input';
 import { AUTOMAP_REGISTRY } from './automap.registry';
 
 const UpdatePostInputSchema = z.object({
@@ -21,6 +22,7 @@ const UpdatePostInputSchema = z.object({
   content: PostContent.field()
     .nullish()
     .register(AUTOMAP_REGISTRY, { decorators: [AutoMap()] }),
+  asset: AssetInputSchema.nullish(),
 });
 
 @InheritValidatedMetadata()

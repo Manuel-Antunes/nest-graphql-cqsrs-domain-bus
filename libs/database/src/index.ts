@@ -25,3 +25,9 @@ export {
   EnsureRequestContext,
   Transactional,
 } from '@mikro-orm/decorators/legacy';
+export {
+  InjectEntityManager,
+  InjectMikroORM,
+  InjectMikroORMs,
+  InjectRepository,
+} from '@mikro-orm/nestjs';

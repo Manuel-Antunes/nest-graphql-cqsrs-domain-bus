@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "devDependencies": {
+    "@aws-sdk/client-s3": "catalog:",
     "@graphql-codegen/cli": "^7.4.1",
     "@graphql-codegen/client-preset": "^6.2.0",
     "@graphql-typed-document-node/core": "^3.2.0",

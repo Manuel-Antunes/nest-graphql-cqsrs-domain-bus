@@ -28,4 +28,5 @@ export const seeder = new Seeder('Seed', {
   platform: migrations,
   handler: 'apps/migrator/dist/lambda.seedHandler',
   seeds: ['apps/migrator/src/seeders'],
+  after: migrator,
 });

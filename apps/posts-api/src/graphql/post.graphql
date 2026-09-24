@@ -12,6 +12,11 @@ type Post @key(fields: "id") {
   Quantidade de eventos aplicados (1 = só criado)
   """
   version: Int!
+
+  """
+  The file attached to the post, if any
+  """
+  asset: Asset
 }
 
 type PostConnection {

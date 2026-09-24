@@ -1,6 +1,7 @@
 /// <reference path="../../../.sst/platform/config.d.ts" />
 
 import { vpc } from '../network';
+import { bucket } from '../storage';
 import type { LambdaPlatform } from '../support';
 import { build } from './build';
 import {
@@ -17,7 +18,11 @@ import {
  */
 const base = { vpc, link: links, dependsOn: [build] };
 
-export const posts: LambdaPlatform = { ...base, environment: postsEnvironment };
+export const posts: LambdaPlatform = {
+  ...base,
+  link: [...links, bucket],
+  environment: postsEnvironment,
+};
 
 export const tagging: LambdaPlatform = {
   ...base,

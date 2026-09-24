@@ -11,7 +11,7 @@
       "path": "./tsconfig.app.json"
     },
     {
-      "path": "../../libs/cqsrs/tsconfig.lib.json"
+      "path": "../../libs/core/cqsrs/tsconfig.lib.json"
     },
     {
       "path": "../../libs/platform/tsconfig.lib.json"
@@ -23,7 +23,7 @@
       "path": "../../libs/users/tsconfig.lib.json"
     },
     {
-      "path": "../../libs/validated-dto/tsconfig.lib.json"
+      "path": "../../libs/core/validated-dto/tsconfig.lib.json"
     }
   ]
 }

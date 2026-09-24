@@ -98,13 +98,54 @@ services:
       AUTH_URL: http://localhost:${API_PORT:-3000}
       WEB_URL: http://localhost:${WEB_PORT:-4300}
       AUTH_TRUSTED_ORIGINS: http://localhost:${API_PORT:-3000},http://localhost:${WEB_PORT:-4300}
+      DRIVE_BUCKET: ${DRIVE_BUCKET:-local}
+      DRIVE_AWS_REGION: ${DRIVE_AWS_REGION:-us-east-1}
+      DRIVE_AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-sail}
+      DRIVE_AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-password}
+      DRIVE_S3_ENDPOINT: http://minio:9000
+      DRIVE_S3_PUBLIC_ENDPOINT: http://localhost:${MINIO_PORT:-9000}
+      DRIVE_S3_FORCE_PATH_STYLE: "true"
     depends_on:
+      createbuckets:
+        condition: service_completed_successfully
       rabbitmq:
         condition: service_healthy
       inngest:
         condition: service_started
       migrator:
         condition: service_completed_successfully
+  minio:
+    image: minio/minio:latest
+    container_name: nestposts-minio
+    ports:
+      - "${MINIO_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-8900}:8900"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-sail}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-password}
+    volumes:
+      - minio-data:/data/minio
+    command: minio server /data/minio --console-address ":8900"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  createbuckets:
+    image: minio/mc
+    container_name: nestposts-createbuckets
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      /usr/bin/mc alias set minio http://minio:9000 ${MINIO_ROOT_USER:-sail} ${MINIO_ROOT_PASSWORD:-password} &&
+      /usr/bin/mc mb --ignore-existing minio/${DRIVE_BUCKET:-local} &&
+      /usr/bin/mc anonymous set download minio/${DRIVE_BUCKET:-local}/tmp &&
+      /usr/bin/mc anonymous set download minio/${DRIVE_BUCKET:-local}/assets
+      "
+    restart: "no"
 
   tagging:
     profiles: ["apps"]
@@ -195,3 +236,6 @@ services:
       interval: 5s
       timeout: 10s
       retries: 20
+
+volumes:
+  minio-data:

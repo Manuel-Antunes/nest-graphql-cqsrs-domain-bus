@@ -19,7 +19,7 @@ The only exceptions:
    suppresses nothing is itself an error (`suppressions/unused`), so a stale one cannot survive.
    `// biome-ignore-all` at the top of a file covers the whole file. The hand-written ones (the
    `/* eslint-disable */` in every `sst-env.d.ts` is generated and does not count) are: two
-   `@ts-expect-error` in `libs/validated-dto/src/mixins/validated-dto.mixin.spec.ts`;
+   `@ts-expect-error` in `libs/core/validated-dto/src/mixins/validated-dto.mixin.spec.ts`;
    `useExhaustiveDependencies` in `saga-runner.tsx`; `noBannedTypes` on `ValidatedDto`'s
    `Extras = {}` default, which as `object` stops a top-level union DTO from accepting a scalar;
    `noConstructorReturn` twice in `validated-dto.mixin.ts`, where the union factory resolves the
@@ -30,17 +30,17 @@ The only exceptions:
    `noArrayIndexKey` in `saga-runner.tsx` and `entities-probe.tsx`, whose lists are append-only and
    positional; `noLabelWithoutControl` and `useSemanticElements` in `apps/web`; and the
    `biome-ignore-all` on `libs/database/src/index.ts` described under **Linting** below.
-3. **The in-house libraries** — `libs/cqsrs`, `libs/database`, `libs/validated-dto`,
-   `libs/transport-eventbus`, `libs/microservices-aws` and `libs/microservices-inngest` — may carry
-   **JSDoc**, and only JSDoc (`/** … */`), as usage
-   documentation of their public API. These are
+3. **The in-house libraries** — `libs/core/cqsrs`, `libs/database`, `libs/core/validated-dto`,
+   `libs/core/transport-eventbus`, `libs/core/microservices-aws`,
+   `libs/core/microservices-inngest` and `libs/asset` — may carry **JSDoc**, and only JSDoc
+   (`/** … */`), as usage documentation of their public API. These are
    general-purpose libraries that happen to live in this repository: their callers read the signature
    and the doc popup, not the implementation, so documenting what a type, option or method is for
    earns its keep. The rule still holds inside them for `//` and `/* */` comments, **except** where a
    block comment records a measured failure that the code cannot express (`transport-eventbus` has a
    few of those, each naming the symptom it prevents), and for their `.spec.ts` files, which carry no
    comments at all.
-4. **`libs/transport-eventbus/NOTICE.md`** is where the vendoring of
+4. **`libs/core/transport-eventbus/NOTICE.md`** is where the vendoring of
    [nestjs-transport-eventbus](https://github.com/sergey-telpuk/nestjs-transport-eventbus) is
    accounted for: what came from upstream, what the new versions forced, what this repository added.
    Anything that changes that library's relationship to upstream belongs there.
@@ -175,6 +175,7 @@ pnpm format / format:check     # biome format, alone
 pnpm graph                     # the project graph, which is also the layer graph
 
 docker compose up -d localstack   # SNS + SQS, with the topology docker/localstack/init creates
+docker compose up -d minio createbuckets   # the bucket a post keeps its file in, with its policies
 docker compose --profile apps up -d --build   # the infrastructure AND the four applications, as images
 npx nx run @nestposts/posts-api:docker:build  # one image; `-t docker:build` builds all four
 npx sst deploy --stage <name>     # the topic, the queues and apps/tagging as a Lambda
@@ -220,6 +221,7 @@ Environment variables, per application:
 | logging | `LOG_LEVEL` (default `info`); pretty when stdout is a terminal, JSON otherwise | idem |
 | telemetry | `OTEL_EXPORTER_OTLP_ENDPOINT` turns tracing **on** — unset, the SDK never starts; `OTEL_SERVICE_NAME`, and the rest of `OTEL_*` | idem |
 | auth | `AUTH_URL`, `AUTH_SECRET`, `AUTH_BASE_PATH` (default `/api/auth`), `WEB_URL`, `AUTH_TRUSTED_ORIGINS`, `AUTH_COOKIE_DOMAIN`, `AUTH_GOOGLE_ID`/`AUTH_GOOGLE_SECRET`, `AUTH_GITHUB_ID`/`AUTH_GITHUB_SECRET` — see `libs/auth/README.md`. **Every process that reads a session shares `AUTH_SECRET`**, `apps/web` included | — |
+| storage | `DRIVE_BUCKET`, `DRIVE_S3_ENDPOINT`, `DRIVE_S3_PUBLIC_ENDPOINT` (where the BROWSER reaches the same storage — signed URLs are bound to it), `DRIVE_S3_FORCE_PATH_STYLE`, `DRIVE_CDN_URL`, `DRIVE_AWS_REGION`, `DRIVE_AWS_ACCESS_KEY_ID`/`DRIVE_AWS_SECRET_ACCESS_KEY` — see `libs/asset/README.md` | — |
 | other | `PORT`, `MIKRO_ORM_DEBUG=true` | `MIKRO_ORM_DEBUG=true` |
 
 ## Architecture
@@ -252,22 +254,25 @@ libs/organizations       organizations, members and invitations: the three table
                          CONTRIBUTES to the instance libs/auth builds. Both have READMEs
 libs/posts               domain/post + domain/tag + their ORM mappings and repositories,
                          wired by PostsInfrastructureModule
-libs/cqsrs               the third CQRS message (see below)
-libs/validated-dto       Zod → DTO/value object mixins
-libs/transport-eventbus  the CQRS event bus over Nest's microservice transports (see below),
+libs/asset               files in S3-compatible storage as a value an entity holds: Asset, the
+                         attachment() column type and the subscriber that moves, signs and cleans up
+                         the objects on flush, and the DiskService port. It has a README
+libs/core/cqsrs          the third CQRS message (see below)
+libs/core/validated-dto  Zod → DTO/value object mixins
+libs/core/transport-eventbus  the CQRS event bus over Nest's microservice transports (see below),
                          RabbitMQ / SNS+SQS / Inngest / in-process — the envelope's wire on each
-libs/microservices-aws   SNS and SQS as a plain Nest transport: the client proxies, SqsStrategy,
+libs/core/microservices-aws  SNS and SQS as a plain Nest transport: the client proxies, SqsStrategy,
                          SqsContext, processSqsEvent. No CQRS, no envelope, no @EventType
-libs/microservices-inngest  Inngest as a plain Nest transport: InngestClientProxy, InngestStrategy,
+libs/core/microservices-inngest  Inngest as a plain Nest transport: InngestClientProxy, InngestStrategy,
                          InngestContext. Same rule
-libs/retry-policy        @RetryPolicy for an @EventPattern handler, and one ExceptionProducer per
+libs/core/retry-policy   @RetryPolicy for an @EventPattern handler, and one ExceptionProducer per
                          transport (SQS, Inngest, RabbitMQ with its dead-letter topology) — see its
                          README
-libs/observability       the one door to observability: startTelemetry (the OTel SDK) and
+libs/core/observability  the one door to observability: startTelemetry (the OTel SDK) and
                          loggingModule (pino, with trace_id on every record). A library depends on
                          @opentelemetry/api; an application depends on this. Import
                          @nestposts/observability/telemetry, NEVER the barrel — see Observability
-libs/lambda              how AWS enters a Nest application: bootOnce (one boot per container),
+libs/core/lambda         how AWS enters a Nest application: bootOnce (one boot per container),
                          streamingHandler (HTTP over a Function URL) and queueHandler (SQS)
 
 apps/posts-api           application + interfaces (GraphQL, messaging), a HYBRID application:
@@ -275,8 +280,8 @@ apps/posts-api           application + interfaces (GraphQL, messaging), a HYBRID
 apps/tagging             one step of the saga, a FULL microservice: no HTTP port at all
 apps/migrator            the migrations and the seeders of both schemas — the only thing that
                          writes DDL, and the only thing that seeds (see below)
-infra/aws                the deployed shape: the topic, the queues, the four functions and the
-                         router, in SST. `infra/aws/README.md` is the guide — read it before
+infra/aws                the deployed shape: the topic, the queues, the four functions, the bucket
+                         and the router, in SST. `infra/aws/README.md` is the guide — read it before
                          touching a filter policy or the bundling options
 apps/web-e2e             the whole system through a BROWSER: Playwright over three processes and a
                          real broker — authentication, authorization, the reading path and the saga
@@ -314,7 +319,7 @@ the shape `BetterAuthModule` (`libs/auth`) has as well. What an importer asks fo
 layer ("the persistence of everything"), and `apps/tagging` shows why it matters: it imports neither,
 because it decides about a Post through its event store and has no repository at all.
 
-### CQSRS: the third message (`libs/cqsrs`)
+### CQSRS: the third message (`libs/core/cqsrs`)
 
 A small in-house library, which knows nothing about GraphQL, adding a subscription bus to Nest's CQRS:
 
@@ -340,7 +345,7 @@ A small in-house library, which knows nothing about GraphQL, adding a subscripti
   in registration order, and the loser of either race is Nest's plain publisher, silently. The
   publisher itself has to come from a global module (`TransportModule` is one).
 
-### transport-eventbus: the CQRS bus across services (`libs/transport-eventbus`)
+### transport-eventbus: the CQRS bus across services (`libs/core/transport-eventbus`)
 
 A vendored and adapted copy of **nestjs-transport-eventbus** plus an integration layer.
 `README.md` in that directory is the usage guide — wiring, publishing, receiving, testing without a
@@ -379,10 +384,10 @@ before changing the library's shape. The essentials:
   allows ten message attributes) and the in-process pair. `SqsStrategy` runs either as a polling loop
   (`queueUrl`) or driven by a Lambda (`processSqsEvent`, which reports `batchItemFailures`); the
   controllers, the handlers and the events are the same on all three.
-- **Inngest is the local default** (`libs/transport-eventbus/src/inngest`), and it inverts who calls
-  whom: a broker delivers, Inngest **invokes**. The client proxy sends an event, the strategy turns
-  every `@EventPattern` into a function and serves it over the host application's HTTP adapter, and
-  the dev server (a container in `docker-compose.yml`) routes between them.
+- **Inngest is the local default** (`libs/core/transport-eventbus/src/inngest`), and it inverts
+  who calls whom: a broker delivers, Inngest **invokes**. The client proxy sends an event, the
+  strategy turns every `@EventPattern` into a function and serves it over the host application's
+  HTTP adapter, and the dev server (a container in `docker-compose.yml`) routes between them.
   - **The event's name is the QUALIFIED name**, `posts.PostCreated`, not the routing key: Inngest
     matches a trigger by exact name and has no wildcards, so a name carrying the aggregate would mint
     one event name per post and no function could be declared for it. The aggregate stays in the
@@ -416,8 +421,8 @@ before changing the library's shape. The essentials:
   any plain `ClientProxy`, and the strategy falls through to Nest's `IncomingRequestDeserializer`,
   which reads back what a plain proxy sends — and not an event. A default wire format is a decision,
   and it belongs to the composition root like every other one here. The proxies and strategies
-  themselves live in `libs/microservices-aws` and `libs/microservices-inngest`, which is what that
-  rule bought: nothing in them knows an envelope exists.
+  themselves live in `libs/core/microservices-aws` and `libs/core/microservices-inngest`, which
+  is what that rule bought: nothing in them knows an envelope exists.
 - **A controller's parameter is the event, through `@TransportEvent()`** — a `@Payload()` bound to
   `TransportEventPipe`, which rebuilds the real class from the envelope and marks it as ingested. Extra
   pipes compose (`@TransportEvent(new ValidationPipe())`), and `@TransportRequest()` is the other half:
@@ -568,10 +573,10 @@ x-tenant: Acme  ──▶  @CurrentTenant()  ──▶  new PostRequest(postId, 
 - **Where the tenant is read from is the `TENANT_RESOLVER` token**, and it takes a function, an
   instance or an injectable class — a class being registered by `TenancyModule` itself, so its
   dependencies resolve from inside and nothing is provided from outside. `HeaderTenantResolver` is the
-  default; `TransportTenantResolver` (`libs/transport-eventbus`) answers for a message, decoding the
-  envelope through `IncomingRequest` — **not** `@TransportRequest()`, because an interceptor runs
-  before the pipes, the same reason a guard cannot use it either. It falls back to the header
-  resolver, because `apps/posts-api` is a hybrid and one resolver has to be right for both.
+  default; `TransportTenantResolver` (`libs/core/transport-eventbus`) answers for a message,
+  decoding the envelope through `IncomingRequest` — **not** `@TransportRequest()`, because an
+  interceptor runs before the pipes, the same reason a guard cannot use it either. It falls back to
+  the header resolver, because `apps/posts-api` is a hybrid and one resolver has to be right for both.
 - **`TransportRequestContext.toAttributes()` re-emits what arrived**, which is what makes a service in
   the middle of a chain carry the tenant onward without knowing tenants exist. It excludes everything
   under `TRANSPORT_METADATA_PREFIX`: re-emitting `cqrs-transport-origin` would republish somebody
@@ -839,7 +844,7 @@ just wrong or absent, and only on AWS.
   packages it requires.
 - **A span that ends before the unit of work commits publishes nothing.** Outbound events are staged
   while a handler runs and only leave at `commit()`, so `ingesting()` in
-  `libs/transport-eventbus/src/tracing.ts` wraps `UnitOfWork.run`, not the other way round.
+  `libs/core/transport-eventbus/src/tracing.ts` wraps `UnitOfWork.run`, not the other way round.
   `injectTraceContext` writes `traceparent` from the **active** context; with no span active it
   writes nothing, and the next service opens a trace of its own.
 - **`propagateContextUrls` has to name the URL the application actually calls.**
@@ -867,8 +872,8 @@ Four levels, and each answers something the others cannot:
 | | where | what it proves |
 |---|---|---|
 | unit / slice | every project, beside the code | the rule, the handler, the mapping |
-| integration | `libs/transport-eventbus/src/**`, `libs/auth/src/infrastructure/persistence`, `apps/posts-api/test/persistence` | the envelope, the routing table's refusals, the inbox, the event store and its replay, the ORM mapping — and that Better Auth writes and reads through the entities `libs/auth` maps by hand |
-| one hop, in process | `libs/transport-eventbus/src/in-memory/transport-loop.spec.ts` | two services over `MemoryServer` + `MemoryClient`, each able to reach the other: the real class arrives, the request is restored, a redelivery is deduplicated, the loop is cut |
+| integration | `libs/core/transport-eventbus/src/**`, `libs/auth/src/infrastructure/persistence`, `apps/posts-api/test/persistence` | the envelope, the routing table's refusals, the inbox, the event store and its replay, the ORM mapping — and that Better Auth writes and reads through the entities `libs/auth` maps by hand |
+| one hop, in process | `libs/core/transport-eventbus/src/in-memory/transport-loop.spec.ts` | two services over `MemoryServer` + `MemoryClient`, each able to reach the other: the real class arrives, the request is restored, a redelivery is deduplicated, the loop is cut |
 | the whole system, in a browser | `pnpm test:web` (`apps/web-e2e`, **Playwright**) | **the packaged services over Inngest AND over real RabbitMQ**, driven through Chromium: signing in, being refused, the three states of `/posts/new`, the polymorphic `me`, a post read by someone who never signed in — and then what the browser cannot see, in the same test: each service's durable state, both inboxes, idempotency through the broker's management API, the replica channel, one correlation id across two processes, and the `x-tenant` **of the browser** on the headers of both events |
 
 **`test-e2e` is the target name for every level of e2e there is**, in `apps/posts-api` and in
@@ -885,8 +890,8 @@ through the management API, or the dev server's own `/v1/events`. A test that co
 against one of them would be a test of the transport rather than of the system, which is what that
 port exists to prevent.
 
-It provisions everything itself, through **Testcontainers**: Postgres, the broker or the Inngest dev
-server, the migrator as a one-shot, and then `posts-api` and `tagging` as the images
+It provisions everything itself, through **Testcontainers**: Postgres, MinIO (the bucket and its
+policies included), the broker or the Inngest dev server, the migrator as a one-shot, and then `posts-api` and `tagging` as the images
 `apps/<app>/Dockerfile` build. They share a network and address each other by alias, so nothing has to be taught a port, and
 what the host reaches is published wherever Docker likes — which is why the suite now needs no
 configuration and does not care what else on the machine is holding 5432 or 5672. The one host port

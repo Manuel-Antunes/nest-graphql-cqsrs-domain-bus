@@ -3,9 +3,11 @@ import { OrganizationsInfrastructureModule } from '@nestposts/organizations/infr
 import { PostsInfrastructureModule } from '@nestposts/posts/infrastructure/posts-infrastructure.module';
 import { UsersInfrastructureModule } from '@nestposts/users/infrastructure/users-infrastructure.module';
 
+import { GeneratePresignedUrlQuery } from './asset/query/generate-presigned-url.query';
 import { AssignTagToPostCommand } from './post/command/assign-tag-to-post.command';
 import { CompletePostCommand } from './post/command/complete-post.command';
 import { CreatePostCommand } from './post/command/create-post.command';
+import { DeletePostCommand } from './post/command/delete-post.command';
 import { UpdatePostCommand } from './post/command/update-post.command';
 import { ProjectPostCompletion } from './post/projection/project-post-completion.projection';
 import { FindAllPostsQuery } from './post/query/find-all-posts.query';
@@ -26,8 +28,10 @@ import { UserProvisioning } from './user/user-provisioning.service';
     OrganizationsInfrastructureModule,
   ],
   providers: [
+    GeneratePresignedUrlQuery.Handler,
     CreatePostCommand.Handler,
     UpdatePostCommand.Handler,
+    DeletePostCommand.Handler,
     AssignTagToPostCommand.Handler,
     CompletePostCommand.Handler,
     CreateTagCommand.Handler,

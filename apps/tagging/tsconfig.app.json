@@ -12,10 +12,10 @@
       "path": "../../libs/users/tsconfig.lib.json"
     },
     {
-      "path": "../../libs/transport-eventbus/tsconfig.lib.json"
+      "path": "../../libs/core/transport-eventbus/tsconfig.lib.json"
     },
     {
-      "path": "../../libs/retry-policy/tsconfig.lib.json"
+      "path": "../../libs/core/retry-policy/tsconfig.lib.json"
     },
     {
       "path": "../../libs/posts/tsconfig.lib.json"
@@ -24,22 +24,22 @@
       "path": "../../libs/platform/tsconfig.lib.json"
     },
     {
-      "path": "../../libs/observability/tsconfig.lib.json"
+      "path": "../../libs/core/observability/tsconfig.lib.json"
     },
     {
-      "path": "../../libs/microservices-inngest/tsconfig.lib.json"
+      "path": "../../libs/core/microservices-inngest/tsconfig.lib.json"
     },
     {
-      "path": "../../libs/microservices-aws/tsconfig.lib.json"
+      "path": "../../libs/core/microservices-aws/tsconfig.lib.json"
     },
     {
-      "path": "../../libs/lambda/tsconfig.lib.json"
+      "path": "../../libs/core/lambda/tsconfig.lib.json"
     },
     {
       "path": "../../libs/database/tsconfig.lib.json"
     },
     {
-      "path": "../../libs/cqsrs/tsconfig.lib.json"
+      "path": "../../libs/core/cqsrs/tsconfig.lib.json"
     }
   ]
 }

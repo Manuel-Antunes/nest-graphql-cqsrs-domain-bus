@@ -1,0 +1,28 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    "tsBuildInfoFile": "dist/tsconfig.lib.tsbuildinfo",
+    "emitDeclarationOnly": false
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/**/*.spec.ts"],
+  "references": [
+    {
+      "path": "../../platform/tsconfig.lib.json"
+    },
+    {
+      "path": "../../database/tsconfig.lib.json"
+    },
+    {
+      "path": "../cqsrs/tsconfig.lib.json"
+    },
+    {
+      "path": "../microservices-aws/tsconfig.lib.json"
+    },
+    {
+      "path": "../microservices-inngest/tsconfig.lib.json"
+    }
+  ]
+}

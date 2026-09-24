@@ -6,6 +6,7 @@ import { UserProvisioningHooks } from './auth/user-provisioning.hooks';
 import { AuthExceptionFilter } from './filters/auth-exception.filter';
 import { DomainExceptionFilter } from './filters/domain-exception.filter';
 import { HttpExceptionFilter } from './filters/http-exception.filter';
+import { AssetMutationResolver } from './graphql/asset-mutation.resolver';
 import { AuthorEntityResolver } from './graphql/author-entity.resolver';
 import { AuthorPostsResolver } from './graphql/author-posts.resolver';
 import { PostAuthorResolver } from './graphql/post-author.resolver';
@@ -33,6 +34,7 @@ import { SessionUserPipe } from './pipes/session-user.pipe';
   providers: [
     PostQueryResolver,
     PostMutationResolver,
+    AssetMutationResolver,
     PostSubscriptionResolver,
     PostTagsResolver,
     PostAuthorResolver,

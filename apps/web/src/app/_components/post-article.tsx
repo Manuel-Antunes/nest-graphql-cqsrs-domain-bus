@@ -1,4 +1,5 @@
 import { AuthorByline } from '@/app/_components/author-byline';
+import { PostAttachment } from '@/app/_components/post-attachment';
 import { RelativeTime } from '@/app/_components/relative-time';
 import { TagList } from '@/app/_components/tag-list';
 import { VersionBadge } from '@/app/_components/version-badge';
@@ -16,6 +17,9 @@ export const PostArticle_post = graphql(`
     updatedAt
     author {
       ...AuthorByline_author
+    }
+    asset {
+      ...PostAttachment_asset
     }
     ...TagList_post
   }
@@ -55,6 +59,8 @@ export function PostArticle({
       <div className="whitespace-pre-wrap text-sm leading-relaxed">
         {data.content}
       </div>
+
+      {data.asset ? <PostAttachment asset={data.asset} /> : null}
     </article>
   );
 }

@@ -17,6 +17,12 @@ const UpdatePostMutation = graphql(`
   }
 `);
 
+const DeletePostMutation = graphql(`
+  mutation DeletePost($id: ID!) {
+    deletePost(id: $id)
+  }
+`);
+
 export function usePost(id: string) {
   const { data, error, refetch } = useSuspenseQuery(PostByIdQuery, {
     variables: { id },
@@ -24,11 +30,16 @@ export function usePost(id: string) {
   });
 
   const [updatePost, updateState] = useMutation(UpdatePostMutation);
+  const [deletePost, deleteState] = useMutation(DeletePostMutation, {
+    variables: { id },
+    refetchQueries: ['FeedPosts'],
+  });
 
   return {
     post: data?.post,
     error,
     refetch,
     update: { run: updatePost, ...updateState },
+    remove: { run: deletePost, ...deleteState },
   };
 }

@@ -19,7 +19,7 @@ API="${API%/}"
 TARGET="${API:-${STREAM:-}}"
 : "${TARGET:?nothing deployed for this stage}"
 
-AUTHOR_EMAIL="${SEED_AUTHOR_EMAIL:-autor@example.com}"
+AUTHOR_EMAIL="${SEED_AUTHOR_EMAIL:-manuel@example.com}"
 AUTHOR_PASSWORD="${SEED_AUTHOR_PASSWORD:-segredo123}"
 JAR="$(mktemp -t nestposts-e2e-cookies)"
 trap 'rm -f "$JAR"' EXIT
@@ -124,6 +124,75 @@ echo "$BY_KEY" | jq -e --arg id "$POST_ID" '.data._entities[0].id == $id' >/dev/
   || fail "_entities did not resolve the post: $BY_KEY"
 echo "    OK: _entities resolved it, with no session — which is what a router would do"
 
+echo
+echo "==> 9. a file: uploaded to a presigned URL, attached, served by the CDN, replaced, deleted"
+: "${BUCKET:?the stack has no bucket output — is infra/aws/storage deployed?}"
+RED="$(mktemp -t nestposts-red)"; BLUE="$(mktemp -t nestposts-blue)"
+trap 'rm -f "$JAR" "$RED" "$BLUE"' EXIT
+printf 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGO4o6EBAAMQAS0ujiXaAAAAAElFTkSuQmCC' | base64 -d > "$RED"
+printf 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGPQCLgDAAH4AVXSujU3AAAAAElFTkSuQmCC' | base64 -d > "$BLUE"
+
+# Prints the staged key, after putting the file where generatePresignedUrl said.
+upload() {
+  local answer url key status
+  answer=$(gql 'mutation($i:GeneratePresignedUrlInput!){ generatePresignedUrl(input:$i){ url key } }' \
+    '{"i":{"mimeType":"image/png"}}' signed)
+  url=$(echo "$answer" | jq -r '.data.generatePresignedUrl.url // empty')
+  key=$(echo "$answer" | jq -r '.data.generatePresignedUrl.key // empty')
+  [ -n "$url" ] && [ -n "$key" ] || fail "generatePresignedUrl failed: $answer"
+  status=$(curl -sS -o /dev/null -w '%{http_code}' -X PUT -H 'content-type: image/png' \
+    -H "origin: $TARGET" --data-binary @"$1" "$url")
+  [ "$status" = "200" ] || fail "S3 refused the presigned PUT with $status"
+  echo "$key"
+}
+
+asset_of() { jq -nc --arg k "$1" --argjson s "$(wc -c < "$2" | tr -d ' ')" \
+  '{name:$k,size:$s,extname:"png",mimeType:"image/png"}'; }
+
+served() { curl -sS -o "$1" -w '%{http_code}' "$2"; }
+
+stored() { node infra/scripts/object-exists.mjs "$BUCKET" "$1" >/dev/null; }
+
+STAGED=$(upload "$RED")
+WITH_FILE=$(gql 'mutation($i:CreatePostInput!){ createPost(input:$i){ id asset{ name url } } }' \
+  "$(jq -nc --arg t "post with a file $(date +%s)" --argjson a "$(asset_of "$STAGED" "$RED")" \
+    '{i:{title:$t,content:"one red pixel",asset:$a}}')" signed)
+FILE_POST=$(echo "$WITH_FILE" | jq -r '.data.createPost.id // empty')
+FIRST=$(echo "$WITH_FILE" | jq -r '.data.createPost.asset.name // empty')
+FIRST_URL=$(echo "$WITH_FILE" | jq -r '.data.createPost.asset.url // empty')
+[ -n "$FILE_POST" ] || fail "createPost with a file failed: $WITH_FILE"
+[[ "$FIRST" =~ ^assets/[0-9a-f-]{36}\.png$ ]] || fail "the file was not moved under assets/: '$FIRST'"
+[[ "$FIRST_URL" == "$TARGET/files/$FIRST" ]] || fail "the file is not served by the router: '$FIRST_URL'"
+GOT="$(mktemp -t nestposts-got)"
+[ "$(served "$GOT" "$FIRST_URL")" = "200" ] || fail "the CDN did not serve $FIRST_URL"
+cmp -s "$GOT" "$RED" || fail "the CDN served other bytes than the ones uploaded"
+stored "$FIRST" || fail "$FIRST is not in s3://$BUCKET"
+! stored "$STAGED" || fail "the staged upload $STAGED is still in the bucket"
+echo "    OK: $FIRST — moved out of staging, served by the CDN at /files"
+
+REPLACEMENT=$(upload "$BLUE")
+REPLACED=$(gql 'mutation($i:UpdatePostInput!){ updatePost(input:$i){ asset{ name url } } }' \
+  "$(jq -nc --arg id "$FILE_POST" --argjson a "$(asset_of "$REPLACEMENT" "$BLUE")" '{i:{id:$id,asset:$a}}')" \
+  signed)
+SECOND=$(echo "$REPLACED" | jq -r '.data.updatePost.asset.name // empty')
+SECOND_URL=$(echo "$REPLACED" | jq -r '.data.updatePost.asset.url // empty')
+[[ "$SECOND" =~ ^assets/[0-9a-f-]{36}\.png$ ]] && [ "$SECOND" != "$FIRST" ] \
+  || fail "updatePost did not replace the file: $REPLACED"
+[ "$(served "$GOT" "$SECOND_URL")" = "200" ] && cmp -s "$GOT" "$BLUE" \
+  || fail "the CDN did not serve the replacement"
+stored "$SECOND" || fail "$SECOND is not in s3://$BUCKET"
+! stored "$FIRST" || fail "the replaced file $FIRST is still in the bucket"
+echo "    OK: $SECOND replaced it, and $FIRST is gone from the bucket"
+
+DELETED=$(gql 'mutation($id:ID!){ deletePost(id:$id) }' \
+  "$(jq -nc --arg id "$FILE_POST" '{id:$id}')" signed)
+echo "$DELETED" | jq -e '.data.deletePost == true' >/dev/null || fail "deletePost failed: $DELETED"
+GONE=$(gql 'query($id:ID!){ post(id:$id){ id } }' "$(jq -nc --arg id "$FILE_POST" '{id:$id}')")
+echo "$GONE" | jq -e '.data.post == null' >/dev/null || fail "the deleted post is still served: $GONE"
+! stored "$SECOND" || fail "the deleted post's file $SECOND is still in the bucket"
+rm -f "$GOT"
+echo "    OK: the post is gone, and so is its file"
+
 if aws --version >/dev/null 2>&1; then
   echo
   echo "==> queues"
@@ -137,5 +206,5 @@ fi
 
 echo
 echo "================================================================"
-echo "  THE SAGA CLOSED ON AWS. post=$POST_ID"
+echo "  THE SAGA CLOSED ON AWS, AND A FILE WENT THE WHOLE WAY. post=$POST_ID"
 echo "================================================================"

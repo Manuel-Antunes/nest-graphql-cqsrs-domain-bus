@@ -10,7 +10,7 @@
   "exclude": ["src/**/*.spec.ts"],
   "references": [
     {
-      "path": "../validated-dto/tsconfig.lib.json"
+      "path": "../core/validated-dto/tsconfig.lib.json"
     },
     {
       "path": "../platform/tsconfig.lib.json"
