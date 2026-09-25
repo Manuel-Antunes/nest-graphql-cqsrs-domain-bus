@@ -1,21 +1,20 @@
 import { Suspense } from 'react';
 
-import { PreloadQuery } from '@/lib/apollo/rsc';
+import { QueryErrorBoundary } from '@/app/_components/query-error-boundary';
+import { PrefetchInfiniteQuery } from '@/lib/graphql/prefetch';
 
 import { FeedSkeleton } from './_components/feed-skeleton';
 import { FeedView } from './_components/feed-view';
-import { FEED_PAGE_SIZE, FeedPostsQuery } from './query';
+import { feedPostsOptions } from './query';
 
 export default function FeedPage() {
   return (
-    <PreloadQuery
-      query={FeedPostsQuery}
-      variables={{ first: FEED_PAGE_SIZE }}
-      errorPolicy="all"
-    >
-      <Suspense fallback={<FeedSkeleton />}>
-        <FeedView />
-      </Suspense>
-    </PreloadQuery>
+    <Suspense fallback={<FeedSkeleton />}>
+      <PrefetchInfiniteQuery options={feedPostsOptions()}>
+        <QueryErrorBoundary title="Não foi possível listar os posts">
+          <FeedView />
+        </QueryErrorBoundary>
+      </PrefetchInfiniteQuery>
+    </Suspense>
   );
 }

@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 import { ErrorNotice } from '@/app/_components/error-notice';
 import type { FragmentType } from '@/gql';
 import { getFragmentData, graphql } from '@/gql';
+import type { UpdatePostMutationVariables } from '@/gql/graphql';
 import type { UploadedFile } from '@/hooks/use-upload-file';
 import { useUploadFile } from '@/hooks/use-upload-file';
 import { errorShownByHookState } from '@/lib/utils';
@@ -24,16 +25,7 @@ export const PostEditor_post = graphql(`
 `);
 
 interface UpdateRunner {
-  run: (options: {
-    variables: {
-      input: {
-        id: string;
-        title?: string | null;
-        content?: string | null;
-        asset?: UploadedFile | null;
-      };
-    };
-  }) => Promise<unknown>;
+  run: (variables: UpdatePostMutationVariables) => Promise<unknown>;
   loading: boolean;
   error?: unknown;
 }
@@ -77,13 +69,11 @@ export function PostEditor({
         }
         void update
           .run({
-            variables: {
-              input: {
-                id: current.id,
-                title: title.trim() === '' ? null : title,
-                content: content.trim() === '' ? null : content,
-                asset,
-              },
+            input: {
+              id: current.id,
+              title: title.trim() === '' ? null : title,
+              content: content.trim() === '' ? null : content,
+              asset,
             },
           })
           .then(() => {

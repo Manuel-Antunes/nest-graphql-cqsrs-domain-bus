@@ -6,6 +6,7 @@ import {
   startErrorReporting,
 } from '@nestposts/observability/error-reporting';
 
+import { appConfig } from '../config/app.config';
 import { MigratorModule } from './migrator.module';
 
 export interface MigratorContext {
@@ -26,9 +27,7 @@ export const bootstrap = async (): Promise<MigratorContext> => {
 export const withMigrator = async <T>(
   work: (context: MigratorContext) => Promise<T>,
 ): Promise<T> => {
-  startErrorReporting({
-    serviceName: process.env.OTEL_SERVICE_NAME ?? 'migrator',
-  });
+  startErrorReporting({ serviceName: appConfig().serviceName });
   try {
     const context = await bootstrap();
     try {

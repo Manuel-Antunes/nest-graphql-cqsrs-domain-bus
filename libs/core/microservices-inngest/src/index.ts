@@ -1,4 +1,3 @@
-export * from './inngest.config';
 export * from './inngest.context';
 export * from './inngest.events';
 export * from './inngest.strategy';

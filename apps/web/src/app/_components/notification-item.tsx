@@ -76,7 +76,7 @@ export function NotificationItem({
 }) {
   const item = getFragmentData(NotificationItem_notification, notification);
   const summary = summaryOf(item.type, item.data);
-  const [remove, { loading: removing }] = useDeleteNotification();
+  const { mutate: remove, isPending: removing } = useDeleteNotification();
   const Icon = summary.icon;
 
   return (
@@ -122,7 +122,7 @@ export function NotificationItem({
         size="icon-xs"
         aria-label={`Delete notification: ${summary.title}`}
         disabled={removing}
-        onClick={() => void remove({ variables: { id: item.id } })}
+        onClick={() => remove({ id: item.id })}
         className="relative z-10 text-muted-foreground hover:text-destructive"
       >
         {removing ? <Spinner /> : <Trash2Icon />}

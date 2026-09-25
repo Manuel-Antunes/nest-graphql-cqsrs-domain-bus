@@ -1,10 +1,11 @@
 import { Suspense } from 'react';
 import { Skeleton } from '@nestposts/ui/components/ui/skeleton';
 
-import { PreloadQuery } from '@/lib/apollo/rsc';
+import { QueryErrorBoundary } from '@/app/_components/query-error-boundary';
+import { PrefetchQuery } from '@/lib/graphql/prefetch';
 
 import { EntitiesProbe } from './_components/entities-probe';
-import { FederationSeedQuery } from './query';
+import { federationSeedOptions } from './query';
 
 export default function FederationPage() {
   return (
@@ -16,11 +17,13 @@ export default function FederationPage() {
           feita direto.
         </p>
       </div>
-      <PreloadQuery query={FederationSeedQuery} errorPolicy="all">
-        <Suspense fallback={<Skeleton className="h-64 w-full" />}>
-          <EntitiesProbe />
-        </Suspense>
-      </PreloadQuery>
+      <Suspense fallback={<Skeleton className="h-64 w-full" />}>
+        <PrefetchQuery options={federationSeedOptions()}>
+          <QueryErrorBoundary title="Não foi possível ler os ids">
+            <EntitiesProbe />
+          </QueryErrorBoundary>
+        </PrefetchQuery>
+      </Suspense>
     </div>
   );
 }

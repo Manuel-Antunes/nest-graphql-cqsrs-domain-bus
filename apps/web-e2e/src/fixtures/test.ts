@@ -3,6 +3,8 @@ import { test as base, expect } from '@playwright/test';
 
 import type { Account, Accounts } from '../support/accounts';
 import { Registrar } from '../support/accounts';
+import type { BillingRun } from '../support/billing-stack';
+import { billingRun } from '../support/billing-stack';
 import { Broker } from '../support/broker';
 import { ServiceDatabase } from '../support/database';
 import type { ExecuteGraphql } from '../support/graphql';
@@ -17,8 +19,14 @@ import { Storage } from '../support/storage';
 
 export type SignIn = (account: Account) => Promise<void>;
 
-/** A new account of its own, signed up and verified by email, for a test that changes what it holds. */
-export type FreshAccount = (name: string) => Promise<Account>;
+/**
+ * A new account of its own, signed up and verified by email, for a test that changes what it holds.
+ * `domain` is for an address somebody else validates — Polar's checkout refuses `example.com`.
+ */
+export type FreshAccount = (
+  name: string,
+  options?: { domain?: string },
+) => Promise<Account>;
 
 /**
  * Opens one of better-auth-ui's views and waits until it can be typed into. Its forms are TanStack
@@ -60,6 +68,8 @@ interface Fixtures {
   mailbox: Mailbox;
   /** What went on the wire, whichever wire this run used — see `support/messages.ts`. */
   messages: (queue: string) => Messages;
+  /** Polar's sandbox and this run's webhook endpoint — `null` when the run has no billing. */
+  billing: BillingRun | null;
 }
 
 /**
@@ -105,6 +115,10 @@ export const test = base.extend<Fixtures>({
     await use(messagesOf);
   },
 
+  billing: async ({}, use) => {
+    await use(billingRun());
+  },
+
   /**
    * GraphQL **as the browser asks it**: through `/api/graphql`, the proxy that puts this request's
    * cookie and its `x-tenant` on the way out. It is how the page itself queries, so what it proves is
@@ -147,9 +161,9 @@ export const test = base.extend<Fixtures>({
 
   freshAccount: async ({ postsStore }, use) => {
     const registrar = new Registrar(WEB_URL, postsStore);
-    await use((name) =>
+    await use((name, { domain = 'example.com' } = {}) =>
       registrar.signUp(
-        `${name.toLowerCase()}-${Date.now()}-${Math.round(Math.random() * 1e6)}@example.com`,
+        `${name.toLowerCase()}-${Date.now()}-${Math.round(Math.random() * 1e6)}@${domain}`,
         name,
       ),
     );

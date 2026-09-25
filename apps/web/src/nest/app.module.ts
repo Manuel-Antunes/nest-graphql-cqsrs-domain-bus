@@ -1,7 +1,9 @@
 import 'server-only';
 
 import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
 import { BetterAuthModule } from '@nestposts/auth/infrastructure/better-auth/better-auth.module';
+import { BillingInfrastructureModule } from '@nestposts/billing/infrastructure/billing-infrastructure.module';
 import { CqsrsModule } from '@nestposts/cqsrs';
 import {
   DatabaseModule,
@@ -17,13 +19,27 @@ import { OrganizationEntities } from '@nestposts/organizations/infrastructure/pe
 import {
   TRANSPORT_EVENT_BUS_PUBLISHER,
   TransportEventBusModule,
+  TransportIdentity,
 } from '@nestposts/transport-eventbus';
+import { Inngest } from 'inngest';
 
-import { WEB_URL } from '@/lib/env';
-
+import { SubscriptionAuthorship } from './billing/subscription-authorship';
+import { SubscriptionEmails } from './billing/subscription-emails';
+import type { AppConfig } from './config/app.config';
+import { appConfig } from './config/app.config';
+import { authConfig } from './config/auth.config';
+import { awsConfig } from './config/aws.config';
+import { billingConfig } from './config/billing.config';
+import type { InngestConfig } from './config/inngest.config';
+import { inngestConfig } from './config/inngest.config';
+import type { PostgresConfig } from './config/postgres.config';
+import { postgresConfig } from './config/postgres.config';
+import { rabbitmqConfig } from './config/rabbitmq.config';
 import { NextCookiesBetterAuthPluginProvider } from './next-cookies.plugin';
 import { NotificationsPublisher } from './notifications.publisher';
-import { WEB_EVENTS_CLIENT, webEventsClient, webIdentity } from './transport';
+import { WebEventsClient } from './web-events.client';
+
+const billing = billingConfig().polar;
 
 /**
  * **The Next server's Nest application** — a container, not a server.
@@ -48,28 +64,66 @@ import { WEB_EVENTS_CLIENT, webEventsClient, webIdentity } from './transport';
  */
 @Module({
   imports: [
+    ConfigModule.forRoot({
+      isGlobal: true,
+      cache: true,
+      ignoreEnvFile: true,
+      load: [
+        appConfig,
+        authConfig,
+        awsConfig,
+        billingConfig,
+        inngestConfig,
+        postgresConfig,
+        rabbitmqConfig,
+      ],
+    }),
     CqsrsModule.forRoot({ aggregatePublisher: TRANSPORT_EVENT_BUS_PUBLISHER }),
-    DatabaseModule.forRoot(postgresDatabase(SYSTEM_SCHEMA)),
+    DatabaseModule.forRootAsync({
+      inject: [postgresConfig.KEY],
+      useFactory: ({ url, debug }: PostgresConfig) =>
+        postgresDatabase(SYSTEM_SCHEMA, { clientUrl: url, debug }),
+    }),
     TenancyModule.forRoot({
       http: false,
       migrations: { migrationsList: tenantMigrations },
     }),
-    TransportEventBusModule.forRoot({
-      identity: webIdentity(),
-      publishers: [
-        NotificationsPublisher,
-        { provide: WEB_EVENTS_CLIENT, useFactory: webEventsClient },
-      ],
+    TransportEventBusModule.forRootAsync({
+      inject: [appConfig.KEY],
+      useFactory: ({ name, publishes }: AppConfig) =>
+        TransportIdentity.named(name, { publishes }),
     }),
     BetterAuthModule.forRoot({
-      plugins: organizationAuthPluginProviders,
+      plugins: [
+        ...organizationAuthPluginProviders,
+        ...BillingInfrastructureModule.authPlugins(billing),
+      ],
       trailingPlugins: [NextCookiesBetterAuthPluginProvider],
       entities: OrganizationEntities.withAuth(),
-      imports: [OrganizationsInfrastructureModule],
-      config: { baseUrl: WEB_URL, trustedOrigins: [WEB_URL] },
+      imports: [
+        OrganizationsInfrastructureModule,
+        BillingInfrastructureModule.forRoot(billing, {
+          listeners: [SubscriptionEmails, SubscriptionAuthorship],
+        }),
+      ],
+      config: authConfig.KEY,
       notifications: PublishingOnDemandNotifications,
     }),
     OrganizationsInfrastructureModule,
+  ],
+  providers: [
+    NotificationsPublisher,
+    {
+      provide: Inngest,
+      inject: [appConfig.KEY, inngestConfig.KEY],
+      useFactory: (app: AppConfig, { client }: InngestConfig) =>
+        new Inngest({ id: app.name, ...client }),
+    },
+    {
+      provide: WebEventsClient,
+      inject: WebEventsClient.inject,
+      useFactory: WebEventsClient.create,
+    },
   ],
 })
 export class WebAppModule {}

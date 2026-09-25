@@ -1,6 +1,7 @@
-import { useMutation } from '@apollo/client/react';
+import { useMutation } from '@tanstack/react-query';
 
 import { graphql } from '@/gql';
+import { gqlMutationOptions } from '@/lib/graphql/gqlpc';
 
 const GeneratePresignedUrlMutation = graphql(`
   mutation GeneratePresignedUrl($input: GeneratePresignedUrlInput!) {
@@ -26,17 +27,15 @@ const extensionOf = (fileName: string): string => {
 };
 
 export function useUploadFile() {
-  const [generatePresignedUrl] = useMutation(GeneratePresignedUrlMutation);
+  const { mutateAsync: generatePresignedUrl } = useMutation(
+    gqlMutationOptions(GeneratePresignedUrlMutation),
+  );
 
   return async function uploadFile(file: File): Promise<UploadedFile> {
     const mimeType = file.type || UNKNOWN_MIME_TYPE;
-    const { data } = await generatePresignedUrl({
-      variables: { input: { mimeType } },
+    const { generatePresignedUrl: upload } = await generatePresignedUrl({
+      input: { mimeType },
     });
-    const upload = data?.generatePresignedUrl;
-    if (!upload) {
-      throw new Error('generatePresignedUrl answered without an upload URL');
-    }
 
     const response = await fetch(upload.url, {
       method: 'PUT',

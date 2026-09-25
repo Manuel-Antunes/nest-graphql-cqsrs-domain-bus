@@ -10,7 +10,10 @@ import type {
   InboundHeaders,
 } from './execution/stitched-gateway';
 import { StitchedGateway } from './execution/stitched-gateway';
-import type { FederationGatewayOptions } from './federation-gateway.options';
+import type {
+  FederationGatewayAsyncOptions,
+  FederationGatewayOptions,
+} from './federation-gateway.options';
 import { FEDERATION_GATEWAY_OPTIONS } from './federation-gateway.options';
 
 @Controller()
@@ -26,22 +29,31 @@ class SupergraphSchemaController {
 
 @Module({})
 class FederationGatewayCoreModule {
-  static forRoot(options: FederationGatewayOptions): DynamicModule {
+  static forRootAsync<Injected extends unknown[]>(
+    options: FederationGatewayAsyncOptions<Injected>,
+  ): DynamicModule {
     return {
       module: FederationGatewayCoreModule,
       providers: [
-        { provide: FEDERATION_GATEWAY_OPTIONS, useValue: options },
+        {
+          provide: FEDERATION_GATEWAY_OPTIONS,
+          inject: options.inject ?? [],
+          useFactory: options.useFactory,
+        },
         {
           provide: LocalComposeSupergraph,
-          useFactory: () => new LocalComposeSupergraph(options.subgraphs),
+          inject: [FEDERATION_GATEWAY_OPTIONS],
+          useFactory: ({ subgraphs }: FederationGatewayOptions) =>
+            new LocalComposeSupergraph(subgraphs),
         },
         {
           provide: StitchedGateway,
-          useFactory: () =>
+          inject: [FEDERATION_GATEWAY_OPTIONS],
+          useFactory: (gateway: FederationGatewayOptions) =>
             new StitchedGateway({
-              tokenVerifier: options.tokenVerifier,
-              subgraphTokenResolvers: options.subgraphTokenResolvers,
-              forwardedHeaders: options.forwardedHeaders,
+              tokenVerifier: gateway.tokenVerifier,
+              subgraphTokenResolvers: gateway.subgraphTokenResolvers,
+              forwardedHeaders: gateway.forwardedHeaders,
             }),
         },
       ],
@@ -90,7 +102,14 @@ const yogaOptionsFor = (
 @Module({})
 export class FederationGatewayModule {
   static forRoot(options: FederationGatewayOptions): DynamicModule {
-    const core = FederationGatewayCoreModule.forRoot(options);
+    return FederationGatewayModule.forRootAsync({ useFactory: () => options });
+  }
+
+  /** {@link FederationGatewayModule.forRoot}, with the options built from injected configuration. */
+  static forRootAsync<Injected extends unknown[]>(
+    options: FederationGatewayAsyncOptions<Injected>,
+  ): DynamicModule {
+    const core = FederationGatewayCoreModule.forRootAsync(options);
     return {
       module: FederationGatewayModule,
       imports: [

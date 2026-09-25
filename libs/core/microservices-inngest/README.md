@@ -9,14 +9,16 @@ over the host application's Fastify adapter. It knows nothing about CQRS, envelo
 | `InngestClientProxy` | sends an event; `InngestRecordBuilder` adds `user` entries, sessions, an idempotency key, a timestamp |
 | `InngestStrategy` | receives: one function per pattern, mounted at `/api/inngest` |
 | `InngestContext` | `@Ctx()`: the event, the step tools, the run id, the attempt (from zero) |
-| `inngestApp(id)` | the client both halves share |
 | `literalTriggers`, `claimTriggers` | how a pattern becomes the event names a function is triggered by |
 
 ```ts
+const inngest = new Inngest({ id: 'billing', isDev, baseUrl, eventKey, signingKey });
+
 app.connectMicroservice(
   {
     strategy: new InngestStrategy({
-      inngest: inngestApp('billing'),
+      inngest,
+      serveOrigin,
       httpAdapter: app.getHttpAdapter(),
       retries: 5,
     }),
@@ -24,6 +26,12 @@ app.connectMicroservice(
   { inheritAppConfig: true },
 );
 ```
+
+**It reads no environment.** The application builds the `Inngest` client from its own configuration
+(`config/inngest.config.ts` in each app here) and provides it once — `provide: Inngest` — so the proxy
+sends on the same object the strategy creates its functions on, which is what makes the app id in the
+dashboard the service's own name. `serveOrigin` is the address the dev server calls the service back
+at; left out, the registration request's own origin answers.
 
 **Inngest has no wildcards**, so a pattern is resolved into names when the functions are created.
 `literalTriggers`, the default, handles a literal name and one whose last segment is `*`; a namespace

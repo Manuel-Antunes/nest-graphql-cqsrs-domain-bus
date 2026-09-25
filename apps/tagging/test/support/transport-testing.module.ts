@@ -12,11 +12,17 @@ import {
 } from '@nestposts/transport-eventbus';
 import { usersEntities } from '@nestposts/users/infrastructure/users-infrastructure.module';
 
-import { mikroOrmConfig } from '../../src/infrastructure/persistence/mikro-orm.config';
+import { postgresConfig } from '../../src/config/postgres.config';
+import { MikroOrmConfiguration } from '../../src/infrastructure/persistence/mikro-orm.config';
 
 /** This service's connection, on a schema of its own, plus the domain mappings it rehydrates a Post through. */
 export const persistenceTesting = (): DynamicModule[] => [
-  DatabaseModule.forRoot(testDatabaseConfig(mikroOrmConfig(), 'tagging')),
+  DatabaseModule.forRoot(
+    testDatabaseConfig(
+      MikroOrmConfiguration.connection(postgresConfig()),
+      'tagging',
+    ),
+  ),
   DatabaseModule.forFeature([...postsEntities, ...usersEntities]),
   TestSchemaModule.forRoot(),
 ];

@@ -1,4 +1,5 @@
 import { graphql } from '@/gql';
+import { gqlQueryOptions } from '@/lib/graphql/gqlpc';
 
 export const PostByIdQuery = graphql(`
   query PostById($id: ID!) {
@@ -10,3 +11,6 @@ export const PostByIdQuery = graphql(`
     }
   }
 `);
+
+export const postByIdOptions = (id: string) =>
+  gqlQueryOptions(PostByIdQuery, { input: { id } });

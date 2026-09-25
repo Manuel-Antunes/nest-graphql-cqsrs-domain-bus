@@ -24,8 +24,11 @@ post.cover.url;  // ready to serve
 Once, at the composition root, beside `DatabaseModule`:
 
 ```ts
-AssetInfrastructureModule.forRoot(assetStorageOptionsFromEnv())
-AssetInfrastructureModule.forRootAsync({ useFactory: () => ({ bucket: 'uploads' }) })
+AssetInfrastructureModule.forRootAsync({
+  inject: [storageConfig.KEY],                 // registerAs('storage', () => ({ ...assetStorageOptionsFromEnv(process.env) }))
+  useFactory: (storage: StorageConfig) => storage,
+})
+AssetInfrastructureModule.forRoot({ bucket: 'uploads' })
 ```
 
 The module is **global**: the composition root calls `forRoot` once, and the `DiskService` port
@@ -34,7 +37,7 @@ also registers the subscriber and opens the ambient `AssetContext` on every requ
 service that only needs the `DiskService`, and has no MikroORM connection, passes
 `attachments: false`.
 
-`assetStorageOptionsFromEnv()` reads `DRIVE_DISK`, `DRIVE_BUCKET`, `DRIVE_CDN_URL`,
+`assetStorageOptionsFromEnv(env)` parses `DRIVE_DISK`, `DRIVE_BUCKET`, `DRIVE_CDN_URL`,
 `DRIVE_S3_ENDPOINT`, `DRIVE_S3_PUBLIC_ENDPOINT`, `DRIVE_S3_FORCE_PATH_STYLE`, `DRIVE_AWS_REGION`,
 `DRIVE_AWS_ACCESS_KEY_ID` and `DRIVE_AWS_SECRET_ACCESS_KEY`. Both disks are the same bucket; they
 differ in visibility, and the public one is served from `DRIVE_CDN_URL` when there is one. A CDN URL

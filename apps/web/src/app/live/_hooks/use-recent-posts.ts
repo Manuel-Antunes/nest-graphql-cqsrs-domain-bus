@@ -1,18 +1,15 @@
 'use client';
 
-import { useSuspenseQuery } from '@apollo/client/react';
+import { useSuspenseQuery } from '@tanstack/react-query';
 
-import { LIVE_SNAPSHOT_SIZE, LIVE_WINDOW, RecentPostsQuery } from '../query';
+import { LIVE_WINDOW, recentPostsOptions } from '../query';
 
 export function useRecentPosts() {
-  const { data, error } = useSuspenseQuery(RecentPostsQuery, {
-    variables: { first: LIVE_SNAPSHOT_SIZE },
-    errorPolicy: 'all',
-  });
+  const { data } = useSuspenseQuery(recentPostsOptions());
 
-  const all = (data?.posts.edges ?? [])
+  return data.posts.edges
     .filter((edge) => edge !== null)
-    .map((edge) => edge.node);
-  const posts = all.slice(-LIVE_WINDOW).reverse();
-  return { posts, error };
+    .map((edge) => edge.node)
+    .slice(-LIVE_WINDOW)
+    .reverse();
 }

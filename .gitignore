@@ -29,6 +29,7 @@ blob-report/
 sst-env.d.ts
 **/sst-env.d.ts
 .env
+.env.test
 .grit
 _tmp_*
 

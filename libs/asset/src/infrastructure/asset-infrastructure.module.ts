@@ -18,7 +18,7 @@ import { FlydriveDiskService } from './storage/flydrive-disk.service';
  * Storage for assets, and the lifecycle of the entities that hold them.
  *
  * ```ts
- * AssetInfrastructureModule.forRoot(assetStorageOptionsFromEnv())
+ * AssetInfrastructureModule.forRoot(assetStorageOptionsFromEnv(process.env))
  * AssetInfrastructureModule.forRootAsync({ useFactory: () => ({ bucket: 'uploads' }) })
  * ```
  *

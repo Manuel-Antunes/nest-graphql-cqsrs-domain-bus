@@ -1,4 +1,5 @@
 import type { YogaDriverConfig } from '@graphql-yoga/nestjs';
+import type { InjectionToken } from '@nestjs/common';
 
 import type {
   GatewayTokenVerifier,
@@ -28,4 +29,10 @@ export interface FederationGatewayOptions {
    * where a subscription event came from.
    */
   readonly plugins?: YogaDriverConfig['plugins'];
+}
+
+/** {@link FederationGatewayModule.forRootAsync}'s options: the gateway's, built from what the application injects. */
+export interface FederationGatewayAsyncOptions<Injected extends unknown[]> {
+  readonly inject?: InjectionToken[];
+  readonly useFactory: (...injected: Injected) => FederationGatewayOptions;
 }

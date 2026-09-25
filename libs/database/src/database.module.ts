@@ -6,7 +6,8 @@ import type {
 } from '@mikro-orm/core';
 import type { MikroOrmModuleSyncOptions } from '@mikro-orm/nestjs';
 import { MikroOrmModule } from '@mikro-orm/nestjs';
-import type { DynamicModule } from '@nestjs/common';
+import { PostgreSqlDriver } from '@mikro-orm/postgresql';
+import type { DynamicModule, InjectionToken } from '@nestjs/common';
 import { Module } from '@nestjs/common';
 
 /** What a module contributes: the schemas of the tables it owns — MikroORM's own entity list. */
@@ -18,6 +19,14 @@ export type DatabaseEntities = readonly (
 
 /** Everything any module has declared, in this process. See {@link DatabaseModule.forFeature}. */
 const declared = new Set<string | EntityClass<AnyEntity> | EntitySchema>();
+
+type Connection = MikroOrmModuleSyncOptions & { exclusive?: boolean };
+
+/** {@link DatabaseModule.forRootAsync}'s options: the connection, built from what the application injects. */
+export interface DatabaseModuleAsyncOptions<Injected extends unknown[]> {
+  readonly inject?: InjectionToken[];
+  readonly useFactory: (...injected: Injected) => Connection;
+}
 
 @Module({})
 export class DatabaseModule {
@@ -34,15 +43,24 @@ export class DatabaseModule {
    * `TenancyModule`'s to open, on the tenant's entity manager, and a second one opened on the global
    * manager would resolve every wildcard table to the connection's schema.
    */
-  static forRoot(
-    options: MikroOrmModuleSyncOptions & { exclusive?: boolean },
+  static forRoot(options: Connection): DynamicModule {
+    return DatabaseModule.forRootAsync({ useFactory: () => options });
+  }
+
+  /** {@link DatabaseModule.forRoot}, with the connection built from injected configuration. */
+  static forRootAsync<Injected extends unknown[]>(
+    options: DatabaseModuleAsyncOptions<Injected>,
   ): DynamicModule {
-    const { exclusive = false, ...connection } = options;
     return {
       module: DatabaseModule,
       imports: [
         MikroOrmModule.forRootAsync({
-          useFactory: () => {
+          driver: PostgreSqlDriver,
+          inject: options.inject ?? [],
+          useFactory: (...injected: Injected) => {
+            const { exclusive = false, ...connection } = options.useFactory(
+              ...injected,
+            );
             const entities = [
               ...new Set([
                 ...(connection.entities ?? []),

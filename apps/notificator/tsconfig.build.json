@@ -59,6 +59,9 @@
       "path": "../../libs/core/cqsrs/tsconfig.lib.json"
     },
     {
+      "path": "../../libs/billing/tsconfig.lib.json"
+    },
+    {
       "path": "../../libs/auth/tsconfig.lib.json"
     }
   ]

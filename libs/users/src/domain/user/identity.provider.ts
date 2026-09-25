@@ -16,4 +16,11 @@ export abstract class IdentityProvider {
     credentialId: CredentialId,
     role: string,
   ): Promise<Identity>;
+
+  abstract addRole(credentialId: CredentialId, role: string): Promise<Identity>;
+
+  abstract removeRole(
+    credentialId: CredentialId,
+    role: string,
+  ): Promise<Identity>;
 }

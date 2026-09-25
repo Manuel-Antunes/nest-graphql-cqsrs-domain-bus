@@ -3,6 +3,8 @@ import { OrganizationsInfrastructureModule } from '@nestposts/organizations/infr
 import { PostsInfrastructureModule } from '@nestposts/posts/infrastructure/posts-infrastructure.module';
 import { UsersInfrastructureModule } from '@nestposts/users/infrastructure/users-infrastructure.module';
 
+import type { AppConfig } from '../config/app.config';
+import { appConfig } from '../config/app.config';
 import { GeneratePresignedUrlQuery } from './asset/query/generate-presigned-url.query';
 import { AssignTagToPostCommand } from './post/command/assign-tag-to-post.command';
 import { CompletePostCommand } from './post/command/complete-post.command';
@@ -31,7 +33,11 @@ import { UserProvisioning } from './user/user-provisioning.service';
     OrganizationsInfrastructureModule,
   ],
   providers: [
-    { provide: WebLinks, useFactory: () => WebLinks.fromEnv() },
+    {
+      provide: WebLinks,
+      inject: [appConfig.KEY],
+      useFactory: ({ webUrl }: AppConfig) => new WebLinks(webUrl),
+    },
     GeneratePresignedUrlQuery.Handler,
     CreatePostCommand.Handler,
     UpdatePostCommand.Handler,

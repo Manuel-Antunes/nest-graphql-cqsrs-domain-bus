@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { useQuery, useSuspenseQuery } from '@apollo/client/react';
 import { Badge } from '@nestposts/ui/components/ui/badge';
 import { Button } from '@nestposts/ui/components/ui/button';
 import {
@@ -11,13 +10,13 @@ import {
   CardHeader,
   CardTitle,
 } from '@nestposts/ui/components/ui/card';
+import { useQuery, useSuspenseQuery } from '@tanstack/react-query';
 import { Loader2Icon, NetworkIcon, PlayIcon } from 'lucide-react';
 
 import { ErrorNotice } from '@/app/_components/error-notice';
 import { useSession } from '@/app/_providers/session-provider';
-import { TO_POSTS_SUBGRAPH } from '@/lib/env';
 
-import { EntitiesQuery, FederationSeedQuery } from '../query';
+import { entitiesOptions, federationSeedOptions } from '../query';
 
 type Representation = { __typename: string; id: string };
 
@@ -25,21 +24,17 @@ const NO_SUCH_POST = '00000000-0000-4000-8000-000000000000';
 
 export function EntitiesProbe() {
   const { session } = useSession();
-  const seed = useSuspenseQuery(FederationSeedQuery, { errorPolicy: 'all' });
+  const seed = useSuspenseQuery(federationSeedOptions());
   const [representations, setRepresentations] = useState<
     Representation[] | null
   >(null);
 
-  const entities = useQuery(EntitiesQuery, {
-    variables: {
-      representations: representations ?? [],
-    },
-    skip: !representations,
-    fetchPolicy: 'network-only',
-    context: TO_POSTS_SUBGRAPH,
+  const entities = useQuery({
+    ...entitiesOptions(representations ?? []),
+    enabled: representations !== null,
   });
 
-  const nodes = (seed.data?.posts.edges ?? []).map((edge) => edge.node);
+  const nodes = seed.data.posts.edges.map((edge) => edge.node);
 
   const build = (): Representation[] => {
     const list: Representation[] = [];
@@ -72,18 +67,11 @@ export function EntitiesProbe() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {seed.error ? (
-            <ErrorNotice
-              title="Não foi possível ler os ids"
-              error={seed.error}
-            />
-          ) : null}
-
           <Button
             onClick={() => setRepresentations(build())}
-            disabled={nodes.length === 0 || entities.loading}
+            disabled={nodes.length === 0 || entities.isFetching}
           >
-            {entities.loading ? (
+            {entities.isFetching ? (
               <Loader2Icon className="animate-spin" />
             ) : (
               <PlayIcon />

@@ -1,4 +1,4 @@
-import type { DynamicModule } from '@nestjs/common';
+import type { DynamicModule, InjectionToken } from '@nestjs/common';
 import type { Params } from 'nestjs-pino';
 import { LoggerModule } from 'nestjs-pino';
 
@@ -40,6 +40,17 @@ const HEALTH = /^\/health/;
  */
 export const loggingModule = (options: LoggingOptions): DynamicModule =>
   LoggerModule.forRoot(loggingParams(options));
+
+/** {@link loggingModule}, with the options built from what the application injects — its configuration. */
+export const loggingModuleAsync = <Injected extends unknown[]>(options: {
+  readonly inject: InjectionToken[];
+  readonly useFactory: (...injected: Injected) => LoggingOptions;
+}): DynamicModule =>
+  LoggerModule.forRootAsync({
+    inject: options.inject,
+    useFactory: (...injected: Injected) =>
+      loggingParams(options.useFactory(...injected)),
+  });
 
 export const loggingParams = (options: LoggingOptions): Params => {
   const pretty =

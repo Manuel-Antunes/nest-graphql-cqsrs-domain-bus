@@ -1,10 +1,16 @@
 'use client';
 
-import { useMutation, useSuspenseQuery } from '@apollo/client/react';
+import {
+  useMutation,
+  useQueryClient,
+  useSuspenseQuery,
+} from '@tanstack/react-query';
 
+import { feedPostsOptions } from '@/app/feed/query';
 import { graphql } from '@/gql';
+import { gqlMutationOptions } from '@/lib/graphql/gqlpc';
 
-import { PostByIdQuery } from '../query';
+import { postByIdOptions } from '../query';
 
 const UpdatePostMutation = graphql(`
   mutation UpdatePost($input: UpdatePostInput!) {
@@ -24,22 +30,39 @@ const DeletePostMutation = graphql(`
 `);
 
 export function usePost(id: string) {
-  const { data, error, refetch } = useSuspenseQuery(PostByIdQuery, {
-    variables: { id },
-    errorPolicy: 'all',
-  });
+  const queryClient = useQueryClient();
+  const postById = postByIdOptions(id);
+  const { data } = useSuspenseQuery(postById);
 
-  const [updatePost, updateState] = useMutation(UpdatePostMutation);
-  const [deletePost, deleteState] = useMutation(DeletePostMutation, {
-    variables: { id },
-    refetchQueries: ['FeedPosts'],
-  });
+  const invalidateFeed = () =>
+    void queryClient.invalidateQueries({
+      queryKey: feedPostsOptions().queryKey,
+    });
+
+  const update = useMutation(
+    gqlMutationOptions(UpdatePostMutation, {
+      onSuccess: ({ updatePost }) => {
+        queryClient.setQueryData(postById.queryKey, { post: updatePost });
+        invalidateFeed();
+      },
+    }),
+  );
+
+  const remove = useMutation(
+    gqlMutationOptions(DeletePostMutation, { onSuccess: invalidateFeed }),
+  );
 
   return {
-    post: data?.post,
-    error,
-    refetch,
-    update: { run: updatePost, ...updateState },
-    remove: { run: deletePost, ...deleteState },
+    post: data.post,
+    update: {
+      run: update.mutateAsync,
+      loading: update.isPending,
+      error: update.error,
+    },
+    remove: {
+      run: () => remove.mutateAsync({ id }),
+      loading: remove.isPending,
+      error: remove.error,
+    },
   };
 }

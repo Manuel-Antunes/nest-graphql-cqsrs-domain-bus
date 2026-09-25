@@ -21,7 +21,7 @@ import { UnconfiguredPushNotifications } from './push/unconfigured-push-notifica
  * ```ts
  * NotificationChannelsModule.forRoot({
  *   notifications: [PostCreatedNotification],
- *   push: firebasePushOptionsFromEnv(),
+ *   push: firebasePushOptionsFromEnv(process.env),
  * })
  * ```
  *

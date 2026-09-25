@@ -2,19 +2,21 @@ import './telemetry';
 
 import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import type { MicroserviceOptions } from '@nestjs/microservices';
+import type { AsyncMicroserviceOptions } from '@nestjs/microservices';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { FastifyAdapter } from '@nestjs/platform-fastify';
+import { INNGEST_DEFAULT_SERVE_PATH } from '@nestposts/microservices-inngest';
+import type { Inngest } from 'inngest';
 import { Logger as PinoLogger } from 'nestjs-pino';
 
 import { AppModule } from './app.module';
-import { inboundTransport } from './infrastructure/transport/inboundTransport';
-import {
-  inboundDestination,
-  transportMode,
-} from './infrastructure/transport/transport.config';
-
-const INNGEST_SERVE_PATH = '/api/inngest';
+import type { AppConfig } from './config/app.config';
+import { appConfig } from './config/app.config';
+import type { AwsConfig } from './config/aws.config';
+import { awsConfig } from './config/aws.config';
+import type { InngestConfig } from './config/inngest.config';
+import type { RabbitmqConfig } from './config/rabbitmq.config';
+import { InboundTransport } from './infrastructure/transport/inbound-transport';
 
 /**
  * A microservice and nothing else: no HTTP port, because nobody queries this service. What starts it
@@ -28,42 +30,60 @@ const INNGEST_SERVE_PATH = '/api/inngest';
 async function bootstrap() {
   const logger = new Logger('bootstrap');
 
-  if (transportMode() === 'inngest') {
+  if (appConfig().transport === 'inngest') {
     const app = await NestFactory.create<NestFastifyApplication>(
       AppModule,
       new FastifyAdapter(),
-      {
-        bufferLogs: true,
-      },
+      { bufferLogs: true },
     );
     app.useLogger(app.get(PinoLogger));
 
-    app.connectMicroservice(inboundTransport(app.getHttpAdapter()), {
-      inheritAppConfig: true,
-    });
+    app.connectMicroservice<AsyncMicroserviceOptions>(
+      {
+        inject: InboundTransport.inject,
+        useFactory: (
+          config: AppConfig,
+          aws: AwsConfig,
+          rabbitmq: RabbitmqConfig,
+          inngest: InngestConfig,
+          inngestClient: Inngest.Any,
+        ) =>
+          InboundTransport.options(
+            config,
+            aws,
+            rabbitmq,
+            inngest,
+            inngestClient,
+            app.getHttpAdapter(),
+          ),
+      },
+      { inheritAppConfig: true },
+    );
     await app.startAllMicroservices();
 
-    const port = Number(process.env.TAGGING_PORT ?? process.env.PORT ?? 3001);
-    await app.listen(port, '0.0.0.0');
+    const config = app.get<AppConfig>(appConfig.KEY);
+    await app.listen(config.port, '0.0.0.0');
     logger.log(
-      `tagging is listening on ${inboundDestination()} (inngest), served at ` +
-        `http://localhost:${port}${INNGEST_SERVE_PATH}`,
+      `tagging is listening on ${InboundTransport.destination(config, app.get<AwsConfig>(awsConfig.KEY))} (inngest), served at ` +
+        `http://localhost:${config.port}${INNGEST_DEFAULT_SERVE_PATH}`,
     );
     return;
   }
 
-  const app = await NestFactory.createMicroservice<MicroserviceOptions>(
+  const app = await NestFactory.createMicroservice<AsyncMicroserviceOptions>(
     AppModule,
     {
-      ...inboundTransport(),
+      inject: InboundTransport.inject,
+      useFactory: InboundTransport.options,
       bufferLogs: true,
     },
   );
   app.useLogger(app.get(PinoLogger));
 
   await app.listen();
+  const config = app.get<AppConfig>(appConfig.KEY);
   logger.log(
-    `tagging is listening on ${inboundDestination()} (${transportMode()})`,
+    `tagging is listening on ${InboundTransport.destination(config, app.get<AwsConfig>(awsConfig.KEY))} (${config.transport})`,
   );
 }
 

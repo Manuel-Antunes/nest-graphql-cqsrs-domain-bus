@@ -6,8 +6,6 @@
     "build": "graphql-codegen --config codegen.ts && next build"
   },
   "dependencies": {
-    "@apollo/client": "^4.3.1",
-    "@apollo/client-integration-nextjs": "^0.14.5",
     "@base-ui/react": "catalog:",
     "@better-auth-ui/core": "catalog:",
     "@better-auth-ui/react": "catalog:",
@@ -18,6 +16,7 @@
     "@nestjs/common": "^12.0.1",
     "@nestjs/core": "^12.0.1",
     "@nestposts/auth": "workspace:*",
+    "@nestposts/billing": "workspace:*",
     "@nestposts/cqsrs": "workspace:*",
     "@nestposts/database": "workspace:*",
     "@nestposts/microservices-aws": "workspace:*",
@@ -26,11 +25,15 @@
     "@nestposts/notifications": "workspace:*",
     "@nestposts/observability": "workspace:*",
     "@nestposts/organizations": "workspace:*",
+    "@nestposts/tanstack-query-graphql": "workspace:*",
     "@nestposts/transport-eventbus": "workspace:*",
     "@nestposts/ui": "workspace:*",
+    "@nestposts/users": "workspace:*",
     "@opentelemetry/api": "^1.9.1",
     "@opentelemetry/instrumentation-graphql": "^0.70.0",
+    "@polar-sh/better-auth": "catalog:",
     "@sentry/nextjs": "catalog:",
+    "@t3-oss/env-nextjs": "catalog:",
     "@tanstack/react-form": "catalog:",
     "@tanstack/react-pacer": "catalog:",
     "@tanstack/react-query": "catalog:",
@@ -46,7 +49,6 @@
     "date-fns": "catalog:",
     "graphql": "^16.14.2",
     "graphql-sse": "^2.6.1",
-    "graphql-ws": "^6.2.1",
     "input-otp": "catalog:",
     "lucide-react": "^0.545.0",
     "next": "16.3.3",
@@ -114,6 +116,7 @@
         ],
         "inputs": [
           "production",
+          "^production",
           {
             "env": "NEXT_PUBLIC_GATEWAY_URL"
           }

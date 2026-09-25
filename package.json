@@ -64,6 +64,7 @@
     "@mikro-orm/postgresql": "^7.2.1",
     "@mikro-orm/seeder": "^7.2.0",
     "@nestjs/common": "^12.0.1",
+    "@nestjs/config": "^12.0.1",
     "@nestjs/core": "^12.0.1",
     "@nestjs/cqrs": "^12.0.0",
     "@nestjs/graphql": "^14.0.0",

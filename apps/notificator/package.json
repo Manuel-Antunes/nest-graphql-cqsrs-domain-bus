@@ -9,6 +9,7 @@
     "@aws-sdk/s3-request-presigner": "catalog:",
     "@nestjs-modules/mailer": "catalog:",
     "@nestposts/auth": "workspace:*",
+    "@nestposts/billing": "workspace:*",
     "@nestposts/cqsrs": "workspace:*",
     "@nestposts/database": "workspace:*",
     "@nestposts/lambda": "workspace:*",

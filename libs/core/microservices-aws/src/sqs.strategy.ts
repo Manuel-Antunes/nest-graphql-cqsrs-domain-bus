@@ -15,11 +15,7 @@ import type {
 import { Server } from '@nestjs/microservices';
 import type { Context as LambdaContext, SQSEvent, SQSRecord } from 'aws-lambda';
 
-import {
-  awsClientConfig,
-  queueArnFromUrl,
-  queueNameOf,
-} from './aws-client.config';
+import { queueArnFromUrl, queueNameOf } from './aws-client.config';
 import { fromRecordAttributes } from './aws-message';
 import { SqsContext } from './sqs.context';
 import type { SqsEvents } from './sqs.events';
@@ -130,6 +126,7 @@ export class SqsStrategy
   protected override readonly logger = new Logger(SqsStrategy.name);
 
   private readonly client: SQSClient;
+  private readonly region?: string;
   private readonly ownsClient: boolean;
   private readonly listeners: {
     event: keyof SqsEvents;
@@ -144,9 +141,9 @@ export class SqsStrategy
   constructor(protected readonly options: SqsStrategyOptions) {
     super();
     this.ownsClient = !options.client;
-    this.client =
-      options.client ??
-      new SQSClient({ ...awsClientConfig(), ...options.clientConfig });
+    this.client = options.client ?? new SQSClient(options.clientConfig ?? {});
+    const region = options.clientConfig?.region;
+    this.region = typeof region === 'string' ? region : undefined;
     this.initializeSerializer(options);
     this.initializeDeserializer(options);
   }
@@ -332,7 +329,7 @@ export class SqsStrategy
    * poll is in the middle of.
    */
   private async poll(queueUrl: string): Promise<void> {
-    const eventSourceARN = queueArnFromUrl(queueUrl);
+    const eventSourceARN = queueArnFromUrl(queueUrl, this.region);
 
     while (!this.closed) {
       const messages = await this.receive(queueUrl);

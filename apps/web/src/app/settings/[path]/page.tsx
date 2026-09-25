@@ -5,7 +5,11 @@ import { dehydrate, HydrationBoundary } from '@tanstack/react-query';
 
 import { Settings } from '@/components/auth/settings/settings';
 import { WebAuth } from '@/lib/auth/server';
-import { SETTINGS_VIEW_PATHS, signInFor } from '@/lib/auth/views';
+import {
+  BILLING_SETTINGS_PATH,
+  SETTINGS_VIEW_PATHS,
+  signInFor,
+} from '@/lib/auth/views';
 import { getQueryClient } from '@/lib/query-client';
 
 export default async function SettingsPage({
@@ -14,7 +18,10 @@ export default async function SettingsPage({
   params: Promise<{ path: string }>;
 }) {
   const { path } = await params;
-  if (!SETTINGS_VIEW_PATHS.has(path)) {
+  const available =
+    SETTINGS_VIEW_PATHS.has(path) ||
+    (path === BILLING_SETTINGS_PATH && WebAuth.billingEnabled());
+  if (!available) {
     notFound();
   }
 

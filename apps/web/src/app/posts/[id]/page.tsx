@@ -1,10 +1,11 @@
 import { Suspense } from 'react';
 import { Skeleton } from '@nestposts/ui/components/ui/skeleton';
 
-import { PreloadQuery } from '@/lib/apollo/rsc';
+import { QueryErrorBoundary } from '@/app/_components/query-error-boundary';
+import { PrefetchQuery } from '@/lib/graphql/prefetch';
 
 import { PostView } from './_components/post-view';
-import { PostByIdQuery } from './query';
+import { postByIdOptions } from './query';
 
 export default async function PostPage({
   params,
@@ -14,10 +15,12 @@ export default async function PostPage({
   const { id } = await params;
 
   return (
-    <PreloadQuery query={PostByIdQuery} variables={{ id }} errorPolicy="all">
-      <Suspense fallback={<Skeleton className="h-72 w-full" />}>
-        <PostView id={id} />
-      </Suspense>
-    </PreloadQuery>
+    <Suspense fallback={<Skeleton className="h-72 w-full" />}>
+      <PrefetchQuery options={postByIdOptions(id)}>
+        <QueryErrorBoundary title="Não foi possível ler o post">
+          <PostView id={id} />
+        </QueryErrorBoundary>
+      </PrefetchQuery>
+    </Suspense>
   );
 }

@@ -34,10 +34,16 @@
   "exclude": ["node_modules"],
   "references": [
     {
+      "path": "../../libs/users"
+    },
+    {
       "path": "../../libs/ui"
     },
     {
       "path": "../../libs/core/transport-eventbus"
+    },
+    {
+      "path": "../../libs/tanstack-query-graphql"
     },
     {
       "path": "../../libs/organizations"
@@ -62,6 +68,9 @@
     },
     {
       "path": "../../libs/core/cqsrs"
+    },
+    {
+      "path": "../../libs/billing"
     },
     {
       "path": "../../libs/auth"

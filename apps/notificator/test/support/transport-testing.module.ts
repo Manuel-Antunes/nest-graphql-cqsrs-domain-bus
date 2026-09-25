@@ -9,10 +9,16 @@ import {
   TransportIdentity,
 } from '@nestposts/transport-eventbus';
 
-import { mikroOrmConfig } from '../../src/infrastructure/persistence/mikro-orm.config';
+import { postgresConfig } from '../../src/config/postgres.config';
+import { MikroOrmConfiguration } from '../../src/infrastructure/persistence/mikro-orm.config';
 
 export const persistenceTesting = (): DynamicModule[] => [
-  DatabaseModule.forRoot(testDatabaseConfig(mikroOrmConfig(), 'notificator')),
+  DatabaseModule.forRoot(
+    testDatabaseConfig(
+      MikroOrmConfiguration.connection(postgresConfig()),
+      'notificator',
+    ),
+  ),
   TestSchemaModule.forRoot(),
 ];
 

@@ -39,5 +39,7 @@ export const ORGANIZATION_VIEW_PATHS: ReadonlySet<string> = new Set(
   segmentsOf(organizationPlugin({ teams: true }).viewPaths?.organization),
 );
 
+export const BILLING_SETTINGS_PATH = 'billing';
+
 export const signInFor = (path: string): string =>
   `/auth/sign-in?redirectTo=${encodeURIComponent(path)}`;

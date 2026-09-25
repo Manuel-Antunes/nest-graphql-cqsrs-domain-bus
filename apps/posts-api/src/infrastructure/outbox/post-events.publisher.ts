@@ -5,10 +5,10 @@ import { POSTS_NAMESPACE } from '@nestposts/posts/domain/post/event/posts.namesp
 import type { ITransportPublisherEventBus } from '@nestposts/transport-eventbus';
 import { Publisher } from '@nestposts/transport-eventbus';
 
-import { POST_EVENTS_CLIENT } from '../transport/transport.config';
+import { PostEventsClient } from '../transport/post-events.client';
 
 @Injectable()
 @Publisher([POSTS_NAMESPACE, NOTIFICATIONS_NAMESPACE])
 export class PostEventsPublisher implements ITransportPublisherEventBus {
-  constructor(@Inject(POST_EVENTS_CLIENT) readonly client: ClientProxy) {}
+  constructor(@Inject(PostEventsClient) readonly client: ClientProxy) {}
 }

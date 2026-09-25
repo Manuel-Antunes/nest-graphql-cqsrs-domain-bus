@@ -1,10 +1,10 @@
 import { Suspense } from 'react';
 import { Skeleton } from '@nestposts/ui/components/ui/skeleton';
 
-import { PreloadQuery } from '@/lib/apollo/rsc';
+import { PrefetchQuery } from '@/lib/graphql/prefetch';
 
 import { LiveConsole } from './_components/live-console';
-import { LIVE_SNAPSHOT_SIZE, RecentPostsQuery } from './query';
+import { recentPostsOptions } from './query';
 
 export default function LivePage() {
   return (
@@ -15,15 +15,11 @@ export default function LivePage() {
           O que atravessa, o que não atravessa, e por quê.
         </p>
       </div>
-      <PreloadQuery
-        query={RecentPostsQuery}
-        variables={{ first: LIVE_SNAPSHOT_SIZE }}
-        errorPolicy="all"
-      >
-        <Suspense fallback={<Skeleton className="h-96 w-full" />}>
+      <Suspense fallback={<Skeleton className="h-96 w-full" />}>
+        <PrefetchQuery options={recentPostsOptions()}>
           <LiveConsole />
-        </Suspense>
-      </PreloadQuery>
+        </PrefetchQuery>
+      </Suspense>
     </div>
   );
 }

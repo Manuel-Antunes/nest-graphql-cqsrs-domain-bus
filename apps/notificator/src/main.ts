@@ -2,16 +2,20 @@ import './telemetry';
 
 import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import type { AsyncMicroserviceOptions } from '@nestjs/microservices';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { FastifyAdapter } from '@nestjs/platform-fastify';
+import type { Inngest } from 'inngest';
 import { Logger as PinoLogger } from 'nestjs-pino';
 
 import { AppModule } from './app.module';
-import { inboundTransport } from './infrastructure/transport/inboundTransport';
-import {
-  inboundDestination,
-  transportMode,
-} from './infrastructure/transport/transport.config';
+import type { AppConfig } from './config/app.config';
+import { appConfig } from './config/app.config';
+import type { AwsConfig } from './config/aws.config';
+import { awsConfig } from './config/aws.config';
+import type { InngestConfig } from './config/inngest.config';
+import type { RabbitmqConfig } from './config/rabbitmq.config';
+import { InboundTransport } from './infrastructure/transport/inbound-transport';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestFastifyApplication>(
@@ -21,16 +25,34 @@ async function bootstrap() {
   );
   app.useLogger(app.get(PinoLogger));
 
-  app.connectMicroservice(inboundTransport(app.getHttpAdapter()), {
-    inheritAppConfig: true,
-  });
+  app.connectMicroservice<AsyncMicroserviceOptions>(
+    {
+      inject: InboundTransport.inject,
+      useFactory: (
+        config: AppConfig,
+        aws: AwsConfig,
+        rabbitmq: RabbitmqConfig,
+        inngest: InngestConfig,
+        inngestClient: Inngest.Any,
+      ) =>
+        InboundTransport.options(
+          config,
+          aws,
+          rabbitmq,
+          inngest,
+          inngestClient,
+          app.getHttpAdapter(),
+        ),
+    },
+    { inheritAppConfig: true },
+  );
   await app.startAllMicroservices();
 
-  const port = Number(process.env.NOTIFICATOR_PORT ?? process.env.PORT ?? 3002);
-  await app.listen(port, '0.0.0.0');
+  const config = app.get<AppConfig>(appConfig.KEY);
+  await app.listen(config.port, '0.0.0.0');
   new Logger('bootstrap').log(
-    `notificator is listening on ${inboundDestination()} (${transportMode()}), ` +
-      `the notifications subgraph at http://localhost:${port}/graphql`,
+    `notificator is listening on ${InboundTransport.destination(config, app.get<AwsConfig>(awsConfig.KEY))} (${config.transport}), ` +
+      `the notifications subgraph at http://localhost:${config.port}/graphql`,
   );
 }
 

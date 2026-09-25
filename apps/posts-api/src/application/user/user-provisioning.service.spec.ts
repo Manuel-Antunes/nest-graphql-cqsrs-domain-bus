@@ -79,6 +79,16 @@ describe('UserProvisioning', () => {
     expect(await freshEm(module).count(User)).toBe(1);
   });
 
+  it('a credential holding several roles, the way Better Auth stores them, gets each one', async () => {
+    signUp('user');
+    await identities.addRole(credentialId, AUTHOR_ROLE);
+
+    const user = await provision();
+
+    expect(user.roles).toEqual(['user', AUTHOR_ROLE]);
+    expect(await countAuthorships()).toBe(1);
+  });
+
   it('a credential the provider does not know does not become a profile', async () => {
     identities.forget(credentialId);
 

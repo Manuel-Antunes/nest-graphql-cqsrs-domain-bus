@@ -1,9 +1,11 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useApolloClient } from '@apollo/client/react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 
-import { CreateSagaPostMutation, SagaProbeQuery } from '../query';
+import { gqlMutationOptions } from '@/lib/graphql/gqlpc';
+
+import { CreateSagaPostMutation, sagaProbeOptions } from '../query';
 
 export interface SagaEvent {
   at: number;
@@ -24,7 +26,10 @@ const POLL_INTERVAL_MS = 1_000;
 const TIMEOUT_MS = 180_000;
 
 export function useSagaRun() {
-  const client = useApolloClient();
+  const queryClient = useQueryClient();
+  const { mutateAsync: createSagaPost } = useMutation(
+    gqlMutationOptions(CreateSagaPostMutation),
+  );
   const [status, setStatus] = useState<SagaStatus>('idle');
   const [events, setEvents] = useState<SagaEvent[]>([]);
   const [postId, setPostId] = useState<string | null>(null);
@@ -57,13 +62,7 @@ export function useSagaRun() {
         if (cancelled.current) return;
         setElapsed(Date.now() - startedAt.current);
 
-        const { data } = await client.query({
-          query: SagaProbeQuery,
-          variables: { id },
-          fetchPolicy: 'network-only',
-        });
-
-        const post = data?.post;
+        const { post } = await queryClient.fetchQuery(sagaProbeOptions(id));
         if (!post) continue;
 
         if (post.version >= 2) {
@@ -91,7 +90,7 @@ export function useSagaRun() {
         setStatus('timeout');
       }
     },
-    [client, push],
+    [queryClient, push],
   );
 
   const run = useCallback(async () => {
@@ -104,19 +103,13 @@ export function useSagaRun() {
 
     const stamp = new Date().toISOString().slice(11, 19);
     try {
-      const { data } = await client.mutate({
-        mutation: CreateSagaPostMutation,
-        variables: {
-          input: {
-            title: `Saga ${stamp}`,
-            content:
-              'Post criado pela página /saga para medir a travessia entre os dois serviços.',
-          },
+      const { createPost: created } = await createSagaPost({
+        input: {
+          title: `Saga ${stamp}`,
+          content:
+            'Post criado pela página /saga para medir a travessia entre os dois serviços.',
         },
       });
-
-      const created = data?.createPost;
-      if (!created) throw new Error('createPost não devolveu o post.');
 
       setPostId(created.id);
       push({
@@ -140,7 +133,7 @@ export function useSagaRun() {
       });
       setStatus('error');
     }
-  }, [client, observe, push]);
+  }, [createSagaPost, observe, push]);
 
   const watch = useCallback(
     async (id: string) => {

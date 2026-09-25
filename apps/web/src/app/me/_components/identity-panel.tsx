@@ -1,7 +1,6 @@
 'use client';
 
 import Link from 'next/link';
-import { skipToken, useSuspenseQuery } from '@apollo/client/react';
 import {
   Alert,
   AlertDescription,
@@ -16,16 +15,17 @@ import {
   CardHeader,
   CardTitle,
 } from '@nestposts/ui/components/ui/card';
+import { useSuspenseQuery } from '@tanstack/react-query';
 import { ShieldCheckIcon, UserIcon } from 'lucide-react';
 
-import { ErrorNotice } from '@/app/_components/error-notice';
 import { PostList } from '@/app/_components/post-list';
+import { QueryErrorBoundary } from '@/app/_components/query-error-boundary';
 import { useSession } from '@/app/_providers/session-provider';
 import type { FragmentType } from '@/gql';
 import { getFragmentData, graphql } from '@/gql';
 import { cn } from '@/lib/utils';
 
-import { MeQuery } from '../query';
+import { meOptions } from '../query';
 
 export const IdentityPanel_user = graphql(`
   fragment IdentityPanel_user on IUser {
@@ -43,10 +43,6 @@ export const IdentityPanel_user = graphql(`
 
 export function IdentityPanel() {
   const { session } = useSession();
-  const { data, error } = useSuspenseQuery(
-    MeQuery,
-    session ? { errorPolicy: 'all' as const } : skipToken,
-  );
 
   if (!session) {
     return (
@@ -65,9 +61,15 @@ export function IdentityPanel() {
     );
   }
 
-  if (error) return <ErrorNotice title="me falhou" error={error} />;
-  if (!data?.me) return null;
+  return (
+    <QueryErrorBoundary title="me falhou">
+      <Me />
+    </QueryErrorBoundary>
+  );
+}
 
+function Me() {
+  const { data } = useSuspenseQuery(meOptions());
   return <IdentityCard user={data.me} />;
 }
 
@@ -110,7 +112,7 @@ function IdentityCard({
         <section className="space-y-3">
           <h2 className="font-semibold text-lg tracking-tight">Meus posts</h2>
           <PostList
-            connection={me.posts}
+            connections={[me.posts]}
             emptyTitle="Este autor ainda não publicou"
             emptyDescription="Author.posts é resolvido em lote: N autores custam uma consulta."
           />

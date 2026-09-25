@@ -9,6 +9,7 @@ import { UserName } from '@nestposts/users/domain/user/vo/user-name';
 
 import type { BetterAuth } from '../init-auth';
 import { BETTER_AUTH } from '../tokens';
+import { AuthRoles } from './auth-roles';
 
 interface AuthUserRow {
   id: string;
@@ -40,6 +41,40 @@ export class BetterAuthIdentityProvider extends IdentityProvider {
     const updated = await this.onIdentityStore<AuthUserRow>((adapter) =>
       adapter.updateUser(credentialId.value, { role }),
     );
+    return BetterAuthIdentityProvider.toIdentity(updated);
+  }
+
+  addRole(credentialId: CredentialId, role: string): Promise<Identity> {
+    this.logger.log(`adding the role ${role} to credential ${credentialId}`);
+    return this.changeRoles(credentialId, (stored) =>
+      AuthRoles.adding(stored, role),
+    );
+  }
+
+  removeRole(credentialId: CredentialId, role: string): Promise<Identity> {
+    this.logger.log(
+      `removing the role ${role} from credential ${credentialId}`,
+    );
+    return this.changeRoles(credentialId, (stored) =>
+      AuthRoles.removing(stored, role),
+    );
+  }
+
+  private async changeRoles(
+    credentialId: CredentialId,
+    change: (stored: AuthUserRow['role']) => string,
+  ): Promise<Identity> {
+    const updated = await this.onIdentityStore<AuthUserRow>(async (adapter) => {
+      const user = (await adapter.findUserById(
+        credentialId.value,
+      )) as AuthUserRow | null;
+      if (!user) {
+        throw new Error(`no credential ${credentialId}`);
+      }
+      return adapter.updateUser(credentialId.value, {
+        role: change(user.role),
+      });
+    });
     return BetterAuthIdentityProvider.toIdentity(updated);
   }
 

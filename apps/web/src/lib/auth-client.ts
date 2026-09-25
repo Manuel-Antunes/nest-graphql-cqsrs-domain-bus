@@ -1,6 +1,7 @@
 'use client';
 
 import { oauthProviderClient } from '@better-auth/oauth-provider/client';
+import { polarClient } from '@polar-sh/better-auth/client';
 import {
   adminClient,
   emailOTPClient,
@@ -20,5 +21,6 @@ export const authClient = createAuthClient({
     twoFactorClient(),
     multiSessionClient(),
     oauthProviderClient(),
+    polarClient(),
   ],
 });

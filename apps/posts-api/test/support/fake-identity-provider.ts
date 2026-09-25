@@ -40,4 +40,28 @@ export class FakeIdentityProvider extends IdentityProvider {
     this.credentials.set(credentialId.value, updated);
     return updated;
   }
+
+  async addRole(credentialId: CredentialId, role: string): Promise<Identity> {
+    const held = await this.rolesOf(credentialId);
+    return this.grantRole(
+      credentialId,
+      [...new Set([...held, role])].join(','),
+    );
+  }
+
+  async removeRole(
+    credentialId: CredentialId,
+    role: string,
+  ): Promise<Identity> {
+    const held = await this.rolesOf(credentialId);
+    return this.grantRole(
+      credentialId,
+      held.filter((existing) => existing !== role).join(',') || 'user',
+    );
+  }
+
+  private async rolesOf(credentialId: CredentialId): Promise<string[]> {
+    const role = (await this.findById(credentialId))?.role;
+    return role ? role.split(',') : [];
+  }
 }

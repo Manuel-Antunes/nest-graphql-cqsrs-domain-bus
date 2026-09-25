@@ -1,4 +1,5 @@
 import { graphql } from '@/gql';
+import { gqlQueryOptions } from '@/lib/graphql/gqlpc';
 
 export const MeQuery = graphql(`
   query Me {
@@ -7,3 +8,5 @@ export const MeQuery = graphql(`
     }
   }
 `);
+
+export const meOptions = () => gqlQueryOptions(MeQuery);

@@ -74,6 +74,12 @@
     },
     {
       "path": "./apps/gateway"
+    },
+    {
+      "path": "./libs/tanstack-query-graphql"
+    },
+    {
+      "path": "./libs/billing"
     }
   ]
 }

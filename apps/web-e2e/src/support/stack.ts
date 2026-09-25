@@ -1,6 +1,7 @@
 import { appendFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { BillingStack } from './billing-stack';
 import type { Endpoints } from './containers';
 import { ContainerStack, FreePort } from './containers';
 import { ServiceDatabase } from './database';
@@ -37,6 +38,11 @@ export const AUTH_SECRET =
  * notifications, and they reach the notificator's container the way every other event does — so it
  * is handed the broker, or the dev server, at the address the host sees it on.
  *
+ * Billing is Polar's SANDBOX, when the suite has a token for it (see `BillingStack`): a tunnel to the
+ * web's port and a webhook registered at it, opened before the web because the web is started with
+ * the webhook's secret. Without a token the web runs with billing off, as it does for anyone who has
+ * not configured Polar.
+ *
  * `AUTH_SECRET` is one value for all of them, and that is the point rather than a convenience:
  * `apps/web` holds its own Better Auth and signs the session cookie itself, and `apps/posts-api`
  * resolves that same cookie against the same row. A different secret per process and the browser
@@ -51,9 +57,12 @@ export class Stack {
 
   private readonly containers = new ContainerStack();
   private web?: Service;
+  private billing?: BillingStack;
 
   async up(): Promise<void> {
     mkdirSync(this.logDirectory, { recursive: true });
+    const logs = (line: string) =>
+      appendFileSync(join(this.logDirectory, 'containers.log'), line);
     const endpoints = await this.containers.up({
       transport: e2eTransport(),
       apiPort: await FreePort.pick(),
@@ -61,14 +70,16 @@ export class Stack {
       storagePort: await FreePort.pick(),
       webUrl: WEB_URL,
       authSecret: AUTH_SECRET,
-      logs: (line) =>
-        appendFileSync(join(this.logDirectory, 'containers.log'), line),
+      logs,
     });
 
     this.publish(endpoints);
 
     try {
+      this.billing = (await BillingStack.up(WEB_PORT, logs)) ?? undefined;
+      this.billing?.publish();
       await this.startWeb(endpoints);
+      await this.billing?.verify();
     } catch (failure) {
       await this.down();
       throw failure;
@@ -78,6 +89,8 @@ export class Stack {
   async down(): Promise<void> {
     this.web?.stop();
     this.web = undefined;
+    await this.billing?.down();
+    this.billing = undefined;
     await this.containers.down();
   }
 
@@ -118,6 +131,8 @@ export class Stack {
         PORT: String(WEB_PORT),
         MIKRO_ORM_DEBUG: 'false',
         AUTH_RATE_LIMIT: 'false',
+        POLAR_ACCESS_TOKEN: '',
+        ...this.billing?.webEnvironment(),
         WEB_TRANSPORT: e2eTransport(),
         INNGEST_DEV: 'true',
         ...(endpoints.inngestUrl

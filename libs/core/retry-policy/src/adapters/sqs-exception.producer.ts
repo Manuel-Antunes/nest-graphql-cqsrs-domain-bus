@@ -1,9 +1,7 @@
 import { ChangeMessageVisibilityCommand, SQSClient } from '@aws-sdk/client-sqs';
 import { RpcArgumentsHost } from '@nestjs/common/internal';
-import {
-  awsClientConfig,
-  queueUrlFromArn,
-} from '@nestposts/microservices-aws/aws-client.config';
+import type { AwsClientConfig } from '@nestposts/microservices-aws/aws-client.config';
+import { queueUrlFromArn } from '@nestposts/microservices-aws/aws-client.config';
 import { SqsContext } from '@nestposts/microservices-aws/sqs.context';
 
 import { ExceptionProducer } from '../base-exeception-producer';
@@ -34,7 +32,8 @@ const MAX_VISIBILITY_SECONDS = 43_200;
  */
 export class SqsExceptionProducer extends ExceptionProducer {
   constructor(
-    private readonly sqsClient: SQSClient = new SQSClient(awsClientConfig()),
+    private readonly clientConfig: AwsClientConfig = {},
+    private readonly sqsClient: SQSClient = new SQSClient(clientConfig),
   ) {
     super();
   }
@@ -92,7 +91,10 @@ export class SqsExceptionProducer extends ExceptionProducer {
       return;
     }
     const record = host.getContext<SqsContext>().getRecord();
-    const queueUrl = queueUrlFromArn(record.eventSourceARN);
+    const queueUrl = queueUrlFromArn(
+      record.eventSourceARN,
+      this.clientConfig.endpoint,
+    );
     if (!queueUrl || !record.receiptHandle) {
       this.logger.warn(
         'RetryAfter requested but record is missing queue ARN / receipt handle — using the default visibility timeout.',

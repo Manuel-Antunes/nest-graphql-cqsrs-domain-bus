@@ -11,7 +11,7 @@ decides, below, which rules are here and which could not be.
 | file | scope in `biome.json` | replaces |
 |---|---|---|
 | `playwright.grit` | `apps/web-e2e/src/specs/**/*.spec.ts` | `eslint-plugin-playwright` |
-| `graphql-operations.grit` | `apps/web/src/**`, minus `src/gql/**` | `@graphql-eslint/eslint-plugin` |
+| `graphql-operations.grit` | `apps/web/src/**`, minus `src/gql/**` | `@graphql-eslint/eslint-plugin`'s naming convention |
 | `tailwind.grit` | idem | `eslint-plugin-better-tailwindcss` |
 
 The scopes are the ones the ESLint configs had. `playwright.grit` deliberately does not reach
@@ -36,38 +36,31 @@ distinguishing the test's own body from a `page.on('request', …)` callback nes
 `authentication.spec.ts` legitimately has — is a scoping rule GritQL cannot express.
 
 **`graphql-operations.grit`** — every operation in `apps/web` lives inside a `` graphql(`…`) ``
-template literal, and Biome's GraphQL linter only sees standalone `.graphql` files. This reads the
-document as text off the call expression, which is the only handle there is, and that buys the two
-rules that need no schema:
+template literal. With `javascript.experimentalEmbeddedSnippetsEnabled`, Biome formats that document
+and runs its own GraphQL rules on it, so what `@graphql-eslint`'s `operations-recommended` checked is
+now split three ways:
 
-- **The fragment naming convention**, `<Owner>_<field>` — `PostCard_post`. This was the one rule the
-  old config wrote by hand, because the codegen'd unmask helper and every spread site read that name.
-- **No anonymous operations.** The codegen client preset keys its documents by operation name.
-- **Indentation drift.** Biome formats standalone `.graphql` files and leaves an embedded one alone,
-  and Prettier — which reindented these — is gone, so the shape is kept by hand. Canonical is two
-  spaces per level, the definition at two, its closing brace at two, and these hold without counting
-  braces: a line at column zero, an odd number of leading spaces, a tab, a field sitting at the
-  definition's own depth, indentation that grows after a line which opened nothing, indentation that
-  grows by more than one level, a line that opens a block and is not followed by one exactly a level
-  deeper, and a dedent onto a line that does not close one. Together they catch every drift an edit
-  realistically makes — each was checked against all twenty documents first, and none matches correct
-  GraphQL.
-- **Spacing drift**, which is the same idea along the line rather than between lines. `print` puts
-  exactly one space where a space goes and none anywhere else, so each of these is a fact about its
-  output: two spaces in a row outside the indentation (`edges  {`), a spread carrying a space
-  (`... PostCard_post`, where only the inline fragment `... on Post {` is legal), a space around the
-  parentheses or before a colon, a colon with no space after it, a brace that does not open at the
-  end of its line or close alone on its own, and a blank line inside a document. A comma is **not** a
-  rule: `print` writes `(first: $first, after: $after)`.
-- **A line ending in whitespace.**
+| where | what |
+|---|---|
+| Biome, natively | anonymous operations (`useGraphqlNamedOperations`), a second anonymous one (`useLoneAnonymousOperation`), duplicate variables, arguments and fields — `noDuplicateFields` raised to `error` in `biome.json`, because it defaults to `info` |
+| this plugin | naming, which Biome has no rule for (its `useGraphqlNamingConvention` only checks enum values) |
+| codegen | everything that needs the schema — an unknown field or fragment, a wrong argument type — plus an undefined variable and a subscription with two root fields, which fail `graphql-codegen` |
 
-What is **not** covered: a line even-indented at the wrong depth where none of the above applies —
-say a field at six inside a block whose siblings are at six but which should have closed. Proving
-that needs brace counting, which is parsing, which a regex is not. And nothing here reformats: a
-plugin has no autofix, so these report and stop.
+The plugin reads the document as text off the call expression and holds the three conventions of the
+old `naming-convention` config:
 
-Everything in `operations-recommended` that needs the schema — a field that is not on the type, an
-argument of the wrong type — is left to codegen, which fails the build on exactly those.
+- **Fragments are `<Owner>_<field>`** — `PostCard_post`. This was the one rule the old config wrote by
+  hand, because the codegen'd unmask helper and every spread site read that name.
+- **Operations are PascalCase, without the keyword in the name** — `FeedPosts`, not `feedPosts` or
+  `GetFeedPostsQuery`: no `Query`, `Mutation`, `Subscription` or `Get` prefix and no `Query`,
+  `Mutation` or `Subscription` suffix, which are `operations-recommended`'s defaults. Codegen appends
+  the keyword to the type it generates, so a repeated one reads `FeedPostsQueryQuery`.
+- **Variables are camelCase** — `$postId`, not `$PostId` or `$post_id`. The old config allowed a
+  leading underscore on every name, and so does this.
+
+Each was checked both ways against a probe file: firing on the violation, and silent on the legal
+shape beside it — a leading underscore, `$after` used only as a value, `GenerateThing` and
+`QueueStatus`, which contain the forbidden words without starting with them.
 
 **`tailwind.grit`** — reads both places a class list is written here, the `className` attribute and
 the `cn()` call:
@@ -88,20 +81,20 @@ These are the gaps, stated so that nobody reads the table above as full coverage
   compiles these against has none — the pattern compiles and silently never matches, which is worth
   knowing before writing another rule that way.
 - **Class sorting** is Biome's own `nursery/useSortedClasses`, already on in `biome.json`.
-- **Reformatting an embedded GraphQL document.** Plugins have no autofix — `$doc => \`…\`` compiles
-  and does nothing, under `--write` and under `--write --unsafe` alike, which was checked three ways
-  before this line was written. The rules report drift and a person fixes it. Biome DOES format a
-  standalone `.graphql` file, and `graphql.formatter` is now on, so a document that lived in one
-  would be reindented on save with no plugin at all.
-- **A document with two fragments** has only its first checked. The regex returns one match and
-  GritQL has no loop. Every `graphql()` here holds at most one fragment; a second one would need this
-  revisited.
+- **An unused variable** (`no-unused-variables`). It needs a backreference — a `$name` defined and
+  never repeated — and the regex engine has none. Codegen does not refuse one either.
+- **An unused or a duplicate fragment across files** (`no-unused-fragments`,
+  `unique-fragment-name`). A plugin sees one file; codegen refuses a duplicate operation name, not an
+  orphan fragment.
+- **A document with two fragments** has only one of them checked. A capturing regex binds one match
+  and GritQL has no loop. Every `graphql()` here holds one operation or one fragment; a document with
+  more would need this revisited.
 
 ## Working on them
 
 `biome check` formats `.grit` files like any other source, and a plugin that fails to compile reports
-`Error(s) during loading of plugins` rather than failing open. Two behaviours are worth knowing
-because both fail *silently*:
+`Error(s) during loading of plugins` rather than failing open. These are worth knowing, most of
+them because they fail *silently*:
 
 - **`$...name` does not bind.** `cn($...args)` matches nothing; `cn($args)` binds the whole argument
   list. Bare `$...` inside a call works.
@@ -109,7 +102,10 @@ because both fail *silently*:
   the plugin reports `regex pattern matched 1 variables, but expected 0` as an *info* and stops.
 - **`<:` anchors a regex to the WHOLE node.** There is no substring search, so "contains" is written
   `r"(?s).*…*"`. Without the wrapping the rule compiles, loads, matches nothing and looks like a
-  working rule — which is exactly how the indentation checks above shipped broken the first time.
+  working rule.
+- **A plugin that does not compile switches the whole linter off.** `Error(s) during loading of
+  plugins` is then everything the run reports — no other plugin and none of Biome's own rules. A
+  branch still calling a pattern that was deleted is enough.
 
 There is no test runner for these. A rule is proven by writing the violation into a file under the
 scope it is wired to, running `npx biome lint <that file>`, and deleting it — which is how each rule

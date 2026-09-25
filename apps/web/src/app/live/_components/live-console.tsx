@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import Link from 'next/link';
 import {
   Alert,
@@ -17,14 +17,16 @@ import {
   CardTitle,
 } from '@nestposts/ui/components/ui/card';
 import { Label } from '@nestposts/ui/components/ui/label';
+import { Skeleton } from '@nestposts/ui/components/ui/skeleton';
 import { Switch } from '@nestposts/ui/components/ui/switch';
 import { InfoIcon, RadioIcon, TrashIcon } from 'lucide-react';
 
 import { ErrorNotice } from '@/app/_components/error-notice';
+import { QueryErrorBoundary } from '@/app/_components/query-error-boundary';
 import { RelativeTime } from '@/app/_components/relative-time';
 import { StatusDot } from '@/app/_components/status-dot';
 import { VersionBadge } from '@/app/_components/version-badge';
-import { upstreamHost } from '@/lib/env';
+import { Endpoints } from '@/lib/endpoints';
 
 import { usePostStream } from '../_hooks/use-post-stream';
 import { useRecentPosts } from '../_hooks/use-recent-posts';
@@ -37,7 +39,6 @@ const time = new Intl.DateTimeFormat('pt-BR', {
 export function LiveConsole() {
   const [subscribing, setSubscribing] = useState(true);
   const stream = usePostStream(subscribing);
-  const recent = useRecentPosts();
 
   return (
     <div className="space-y-5">
@@ -51,9 +52,9 @@ export function LiveConsole() {
             O navegador fala com <span className="font-mono">/api/graphql</span>
             , o proxy desta aplicação, e tudo o que ele faz é um{' '}
             <span className="font-mono">fetch</span> para{' '}
-            <span className="font-mono">{upstreamHost()}</span> devolvendo o
-            corpo da resposta. Os bytes que chegam aqui são os que o{' '}
-            <span className="font-mono">posts-api</span> escreveu.
+            <span className="font-mono">{Endpoints.upstreamHost()}</span>{' '}
+            devolvendo o corpo da resposta. Os bytes que chegam aqui são os que
+            o <span className="font-mono">posts-api</span> escreveu.
           </p>
           <p>
             O proxy existe por uma razão só: é ele que põe o{' '}
@@ -118,36 +119,16 @@ export function LiveConsole() {
           <CardTitle className="text-base">Estado atual</CardTitle>
           <CardDescription>
             Buscado no servidor pelo{' '}
-            <span className="font-mono">PreloadQuery</span>. É a referência
+            <span className="font-mono">prefetchQuery</span>. É a referência
             contra a qual os eventos acima são lidos.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {recent.error ? (
-            <ErrorNotice
-              title="Não foi possível ler os posts"
-              error={recent.error}
-            />
-          ) : (
-            <ul className="space-y-2">
-              {recent.posts.map((post) => (
-                <li
-                  key={post.id}
-                  className="flex flex-wrap items-center justify-between gap-2 border-b pb-2 text-sm last:border-0"
-                >
-                  <Link href={`/posts/${post.id}`} className="hover:underline">
-                    {post.title}
-                  </Link>
-                  <span className="flex items-center gap-3">
-                    <VersionBadge version={post.version} />
-                    <span className="text-muted-foreground text-xs">
-                      <RelativeTime iso={post.updatedAt} />
-                    </span>
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
+          <QueryErrorBoundary title="Não foi possível ler os posts">
+            <Suspense fallback={<Skeleton className="h-40 w-full" />}>
+              <RecentPostList />
+            </Suspense>
+          </QueryErrorBoundary>
         </CardContent>
       </Card>
 
@@ -162,6 +143,31 @@ export function LiveConsole() {
         disso.
       </p>
     </div>
+  );
+}
+
+function RecentPostList() {
+  const posts = useRecentPosts();
+
+  return (
+    <ul className="space-y-2">
+      {posts.map((post) => (
+        <li
+          key={post.id}
+          className="flex flex-wrap items-center justify-between gap-2 border-b pb-2 text-sm last:border-0"
+        >
+          <Link href={`/posts/${post.id}`} className="hover:underline">
+            {post.title}
+          </Link>
+          <span className="flex items-center gap-3">
+            <VersionBadge version={post.version} />
+            <span className="text-muted-foreground text-xs">
+              <RelativeTime iso={post.updatedAt} />
+            </span>
+          </span>
+        </li>
+      ))}
+    </ul>
   );
 }
 

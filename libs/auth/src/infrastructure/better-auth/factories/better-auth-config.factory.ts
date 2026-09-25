@@ -1,25 +1,21 @@
-import type { FactoryProvider } from '@nestjs/common';
+import type { InjectionToken, Provider } from '@nestjs/common';
 
-import type { AuthConfig } from '../config';
 import { AuthConfiguration } from '../config';
 import { BETTER_AUTH_CONFIG } from '../tokens';
 
 export class BetterAuthConfigFactory {
   /**
-   * The configuration, from the environment, with whatever the composition root overrides.
-   *
-   * `apps/web` is why the overrides exist: it holds the same Better Auth, but its `baseUrl` is its
-   * OWN origin — the cookie has to belong to the origin the browser is talking to.
+   * The configuration: the one the application provides under `config` — its `registerAs('auth')`
+   * key, which builds it with {@link AuthConfiguration.fromEnvironment} and whatever that application
+   * overrides (`apps/web` puts its OWN origin in `baseUrl`, because the cookie has to belong to the
+   * origin the browser is talking to). Without one, the environment's, as read by that same parser.
    */
-  static with(
-    overrides: Partial<AuthConfig> = {},
-  ): FactoryProvider<AuthConfig> {
-    return {
-      provide: BETTER_AUTH_CONFIG,
-      useFactory: (): AuthConfig => ({
-        ...AuthConfiguration.fromEnvironment(),
-        ...overrides,
-      }),
-    };
+  static from(config?: InjectionToken): Provider {
+    return config
+      ? { provide: BETTER_AUTH_CONFIG, useExisting: config }
+      : {
+          provide: BETTER_AUTH_CONFIG,
+          useFactory: () => AuthConfiguration.fromEnvironment(),
+        };
   }
 }

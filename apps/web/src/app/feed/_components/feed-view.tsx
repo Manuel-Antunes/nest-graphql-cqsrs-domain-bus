@@ -9,7 +9,7 @@ import { PostList } from '@/app/_components/post-list';
 import { usePostFeed } from '../_hooks/use-post-feed';
 
 export function FeedView() {
-  const { connection, error, loadingMore, refreshing, loadMore, refresh } =
+  const { connections, error, loadingMore, refreshing, loadMore, refresh } =
     usePostFeed();
 
   return (
@@ -19,8 +19,9 @@ export function FeedView() {
           <h1 className="font-semibold text-2xl tracking-tight">Feed</h1>
           <p className="text-muted-foreground text-sm">
             Buscado no servidor pelo{' '}
-            <span className="font-mono">PreloadQuery</span> e paginado no
-            cliente pelo cache. Os cards não carregam o corpo dos posts.
+            <span className="font-mono">prefetchInfiniteQuery</span> e paginado
+            no cliente pelo TanStack Query. Os cards não carregam o corpo dos
+            posts.
           </p>
         </div>
         <Button
@@ -38,15 +39,13 @@ export function FeedView() {
         <ErrorNotice title="Não foi possível listar os posts" error={error} />
       ) : null}
 
-      {connection ? (
-        <PostList
-          connection={connection}
-          onLoadMore={(after) => void loadMore(after)}
-          loadingMore={loadingMore}
-          emptyTitle="Nenhum post publicado"
-          emptyDescription="Crie um em Escrever — ele nasce na versão 1 e o serviço de tagueamento o completa."
-        />
-      ) : null}
+      <PostList
+        connections={connections}
+        onLoadMore={loadMore}
+        loadingMore={loadingMore}
+        emptyTitle="Nenhum post publicado"
+        emptyDescription="Crie um em Escrever — ele nasce na versão 1 e o serviço de tagueamento o completa."
+      />
     </div>
   );
 }

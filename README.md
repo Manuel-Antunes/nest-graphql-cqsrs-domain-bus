@@ -201,6 +201,8 @@ libs/organizations/src                               # built ON libs/auth, never
 
 apps/posts-api/src
 ├── app.module, main                                 # main connects the microservice and starts both halves
+├── config/app, auth, aws, inngest, postgres,        # registerAs, one per concern: the environment read
+│   rabbitmq, storage                                #   and validated once, loaded by ConfigModule.forRoot
 ├── graphql/*.graphql                                # THE SCHEMA: the definition, not the output
 ├── dto/graphql                                      # the shape of the data ON THE PROTOCOL — no GraphQL decorator
 ├── application
@@ -218,8 +220,8 @@ apps/posts-api/src
 │   ├── persistence/mikro-orm.config                 # só a CONEXÃO: cada tabela chega pelo
 │   │                                                #   módulo que a possui (DatabaseModule.forFeature)
 │   ├── outbox/post-events.publisher                 # @Publisher('posts'): the client of the destination
-│   └── transport/transport.config                   # a identidade e para onde o destino aponta; o
-│                                                    #   transporte inteiro sobe no AppModule, numa chamada
+│   └── transport/inbound-transport,                 # where the destination points and what arrives,
+│       post-events.client                           #   built from the injected config
 └── interfaces
     ├── graphql/*.resolver                           # one resolver per schema file
     ├── messaging/post-completion.controller         # the port of entry BY MESSAGE: @EventPattern → EventIngestion
@@ -229,14 +231,15 @@ apps/posts-api/src
 
 apps/tagging/src
 ├── app.module, main                                 # NestFactory.createMicroservice: no HTTP anywhere
+├── config/app, aws, inngest, postgres, rabbitmq     # the same shape: app info and routing, then each technology
 ├── application
 │   ├── complete-on-post-pre-created.saga            # reacts to the event that crossed
 │   └── complete-post-with-default-tag.command       # decides, on the real Post aggregate
 ├── infrastructure
 │   ├── outbox/post-events.publisher                 # it publishes the `posts` namespace: the fact is
 │   │                                                #   the Post's, and this service decided it
-│   └── transport/transport.config                   # idem; o event store do framework entra por
-│                                                    #   `eventStore: [Post]` no forRoot do AppModule
+│   └── transport/inbound-transport,                 # idem; the framework's event store comes in through
+│       post-events.client, exception-producers      #   `eventStore: [Post]` in the AppModule
 └── interfaces/messaging
     └── post-events.controller                       # UMA entrada: `posts.#`, tudo o que o namespace
                                                      #   afirma — o que ele decide e o que ele replica
@@ -300,7 +303,7 @@ A destination is a provider holding a client, and what it declares is the **name
 @Injectable()
 @Publisher(POSTS_NAMESPACE)
 export class PostEventsPublisher implements ITransportPublisherEventBus {
-  constructor(@Inject(POST_EVENTS_CLIENT) readonly client: ClientProxy) {}
+  constructor(@Inject(PostEventsClient) readonly client: ClientProxy) {}
 }
 
 @EventType({ namespace: POSTS_NAMESPACE, tags: ['postId'] })
@@ -318,9 +321,10 @@ A new event in a namespace some destination already takes goes out routed, with 
 
 **What a service publishes is its contract**, and a contract that lives in a configuration file is a
 contract that changes without passing through code review. Where the destination points — the broker,
-the exchange, the protocol — is configuration, and it lives in
-`infrastructure/transport/transport.config.ts`, together with the transport's serializer and
-deserializer: what goes on the wire is declared where `@nestjs/microservices` already asks for it.
+the exchange, the protocol — is configuration: each application's `config/` reads it
+(`app.config.ts` for the routing, `aws.config.ts`, `rabbitmq.config.ts`, `inngest.config.ts` for each
+technology), and `infrastructure/transport/` builds the clients and the strategy from it, together with
+the transport's serializer and deserializer: what goes on the wire is declared where `@nestjs/microservices` already asks for it.
 
 An event whose namespace nothing takes stays in the process, which is the right default for the events
 a domain is mostly made of — a `tags` event in a service that publishes `posts` is an internal fact,

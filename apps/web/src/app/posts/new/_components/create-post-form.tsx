@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { useMutation } from '@apollo/client/react';
 import {
   Alert,
   AlertDescription,
@@ -12,15 +11,18 @@ import { Button, buttonVariants } from '@nestposts/ui/components/ui/button';
 import { Input } from '@nestposts/ui/components/ui/input';
 import { Label } from '@nestposts/ui/components/ui/label';
 import { Textarea } from '@nestposts/ui/components/ui/textarea';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Loader2Icon, PenLineIcon, WorkflowIcon } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { ErrorNotice } from '@/app/_components/error-notice';
 import { PostCard } from '@/app/_components/post-card';
 import { useSession } from '@/app/_providers/session-provider';
+import { feedPostsOptions } from '@/app/feed/query';
 import { graphql } from '@/gql';
 import type { UploadedFile } from '@/hooks/use-upload-file';
 import { useUploadFile } from '@/hooks/use-upload-file';
+import { gqlMutationOptions } from '@/lib/graphql/gqlpc';
 import { cn, errorShownByHookState } from '@/lib/utils';
 
 const CreatePostMutation = graphql(`
@@ -43,11 +45,20 @@ export function CreatePostForm() {
   const [uploadError, setUploadError] = useState<unknown>(null);
   const uploadFile = useUploadFile();
 
-  const [createPost, { data, loading, error, reset }] = useMutation(
-    CreatePostMutation,
-    {
-      refetchQueries: ['FeedPosts'],
-    },
+  const queryClient = useQueryClient();
+  const {
+    mutateAsync: createPost,
+    data,
+    isPending: loading,
+    error,
+    reset,
+  } = useMutation(
+    gqlMutationOptions(CreatePostMutation, {
+      onSuccess: () =>
+        void queryClient.invalidateQueries({
+          queryKey: feedPostsOptions().queryKey,
+        }),
+    }),
   );
 
   if (!session) {
@@ -104,19 +115,15 @@ export function CreatePostForm() {
               setUploading(false);
             }
           }
-          void createPost({ variables: { input: { title, content, asset } } })
-            .then((result) => {
-              const post = result.data?.createPost;
-              if (post) {
-                toast.success(`Post criado na versão ${post.version}`, {
-                  description:
-                    'Aguardando o serviço de tagueamento completá-lo.',
-                });
-                setTitle('');
-                setContent('');
-                setFile(null);
-                setFileField((field) => field + 1);
-              }
+          void createPost({ input: { title, content, asset } })
+            .then(({ createPost: post }) => {
+              toast.success(`Post criado na versão ${post.version}`, {
+                description: 'Aguardando o serviço de tagueamento completá-lo.',
+              });
+              setTitle('');
+              setContent('');
+              setFile(null);
+              setFileField((field) => field + 1);
             })
             .catch(errorShownByHookState);
         }}

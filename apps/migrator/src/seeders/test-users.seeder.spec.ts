@@ -6,13 +6,10 @@ import { Email } from '@nestposts/users/domain/user/vo/email';
 
 import type { MigratorContext } from '../app/bootstrap';
 import { bootstrap } from '../app/bootstrap';
+import { seedConfig } from '../config/seed.config';
 import { migrateSystem } from '../main';
 import { withSeederContainer } from './container';
-import {
-  SEED_PASSWORD,
-  seededUsers,
-  TestUsersSeeder,
-} from './test-users.seeder';
+import { TestUsersSeeder } from './test-users.seeder';
 
 describe('seeding the users the system should have', () => {
   let context: MigratorContext;
@@ -54,8 +51,8 @@ describe('seeding the users the system should have', () => {
     const rows = await credentials();
 
     expect(rows.map((row) => row.email)).toEqual(
-      seededUsers()
-        .map((user) => user.email)
+      seedConfig()
+        .users.map((user) => user.email)
         .sort(),
     );
     expect(rows.every((row) => row.provider_id === 'credential')).toBe(true);
@@ -81,7 +78,10 @@ describe('seeding the users the system should have', () => {
 
     const signedIn = await inRequestContext(context.orm, () =>
       auth.api.signInEmail({
-        body: { email: 'manuel@example.com', password: SEED_PASSWORD },
+        body: {
+          email: 'manuel@example.com',
+          password: seedConfig().users[0].password,
+        },
       }),
     );
 
@@ -100,7 +100,7 @@ describe('seeding the users the system should have', () => {
     await runSeeder();
 
     const found = await context.orm.em.fork().find(AuthUser, {
-      email: { $in: seededUsers().map((user) => Email.parse(user.email)) },
+      email: { $in: seedConfig().users.map((user) => Email.parse(user.email)) },
     });
     expect(found.every((credential) => credential.emailVerified)).toBe(true);
   });
@@ -109,8 +109,8 @@ describe('seeding the users the system should have', () => {
     await runSeeder();
 
     const found = await context.orm.em.fork().find(AuthUser, {
-      email: { $in: seededUsers().map((user) => Email.parse(user.email)) },
+      email: { $in: seedConfig().users.map((user) => Email.parse(user.email)) },
     });
-    expect(found).toHaveLength(seededUsers().length);
+    expect(found).toHaveLength(seedConfig().users.length);
   });
 });

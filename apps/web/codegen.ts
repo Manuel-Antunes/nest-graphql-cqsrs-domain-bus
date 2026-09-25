@@ -11,6 +11,7 @@ const config: CodegenConfig = {
         fragmentMasking: { unmaskFunctionName: 'getFragmentData' },
       },
       config: {
+        documentMode: 'string',
         scalars: {
           DateTime: 'string',
           JSON: 'Record<string, unknown>',

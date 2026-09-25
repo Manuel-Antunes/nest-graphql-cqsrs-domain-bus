@@ -34,7 +34,7 @@ import { UserId } from '@nestposts/users/domain/user/vo/user-id';
 import { lastValueFrom } from 'rxjs';
 
 import { AppModule } from '../src/app.module';
-import { POST_EVENTS_CLIENT } from '../src/infrastructure/transport/transport.config';
+import { PostEventsClient } from '../src/infrastructure/transport/post-events.client';
 import { until } from './support/until';
 
 describe('the tagging service', () => {
@@ -89,7 +89,7 @@ describe('the tagging service', () => {
     await migrate();
     tagging = await startInProcessService(
       await Test.createTestingModule({ imports: [AppModule] })
-        .overrideProvider(POST_EVENTS_CLIENT)
+        .overrideProvider(PostEventsClient)
         .useValue(new RecordingClient())
         .overrideProvider(TENANT_MIGRATIONS)
         .useValue({ migrationsList: tenantMigrations })
@@ -100,7 +100,7 @@ describe('the tagging service', () => {
       servers: [tagging.server],
       serializer: new MemoryEventEnvelopeSerializer(),
     });
-    outbound = tagging.app.get(POST_EVENTS_CLIENT);
+    outbound = tagging.app.get(PostEventsClient);
     posts = tagging.app.get(EventSourcedRepository);
     inbox = tagging.app.get(MessageInbox);
   });

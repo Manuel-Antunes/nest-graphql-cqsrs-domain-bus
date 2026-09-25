@@ -9,14 +9,12 @@ import {
   TransportEvent,
 } from '@nestposts/transport-eventbus';
 
-import { POST_EVENTS_MAX_RETRIES } from '../../infrastructure/transport/transport.config';
-
 @Controller()
 export class PostEventsController {
   constructor(private readonly ingestion: EventIngestion) {}
 
   @EventPattern(EventAddress.everyEventOf(POSTS_NAMESPACE))
-  @RetryPolicy({ maxRetries: POST_EVENTS_MAX_RETRIES })
+  @RetryPolicy({ maxRetries: 3 })
   posts(@TransportEvent() event: DomainEvent): Promise<void> {
     return this.ingestion.ingest(event);
   }

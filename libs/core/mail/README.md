@@ -69,7 +69,8 @@ this.message.to(user.email).view('welcome', { name: user.name }); // templates/w
 ```
 
 Which transport, from which environment, is the application's decision — `apps/notificator`'s is
-`infrastructure/mail/mail.config.ts` (`MAIL_TRANSPORT` = `smtp` | `ses` | `json`).
+`config/mail.config.ts` (`MAIL_TRANSPORT` = `smtp` | `ses` | `json`), a `registerAs('mail')` the
+`MailModule.forRootAsync` injects.
 
 ## How a view becomes HTML
 

@@ -1,4 +1,4 @@
-import type { DynamicModule, Type } from '@nestjs/common';
+import type { DynamicModule, InjectionToken, Type } from '@nestjs/common';
 import { Module, Scope } from '@nestjs/common';
 import type { DatabaseEntities } from '@nestposts/database';
 import { DatabaseModule } from '@nestposts/database';
@@ -40,8 +40,11 @@ export interface BetterAuthModuleOptions {
    * is where `nextCookies()` goes.
    */
   trailingPlugins?: readonly BetterAuthPluginProvider[];
-  /** What this composition root overrides on the configuration read from the environment. */
-  config?: Partial<AuthConfig>;
+  /**
+   * The token the application provides its {@link AuthConfig} under — its `registerAs('auth')` key.
+   * Left out, the configuration is read from the environment.
+   */
+  config?: InjectionToken;
   /** Modules providing what those plugin providers inject. */
   imports?: DynamicModule['imports'];
   /**
@@ -76,7 +79,7 @@ export class BetterAuthModule {
       global: true,
       imports: [...imports, DatabaseModule.forFeature(entities)],
       providers: [
-        BetterAuthConfigFactory.with(options.config),
+        BetterAuthConfigFactory.from(options.config),
         BetterAuthAdapterFactory,
         { provide: OnDemandNotifications, useClass: notifications },
         BetterAuthEmails,

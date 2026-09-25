@@ -7,7 +7,9 @@ import { AuthService } from '@nestposts/auth/domain/auth/auth.service';
 import { BETTER_AUTH } from '@nestposts/auth/infrastructure/better-auth/tokens';
 import { OrganizationService } from '@nestposts/organizations/domain/organization/organization.service';
 
-import { TENANT_HEADER } from '@/lib/env';
+import { env } from '@/env.mjs';
+import { Endpoints } from '@/lib/endpoints';
+import { billingConfig } from '@/nest/config/billing.config';
 import { Nest } from '@/nest/container';
 
 import type { Session } from './session';
@@ -46,13 +48,17 @@ export class WebAuth {
   /** The social providers this deployment has credentials for — the sign-in screen offers these. */
   static socialProviders(): AuthSocialProvider[] {
     return [
-      ...(process.env.AUTH_GOOGLE_ID && process.env.AUTH_GOOGLE_SECRET
+      ...(env.AUTH_GOOGLE_ID && env.AUTH_GOOGLE_SECRET
         ? (['google'] as const)
         : []),
-      ...(process.env.AUTH_GITHUB_ID && process.env.AUTH_GITHUB_SECRET
+      ...(env.AUTH_GITHUB_ID && env.AUTH_GITHUB_SECRET
         ? (['github'] as const)
         : []),
     ];
+  }
+
+  static billingEnabled(): boolean {
+    return billingConfig().polar !== null;
   }
 
   /** The instance itself, for the `/api/auth/*` catch-all Next serves. */
@@ -110,13 +116,13 @@ export class WebAuth {
    */
   static async tenantHeader(): Promise<Record<string, string>> {
     const auth = await WebAuth.auth();
-    const named = auth.headers.get(TENANT_HEADER);
+    const named = auth.headers.get(Endpoints.tenantHeader);
     if (named) {
-      return { [TENANT_HEADER]: named };
+      return { [Endpoints.tenantHeader]: named };
     }
     const active = await (await WebAuth.organizations())
       .activeOrganization()
       .catch(() => null);
-    return active ? { [TENANT_HEADER]: active.slug.value } : {};
+    return active ? { [Endpoints.tenantHeader]: active.slug.value } : {};
   }
 }

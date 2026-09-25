@@ -38,8 +38,15 @@ The rule for what belongs here is that it must be understandable without a domai
 ## `postgresDatabase`: one connection, and the schema every table is pinned to
 
 ```ts
-export const mikroOrmConfig = () =>
-  postgresDatabase(SYSTEM_SCHEMA, { subscribers: [new SoftDeleteSubscriber()] });
+DatabaseModule.forRootAsync({
+  inject: [postgresConfig.KEY],                 // the application's registerAs('postgres')
+  useFactory: ({ url, debug }: PostgresConfig) =>
+    postgresDatabase(SYSTEM_SCHEMA, {
+      clientUrl: url,
+      debug,
+      subscribers: [new SoftDeleteSubscriber()],
+    }),
+})
 ```
 
 Every service shares one Postgres — `POSTGRES_URL` — and the connection points at `public`. What

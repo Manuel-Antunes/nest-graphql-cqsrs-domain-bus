@@ -11,6 +11,8 @@ import { eventLogEntities } from '@nestposts/transport-eventbus/persistence/even
 import { transportEntities } from '@nestposts/transport-eventbus/persistence/message-inbox.entity';
 import { usersEntities } from '@nestposts/users/infrastructure/users-infrastructure.module';
 
+import type { PostgresConfig } from '../config/postgres.config';
+import { postgresConfig } from '../config/postgres.config';
 import { systemMigrations } from '../migrations/system';
 import { tenantMigrations } from '../migrations/tenant';
 import { DatabaseSeeder } from '../seeders/database.seeder';
@@ -37,8 +39,12 @@ export const migratorTables = (): DatabaseEntities => [
   ...eventLogEntities,
 ];
 
-export const systemConnection = (): PostgresOptions =>
+export const systemConnection = (
+  { url, debug }: PostgresConfig = postgresConfig(),
+): PostgresOptions =>
   postgresDatabase(SYSTEM_SCHEMA, {
+    clientUrl: url,
+    debug,
     preferTs: false,
     entities: [...migratorTables()],
     subscribers: [new SoftDeleteSubscriber()],

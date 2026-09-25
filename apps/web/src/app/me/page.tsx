@@ -1,20 +1,14 @@
 import { Suspense } from 'react';
 import { Skeleton } from '@nestposts/ui/components/ui/skeleton';
 
-import { PreloadQuery } from '@/lib/apollo/rsc';
 import { WebAuth } from '@/lib/auth/server';
+import { PrefetchQuery } from '@/lib/graphql/prefetch';
 
 import { IdentityPanel } from './_components/identity-panel';
-import { MeQuery } from './query';
+import { meOptions } from './query';
 
 export default async function MePage() {
   const session = await WebAuth.session();
-
-  const panel = (
-    <Suspense fallback={<Skeleton className="h-64 w-full" />}>
-      <IdentityPanel />
-    </Suspense>
-  );
 
   return (
     <div className="space-y-5">
@@ -26,13 +20,15 @@ export default async function MePage() {
           e-mail.
         </p>
       </div>
-      {session ? (
-        <PreloadQuery query={MeQuery} errorPolicy="all">
-          {panel}
-        </PreloadQuery>
-      ) : (
-        panel
-      )}
+      <Suspense fallback={<Skeleton className="h-64 w-full" />}>
+        {session ? (
+          <PrefetchQuery options={meOptions()}>
+            <IdentityPanel />
+          </PrefetchQuery>
+        ) : (
+          <IdentityPanel />
+        )}
+      </Suspense>
     </div>
   );
 }

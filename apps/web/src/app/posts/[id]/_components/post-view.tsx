@@ -23,12 +23,9 @@ import { usePost } from '../_hooks/use-post';
 import { PostEditor } from './post-editor';
 
 export function PostView({ id }: { id: string }) {
-  const { post, error, update, remove } = usePost(id);
+  const { post, update, remove } = usePost(id);
   const { session, isAuthor } = useSession();
   const router = useRouter();
-
-  if (error)
-    return <ErrorNotice title="Não foi possível ler o post" error={error} />;
 
   if (!post) {
     return (

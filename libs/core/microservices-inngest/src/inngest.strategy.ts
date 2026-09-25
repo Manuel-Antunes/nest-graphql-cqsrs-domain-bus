@@ -65,7 +65,7 @@ export interface InngestStrategyOptions {
    * arrived on. The SDK otherwise derives what it advertises from that request's `Host` — so a
    * registration triggered from outside the network registers an address that only exists outside
    * it, Inngest calls something that is not this service, and every run hangs in `Running` with
-   * nothing in any log. Left out, `INNGEST_SERVE_ORIGIN` answers, and then the request does.
+   * nothing in any log. Left out, the request's own origin answers.
    *
    * ```ts
    * new InngestStrategy({ ..., serveOrigin: 'http://tagging:3001' })
@@ -122,7 +122,7 @@ export class InngestStrategy
     super();
     this.inngest = options.inngest;
     this.servePath = options.servePath ?? INNGEST_DEFAULT_SERVE_PATH;
-    this.serveOrigin = options.serveOrigin ?? process.env.INNGEST_SERVE_ORIGIN;
+    this.serveOrigin = options.serveOrigin;
     this.httpAdapter = options.httpAdapter;
     this.initializeSerializer(options);
     this.initializeDeserializer(options);

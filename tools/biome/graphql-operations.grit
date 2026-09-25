@@ -1,17 +1,18 @@
-// What `@graphql-eslint` enforced on the operations, in the one place Biome can still see them.
+// The naming rules `@graphql-eslint` enforced on the operations, which Biome does not ship.
 //
-// Biome lints standalone `.graphql` files, and every operation in `apps/web` lives inside a
-// `graphql(`…`)` template literal instead — so this reads the document as TEXT, from the call
-// expression, which is the only handle GritQL gives on it. That buys the rules that do not need a
-// schema. Everything in `operations-recommended` that does — a field that is not on the type, an
-// argument of the wrong type — is left to codegen, which fails the build on exactly those.
+// With `javascript.experimentalEmbeddedSnippetsEnabled`, Biome formats the document inside every
+// `graphql(`…`)` and runs its own GraphQL rules on it — anonymous operations, duplicate fields,
+// variables and arguments. What it has no rule for is naming, so this reads the document as TEXT,
+// from the call expression, and checks the three conventions the old `naming-convention` config
+// held. Everything that needs a schema is left to codegen, which fails the build on it.
 //
 // EVERY regex here is anchored: `<:` matches the WHOLE node, not a substring, so a "contains"
 // pattern is written `(?s).*…*`. Left off, the rule compiles, loads, reports nothing and looks
-// like a rule. That is how the indentation checks below shipped broken the first time.
+// like a rule.
 //
-// A regex also captures only its FIRST match. Every `graphql()` here holds one operation and at most
-// one fragment; a document with two fragments would have only its first one checked.
+// A capturing regex binds one match. Every `graphql()` here holds one operation or one fragment,
+// which is all the two name rules need; the variable rule captures nothing and sees every
+// definition.
 
 language js
 
@@ -24,14 +25,21 @@ or {
     $name <: not r"[A-Z][A-Za-z0-9]*_[a-z][A-Za-z0-9]*",
     register_diagnostic(span=$document, message="A fragment is named `<Owner>_<field>` — `PostCard_post`, `TagList_post`. The codegen'd unmask helper and every spread site read that name.", severity="error")
   },
-  // `no-anonymous-operations`. The client preset keys its generated documents by operation name, so
-  // an anonymous one is not addressable — and two of them collide silently.
+  // `OperationDefinition` from `operations-recommended`: PascalCase, and the keyword is not
+  // repeated in the name — `query FeedPosts`, not `query GetFeedPostsQuery`. The codegen'd type is
+  // the name plus the keyword, so a repeated one reads `GetFeedPostsQueryQuery`.
   `graphql($document)` where {
-    $document <: r"(?s).*\b(query|mutation|subscription)\s*[({].*"($keyword),
-    register_diagnostic(span=$document, message="An operation is named. The codegen client preset keys its documents by that name, and two anonymous operations collide.", severity="error")
+    $document <: r"(?s).*\b(?:query|mutation|subscription)\s+([A-Za-z0-9_]+).*"($name),
+    $name <: or {
+      not r"_*[A-Z][A-Za-z0-9]*",
+      r"_*(?:Query|Mutation|Subscription|Get).*",
+      r".*(?:Query|Mutation|Subscription)"
+    },
+    register_diagnostic(span=$document, message="An operation is named in PascalCase, without the keyword in it — `FeedPosts`, not `GetFeedPostsQuery`. Codegen appends the keyword to the type it generates.", severity="error")
   },
+  // `VariableDefinition: camelCase`, with the old config's leading underscore allowed.
   `graphql($document)` where {
-    $document <: graphql_indentation_drift(),
-    register_diagnostic(span=$document, message="This document is not indented the way it would be printed: two spaces per level, the definition at two, its closing brace at two. Biome does not format GraphQL inside a template literal, so the indentation is kept by hand.", severity="error")
+    $document <: r"(?s).*\$_*(?:[A-Z]|[A-Za-z0-9]+_)[A-Za-z0-9_]*\s*:.*",
+    register_diagnostic(span=$document, message="A variable is named in camelCase — `$postId`, not `$PostId` or `$post_id`.", severity="error")
   }
 }

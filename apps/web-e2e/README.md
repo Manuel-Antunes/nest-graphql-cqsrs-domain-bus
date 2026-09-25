@@ -87,11 +87,50 @@ costs is a `dependsOn` on their `build` targets, which is in `package.json`.
 `Stack` would have no child handles and would leave three servers running. The accounts cannot travel
 that way, since specs run in worker processes, so they go through a file.
 
+## Billing, against Polar's sandbox
+
+`billing.spec` needs somewhere Polar can deliver webhooks to, so when the suite has a token the stack
+grows a half of its own (`src/support/billing-stack.ts`), up **before** the web because the web is
+started with the webhook's secret:
+
+1. **The products are found or created in the sandbox** — `nestposts e2e Free` and
+   `nestposts e2e Pro`, recognized by a `nestposts_e2e` metadata key, priced in the organization's
+   default currency.
+2. **A tunnel is opened to the web's port** (`src/support/tunnel.ts`), as a container: **ngrok** when
+   `NGROK_AUTH_TOKEN` is set — the account's own domain, which resolves at once — and a **Cloudflare
+   quick tunnel** otherwise, or when ngrok refuses to start (a free account allows one agent session
+   anywhere). A quick tunnel's name reaches public DNS some tens of seconds after it is printed, and
+   asking early caches an NXDOMAIN, so it waits before the first question and asks public resolvers.
+3. **A webhook endpoint is registered at the tunnel**, and Polar generates its secret — the web gets
+   `POLAR_ACCESS_TOKEN`, `POLAR_ENVIRONMENT=sandbox` and that `POLAR_WEBHOOK_SECRET`. Endpoints a
+   previous run left behind — same URL, or older than two hours — are deleted first.
+4. **Once the web answers, an unsigned POST through the tunnel must come back `400`** — the web
+   refusing a signature, which proves the tunnel, the route and the secret together, at setup.
+
+The teardown deletes the endpoint and closes the tunnel. Workers learn the endpoint and the products
+from `E2E_POLAR_*` variables, through the `billing` fixture, which is `null` — and the spec skipped —
+when the run has no billing.
+
+**The token is read from `.env.test` (or `E2E_POLAR_ACCESS_TOKEN`), never from `POLAR_ACCESS_TOKEN`**:
+`nx` loads the root `.env` into every target, and that one holds a deploy's values
+(`src/support/test-environment.ts`). The client is pinned to the sandbox API and a
+`POLAR_ENVIRONMENT` other than `sandbox` is refused. `E2E_BILLING=off` runs the suite without billing
+while a token is present.
+
+Polar's pages are driven the way a buyer drives them (`src/support/polar-pages.ts`), and the checkout
+has two traps. **Each field is saved as it is left** — a `PATCH` to `/v1/checkouts/client/…` — and
+submitting reads what was saved, so a field typed and submitted without leaving it first turns the
+click into a save; every field is left and its save awaited. **The email must be deliverable**: Polar
+refuses `example.com`, so the buyers are `freshAccount(name, { domain: 'mailinator.com' })`, whose
+mail lands in Mailpit like every other. The paid plan is the Stripe test card `4242 4242 4242 4242`,
+billed to Germany, which asks for no tax id.
+
 ## What the specs read
 
 | spec | what it proves |
 |---|---|
 | `authentication` | the cookie is written by this application's own Better Auth, is `httpOnly`, survives a reload, is refused for a wrong password, is cleared by signing out — **and is accepted by the posts-api**, which is the whole point of the web holding its own |
+| `billing` | only with a Polar sandbox token (below): the plans on `/settings/billing` are the products Polar sells; a free plan checked out in Polar's hosted checkout comes back as the subscription; its activation webhook makes the subscriber an **author** — who then publishes a post — and emails them; an unsigned webhook is refused with `400` and changes nothing; cancelling in the customer portal shows "Ends on" and emails, and keeps the role; revoking through Polar's API (the end of the period, which cannot be waited for) takes the role away and emails; that activation **redelivered** grants nothing and emails nobody; a paid plan bought with a test card makes its buyer an author; the portal opens on the subscription and links back; and Polar's own delivery log shows every event accepted with `200` |
 | `authorization` | the three states of `/posts/new` (anonymous, authenticated without the role, author); that the refusal is the server's and not the screen's; that reading is anonymous on purpose; and that `me` is polymorphic — `User` for the reader, `Author` for the author |
 | `federation` | the subgraph called the way a router calls it: `_entities(representations:)` resolving a `Post`, its `Author` and its `Tag` by key alone, anonymously — and answering `null`, in its own position, both for a key that resolves to nothing and for an author asked for as a `User` |
 | `reading` | a post written by an author reaches someone who never signed in, with `author` and `tags` resolved — the two `@ResolveField`s, seen on the page |

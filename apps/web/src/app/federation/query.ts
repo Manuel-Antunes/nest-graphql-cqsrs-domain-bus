@@ -1,4 +1,9 @@
 import { graphql } from '@/gql';
+import type { EntitiesQueryVariables } from '@/gql/graphql';
+import {
+  gqlQueryOptions,
+  postsSubgraphQueryOptions,
+} from '@/lib/graphql/gqlpc';
 
 export const FederationSeedQuery = graphql(`
   query FederationSeed {
@@ -51,3 +56,13 @@ export const EntitiesQuery = graphql(`
     }
   }
 `);
+
+export const federationSeedOptions = () => gqlQueryOptions(FederationSeedQuery);
+
+export const entitiesOptions = (
+  representations: EntitiesQueryVariables['representations'],
+) =>
+  postsSubgraphQueryOptions(EntitiesQuery, {
+    input: { representations },
+    staleTime: 0,
+  });

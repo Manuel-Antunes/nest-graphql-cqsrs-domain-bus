@@ -9,6 +9,8 @@ import { HydrationBoundary, QueryClientProvider } from '@tanstack/react-query';
 
 import { AuthProvider } from '@/components/auth/auth-provider';
 import { adminPlugin } from '@/lib/auth/admin-plugin';
+import { billingAdapter } from '@/lib/auth/billing-adapter';
+import { billingPlugin } from '@/lib/auth/billing-plugin';
 import { deleteUserPlugin } from '@/lib/auth/delete-user-plugin';
 import { emailOtpPlugin } from '@/lib/auth/email-otp-plugin';
 import { magicLinkPlugin } from '@/lib/auth/magic-link-plugin';
@@ -17,6 +19,7 @@ import { oauthProviderPlugin } from '@/lib/auth/oauth-provider-plugin';
 import { organizationPlugin } from '@/lib/auth/organization-plugin';
 import { SYSTEM_ROLES } from '@/lib/auth/roles';
 import { twoFactorPlugin } from '@/lib/auth/two-factor-plugin';
+import { BILLING_SETTINGS_PATH } from '@/lib/auth/views';
 import { authClient } from '@/lib/auth-client';
 import { getQueryClient } from '@/lib/query-client';
 
@@ -39,12 +42,24 @@ const plugins = [
   }),
 ];
 
+const pluginsWithBilling = [
+  ...plugins,
+  billingPlugin({
+    adapter: billingAdapter,
+    user: true,
+    organization: false,
+    path: BILLING_SETTINGS_PATH,
+  }),
+];
+
 export function AuthProviders({
   socialProviders,
+  billing,
   dehydratedState,
   children,
 }: {
   socialProviders: AuthSocialProvider[];
+  billing: boolean;
   dehydratedState: DehydratedState;
   children: React.ReactNode;
 }) {
@@ -61,7 +76,7 @@ export function AuthProviders({
         navigate={({ to, replace }) =>
           replace ? router.replace(to) : router.push(to)
         }
-        plugins={plugins}
+        plugins={billing ? pluginsWithBilling : plugins}
         Link={Link}
       >
         <HydrationBoundary state={dehydratedState}>

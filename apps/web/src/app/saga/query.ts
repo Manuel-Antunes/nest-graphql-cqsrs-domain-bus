@@ -1,4 +1,5 @@
 import { graphql } from '@/gql';
+import { gqlQueryOptions } from '@/lib/graphql/gqlpc';
 
 export const CreateSagaPostMutation = graphql(`
   mutation CreateSagaPost($input: CreatePostInput!) {
@@ -29,3 +30,6 @@ export const SagaProbeQuery = graphql(`
     }
   }
 `);
+
+export const sagaProbeOptions = (id: string) =>
+  gqlQueryOptions(SagaProbeQuery, { input: { id }, staleTime: 0 });

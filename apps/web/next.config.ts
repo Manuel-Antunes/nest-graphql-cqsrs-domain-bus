@@ -12,6 +12,7 @@ const nextConfig: NextConfig = {
   outputFileTracingRoot: monorepoRoot,
   transpilePackages: [
     '@nestposts/ui',
+    '@nestposts/tanstack-query-graphql',
     '@mikro-orm/core',
     '@mikro-orm/migrations',
     '@mikro-orm/postgresql',

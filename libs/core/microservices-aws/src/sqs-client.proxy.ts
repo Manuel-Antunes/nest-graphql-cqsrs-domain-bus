@@ -9,7 +9,7 @@ import type {
 } from '@nestjs/microservices';
 import { ClientProxy } from '@nestjs/microservices';
 
-import { awsClientConfig, queueNameOf } from './aws-client.config';
+import { queueNameOf } from './aws-client.config';
 import {
   asMessageAttributes,
   orderingKeyIn,
@@ -59,9 +59,7 @@ export class SqsClientProxy extends ClientProxy {
     }
     this.fifo = this.queueUrl.endsWith('.fifo');
     this.ownsClient = !options.client;
-    this.client =
-      options.client ??
-      new SQSClient({ ...awsClientConfig(), ...options.clientConfig });
+    this.client = options.client ?? new SQSClient(options.clientConfig ?? {});
     this.initializeSerializer(options);
   }
 

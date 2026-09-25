@@ -53,7 +53,7 @@ It is not a new design. It is `nestposts.events`, piece by piece:
 | `@EventPattern(...)` on a controller | **the same `@EventPattern`** | unchanged |
 | `@Publisher(POSTS_NAMESPACE)` | **the same `@Publisher`** | unchanged |
 
-Switching transports cost **one branch in `transport.config.ts` per application**, which is what
+Switching transports cost **one branch in each application's transport factories** (`InboundTransport`, the client its `@Publisher` holds), which is what
 `EventEnvelopeSerializer` and `@Publisher` existed to buy: the code says *what* goes out, the
 configuration says *where*.
 
@@ -234,7 +234,7 @@ the account and managed elsewhere: the stack does not create it (that fails with
 `AlreadyExistsException`) and does not import it (`sst remove` would then delete an identity other
 things send through); it links an `sst.Linkable` carrying `ses:SendEmail` and `ses:SendRawEmail` on the
 identity's ARN. Only `Notificator` links either, and it sends with `MAIL_TRANSPORT=ses` (nodemailer's
-SESv2 transport, configured in `apps/notificator/src/infrastructure/mail/mail.config.ts`) and
+SESv2 transport, configured in `apps/notificator/src/config/mail.config.ts`) and
 `MAIL_FROM` derived from the sender.
 
 While the account is in the **SES sandbox**, mail is delivered only to verified addresses. Anything

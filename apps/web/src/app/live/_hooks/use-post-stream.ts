@@ -1,10 +1,10 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
-import { useSubscription } from '@apollo/client/react';
+import { useCallback, useState } from 'react';
+import type { SubscriptionStatus } from '@nestposts/tanstack-query-graphql';
 
 import type { StreamStatus } from '@/app/_components/status-dot';
-import { onSseConnected } from '@/lib/apollo/links/sse-link';
+import { gqlSubscriptionOptions, useSubscription } from '@/lib/graphql/gqlpc';
 
 import { OnPostCreatedSubscription, OnPostUpdatedSubscription } from '../query';
 
@@ -16,74 +16,59 @@ export interface StreamEvent {
   version: number;
 }
 
-function statusOf(
-  active: boolean,
-  open: boolean,
-  error: unknown,
-): StreamStatus {
-  if (!active) return 'idle';
-  if (error) return 'error';
-  return open ? 'open' : 'connecting';
+interface StreamedPost {
+  id: string;
+  title: string;
+  version: number;
 }
+
+const STREAM_STATUS: Record<SubscriptionStatus, StreamStatus> = {
+  idle: 'idle',
+  connecting: 'connecting',
+  pending: 'open',
+  error: 'error',
+  complete: 'closed',
+};
 
 export function usePostStream(active: boolean) {
   const [events, setEvents] = useState<StreamEvent[]>([]);
-  const [open, setOpen] = useState({ created: false, updated: false });
 
-  useEffect(() => {
-    if (!active) {
-      setOpen({ created: false, updated: false });
-      return;
-    }
-    const offCreated = onSseConnected('OnPostCreated', () =>
-      setOpen((current) => ({ ...current, created: true })),
-    );
-    const offUpdated = onSseConnected('OnPostUpdated', () =>
-      setOpen((current) => ({ ...current, updated: true })),
-    );
-    return () => {
-      offCreated();
-      offUpdated();
-    };
-  }, [active]);
+  const record = useCallback(
+    (source: StreamEvent['source'], post: StreamedPost) => {
+      setEvents((current) => [
+        {
+          receivedAt: Date.now(),
+          source,
+          postId: post.id,
+          title: post.title,
+          version: post.version,
+        },
+        ...current,
+      ]);
+    },
+    [],
+  );
 
-  const record = useCallback((source: StreamEvent['source'], post: unknown) => {
-    const value = post as
-      | { id?: string; title?: string; version?: number }
-      | null
-      | undefined;
-    const postId = value?.id;
-    if (!postId) return;
+  const created = useSubscription(
+    gqlSubscriptionOptions(OnPostCreatedSubscription, {
+      enabled: active,
+      onData: (data) => record('onPostCreated', data.onPostCreated),
+    }),
+  );
 
-    setEvents((current) => [
-      {
-        receivedAt: Date.now(),
-        source,
-        postId,
-        title: value?.title ?? '(sem título)',
-        version: value?.version ?? 0,
-      },
-      ...current,
-    ]);
-  }, []);
-
-  const created = useSubscription(OnPostCreatedSubscription, {
-    skip: !active,
-    variables: {},
-    onData: ({ data }) => record('onPostCreated', data.data?.onPostCreated),
-  });
-
-  const updated = useSubscription(OnPostUpdatedSubscription, {
-    skip: !active,
-    variables: {},
-    onData: ({ data }) => record('onPostUpdated', data.data?.onPostUpdated),
-  });
+  const updated = useSubscription(
+    gqlSubscriptionOptions(OnPostUpdatedSubscription, {
+      enabled: active,
+      input: {},
+      onData: (data) => record('onPostUpdated', data.onPostUpdated),
+    }),
+  );
 
   return {
     events,
     clear: () => setEvents([]),
-    createdStatus: statusOf(active, open.created, created.error),
-    updatedStatus: statusOf(active, open.updated, updated.error),
+    createdStatus: STREAM_STATUS[created.status],
+    updatedStatus: STREAM_STATUS[updated.status],
     error: created.error ?? updated.error,
   };
 }

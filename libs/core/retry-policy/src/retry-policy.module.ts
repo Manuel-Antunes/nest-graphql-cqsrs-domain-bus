@@ -48,11 +48,14 @@ export const {
  * inbound transport, so it passes the matching `exceptionProducer`:
  *
  * ```ts
- * RetryPolicyModule.forRoot({
- *   exceptionProducer:
- *     process.env.INFRA_PROVIDER === 'aws'
- *       ? new SqsExceptionProducer()
- *       : new InngestExceptionProducer(),
+ * RetryPolicyModule.forRootAsync({
+ *   inject: [appConfig.KEY, awsConfig.KEY],
+ *   useFactory: (app: AppConfig, aws: AwsConfig) => ({
+ *     exceptionProducer:
+ *       app.transport === 'aws'
+ *         ? new SqsExceptionProducer(aws.client)
+ *         : new InngestExceptionProducer(),
+ *   }),
  * })
  * ```
  *

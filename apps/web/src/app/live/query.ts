@@ -1,4 +1,5 @@
 import { graphql } from '@/gql';
+import { gqlQueryOptions } from '@/lib/graphql/gqlpc';
 
 export const OnPostCreatedSubscription = graphql(`
   subscription OnPostCreated {
@@ -40,3 +41,6 @@ export const RecentPostsQuery = graphql(`
 export const LIVE_SNAPSHOT_SIZE = 100;
 
 export const LIVE_WINDOW = 12;
+
+export const recentPostsOptions = () =>
+  gqlQueryOptions(RecentPostsQuery, { input: { first: LIVE_SNAPSHOT_SIZE } });

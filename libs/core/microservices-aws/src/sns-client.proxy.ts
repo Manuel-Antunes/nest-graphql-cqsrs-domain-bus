@@ -9,7 +9,6 @@ import type {
 } from '@nestjs/microservices';
 import { ClientProxy } from '@nestjs/microservices';
 
-import { awsClientConfig } from './aws-client.config';
 import {
   asMessageAttributes,
   orderingKeyIn,
@@ -23,7 +22,7 @@ export interface SnsClientProxyOptions {
   readonly topicArn: string;
   /** A client to use instead of building one — a shared instance, or a double in a spec. */
   readonly client?: SNSClient;
-  /** Passed to the client this proxy builds, over {@link awsClientConfig}'s answer. */
+  /** Passed to the client this proxy builds — the region, a LocalStack endpoint, credentials. */
   readonly clientConfig?: SNSClientConfig;
   /**
    * **How a packet becomes a message.** It may answer an {@link AwsOutgoingMessage} — a body, the
@@ -74,9 +73,7 @@ export class SnsClientProxy extends ClientProxy {
     }
     this.fifo = this.topicArn.endsWith('.fifo');
     this.ownsClient = !options.client;
-    this.client =
-      options.client ??
-      new SNSClient({ ...awsClientConfig(), ...options.clientConfig });
+    this.client = options.client ?? new SNSClient(options.clientConfig ?? {});
     this.initializeSerializer(options);
   }
 

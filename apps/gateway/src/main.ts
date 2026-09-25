@@ -7,7 +7,8 @@ import { FastifyAdapter } from '@nestjs/platform-fastify';
 import { Logger as PinoLogger } from 'nestjs-pino';
 
 import { AppModule } from './app.module';
-import { gatewayPort, gatewaySubgraphs } from './gateway.config';
+import type { AppConfig } from './config/app.config';
+import { appConfig } from './config/app.config';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestFastifyApplication>(
@@ -18,9 +19,10 @@ async function bootstrap() {
   app.useLogger(app.get(PinoLogger));
   app.enableShutdownHooks();
 
-  await app.listen(gatewayPort(), '0.0.0.0');
+  const config = app.get<AppConfig>(appConfig.KEY);
+  await app.listen(config.port, '0.0.0.0');
   new Logger('bootstrap').log(
-    `gateway at http://localhost:${gatewayPort()}/graphql, federating ${gatewaySubgraphs()
+    `gateway at http://localhost:${config.port}/graphql, federating ${config.subgraphs
       .map(({ name, url }) => `${name} (${url})`)
       .join(', ')}`,
   );

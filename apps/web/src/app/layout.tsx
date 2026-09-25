@@ -43,6 +43,7 @@ export default async function RootLayout({
       <body className="antialiased">
         <Providers
           socialProviders={WebAuth.socialProviders()}
+          billing={WebAuth.billingEnabled()}
           dehydratedState={dehydrate(queryClient)}
         >
           <SiteHeader />

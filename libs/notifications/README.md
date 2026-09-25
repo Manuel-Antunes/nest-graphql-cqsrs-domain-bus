@@ -56,18 +56,24 @@ reacts to `PostCreated`.
 
 ```ts
 MailModule.forRootAsync({
-  useFactory: () => ({
+  inject: [mailConfig.KEY],
+  useFactory: ({ transport, from }: MailConfig) => ({
     transport,
     defaults: { from },
     template: { resolver: new ReactEmailTemplateResolver() },
     plugins: [plainTextFromHtml()],
   }),
 }),
-NotificationChannelsModule.forRoot({
+NotificationChannelsModule.forRootAsync({
   notifications: [PostCreatedNotification],
-  push: firebasePushOptionsFromEnv(),
+  inject: [firebaseConfig.KEY],
+  useFactory: ({ push }: FirebaseConfig) => ({ push }),
 }),
 ```
+
+The application's configuration builds `push`: `apps/notificator`'s `config/firebase.config.ts` is
+`registerAs('firebase', () => ({ push: firebasePushOptionsFromEnv(process.env) }))` — this library
+parses the service account, the application decides where it is read from.
 
 `notifications` is the registration: a type nothing listed answers for fails the delivery with
 `UnknownNotificationTypeException`. `push` is optional — without `FIREBASE_CREDENTIALS` the channel

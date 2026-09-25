@@ -64,6 +64,9 @@
       "complexity": {
         "noStaticOnlyClass": "off"
       },
+      "suspicious": {
+        "noDuplicateFields": "error"
+      },
       "style": {
         "useImportType": "off",
         "noRestrictedImports": {

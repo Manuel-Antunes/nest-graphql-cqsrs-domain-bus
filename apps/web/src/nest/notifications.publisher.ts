@@ -6,10 +6,10 @@ import { NOTIFICATIONS_NAMESPACE } from '@nestposts/notifications/domain/notific
 import type { ITransportPublisherEventBus } from '@nestposts/transport-eventbus';
 import { Publisher } from '@nestposts/transport-eventbus';
 
-import { WEB_EVENTS_CLIENT } from './transport';
+import { WebEventsClient } from './web-events.client';
 
 @Injectable()
 @Publisher(NOTIFICATIONS_NAMESPACE)
 export class NotificationsPublisher implements ITransportPublisherEventBus {
-  constructor(@Inject(WEB_EVENTS_CLIENT) readonly client: ClientProxy) {}
+  constructor(@Inject(WebEventsClient) readonly client: ClientProxy) {}
 }

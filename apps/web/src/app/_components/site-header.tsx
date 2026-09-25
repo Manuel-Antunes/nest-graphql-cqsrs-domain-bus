@@ -2,15 +2,22 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useAuth } from '@better-auth-ui/react';
 import { Badge } from '@nestposts/ui/components/ui/badge';
 import { buttonVariants } from '@nestposts/ui/components/ui/button';
-import { RadioIcon, ShieldCheckIcon, UsersIcon } from 'lucide-react';
+import {
+  CreditCardIcon,
+  RadioIcon,
+  ShieldCheckIcon,
+  UsersIcon,
+} from 'lucide-react';
 
 import { NotificationBell } from '@/app/_components/notification-bell';
 import { useSession } from '@/app/_providers/session-provider';
 import { OrganizationSwitcher } from '@/components/auth/organization/organization-switcher';
 import { UserButton } from '@/components/auth/user/user-button';
-import { upstreamHost } from '@/lib/env';
+import { BILLING_SETTINGS_PATH } from '@/lib/auth/views';
+import { Endpoints } from '@/lib/endpoints';
 import { cn } from '@/lib/utils';
 
 const routes = [
@@ -29,6 +36,8 @@ const hasRole = (role: string | null | undefined, wanted: string) =>
 export function SiteHeader() {
   const pathname = usePathname();
   const { session, isAuthor } = useSession();
+  const { plugins } = useAuth();
+  const billing = plugins.some((plugin) => plugin.id === 'billing');
 
   return (
     <header className="sticky top-0 z-40 border-b bg-background/80 backdrop-blur-sm">
@@ -58,7 +67,7 @@ export function SiteHeader() {
             variant="outline"
             className="hidden font-mono text-[10px] sm:inline-flex"
           >
-            {upstreamHost()}
+            {Endpoints.upstreamHost()}
           </Badge>
           {session ? (
             <>
@@ -82,6 +91,18 @@ export function SiteHeader() {
                     icon: <UsersIcon className="text-muted-foreground" />,
                     visibility: 'authenticated',
                   },
+                  ...(billing
+                    ? [
+                        {
+                          label: 'Billing',
+                          href: `/settings/${BILLING_SETTINGS_PATH}`,
+                          icon: (
+                            <CreditCardIcon className="text-muted-foreground" />
+                          ),
+                          visibility: 'authenticated' as const,
+                        },
+                      ]
+                    : []),
                   ...(hasRole(session.user.role, 'admin')
                     ? [
                         {

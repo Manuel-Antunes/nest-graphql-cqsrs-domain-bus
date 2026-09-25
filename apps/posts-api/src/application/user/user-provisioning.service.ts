@@ -73,5 +73,8 @@ export class UserProvisioning {
 }
 
 function rolesOf(identity: Identity): readonly string[] {
-  return identity.role ? [identity.role] : [];
+  return (identity.role ?? '')
+    .split(',')
+    .map((role) => role.trim())
+    .filter(Boolean);
 }

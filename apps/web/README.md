@@ -1,7 +1,8 @@
 # web
 
-The system's test client: Next.js (app router) + Apollo Client, talking to **the federation gateway**
-(`apps/gateway`), which federates the posts subgraph and the notifications one.
+The system's test client: Next.js (app router) + TanStack Query, through
+`@nestposts/tanstack-query-graphql` (`libs/tanstack-query-graphql`), talking to **the federation
+gateway** (`apps/gateway`), which federates the posts subgraph and the notifications one.
 
 ```bash
 pnpm db:setup                          # the schemas, the default tag, the OAuth resource
@@ -17,6 +18,15 @@ proxy's upstream on the server, and the SSE endpoint of subscriptions in the bro
 only the federation page calls. The auth variables are the API's (see the root `CLAUDE.md`), plus
 `WEB_TRANSPORT` and its broker address, because this server publishes the emails its Better Auth
 sends.
+
+## Environment: `src/env.mjs`
+
+The one place this application reads its environment, with `@t3-oss/env-nextjs`. `server` is the
+Nest container's schemas merged (`src/nest/config/schemas/*.schema.ts`: app and routing, auth,
+AWS, billing, Inngest, Postgres, RabbitMQ) plus `POSTS_SUBGRAPH_URL`; `client` is the
+`NEXT_PUBLIC_*` the browser is given, listed again in `experimental__runtimeEnv` so Next inlines
+them; `shared` is `NODE_ENV`. The container's `registerAs` factories read `env`, and so does every
+server component and route. A variable declared empty counts as unset.
 
 ## Por onde os dados passam
 
@@ -38,17 +48,61 @@ processo responda tudo dali em diante — o que uma função atrás de um balanc
 para fazer isso porque `onPostCreated` e `onPostUpdated` são `@AllowAnonymous`: não há sessão a
 reencaminhar.
 
+## Queries run on the server, and the browser hydrates them into one cache
+
+Every screen's query lives in its route's `query.ts`: the document, and a builder that turns it into
+TanStack Query options — `feedPostsOptions()`, `postByIdOptions(id)`, `meOptions()` — minted by the
+`GqlRpc` in `lib/graphql/gqlpc.ts`. The page, a server component, renders
+`<PrefetchQuery options={…}>` (`<PrefetchInfiniteQuery>` for the feed) inside a `Suspense`: it awaits
+the query on the server, dehydrates it into a `HydrationBoundary`, and the client component that calls
+`useSuspenseQuery(sameOptions())` renders with data on its first frame, without a request of its own
+and without suspending. What streams while the server fetches is the `Suspense` fallback.
+
+There is **one** cache. The `QueryClient` (`lib/query-client.ts`) is built with the lib's
+`GraphQueryCache` and `GraphMutationCache` over an Apollo `InMemoryCache`, so every result — hydrated
+from the server, fetched in the browser, returned by a mutation or pushed by a subscription — is
+normalized into it by `__typename` and `id`, and a query that mounts empty is filled from it. Apollo's
+client is gone — no links, no `ApolloProvider`, no `PreloadQuery` — and its cache is what remains, as
+the normalized store under TanStack Query.
+
+- **`execute` has two transports** (`lib/graphql/execute.ts`). In the browser it posts to
+  `/api/graphql`, or to `/api/graphql/posts` for the federation page's `_entities`, and the proxy puts
+  the session cookie on the way out. On the server it goes straight to the gateway with the request's
+  cookie and tenant: `lib/graphql/execute.server.ts` installs that transport on `globalThis`, and
+  `lib/graphql/prefetch.tsx` imports it, so every server component that prefetches has it and no
+  client bundle ever contains it.
+- **A load that fails lands in a `QueryErrorBoundary`.** A prefetch that fails is not dehydrated, so
+  the component suspends in the browser and asks again; if that fails too, TanStack's
+  `useSuspenseQuery` throws — it always does when there is no data, unlike Apollo's under
+  `errorPolicy: 'all'` — and the page's `QueryErrorBoundary` (`app/_components`) renders the same
+  `ErrorNotice` the screen used to. A background refetch that fails does not throw: the data stays.
+  `execute` throws a `GraphQLResponseError` for any response that carries `errors`, and the query
+  client retries only what is not one, and nothing on the server.
+- **`useSuspenseQuery` takes no `enabled`**, so a query that waits for something is a component that
+  mounts when it is there: `/me`'s query lives in a child that renders only with a session. What
+  runs on a click, on a timer or when a popover opens — `_entities`, the bell's count, the inbox — is a
+  plain `useQuery`.
+- **A write to Apollo does not re-render a mounted query** (the lib's README explains why). A mutation
+  whose result a mounted query shows writes it with `setQueryData`, which `GraphQueryCache` mirrors
+  into Apollo as well; one that changes a list's membership invalidates the list. The feed is an
+  infinite query, which the lib keeps out of Apollo, so every write that changes it invalidates it.
+- **Subscriptions** are `useSubscription(gqlSubscriptionOptions(…))` over `lib/graphql/subscribe.ts`,
+  the `graphql-sse` client described above. `status: 'pending'` means the server accepted the stream,
+  and that is what `/live`'s dot shows as open.
+- **Codegen emits strings** (`documentMode: 'string'` in `codegen.ts`): the lib keys a query on its
+  document's text and adds `__typename` to what goes over the wire.
+
 ## The tenant is the active organization
 
 Every organization is a tenant, with its posts in a schema of its own (see the root `CLAUDE.md`), and
 this application is what says which one a user is in. `WebAuth.tenantHeader()` answers with the
 session's active organization's slug — or with an `x-tenant` the browser sent itself, which the
-subgraphs check like any other — and it is what `/api/graphql` and the server's Apollo client put on
-every request to the gateway. The SSE link sends the same slug, which `TenantSync`
+subgraphs check like any other — and it is what `/api/graphql` and the server-side transport put on
+every request to the gateway. The SSE client sends the same slug, which `TenantSync`
 (`app/_providers/tenant-sync.tsx`) keeps from better-auth-ui's active organization; when the active
-organization changes — the header's switcher, or creating one, which makes it active — it resets
-Apollo's cache and refreshes the server components, so the feed is the new tenant's. No active
-organization is the root tenant.
+organization changes — the header's switcher, or creating one, which makes it active — it empties
+the normalized cache, resets every `['graph']` query and refreshes the server components, so the feed
+is the new tenant's. No active organization is the root tenant.
 
 The Nest container here holds a `TenancyModule` too, with the migrator's `tenantMigrations` list
 (Turbopack has no directory to read migrations from): an organization created through these screens
@@ -84,11 +138,25 @@ The session this application reads (`useSession()` in `app/_providers/session-pr
 one better-auth-ui keeps in TanStack Query, prefetched by the layout — so signing in or out in those
 screens reaches the header and the pages without a reload.
 
+## Billing
+
+`/settings/billing` is better-auth-ui's billing view (`components/auth/billing`, copied from its
+registry like every other auth screen), over Polar through `libs/billing` — see its README. It
+exists only when `POLAR_ACCESS_TOKEN` is set: `WebAuth.billingEnabled()` decides, in the layout, whether
+`billingPlugin` joins the plugins `AuthProvider` gets, and the settings route answers 404 for
+`billing` otherwise. The user menu links to it when it is there.
+
+The adapter (`lib/auth/billing-adapter.ts`) is better-auth-ui's Polar adapter with three operations
+swapped for `libs/billing`'s endpoints: the plans come from the Polar catalog rather than a list
+written here, the state of a user Polar has never seen is "no subscription" rather than an error,
+and the portal creates the customer it opens. Checkout is the Polar plugin's, by product id. Only
+personal billing is on — organization billing needs an authorization check the Polar plugin lacks.
+
 ## Federação
 
 `apps/posts-api` é um **subgraph** — driver `YogaFederationDriver` —, e `/federation` é a única tela
-daqui que fala com ele diretamente, sem passar pelo gateway (a operação leva
-`context: TO_POSTS_SUBGRAPH` e sai por `/api/graphql/posts`), porque chama o que nenhuma outra
+daqui que fala com ele diretamente, sem passar pelo gateway (a operação sai pelo `GqlRpc` do
+subgraph, `postsSubgraphQueryOptions`, e por `/api/graphql/posts`), porque chama o que nenhuma outra
 chamaria: `_entities(representations:)`, que é por onde um
 roteador de federação resolve uma entidade a partir da chave, e não de uma query. A tela monta o lote
 com o que o feed já sabe — um `Post`, o `Author` dele, as `Tag`s — e junta as duas recusas que são a

@@ -2,9 +2,6 @@ import type { Plugin } from 'graphql-yoga';
 
 const SECONDS = 1000;
 
-export const subscriptionMaxSeconds = (): number =>
-  Number(process.env.SUBSCRIPTION_MAX_SECONDS ?? 0);
-
 /**
  * **A subscription that ends itself, because on Lambda nobody else will.**
  *

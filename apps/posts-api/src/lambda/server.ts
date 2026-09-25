@@ -2,7 +2,7 @@ import '../telemetry';
 
 import type { INestMicroservice } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import type { MicroserviceOptions } from '@nestjs/microservices';
+import type { AsyncMicroserviceOptions } from '@nestjs/microservices';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { FastifyAdapter } from '@nestjs/platform-fastify';
 import { bootOnce } from '@nestposts/lambda';
@@ -10,7 +10,8 @@ import type { FastifyInstance } from 'fastify';
 import { Logger as PinoLogger } from 'nestjs-pino';
 
 import { AppModule } from '../app.module';
-import { lambdaTransport } from '../infrastructure/transport/transport.config';
+import { awsConfig } from '../config/aws.config';
+import { InboundTransport } from '../infrastructure/transport/inbound-transport';
 
 export interface PostsApi {
   readonly app: NestFastifyApplication;
@@ -29,11 +30,9 @@ export const booted = bootOnce<PostsApi>(async () => {
   );
   app.useLogger(app.get(PinoLogger));
 
-  const consumer = app.connectMicroservice<MicroserviceOptions>(
-    lambdaTransport(),
-    {
-      inheritAppConfig: true,
-    },
+  const consumer = app.connectMicroservice<AsyncMicroserviceOptions>(
+    { inject: [awsConfig.KEY], useFactory: InboundTransport.lambda },
+    { inheritAppConfig: true },
   );
   await app.startAllMicroservices();
   await app.init();

@@ -1,7 +1,7 @@
 import { GraphQLInstrumentation } from '@opentelemetry/instrumentation-graphql';
 import { registerOTel } from '@vercel/otel';
 
-import { API_URL, GRAPHQL_UPSTREAM } from '@/lib/env';
+import { env } from '@/env.mjs';
 import { FlushAtRequestEnd } from '@/lib/flush-at-request-end';
 
 registerOTel({
@@ -11,8 +11,8 @@ registerOTel({
   instrumentationConfig: {
     fetch: {
       propagateContextUrls: [
-        GRAPHQL_UPSTREAM,
-        API_URL,
+        env.NEXT_PUBLIC_GATEWAY_URL,
+        env.NEXT_PUBLIC_API_URL,
         /lambda-url\..*\.on\.aws/,
         /execute-api\..*\.amazonaws\.com/,
       ],

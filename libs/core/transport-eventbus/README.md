@@ -74,16 +74,15 @@ import {
 @Module({
   imports: [
     CqsrsModule.forRoot({ aggregatePublisher: TRANSPORT_EVENT_BUS_PUBLISHER }),
-    DatabaseModule.forRoot(mikroOrmConfig()),
     TransportEventBusModule.forRoot({
-      identity: taggingIdentity(),                    // 'tagging', or an identity of its own
+      identity: 'tagging',                            // or a TransportIdentity of its own
       inbox: MikroOrmMessageInbox,                    // receiving on, and what it remembers
       eventStore: [Post],                             // the aggregates it sources from its streams
-      publishers: [
-        PostEventsPublisher,
-        { provide: POST_EVENTS_CLIENT, useFactory: postEventsClient },
-      ],
     }),
+  ],
+  providers: [
+    PostEventsPublisher,                              // a @Publisher, discovered container-wide
+    { provide: PostEventsClient, useFactory: () => new SnsClientProxy({ topicArn }) },
   ],
 })
 export class AppModule {}
@@ -94,22 +93,21 @@ export class AppModule {}
 | `identity` | required | who this service is on the wire: a name, or a `TransportIdentity` (`.silent('my-suite')` for a spec) |
 | `publishes` | `true` | the master switch of the outbound half, when the identity is a plain name |
 | `requestContext` | `CorrelatedRequestContext` | what a request means here |
-| `publishers` | `[]` | the destinations: the `@Publisher` classes and the clients they hold |
+| `publishers` | `[]` | destinations registered inside this module. A `@Publisher` is found **container-wide**, so the applications here declare theirs, and the clients they hold, in `AppModule` instead |
 | `inbox` | — | passing one turns **receiving** on: `MikroOrmMessageInbox`, or `NoMessageInbox` for a service that keeps no memory of what it received |
 | `sink` | `NoDurableState` | what an ingested event leaves durable, inside the ingestion's transaction |
 | `eventStore` | — | the aggregates this service event-sources; given, the store and the sink that fills it are wired, with a repository per aggregate |
 | `imports` / `providers` / `exports` | `[]` | whatever the above depend on |
 
-`forRootAsync` is the same with the identity resolved at runtime — from a `ConfigService`, a secret, a
-discovery agent:
+`forRootAsync` is the same with the identity resolved at runtime — from the application's
+configuration, a secret, a discovery agent. Every application here builds it from its
+`registerAs('app')` config:
 
 ```ts
 TransportEventBusModule.forRootAsync({
-  imports: [ConfigModule],
-  inject: [ConfigService],
-  useFactory: (config: ConfigService) => ({ identity: config.serviceName, publishes: config.publishes }),
+  inject: [appConfig.KEY],
+  useFactory: ({ name, publishes }: AppConfig) => TransportIdentity.named(name, { publishes }),
   inbox: MikroOrmMessageInbox,
-  publishers: [PostEventsPublisher, { provide: POST_EVENTS_CLIENT, useFactory: postEventsClient }],
 })
 ```
 
@@ -150,7 +148,7 @@ import { Publisher, type ITransportPublisherEventBus } from '@nestposts/transpor
 @Injectable()
 @Publisher(POSTS_NAMESPACE)
 export class PostEventsPublisher implements ITransportPublisherEventBus {
-  constructor(@Inject(POST_EVENTS_CLIENT) readonly client: ClientProxy) {}
+  constructor(@Inject(PostEventsClient) readonly client: ClientProxy) {}
 }
 ```
 
@@ -160,18 +158,22 @@ upstream's mode.
 and the client itself is ordinary Nest — with one addition, the transport's serializer:
 
 ```ts
-export const postEventsClient = (): ClientProxy =>
-  ClientProxyFactory.create({
-    transport: Transport.RMQ,
-    options: {
-      urls: [process.env.RABBITMQ_URL ?? 'amqp://localhost:5672'],
-      exchange: 'nestposts.events',
-      exchangeType: 'topic',
-      wildcards: true,      // this is what makes the pattern BE the routing key
-      persistent: true,
-      serializer: new RmqEventEnvelopeSerializer(),   // the event in the body, the metadata in headers
-    },
-  });
+{
+  provide: PostEventsClient,
+  inject: [rabbitmqConfig.KEY],                       // the application's registerAs('rabbitmq')
+  useFactory: ({ urls }: RabbitmqConfig) =>
+    ClientProxyFactory.create({
+      transport: Transport.RMQ,
+      options: {
+        urls,
+        exchange: 'nestposts.events',
+        exchangeType: 'topic',
+        wildcards: true,      // this is what makes the pattern BE the routing key
+        persistent: true,
+        serializer: new RmqEventEnvelopeSerializer(),   // the event in the body, the metadata in headers
+      },
+    }),
+}
 ```
 
 **The code says what goes out; the configuration says where.** The destination names the namespaces and
@@ -238,11 +240,12 @@ deserializer as the other half of the wire format:
 
 ```ts
 const app = await NestFactory.create(AppModule);
+const { urls } = app.get<RabbitmqConfig>(rabbitmqConfig.KEY);   // the application's registerAs('rabbitmq')
 app.connectMicroservice<MicroserviceOptions>(
   {
     transport: Transport.RMQ,
     options: {
-      urls: [process.env.RABBITMQ_URL!],
+      urls,
       queue: 'nestposts.posts-api.post-completed',   // one queue per SERVICE
       queueOptions: { durable: true },
       exchange: 'nestposts.events',
@@ -443,14 +446,13 @@ aggregates, and the store, the sink that appends every ingested event to the str
 @Module({
   imports: [
     CqsrsModule.forRoot({ aggregatePublisher: TRANSPORT_EVENT_BUS_PUBLISHER }),
-    DatabaseModule.forRoot(mikroOrmConfig()),
     TransportEventBusModule.forRoot({
-      identity: taggingIdentity(),
+      identity: 'tagging',
       inbox: MikroOrmMessageInbox,
       eventStore: [Post],
-      publishers: [PostEventsPublisher, { provide: POST_EVENTS_CLIENT, useFactory: postEventsClient }],
     }),
   ],
+  providers: [PostEventsPublisher, { provide: PostEventsClient, useFactory: /* … */ }],
 })
 export class AppModule {}
 ```
@@ -665,12 +667,12 @@ module, which is how a spec replaces a destination's client:
 ```ts
 const tagging = await startInProcessService(
   await Test.createTestingModule({ imports: [AppModule] })
-    .overrideProvider(POST_EVENTS_CLIENT)
+    .overrideProvider(PostEventsClient)
     .useValue(new RecordingClient())
     .compile(),
 );
 
-tagging.app.get<RecordingClient>(POST_EVENTS_CLIENT).sent;      // pattern + { data, metadata }, as they left
+tagging.app.get<RecordingClient>(PostEventsClient).sent;      // pattern + { data, metadata }, as they left
 ```
 
 `RecordingClient` keeps what it was asked to send instead of sending it — the pattern it went out
@@ -739,11 +741,16 @@ mapping is close enough to read straight across:
 ### Publishing
 
 ```ts
-export const postEventsClient = (): ClientProxy =>
-  new SnsClientProxy({
-    topicArn: process.env.POSTS_TOPIC_ARN!,
-    serializer: new AwsEventEnvelopeSerializer(),
-  });
+{
+  provide: PostEventsClient,
+  inject: [awsConfig.KEY],                            // the application's registerAs('aws')
+  useFactory: ({ topicArn, client }: AwsConfig) =>
+    new SnsClientProxy({
+      topicArn,
+      clientConfig: client,
+      serializer: new AwsEventEnvelopeSerializer(),
+    }),
+}
 ```
 
 The destination and the wire, and **both** are the caller's to name. `AwsEventEnvelopeSerializer` is
@@ -778,7 +785,8 @@ side's inbox has to.
 // a long-running process — `docker compose`, `pnpm dev`, a container
 {
   strategy: new SqsStrategy({
-    queueUrl: process.env.TAGGING_QUEUE_URL!,
+    queueUrl: aws.inboundQueueUrls,                 // the application's registerAs('aws')
+    clientConfig: aws.client,
     deserializer: new SqsEventEnvelopeDeserializer(),
   }),
 }
@@ -865,9 +873,10 @@ export AWS_REGION=us-east-1
 POSTS_TRANSPORT=aws TAGGING_TRANSPORT=aws pnpm dev
 ```
 
-`awsClientConfig()` is what makes that enough: with an endpoint set and no key in the environment it
-supplies the pair LocalStack documents, because the SDK refuses to run without credentials and says
-so in a message that reads like a broken deployment.
+Each application's `config/aws.config.ts` is what makes that enough: with an endpoint set and no key
+in the environment it gives the clients the pair LocalStack documents (`LOCALSTACK_CREDENTIALS`),
+because the SDK refuses to run without credentials and says so in a message that reads like a broken
+deployment.
 
 ---
 
@@ -1031,4 +1040,5 @@ no namespace).
 `AWS_ENDPOINT_URL` points the SNS and SQS clients at LocalStack and is what makes the AWS transport
 usable without an account; `AWS_REGION` and the credentials are the SDK's own, except that a local
 endpoint with no key in the environment gets LocalStack's documented pair rather than a
-`CredentialsProviderError`.
+`CredentialsProviderError`. None of it is read by this library or by `@nestposts/microservices-aws`:
+each application reads it in its own `config/aws.config.ts` and hands the clients a `clientConfig`.

@@ -12,7 +12,6 @@ export const PostList_connection = graphql(`
   fragment PostList_connection on PostConnection {
     pageInfo {
       hasNextPage
-      endCursor
     }
     edges {
       cursor
@@ -24,20 +23,23 @@ export const PostList_connection = graphql(`
 `);
 
 export function PostList({
-  connection,
+  connections,
   onLoadMore,
   loadingMore = false,
   emptyTitle = 'Nenhum post ainda',
   emptyDescription,
 }: {
-  connection: FragmentType<typeof PostList_connection>;
-  onLoadMore?: (after: string) => void;
+  connections: readonly FragmentType<typeof PostList_connection>[];
+  onLoadMore?: () => void;
   loadingMore?: boolean;
   emptyTitle?: string;
   emptyDescription?: string;
 }) {
-  const data = getFragmentData(PostList_connection, connection);
-  const edges = data.edges.filter((edge) => edge !== null);
+  const pages = getFragmentData(PostList_connection, connections);
+  const edges = pages
+    .flatMap((page) => page.edges)
+    .filter((edge) => edge !== null);
+  const hasNextPage = pages.at(-1)?.pageInfo.hasNextPage ?? false;
 
   if (edges.length === 0) {
     return (
@@ -57,15 +59,9 @@ export function PostList({
         ))}
       </div>
 
-      {data.pageInfo.hasNextPage && onLoadMore ? (
+      {hasNextPage && onLoadMore ? (
         <div className="flex justify-center">
-          <Button
-            variant="outline"
-            disabled={loadingMore}
-            onClick={() =>
-              data.pageInfo.endCursor && onLoadMore(data.pageInfo.endCursor)
-            }
-          >
+          <Button variant="outline" disabled={loadingMore} onClick={onLoadMore}>
             {loadingMore ? <Loader2Icon className="animate-spin" /> : null}
             Carregar mais
           </Button>

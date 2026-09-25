@@ -81,13 +81,10 @@ export async function setup(): Promise<void> {
 
 export { bootstrap, withMigrator } from './app/bootstrap';
 export { MigratorModule } from './app/migrator.module';
+export { seedConfig } from './config/seed.config';
 export { DatabaseSeeder } from './seeders/database.seeder';
 export { OAuthResourcesSeeder } from './seeders/oauth-resources.seeder';
-export {
-  SEED_PASSWORD,
-  seededUsers,
-  TestUsersSeeder,
-} from './seeders/test-users.seeder';
+export { TestUsersSeeder } from './seeders/test-users.seeder';
 
 const commands: Record<string, () => Promise<unknown>> = {
   fresh,
