@@ -36,7 +36,7 @@ export async function setupTestStorage(): Promise<TestStorage> {
   const bucket = 'assets';
 
   const container: StartedTestContainer = await new GenericContainer(
-    'minio/minio:latest',
+    'pgsty/minio:latest',
   )
     .withCommand(['server', '/data'])
     .withEnvironment({

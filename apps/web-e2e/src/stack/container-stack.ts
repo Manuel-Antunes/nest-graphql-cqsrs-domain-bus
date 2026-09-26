@@ -44,7 +44,7 @@ export class ContainerStack {
   private static readonly RABBITMQ_IMAGE = 'rabbitmq:4-management';
   private static readonly INNGEST_IMAGE = 'inngest/inngest:latest';
   private static readonly MAILPIT_IMAGE = 'axllent/mailpit:latest';
-  private static readonly MINIO_IMAGE = 'minio/minio:latest';
+  private static readonly MINIO_IMAGE = 'pgsty/minio:latest';
 
   private static readonly MAILPIT_SMTP_PORT = 1025;
   private static readonly MAILPIT_API_PORT = 8025;
