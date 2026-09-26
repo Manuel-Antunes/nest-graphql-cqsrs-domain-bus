@@ -1,4 +1,4 @@
-import type { SignedURLOptions } from 'flydrive/types';
+import type { StorageSignedUrlRequest } from '@nestjs/storage';
 
 import type { BinPaths, Converter } from '../domain/converter/converter';
 import type { VariantLayout } from '../domain/options/attachment-path';
@@ -37,7 +37,7 @@ export interface AttachmentModuleOptions {
   keepSource?: boolean;
 
   /** How signed URLs are made when {@link preComputeUrl} computes one. */
-  signedUrl?: SignedURLOptions;
+  signedUrl?: StorageSignedUrlRequest;
 
   /** Where `ffmpeg`, `ffprobe`, `pdftoppm`, `pdfinfo` and `soffice` are, when not on the `PATH`. */
   bin?: BinPaths;

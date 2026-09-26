@@ -13,6 +13,7 @@ MikroORM. A copy of the package was read as the reference; none of it is vendore
 | `Variant` | `Variant` | `key` and `blurhash` |
 | `Asset.from*` / `Attachment.from*` | `attachmentManager.createFrom*` | static constructors — `fromFile`, `fromFiles`, `fromPath`, `fromBuffer`, `fromBase64`, `fromUrl`, `fromStream` — plus `fromDisk`, an object already on a disk, which upstream had no way to attach |
 | `AttachmentManager` | `AttachmentManager` | `computeUrl`, `write`, `remove`, the converters; `store` for an asset outside any entity |
+| `@nestjs/storage`'s `Storage` and `StorageDisk` | `@adonisjs/drive`, which is flydrive | the disks. A disk's visibility is gone: a disk with a `publicUrl` serves its files there, and any other signs |
 | `attachment()` / `attachments()` | `@attachment()` / `@attachments()` | MikroORM property builders over a custom `Type`; `serializeAs` and `serialize` are MikroORM's own `serializedName`, `hidden` and `serializer` |
 | `AttachmentSubscriber` | `utils/hooks.ts` and the `services/attachment/*` | one global MikroORM `EventSubscriber` instead of per-model hooks: `onLoad` for `afterFind`, `onFlush` for `beforeSave`/`beforeDelete`, the transaction events for `trx.after('commit' \| 'rollback')` |
 | `AttachmentOptions` | `LucidOptions` | `disk`, `folder`, `rename`, `preComputeUrl`, `meta`, `variants`, with `:param` segments slugged as upstream; every option may be a strategy of the entity, the property path, the original name and the ambient context. `keepSource` is this library's |
@@ -28,8 +29,7 @@ MikroORM. A copy of the package was read as the reference; none of it is vendore
 
 ## What this library adds
 
-The flydrive `DriveManager` as a Nest module (`DriveModule`, `Drive`); the ambient
-`AttachmentContext` a strategy reads; `TestDrive`; and a legacy reader for columns this library
+The ambient `AttachmentContext` a strategy reads; `TestDisks`; and a legacy reader for columns this library
 wrote before `path` existed.
 
 ## What upstream had and this does not

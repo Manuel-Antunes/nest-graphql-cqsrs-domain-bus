@@ -1,7 +1,6 @@
 import { ForeignKeyConstraintViolationException } from '@mikro-orm/core';
 import { CommandBus } from '@nestjs/cqrs';
 import type { TestingModule } from '@nestjs/testing';
-import { TestDrive } from '@nestposts/asset/infrastructure/testing/test-drive';
 import { PostPreCreatedEvent } from '@nestposts/posts/domain/post/event/post-pre-created.event';
 import { InvalidPostException } from '@nestposts/posts/domain/post/exception/invalid-post.exception';
 import { PostAlreadyExistsException } from '@nestposts/posts/domain/post/exception/post-already-exists.exception';
@@ -13,7 +12,7 @@ import { UserId } from '@nestposts/users/domain/user/vo/user-id';
 import { UserName } from '@nestposts/users/domain/user/vo/user-name';
 
 import {
-  attachmentsOn,
+  attachments,
   contentsOf,
   givenAnUpload,
   storedIn,
@@ -184,7 +183,6 @@ describe('CreatePostCommand.Handler', () => {
 });
 
 describe('CreatePostCommand.Handler, with an attachment', () => {
-  let drive: TestDrive;
   let module: TestingModule;
   let author: Awaited<ReturnType<typeof givenAnAuthor>>;
 
@@ -193,16 +191,10 @@ describe('CreatePostCommand.Handler, with an attachment', () => {
       module.get(CommandBus).execute(command, new PostRequest(command.postId)),
     );
 
-  beforeAll(async () => {
-    drive = await TestDrive.create();
-  });
-
-  afterAll(() => drive?.stop());
-
   beforeEach(async () => {
     module = await createCqrsTestingModule(
       [CreatePostCommand.Handler],
-      attachmentsOn(drive),
+      attachments(),
     );
     author = await givenAnAuthor(module);
   });

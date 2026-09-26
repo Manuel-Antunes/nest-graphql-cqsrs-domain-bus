@@ -148,7 +148,8 @@ const NOT_BUNDLED: Record<string, string> =
  *
  * `@nestjs/core`, `@nestjs/microservices`, `@nestjs/graphql` and the Fastify adapter reach for a
  * package the moment a feature is asked for — Kafka, Redis, MQTT, NATS, gRPC, the WebSocket adapter,
- * static files, view engines — through `loadPackage`, which is a `require` inside a **try/catch**.
+ * static files, view engines, and since Nest 12.1 the Fastify adapter's multipart uploads — through
+ * `loadPackage`, which is a `require` inside a **try/catch**.
  * That is a runtime decision and a bundler cannot see it: esbuild follows the `require`, fails to
  * resolve a package this repository never installed, and the deploy stops with
  * `Could not resolve "kafkajs"` for an application that speaks SQS.
@@ -174,6 +175,7 @@ const NOT_NEEDED = [
   '@nestjs/websockets/*',
   '@fastify/static',
   '@fastify/view',
+  '@fastify/multipart',
   'kafkajs',
   'ioredis',
   'mqtt',

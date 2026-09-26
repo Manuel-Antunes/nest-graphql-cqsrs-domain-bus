@@ -1,6 +1,5 @@
 import { CommandBus } from '@nestjs/cqrs';
 import type { TestingModule } from '@nestjs/testing';
-import { TestDrive } from '@nestposts/asset/infrastructure/testing/test-drive';
 import { ACTIVE_FILTER } from '@nestposts/platform/infrastructure/persistence/soft-delete/soft-delete-orm.entity';
 import { PostDeletedEvent } from '@nestposts/posts/domain/post/event/post-deleted.event';
 import { PostNotFoundException } from '@nestposts/posts/domain/post/exception/post-not-found.exception';
@@ -8,7 +7,7 @@ import { Post } from '@nestposts/posts/domain/post/post.entity';
 import { PostId } from '@nestposts/posts/domain/post/vo/post-id';
 
 import {
-  attachmentsOn,
+  attachments,
   givenAnUpload,
   storedIn,
 } from '../../../../test/support/attachments';
@@ -27,7 +26,6 @@ import { PostRequest } from '../../shared/post-request';
 import { DeletePostCommand } from './delete-post.command';
 
 describe('DeletePostCommand.Handler', () => {
-  let drive: TestDrive;
   let module: TestingModule;
   let events: RecordingEvents;
 
@@ -43,16 +41,10 @@ describe('DeletePostCommand.Handler', () => {
       { filters: { [ACTIVE_FILTER]: false } },
     );
 
-  beforeAll(async () => {
-    drive = await TestDrive.create();
-  });
-
-  afterAll(() => drive?.stop());
-
   beforeEach(async () => {
     module = await createCqrsTestingModule(
       [DeletePostCommand.Handler],
-      attachmentsOn(drive),
+      attachments(),
     );
     events = new RecordingEvents(module);
   });

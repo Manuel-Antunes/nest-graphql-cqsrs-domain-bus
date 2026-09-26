@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import type { SignedURLOptions } from 'flydrive/types';
+import type { StorageSignedUrlRequest } from '@nestjs/storage';
+import { Storage } from '@nestjs/storage';
 
 import type { Asset, AssetWrite } from '../domain/asset/asset';
 import { Attachment } from '../domain/asset/attachment';
@@ -14,7 +15,6 @@ import type { VariantLayout } from '../domain/options/attachment-path';
 import { AttachmentPath } from '../domain/options/attachment-path';
 import type { AttachmentModuleOptions } from './attachment.options';
 import { ATTACHMENT_OPTIONS } from './attachment.options';
-import { Drive } from './drive/drive';
 import type { AttachmentKeyPayload } from './keys/attachment-keys';
 import { AttachmentKeys } from './keys/attachment-keys';
 import { MediaMeta } from './media/media-meta';
@@ -40,7 +40,7 @@ export interface StandalonePlacement {
  * ```ts
  * constructor(private readonly attachments: AttachmentManager) {}
  *
- * await this.attachments.computeUrl(post.cover, { expiresIn: '30 mins' });
+ * await this.attachments.computeUrl(post.cover, { expiresIn: '30m' });
  * const report = await this.attachments.store(await Asset.fromBuffer(pdf, 'report.pdf'), {
  *   folder: 'reports',
  * });
@@ -57,7 +57,7 @@ export class AttachmentManager {
   constructor(
     @Inject(ATTACHMENT_OPTIONS)
     private readonly options: AttachmentModuleOptions,
-    readonly drive: Drive,
+    readonly storage: Storage,
     readonly converters: ConverterRegistry,
     readonly keys: AttachmentKeys,
   ) {
@@ -91,21 +91,21 @@ export class AttachmentManager {
     };
   }
 
-  /** The disk `asset` is on — or goes to: its own, the column's, or the drive's default. */
+  /** The disk `asset` is on — or goes to: its own, the column's, or the storage's default. */
   diskOf(asset: Asset, fallback?: string): string {
-    return asset.disk ?? fallback ?? this.drive.defaultDisk;
+    return asset.disk ?? fallback ?? this.storage.defaultDisk;
   }
 
   /** Binds `asset` — and, for an attachment, each of its variants — to the disk it is stored on. */
   bind<T extends Asset>(asset: T, fallbackDisk?: string): T {
     const disk = this.diskOf(asset, fallbackDisk);
-    asset.bindTo(this.drive.use(disk));
+    asset.bindTo(this.storage.disk(disk));
     if (asset instanceof Attachment) {
       for (const variant of asset.variants) {
         if (variant.disk && variant.disk !== disk) {
-          variant.bindTo(this.drive.use(variant.disk));
+          variant.bindTo(this.storage.disk(variant.disk));
         } else if (!variant.bound) {
-          variant.bindTo(this.drive.use(disk));
+          variant.bindTo(this.storage.disk(disk));
         }
       }
     }
@@ -145,7 +145,7 @@ export class AttachmentManager {
       asset.meta = await this.metaOf(asset, disk);
     }
     const write = await asset.store(
-      this.drive,
+      this.storage,
       { disk, path },
       { keepSource: options.keepSource },
     );
@@ -187,7 +187,8 @@ export class AttachmentManager {
    */
   async computeUrl(
     asset: Asset,
-    signedUrlOptions: SignedURLOptions | undefined = this.options.signedUrl,
+    signedUrlOptions: StorageSignedUrlRequest | undefined = this.options
+      .signedUrl,
   ): Promise<void> {
     if (!asset.bound) {
       this.bind(asset);
@@ -201,7 +202,7 @@ export class AttachmentManager {
 
   private async metaOf(asset: Asset, disk: string) {
     try {
-      const input = await asset.source?.read(this.drive, disk);
+      const input = await asset.source?.read(this.storage, disk);
       return input === undefined
         ? undefined
         : await MediaMeta.read(input, asset.mimeType, this.context);

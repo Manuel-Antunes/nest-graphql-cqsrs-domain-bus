@@ -1,59 +1,60 @@
-import { Drive } from '@nestposts/asset/infrastructure/drive/drive';
+import type { StorageDisk } from '@nestjs/storage';
 
 import type { MinioStorage } from '../../../test/support/minio-storage';
 import { startMinioStorage } from '../../../test/support/minio-storage';
-import { BucketDisks } from './bucket-disks';
+import type { BucketStorage } from './bucket-disks';
+import {
+  BucketDisks,
+  MissingStorageCredentialsException,
+} from './bucket-disks';
+
+const disksOf = (storage: BucketStorage) =>
+  new BucketDisks(storage).createStorageOptions().disks as Record<
+    'public' | 'private',
+    StorageDisk
+  >;
 
 describe('BucketDisks', () => {
   let minio: MinioStorage;
-  let disks: BucketDisks;
-  let drive: Drive;
+  let disks: Record<'public' | 'private', StorageDisk>;
 
   beforeAll(async () => {
     minio = await startMinioStorage();
-    disks = new BucketDisks(minio.storage);
-    drive = new Drive(disks.createDriveOptions());
+    disks = disksOf(minio.storage);
   });
 
-  afterAll(async () => {
-    disks?.onModuleDestroy();
-    await minio?.stop();
-  });
+  afterAll(() => minio?.stop());
 
   beforeEach(() => minio.drop());
 
-  it('answers with the public disk when none is named', async () => {
-    await drive.use().put('default.txt', 'default');
-
-    await expect(drive.use('public').get('default.txt')).resolves.toBe(
-      'default',
+  it('answers with the public disk when none is named', () => {
+    expect(new BucketDisks(minio.storage).createStorageOptions().default).toBe(
+      'public',
     );
   });
 
-  it('serves an object under a publicly readable prefix at an unsigned url', async () => {
-    await drive.use('public').put('tmp/public.txt', 'public-bytes');
+  it('serves an object under a publicly readable prefix at its public url', async () => {
+    await disks.public.put('tmp/public.txt', 'public-bytes');
 
-    const response = await fetch(
-      await drive.use('public').getUrl('tmp/public.txt'),
-    );
+    const response = await fetch(disks.public.url('tmp/public.txt'));
 
     expect(response.status).toBe(200);
     await expect(response.text()).resolves.toBe('public-bytes');
   });
 
   it('serves a private object only through a signed url', async () => {
-    await drive.use('private').put('private.txt', 'private-bytes');
+    await disks.private.put('private.txt', 'private-bytes');
 
-    const signed = await drive.use('private').getSignedUrl('private.txt');
+    const signed = await disks.private.signedUrl('private.txt');
 
     expect(signed).toContain('X-Amz-Signature');
     expect((await fetch(signed)).status).toBe(200);
     expect((await fetch(signed.split('?')[0])).status).toBe(403);
+    expect(() => disks.private.url('private.txt')).toThrow();
   });
 
   describe('behind a public endpoint that is not its own', () => {
-    let exposedDisks: BucketDisks;
-    let exposed: Drive;
+    let exposed: Record<'public' | 'private', StorageDisk>;
     let publicEndpoint: string;
 
     beforeAll(() => {
@@ -62,33 +63,30 @@ describe('BucketDisks', () => {
       outside.hostname =
         internal.hostname === '127.0.0.1' ? 'localhost' : '127.0.0.1';
       publicEndpoint = outside.origin;
-      exposedDisks = new BucketDisks({ ...minio.storage, publicEndpoint });
-      exposed = new Drive(exposedDisks.createDriveOptions());
+      exposed = disksOf({ ...minio.storage, publicEndpoint });
     });
 
-    afterAll(() => exposedDisks?.onModuleDestroy());
-
     it('signs an upload for the public host, and the object lands where the service reads it', async () => {
-      const url = await exposed
-        .use('private')
-        .getSignedUploadUrl('tmp/user-1/upload', { contentType: 'text/plain' });
+      const upload = await exposed.private.signedUpload('tmp/user-1/upload', {
+        contentType: 'text/plain',
+      });
 
-      expect(url.startsWith(`${publicEndpoint}/`)).toBe(true);
-      const put = await fetch(url, {
-        method: 'PUT',
-        headers: { 'content-type': 'text/plain' },
+      expect(upload.url.startsWith(`${publicEndpoint}/`)).toBe(true);
+      const put = await fetch(upload.url, {
+        method: upload.method,
+        headers: upload.headers,
         body: 'uploaded',
       });
       expect(put.status).toBe(200);
-      await expect(
-        exposed.use('private').get('tmp/user-1/upload'),
-      ).resolves.toBe('uploaded');
+      await expect(exposed.private.getText('tmp/user-1/upload')).resolves.toBe(
+        'uploaded',
+      );
     });
 
     it('signs a read for the public host', async () => {
-      await exposed.use('private').put('private.txt', 'private-bytes');
+      await exposed.private.put('private.txt', 'private-bytes');
 
-      const url = await exposed.use('private').getSignedUrl('private.txt');
+      const url = await exposed.private.signedUrl('private.txt');
 
       expect(url.startsWith(`${publicEndpoint}/`)).toBe(true);
       const response = await fetch(url);
@@ -96,26 +94,30 @@ describe('BucketDisks', () => {
       await expect(response.text()).resolves.toBe('private-bytes');
     });
 
-    it('builds an unsigned url on the public host, path-style', async () => {
-      await expect(
-        exposed.use('public').getUrl('tmp/public.txt'),
-      ).resolves.toBe(
+    it('builds an unsigned url on the public host, path-style', () => {
+      expect(exposed.public.url('tmp/public.txt')).toBe(
         `${publicEndpoint}/${minio.storage.bucket}/tmp/public.txt`,
       );
     });
   });
 
-  it('keeps the path of a CDN url given without a trailing slash', async () => {
-    const cdnDisks = new BucketDisks({
+  it('builds its disks without credentials, and names the missing ones when the bucket is used', async () => {
+    const unconfigured = disksOf({ bucket: 'uploads', region: 'us-east-1' });
+
+    await expect(unconfigured.private.put('a.txt', 'a')).rejects.toThrow(
+      MissingStorageCredentialsException,
+    );
+  });
+
+  it('serves the public disk from a CDN, keeping the path its url carries', () => {
+    const cdn = disksOf({
       bucket: 'uploads',
       region: 'us-east-1',
       cdnUrl: 'https://cdn.example/uploads',
     });
-    const cdn = new Drive(cdnDisks.createDriveOptions());
 
-    await expect(cdn.use('public').getUrl('posts/cover.png')).resolves.toBe(
+    expect(cdn.public.url('posts/cover.png')).toBe(
       'https://cdn.example/uploads/posts/cover.png',
     );
-    cdnDisks.onModuleDestroy();
   });
 });

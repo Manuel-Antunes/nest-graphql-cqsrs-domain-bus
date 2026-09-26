@@ -1,112 +1,75 @@
-import {
-  GetObjectCommand,
-  PutObjectCommand,
-  S3Client,
-} from '@aws-sdk/client-s3';
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import type { OnModuleDestroy } from '@nestjs/common';
 import { Inject, Injectable } from '@nestjs/common';
-import type { DriveOptions } from '@nestposts/asset/infrastructure/drive/drive';
-import type { DriveOptionsFactory } from '@nestposts/asset/infrastructure/drive/drive.module-definition';
-import { S3Driver } from 'flydrive/drivers/s3';
+import type {
+  S3DiskOptions,
+  StorageModuleOptions,
+  StorageOptionsFactory,
+} from '@nestjs/storage';
 
 import type { StorageConfig } from '../../config/storage.config';
 import { storageConfig } from '../../config/storage.config';
+import { PublicEndpointS3Disk } from './public-endpoint-s3.disk';
 
 export type BucketStorage = Pick<StorageConfig, 'bucket'> &
   Partial<Omit<StorageConfig, 'bucket'>>;
 
-type S3UrlBuilder = NonNullable<
-  ConstructorParameters<typeof S3Driver>[0]['urlBuilder']
->;
+const DEFAULT_REGION = 'us-east-1';
 
-const DEFAULT_EXPIRY_SECONDS = 30 * 60;
+export class MissingStorageCredentialsException extends Error {
+  constructor() {
+    super(
+      'the bucket has no credentials: set DRIVE_AWS_ACCESS_KEY_ID and DRIVE_AWS_SECRET_ACCESS_KEY, or AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY',
+    );
+    this.name = 'MissingStorageCredentialsException';
+  }
+}
 
 @Injectable()
-export class BucketDisks implements DriveOptionsFactory, OnModuleDestroy {
-  private readonly clients: S3Client[] = [];
-
+export class BucketDisks implements StorageOptionsFactory {
   constructor(
     @Inject(storageConfig.KEY) private readonly storage: BucketStorage,
   ) {}
 
-  createDriveOptions(): DriveOptions {
-    const client = this.client(this.storage.endpoint);
-    const urlBuilder = this.storage.publicEndpoint
-      ? BucketDisks.publicUrls(
-          this.client(this.storage.publicEndpoint),
-          this.storage.publicEndpoint,
-          this.storage.cdnUrl,
-        )
-      : undefined;
-    const disk = (visibility: 'public' | 'private') => () =>
-      new S3Driver({
-        client,
-        bucket: this.storage.bucket,
-        visibility,
-        supportsACL: this.storage.supportsACL ?? false,
-        cdnUrl:
-          visibility === 'public' && this.storage.cdnUrl
-            ? BucketDisks.withTrailingSlash(this.storage.cdnUrl)
-            : undefined,
-        urlBuilder,
-      });
+  createStorageOptions(): StorageModuleOptions {
+    const options: S3DiskOptions = {
+      bucket: this.storage.bucket,
+      region: this.storage.region,
+      endpoint: this.storage.endpoint,
+      forcePathStyle: this.storage.forcePathStyle,
+      credentials: this.storage.credentials ?? BucketDisks.missingCredentials,
+    };
     return {
       default: this.storage.defaultDisk ?? 'public',
-      services: { public: disk('public'), private: disk('private') },
+      disks: {
+        public: PublicEndpointS3Disk.signingAt(
+          { ...options, publicUrl: this.publicUrl() },
+          this.storage.publicEndpoint,
+        ),
+        private: PublicEndpointS3Disk.signingAt(
+          options,
+          this.storage.publicEndpoint,
+        ),
+      },
     };
   }
 
-  onModuleDestroy(): void {
-    for (const client of this.clients.splice(0)) {
-      client.destroy();
+  private static missingCredentials(): never {
+    throw new MissingStorageCredentialsException();
+  }
+
+  private publicUrl(): string {
+    const { bucket, cdnUrl, publicEndpoint, endpoint, forcePathStyle } =
+      this.storage;
+    if (cdnUrl) {
+      return cdnUrl;
     }
-  }
-
-  private client(endpoint?: string): S3Client {
-    const client = new S3Client({
-      region: this.storage.region,
-      endpoint,
-      forcePathStyle: this.storage.forcePathStyle,
-      credentials: this.storage.credentials,
-    });
-    this.clients.push(client);
-    return client;
-  }
-
-  private static publicUrls(
-    signer: S3Client,
-    publicEndpoint: string,
-    cdnUrl: string | undefined,
-  ): S3UrlBuilder {
-    return {
-      ...(cdnUrl
-        ? {}
-        : {
-            generateURL: async (key, bucket) =>
-              new URL(
-                `${bucket}/${key}`,
-                BucketDisks.withTrailingSlash(publicEndpoint),
-              ).toString(),
-          }),
-      generateSignedURL: (_key, input, _client, expiresIn) =>
-        getSignedUrl(signer, new GetObjectCommand(input), {
-          expiresIn: BucketDisks.expirySeconds(expiresIn),
-        }),
-      generateSignedUploadURL: (_key, input, _client, expiresIn) =>
-        getSignedUrl(signer, new PutObjectCommand(input), {
-          expiresIn: BucketDisks.expirySeconds(expiresIn),
-        }),
-    };
-  }
-
-  private static withTrailingSlash(url: string): string {
-    return url.endsWith('/') ? url : `${url}/`;
-  }
-
-  private static expirySeconds(expiresIn?: number | string): number {
-    return typeof expiresIn === 'number'
-      ? expiresIn
-      : Number(expiresIn) || DEFAULT_EXPIRY_SECONDS;
+    const base = publicEndpoint ?? endpoint;
+    if (!base) {
+      return `https://${bucket}.s3.${this.storage.region ?? DEFAULT_REGION}.amazonaws.com`;
+    }
+    if (publicEndpoint || forcePathStyle) {
+      return `${base.replace(/\/+$/, '')}/${bucket}`;
+    }
+    const url = new URL(base);
+    return `${url.protocol}//${bucket}.${url.host}`;
   }
 }

@@ -260,7 +260,7 @@ Environment variables, per application:
 | telemetry | `OTEL_EXPORTER_OTLP_ENDPOINT` turns tracing **on** — unset, the SDK never starts; `OTEL_SERVICE_NAME`, and the rest of `OTEL_*` | idem | idem |
 | errors | `SENTRY_DSN` turns error reporting **on** — unset, every report is a no-op; `SENTRY_ENVIRONMENT`, `SENTRY_RELEASE`. The deploy sets all three from `infra/sentry` | idem | idem |
 | auth | `AUTH_URL`, `AUTH_SECRET`, `AUTH_BASE_PATH` (default `/api/auth`), `WEB_URL`, `AUTH_TRUSTED_ORIGINS`, `AUTH_COOKIE_DOMAIN`, `AUTH_GOOGLE_ID`/`AUTH_GOOGLE_SECRET`, `AUTH_GITHUB_ID`/`AUTH_GITHUB_SECRET`, `AUTH_REQUIRE_EMAIL_VERIFICATION` (default `true`), `AUTH_RATE_LIMIT=false` (the e2e sets it) — see `libs/auth/README.md`. **Every process that reads a session shares `AUTH_SECRET`**, `apps/web` included | — | — |
-| storage | `DRIVE_BUCKET`, `DRIVE_S3_ENDPOINT`, `DRIVE_S3_PUBLIC_ENDPOINT` (where the BROWSER reaches the same storage — signed URLs are bound to it), `DRIVE_S3_FORCE_PATH_STYLE`, `DRIVE_CDN_URL`, `DRIVE_AWS_REGION`, `DRIVE_AWS_ACCESS_KEY_ID`/`DRIVE_AWS_SECRET_ACCESS_KEY` — read by `config/storage.config.ts`, turned into the S3 disks by `infrastructure/storage/bucket-disks.ts`; `libs/asset` reads no environment | — | — |
+| storage | `DRIVE_BUCKET`, `DRIVE_S3_ENDPOINT`, `DRIVE_S3_PUBLIC_ENDPOINT` (where the BROWSER reaches the same storage — signed URLs are bound to it), `DRIVE_S3_FORCE_PATH_STYLE`, `DRIVE_CDN_URL`, `DRIVE_AWS_REGION`, `DRIVE_AWS_ACCESS_KEY_ID`/`DRIVE_AWS_SECRET_ACCESS_KEY` — read by `config/storage.config.ts`, turned into `@nestjs/storage`'s `S3Disk`s by `infrastructure/storage/bucket-disks.ts`; `libs/asset` reads no environment. The credentials fall back to `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`/`AWS_SESSION_TOKEN` (what Lambda sets), read there: an `S3Disk` reads them once, when it is BUILT, and refuses to be built without them, so with none at all `BucketDisks` hands it a function that fails only when the bucket is used, and the service still boots | — | — |
 | mail | — | — | `MAIL_TRANSPORT` = `smtp` (default) \| `ses` \| `json`, `MAIL_SMTP_URL` (default Mailpit, `smtp://localhost:1025`), `MAIL_FROM`, `MAIL_SES_REGION` — read by `infrastructure/mail/mail.config.ts`; `libs/core/mail` itself takes the mailer's options and reads no environment |
 | push | — | — | `FIREBASE_CREDENTIALS` (the service account's JSON); unset, the `push` channel sends nothing |
 | other | `PORT`, `MIKRO_ORM_DEBUG=true` | `MIKRO_ORM_DEBUG=true` | `MIKRO_ORM_DEBUG=true` |
@@ -329,11 +329,12 @@ libs/notifications       notifications as a domain concept: Notification (via, a
                          on-demand twin (someone known only by an address), devices, the delivery
                          ledger, and the channels that deliver. It has a README
 libs/asset               files as a value an entity holds — a port of @jrmc/adonis-attachment over
-                         flydrive: the Drive (DriveModule) of named disks on any driver, Asset,
-                         Attachment and Variant with their static constructors, the attachment()
-                         and attachments() column types, the global subscriber that stores, binds
-                         and cleans up on flush, the converters and the variant queue, and the
-                         attachments route by key id. It knows no provider. README and NOTICE
+                         @nestjs/storage: Asset, Attachment and Variant with their static
+                         constructors, the attachment() and attachments() column types, the global
+                         subscriber that stores, binds and cleans up on flush, the converters and the
+                         variant queue, and the attachments route by key id. The disks are
+                         @nestjs/storage's (StorageModule, Storage, S3Disk); it knows no provider.
+                         README and NOTICE
 libs/core/cqsrs          the third CQRS message (see below)
 libs/core/validated-dto  Zod → DTO/value object mixins
 libs/core/mail           class-based email (Mail, Message, MailService) over @nestjs-modules/mailer,
@@ -446,9 +447,9 @@ else. `apps/tagging/src/config` is the reference shape:
   it everywhere else. Modules take their config through `forRootAsync({ inject: [xConfig.KEY] })`
   (`DatabaseModule`, `FederationGatewayModule`, `RetryPolicyModule`, `MailModule`,
   `NotificationChannelsModule`, `GraphQLModule`, `loggingModuleAsync`), `BetterAuthModule`
-  through its `config: authConfig.KEY` option, and `DriveModule` through `useClass` — posts-api's
-  `BucketDisks` is a `DriveOptionsFactory` that injects `storageConfig.KEY` and owns the S3 clients
-  it builds.
+  through its `config: authConfig.KEY` option, and `StorageModule` (`@nestjs/storage`) through `useClass` —
+  posts-api's `BucketDisks` is a `StorageOptionsFactory` that injects `storageConfig.KEY` and builds
+  the `S3Disk`s.
 - **A value needed before the container exists is read by calling the factory**, `appConfig()` —
   `main.ts` deciding whether tagging is a hybrid, `TransportEventBusModule`'s static `subscriptions`,
   the billing plugins the web registers. The same parse, the same validation.

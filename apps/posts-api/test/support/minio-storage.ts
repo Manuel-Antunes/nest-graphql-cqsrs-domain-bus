@@ -48,7 +48,6 @@ export async function startMinioStorage(): Promise<MinioStorage> {
     endpoint: `http://${container.getHost()}:${container.getMappedPort(MINIO_PORT)}`,
     forcePathStyle: true,
     credentials,
-    supportsACL: true,
   };
 
   const client = new S3Client({

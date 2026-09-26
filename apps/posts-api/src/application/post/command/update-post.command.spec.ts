@@ -1,16 +1,16 @@
 import { CommandBus } from '@nestjs/cqrs';
 import type { TestingModule } from '@nestjs/testing';
-import { TestDrive } from '@nestposts/asset/infrastructure/testing/test-drive';
 import { PostUpdatedEvent } from '@nestposts/posts/domain/post/event/post-updated.event';
 import { InvalidPostException } from '@nestposts/posts/domain/post/exception/invalid-post.exception';
 import { PostNotFoundException } from '@nestposts/posts/domain/post/exception/post-not-found.exception';
 import { Post } from '@nestposts/posts/domain/post/post.entity';
+import { PostRepository } from '@nestposts/posts/domain/post/post.repository';
 import { PostContent } from '@nestposts/posts/domain/post/vo/post-content';
 import { PostId } from '@nestposts/posts/domain/post/vo/post-id';
 import { PostTitle } from '@nestposts/posts/domain/post/vo/post-title';
 
 import {
-  attachmentsOn,
+  attachments,
   contentsOf,
   givenAnUpload,
   storedIn,
@@ -130,7 +130,6 @@ describe('UpdatePostCommand.Handler', () => {
 });
 
 describe('UpdatePostCommand.Handler, with an attachment', () => {
-  let drive: TestDrive;
   let module: TestingModule;
 
   const execute = (command: UpdatePostCommand.UpdatePost) =>
@@ -148,16 +147,10 @@ describe('UpdatePostCommand.Handler, with an attachment', () => {
     return { author, post, stored: post.asset?.path as string };
   };
 
-  beforeAll(async () => {
-    drive = await TestDrive.create();
-  });
-
-  afterAll(() => drive?.stop());
-
   beforeEach(async () => {
     module = await createCqrsTestingModule(
       [UpdatePostCommand.Handler],
-      attachmentsOn(drive),
+      attachments(),
     );
   });
 
@@ -188,6 +181,29 @@ describe('UpdatePostCommand.Handler, with an attachment', () => {
     await expect(contentsOf(module, replaced)).resolves.toBe('second');
     await expect(storedIn(module, stored)).resolves.toBe(false);
     await expect(storedIn(module, replacement.name)).resolves.toBe(false);
+  });
+
+  it('answers the replacement with its url to the request that stored it, as the mutation does', async () => {
+    const { author, post } = await givenAPostWithAFile();
+    const replacement = await givenAnUpload(module, author.id, 'second');
+
+    const read = await inRequestContext(module, async () => {
+      await module
+        .get(CommandBus)
+        .execute(
+          new UpdatePostCommand.UpdatePost(
+            post.id,
+            null,
+            null,
+            replacement,
+            author.id,
+          ),
+          new PostRequest(post.id),
+        );
+      return module.get(PostRepository).findById(post.id);
+    });
+
+    expect(read?.asset?.url).toContain(read?.asset?.path);
   });
 
   it('changes the text and the file in one go', async () => {

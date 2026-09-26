@@ -1,8 +1,7 @@
 import { CqrsModule, QueryBus } from '@nestjs/cqrs';
+import { Storage, StorageModule } from '@nestjs/storage';
 import type { TestingModule } from '@nestjs/testing';
 import { Test } from '@nestjs/testing';
-import { Drive } from '@nestposts/asset/infrastructure/drive/drive';
-import { DriveModule } from '@nestposts/asset/infrastructure/drive/drive.module';
 import { UserId } from '@nestposts/users/domain/user/vo/user-id';
 
 import type { MinioStorage } from '../../../../test/support/minio-storage';
@@ -27,7 +26,7 @@ describe('GeneratePresignedUrlQuery.Handler', () => {
     module = await Test.createTestingModule({
       imports: [
         CqrsModule.forRoot(),
-        DriveModule.forRootAsync({
+        StorageModule.forRootAsync({
           imports: [minio.configModule()],
           useClass: BucketDisks,
         }),
@@ -59,9 +58,9 @@ describe('GeneratePresignedUrlQuery.Handler', () => {
     });
 
     expect(put.status).toBe(200);
-    const disk = module.get(Drive).use();
-    await expect(disk.get(key)).resolves.toBe('uploaded-bytes');
-    await expect(disk.getMetaData(key)).resolves.toMatchObject({
+    const disk = module.get(Storage).disk();
+    await expect(disk.getText(key)).resolves.toBe('uploaded-bytes');
+    await expect(disk.stat(key)).resolves.toMatchObject({
       contentType: 'text/plain',
     });
   });

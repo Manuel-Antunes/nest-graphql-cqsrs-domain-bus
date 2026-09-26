@@ -5,8 +5,8 @@ import { YogaFederationDriver } from '@graphql-yoga/nestjs-federation';
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { GraphQLISODateTime, GraphQLModule } from '@nestjs/graphql';
+import { StorageModule } from '@nestjs/storage';
 import { AttachmentModule } from '@nestposts/asset/infrastructure/attachment.module';
-import { DriveModule } from '@nestposts/asset/infrastructure/drive/drive.module';
 import { AuthInfrastructureModule } from '@nestposts/auth/infrastructure/auth-infrastructure.module';
 import { CqsrsModule } from '@nestposts/cqsrs';
 import { DatabaseModule, TenancyModule } from '@nestposts/database';
@@ -114,7 +114,7 @@ import { validatedDtoClasses } from './interfaces/mapper/validated-dto.strategy'
       strategyInitializer: validatedDtoClasses(),
       errorHandler: new MapperErrorHandler(),
     }),
-    DriveModule.forRootAsync({ useClass: BucketDisks }),
+    StorageModule.forRootAsync({ useClass: BucketDisks }),
     AttachmentModule.forRoot({}),
     TransportEventBusModule.forRootAsync({
       inject: [appConfig.KEY],

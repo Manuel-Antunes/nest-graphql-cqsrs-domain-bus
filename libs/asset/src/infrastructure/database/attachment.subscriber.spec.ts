@@ -1,6 +1,7 @@
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { EventEmitter2, EventEmitterModule } from '@nestjs/event-emitter';
+import { Storage } from '@nestjs/storage';
 import type { TestingModule } from '@nestjs/testing';
 import { Test } from '@nestjs/testing';
 import type { EntityManager } from '@nestposts/database';
@@ -22,8 +23,6 @@ import {
 } from '../../domain/events/variant-generation.events';
 import { AttachmentModule } from '../attachment.module';
 import { AttachmentContext } from '../context/attachment-context';
-import { Drive } from '../drive/drive';
-import { DriveModule } from '../drive/drive.module';
 import { AttachmentServer } from '../http/attachment-server';
 import { AttachmentKeys } from '../keys/attachment-keys';
 import {
@@ -37,17 +36,16 @@ import {
   TestPostSchema,
   UppercaseConverter,
 } from '../testing/attachment-test-entities';
-import { TestDrive } from '../testing/test-drive';
+import { TestDisks } from '../testing/test-disks';
 import { RegenerateService } from '../variants/regenerate.service';
 import { VariantQueue } from '../variants/variant-queue';
 
 const TABLE = 'attachment_test_post';
 const SECRET = 'attachment-spec-secret';
 
-let testDrive: TestDrive;
 let moduleRef: TestingModule;
 let orm: AnyMikroORM;
-let drive: Drive;
+let storage: Storage;
 let events: { name: string; event: VariantGenerationEvent }[];
 
 const em = () => orm.em.fork();
@@ -65,7 +63,7 @@ async function upload(
   key: string,
   body = 'payload',
 ): Promise<Attachment> {
-  await drive.use(disk).put(key, body);
+  await storage.disk(disk).put(key, body);
   const extname = key.split('.').pop() as string;
   return Attachment.fromDisk(key, {
     size: body.length,
@@ -74,10 +72,10 @@ async function upload(
 }
 
 const exists = (disk: 'public' | 'private', key: string) =>
-  drive.use(disk).exists(key);
+  storage.disk(disk).exists(key);
 
 const read = (disk: 'public' | 'private', key: string) =>
-  drive.use(disk).get(key);
+  storage.disk(disk).getText(key);
 
 const idle = () => moduleRef.get(VariantQueue).idle();
 
@@ -123,7 +121,6 @@ const png = (width = 4, height = 3) =>
     .toBuffer();
 
 beforeAll(async () => {
-  testDrive = await TestDrive.create();
   moduleRef = await Test.createTestingModule({
     imports: [
       DatabaseModule.forRoot({
@@ -135,7 +132,7 @@ beforeAll(async () => {
       }),
       TestSchemaModule.forRoot(),
       EventEmitterModule.forRoot(),
-      DriveModule.forRoot(testDrive.options),
+      TestDisks.module(),
       AttachmentModule.forRoot({
         preComputeUrl: true,
         secret: SECRET,
@@ -149,7 +146,7 @@ beforeAll(async () => {
   await moduleRef.init();
 
   orm = moduleRef.get(MikroORM);
-  drive = moduleRef.get(Drive);
+  storage = moduleRef.get(Storage);
   const emitter = moduleRef.get(EventEmitter2);
   for (const name of Object.values(AttachmentEvent)) {
     emitter.on(name, (event: VariantGenerationEvent) =>
@@ -160,7 +157,6 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await moduleRef?.close();
-  await testDrive?.stop();
 });
 
 beforeEach(async () => {
@@ -178,7 +174,7 @@ beforeEach(async () => {
         .map(table)
         .join(', ')}`,
     );
-  await testDrive.drop();
+  TestDisks.clear(storage);
 });
 
 describe('attachment column type (serialization)', () => {
@@ -188,7 +184,7 @@ describe('attachment column type (serialization)', () => {
       avatar: await upload('private', 'tmp/durable.png'),
     });
 
-    expect(entity.avatar.url).toMatch(/^http:\/\/files\.test\/private\//);
+    expect(TestDisks.isSigned(storage, entity.avatar.url)).toBe(true);
     expect(await column(id, 'avatar')).toEqual({
       disk: 'private',
       path: entity.avatar.path,
@@ -218,7 +214,7 @@ describe('attachment column type (serialization)', () => {
   });
 
   it('reads a row written before `path` existed as the attachment at its `name`, and never moves it', async () => {
-    await drive.use('private').put('legacy/kept.png', 'legacy');
+    await storage.disk('private').put('legacy/kept.png', 'legacy');
     const [row] = (await orm.em.getConnection().execute(
       `insert into ${table(TABLE)} (id, title, avatar)
        values (gen_random_uuid(), 'legacy', ?::json) returning id::text as id`,
@@ -262,7 +258,7 @@ describe('CREATE — storing a pending attachment', () => {
     });
 
     expect(entity.cover.url).toBe(
-      `${TestDrive.BASE_URL}/public/${entity.cover.path}`,
+      `${TestDisks.BASE_URL}/public/${entity.cover.path}`,
     );
   });
 
@@ -272,7 +268,7 @@ describe('CREATE — storing a pending attachment', () => {
       avatar: await upload('private', 'tmp/private.png'),
     });
 
-    expect(TestDrive.isSigned(entity.avatar.url)).toBe(true);
+    expect(TestDisks.isSigned(storage, entity.avatar.url)).toBe(true);
   });
 
   it('leaves the source where it is when keepSource is set', async () => {
@@ -289,7 +285,7 @@ describe('CREATE — storing a pending attachment', () => {
   });
 
   it('leaves the source where it is when the attachment itself says so', async () => {
-    await drive.use('public').put('shared/logo.png', 'logo');
+    await storage.disk('public').put('shared/logo.png', 'logo');
     const { entity } = await insertPost({
       title: 'keep-this-source',
       cover: Attachment.fromDisk('shared/logo.png', {
@@ -358,8 +354,8 @@ describe('CREATE — storing a pending attachment', () => {
 
     expect(entity.cover.mimeType).toBe('image/png');
     expect(entity.cover.originalName).toBe('pixel.png');
-    expect(await drive.use('public').getBytes(entity.cover.path)).toEqual(
-      new Uint8Array(bytes),
+    expect(await storage.disk('public').getBuffer(entity.cover.path)).toEqual(
+      bytes,
     );
   });
 
@@ -379,8 +375,8 @@ describe('CREATE — storing a pending attachment', () => {
 
       expect(entity.cover.originalName).toBe('red.png');
       expect(entity.cover.mimeType).toBe('image/png');
-      expect(await drive.use('public').getBytes(entity.cover.path)).toEqual(
-        new Uint8Array(bytes),
+      expect(await storage.disk('public').getBuffer(entity.cover.path)).toEqual(
+        bytes,
       );
     } finally {
       server.close();
@@ -417,7 +413,7 @@ describe('LOAD — binding without touching storage', () => {
     });
 
     const loaded = await findPost(id);
-    expect(TestDrive.isSigned(loaded.avatar.url)).toBe(true);
+    expect(TestDisks.isSigned(storage, loaded.avatar.url)).toBe(true);
     expect(loaded.avatar.path).toBe(entity.avatar.path);
     expect(await loaded.avatar.getBuffer()).toEqual(Buffer.from('load-bytes'));
   });
@@ -430,7 +426,9 @@ describe('LOAD — binding without touching storage', () => {
 
     const loaded = await findPost(id);
     expect(loaded.manual.url).toBeUndefined();
-    expect(TestDrive.isSigned(await loaded.manual.getSignedUrl())).toBe(true);
+    expect(
+      TestDisks.isSigned(storage, await loaded.manual.getSignedUrl()),
+    ).toBe(true);
   });
 
   it('a load followed by a flush issues no UPDATE (no url churn)', async () => {
@@ -450,6 +448,30 @@ describe('LOAD — binding without touching storage', () => {
     const uow = fork.getUnitOfWork();
     uow.computeChangeSets();
     expect(uow.getChangeSets()).toHaveLength(0);
+  });
+
+  it('keeps what it stored, bound and with its url, when the same entity manager reads the row again', async () => {
+    const { id } = await insertPost({ title: 'read-again' });
+
+    const fork = em();
+    const loaded = await findPost(id, fork);
+    loaded.cover = await upload('public', 'tmp/read-again.png', 'again');
+    loaded.gallery = [
+      await Attachment.fromBuffer(Buffer.from('one'), 'one.txt'),
+    ];
+    await fork.flush();
+    const [again] = (await fork.find(
+      TestPostSchema as never,
+      {
+        id,
+      } as never,
+    )) as any[];
+
+    expect(again).toBe(loaded);
+    expect(again.cover.url).toBe(
+      `${TestDisks.BASE_URL}/public/${again.cover.path}`,
+    );
+    expect(await again.gallery[0].getBuffer()).toEqual(Buffer.from('one'));
   });
 
   it('seals a key id that opens to the row and the property', async () => {
@@ -660,8 +682,10 @@ describe('transactions', () => {
 
     expect(await read('public', 'tmp/constraint.png')).toBe('staged');
     expect(cover.pending).toBe(true);
-    const { objects } = await drive.use('public').listAll('posts/covers');
-    expect([...objects]).toHaveLength(0);
+    const { entries } = await storage.disk('public').list({
+      prefix: 'posts/covers/',
+    });
+    expect(entries).toHaveLength(0);
   });
 
   it('deletes only the copy when a keepSource store rolls back', async () => {
@@ -794,7 +818,7 @@ describe('embeddables — attachments nested in flattened embeddables', () => {
     const loaded = await findPost(id);
     const file = loaded.documents.identification.file;
     expect(file).toBeInstanceOf(Attachment);
-    expect(TestDrive.isSigned(file.url)).toBe(true);
+    expect(TestDisks.isSigned(storage, file.url)).toBe(true);
     expect(await file.getBuffer()).toEqual(Buffer.from('load-bytes'));
     expect(loaded.documents.identification.status).toBe('PENDING');
   });
@@ -1000,7 +1024,7 @@ describe('variants', () => {
 
     const loaded = await findPost(id);
     expect(loaded.shouted.getVariant('upper').url).toBe(
-      `${TestDrive.BASE_URL}/public/${variant.path}`,
+      `${TestDisks.BASE_URL}/public/${variant.path}`,
     );
     expect(await loaded.shouted.getUrl('upper')).toBe(
       loaded.shouted.getVariant('upper').url,

@@ -48,8 +48,31 @@ export class AttachmentType extends Type<AttachmentValue, string | null> {
       : JSON.stringify(stored);
   }
 
+  /**
+   * Whether two stored values hold the same attachments — the JSON text this type writes and the
+   * object the driver reads back are the same value. Compared as text, every query that returned the
+   * row to an entity manager already holding it would rehydrate the column with an attachment of its
+   * own: unbound, and without the URL that was resolved for it.
+   */
+  override compareValues(a: unknown, b: unknown): boolean {
+    return this.canonical(a) === this.canonical(b);
+  }
+
   override getColumnType(): string {
     return 'json';
+  }
+
+  private canonical(value: unknown): string {
+    try {
+      const attachments = this.convertToJSValue(value);
+      return JSON.stringify(
+        Array.isArray(attachments)
+          ? attachments.map((attachment) => attachment.toObject())
+          : (attachments?.toObject() ?? null),
+      );
+    } catch {
+      return typeof value === 'string' ? value : JSON.stringify(value);
+    }
   }
 }
 

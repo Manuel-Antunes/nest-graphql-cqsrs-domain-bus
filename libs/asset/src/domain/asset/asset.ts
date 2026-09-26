@@ -2,8 +2,7 @@
 import { randomUUID } from 'node:crypto';
 import { posix } from 'node:path';
 import type { Readable } from 'node:stream';
-import type { Disk } from 'flydrive';
-import type { SignedURLOptions } from 'flydrive/types';
+import type { StorageDisk, StorageSignedUrlRequest } from '@nestjs/storage';
 
 import {
   AssetAlreadyStoredException,
@@ -118,11 +117,11 @@ export class Asset {
   /** What was read from the file itself — dimensions, EXIF, duration — when `meta` is on. */
   meta?: AssetMeta;
 
-  /** The URL computed by {@link computeUrl}, signed for a private disk. */
+  /** The URL computed by {@link computeUrl}: public on a disk with a `publicUrl`, signed on any other. */
   url?: string;
 
   #source?: AssetSource;
-  #bound?: Disk;
+  #bound?: StorageDisk;
 
   constructor(attributes: AssetAttributes, source?: AssetSource) {
     this.disk = attributes.disk;
@@ -295,13 +294,13 @@ export class Asset {
     return this.#bound !== undefined;
   }
 
-  bindTo(disk: Disk): this {
+  bindTo(disk: StorageDisk): this {
     this.#bound = disk;
     return this;
   }
 
-  /** The flydrive disk the asset is stored on. */
-  getDisk(): Disk {
+  /** The `@nestjs/storage` disk the asset is stored on. */
+  getDisk(): StorageDisk {
     if (!this.#bound) {
       throw new DiskNotBoundException(this.path || this.originalName);
     }
@@ -309,34 +308,37 @@ export class Asset {
   }
 
   getBytes(): Promise<Uint8Array> {
-    return this.getDisk().getBytes(this.path);
+    return this.getBuffer();
   }
 
-  async getBuffer(): Promise<Buffer> {
-    return Buffer.from(await this.getBytes());
+  getBuffer(): Promise<Buffer> {
+    return this.getDisk().getBuffer(this.path);
   }
 
-  getStream(): Promise<Readable> {
-    return this.getDisk().getStream(this.path);
+  async getStream(): Promise<Readable> {
+    return (await this.getDisk().get(this.path)).body;
   }
 
-  getUrl(): Promise<string> {
-    return this.getDisk().getUrl(this.path);
+  /** The public URL, on a disk configured with a `publicUrl`. */
+  async getUrl(): Promise<string> {
+    return this.getDisk().url(this.path);
   }
 
-  getSignedUrl(options?: SignedURLOptions): Promise<string> {
-    return this.getDisk().getSignedUrl(this.path, options);
+  getSignedUrl(options?: StorageSignedUrlRequest): Promise<string> {
+    return this.getDisk().signedUrl(this.path, options);
   }
 
-  /** Resolves and keeps {@link url}: signed when the object is private, plain otherwise. */
-  async computeUrl(options?: SignedURLOptions): Promise<string> {
+  /** Resolves and keeps {@link url}: the public URL on a disk configured with one, a signed URL on any other. */
+  async computeUrl(options?: StorageSignedUrlRequest): Promise<string> {
     const disk = this.getDisk();
-    const visibility = await disk.getVisibility(this.path);
-    this.url =
-      visibility === 'private'
-        ? await disk.getSignedUrl(this.path, options)
-        : await disk.getUrl(this.path);
-    return this.url;
+    let url: string;
+    try {
+      url = disk.url(this.path);
+    } catch {
+      url = await disk.signedUrl(this.path, options);
+    }
+    this.url = url;
+    return url;
   }
 
   /**
@@ -345,7 +347,7 @@ export class Asset {
    * pending again.
    */
   async store(
-    drive: DiskResolver,
+    storage: DiskResolver,
     placement: AssetPlacement,
     options: { keepSource?: boolean } = {},
   ): Promise<AssetWrite> {
@@ -354,18 +356,21 @@ export class Asset {
       throw new AssetAlreadyStoredException(this.path);
     }
     const previous = { disk: this.disk, path: this.path };
-    await source.writeTo(drive, { ...placement, contentType: this.mimeType });
+    await source.writeTo(storage, {
+      ...placement,
+      contentType: this.mimeType,
+    });
 
     this.#source = undefined;
     this.disk = placement.disk;
     this.path = placement.path;
     this.url = undefined;
-    this.bindTo(drive.use(placement.disk));
+    this.bindTo(storage.disk(placement.disk));
 
     return new AssetWrite(
-      () => source.release(drive, placement.disk, options.keepSource),
+      () => source.release(storage, placement.disk, options.keepSource),
       async () => {
-        await drive.use(placement.disk).delete(placement.path);
+        await storage.disk(placement.disk).delete(placement.path);
         this.#source = source;
         this.disk = previous.disk;
         this.path = previous.path;

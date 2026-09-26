@@ -1,11 +1,13 @@
-import type { Disk } from 'flydrive';
+import { createReadStream } from 'node:fs';
+import { stat } from 'node:fs/promises';
+import type { StorageDisk } from '@nestjs/storage';
 
 import type { LocalInput } from '../file/local-input';
 import { TemporaryFile } from '../file/temporary-file';
 
-/** Anything that hands out a disk by name — the `Drive` is one. */
+/** Anything that hands out a disk by name — `@nestjs/storage`'s `Storage` is one. */
 export interface DiskResolver {
-  use(disk?: string): Disk;
+  disk(name?: string): StorageDisk;
 }
 
 /** Where an asset's bytes are being stored: the disk, the key on it, and what they are. */
@@ -48,14 +50,14 @@ export abstract class AssetSource {
     return undefined;
   }
 
-  abstract writeTo(drive: DiskResolver, target: SourceTarget): Promise<void>;
+  abstract writeTo(storage: DiskResolver, target: SourceTarget): Promise<void>;
 
   /** The bytes, locally, for reading metadata or converting them. */
-  abstract read(drive: DiskResolver, disk: string): Promise<LocalInput>;
+  abstract read(storage: DiskResolver, disk: string): Promise<LocalInput>;
 
   /** Lets go of the source once the stored copy is final. */
   abstract release(
-    drive: DiskResolver,
+    storage: DiskResolver,
     disk: string,
     keepSource?: boolean,
   ): Promise<void>;
@@ -74,15 +76,19 @@ class LocalSource extends AssetSource {
   }
 
   async writeTo(
-    drive: DiskResolver,
+    storage: DiskResolver,
     { disk, path, contentType }: SourceTarget,
   ): Promise<void> {
-    const target = drive.use(disk);
+    const target = storage.disk(disk);
     if (Buffer.isBuffer(this.input)) {
       await target.put(path, this.input, { contentType });
-    } else {
-      await target.copyFromFs(this.input, path, { contentType });
+      return;
     }
+    const { size } = await stat(this.input);
+    await target.put(path, createReadStream(this.input), {
+      contentType,
+      contentLength: size,
+    });
   }
 
   async read(): Promise<LocalInput> {
@@ -106,29 +112,32 @@ class DiskSource extends AssetSource {
   }
 
   async writeTo(
-    drive: DiskResolver,
+    storage: DiskResolver,
     { disk, path, contentType }: SourceTarget,
   ): Promise<void> {
     const from = this.disk ?? disk;
     if (from === disk) {
-      await drive.use(disk).copy(this.key, path);
+      await storage.disk(disk).copy(this.key, path);
       return;
     }
-    const bytes = await drive.use(from).getBytes(this.key);
-    await drive.use(disk).put(path, bytes, { contentType });
+    const download = await storage.disk(from).get(this.key);
+    await storage.disk(disk).put(path, download.body, {
+      contentType,
+      contentLength: download.size,
+    });
   }
 
-  async read(drive: DiskResolver, disk: string): Promise<LocalInput> {
-    return Buffer.from(await drive.use(this.disk ?? disk).getBytes(this.key));
+  async read(storage: DiskResolver, disk: string): Promise<LocalInput> {
+    return storage.disk(this.disk ?? disk).getBuffer(this.key);
   }
 
   async release(
-    drive: DiskResolver,
+    storage: DiskResolver,
     disk: string,
     keepSource = false,
   ): Promise<void> {
     if (!this.keepSource && !keepSource) {
-      await drive.use(this.disk ?? disk).delete(this.key);
+      await storage.disk(this.disk ?? disk).delete(this.key);
     }
   }
 }

@@ -3,9 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "dependencies": {
-    "@aws-sdk/client-s3": "catalog:",
     "@aws-sdk/client-sesv2": "catalog:",
-    "@aws-sdk/s3-request-presigner": "catalog:",
     "@nestjs-modules/mailer": "catalog:",
     "@nestposts/auth": "workspace:*",
     "@nestposts/billing": "workspace:*",
@@ -27,7 +25,6 @@
     "@nestposts/validated-dto": "workspace:*",
     "clsx": "catalog:",
     "firebase-admin": "catalog:",
-    "flydrive": "catalog:",
     "html-to-text": "catalog:",
     "ical-generator": "catalog:",
     "nodemailer": "catalog:",

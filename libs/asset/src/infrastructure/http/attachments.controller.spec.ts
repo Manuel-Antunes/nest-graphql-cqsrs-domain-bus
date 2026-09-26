@@ -18,13 +18,12 @@ import type { Observable } from 'rxjs';
 
 import { Attachment } from '../../domain/asset/attachment';
 import { AttachmentModule } from '../attachment.module';
-import { DriveModule } from '../drive/drive.module';
 import {
   ATTACHMENT_TEST_ENTITIES,
   TestPostSchema,
   UppercaseConverter,
 } from '../testing/attachment-test-entities';
-import { TestDrive } from '../testing/test-drive';
+import { TestDisks } from '../testing/test-disks';
 
 @Injectable()
 class MarkedRoute implements NestInterceptor {
@@ -38,7 +37,6 @@ class MarkedRoute implements NestInterceptor {
 }
 
 describe('the attachments route', () => {
-  let testDrive: TestDrive;
   let app: NestFastifyApplication;
   let orm: AnyMikroORM;
 
@@ -59,7 +57,6 @@ describe('the attachments route', () => {
   };
 
   beforeAll(async () => {
-    testDrive = await TestDrive.create();
     const moduleRef = await Test.createTestingModule({
       imports: [
         DatabaseModule.forRoot({
@@ -70,7 +67,7 @@ describe('the attachments route', () => {
           exclusive: true,
         }),
         TestSchemaModule.forRoot(),
-        DriveModule.forRoot(testDrive.options),
+        TestDisks.module(),
         AttachmentModule.forRoot({
           secret: 'route-secret',
           converters: { upper: new UppercaseConverter() },
@@ -88,7 +85,6 @@ describe('the attachments route', () => {
 
   afterAll(async () => {
     await app?.close();
-    await testDrive?.stop();
   });
 
   it('serves an attachment by its key id, under the path and decorators it was given', async () => {

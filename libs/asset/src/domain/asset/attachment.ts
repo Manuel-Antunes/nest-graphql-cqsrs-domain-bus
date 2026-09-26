@@ -1,5 +1,4 @@
-import type { Disk } from 'flydrive';
-import type { SignedURLOptions } from 'flydrive/types';
+import type { StorageDisk, StorageSignedUrlRequest } from '@nestjs/storage';
 
 import { CannotCreateAttachmentException } from '../errors/attachment.exceptions';
 import type { AssetAttributes } from './asset';
@@ -24,7 +23,7 @@ export interface AttachmentAttributes extends AssetAttributes {
  *
  * post.cover.url;                              // when preComputeUrl is on
  * await post.cover.getUrl('thumbnail');        // a variant's URL, or the original's
- * await post.cover.getSignedUrl('thumbnail', { expiresIn: '30 mins' });
+ * await post.cover.getSignedUrl('thumbnail', { expiresIn: '30m' });
  * post.cover.getVariant('thumbnail')?.blurhash;
  * ```
  */
@@ -79,8 +78,8 @@ export class Attachment extends Asset {
 
   /** A signed URL of the variant `key`, or of the original when there is no such variant. */
   override async getSignedUrl(
-    variantOrOptions?: string | SignedURLOptions,
-    options?: SignedURLOptions,
+    variantOrOptions?: string | StorageSignedUrlRequest,
+    options?: StorageSignedUrlRequest,
   ): Promise<string> {
     if (typeof variantOrOptions !== 'string') {
       return super.getSignedUrl(variantOrOptions ?? options);
@@ -90,7 +89,7 @@ export class Attachment extends Asset {
   }
 
   /** Binds the attachment, and every variant stored on the same disk, to `disk`. */
-  override bindTo(disk: Disk): this {
+  override bindTo(disk: StorageDisk): this {
     super.bindTo(disk);
     for (const variant of this.variants) {
       if (!variant.disk || variant.disk === this.disk) {
@@ -101,7 +100,7 @@ export class Attachment extends Asset {
   }
 
   /** Resolves and keeps the URL of the original and of every variant. */
-  async computeUrls(options?: SignedURLOptions): Promise<void> {
+  async computeUrls(options?: StorageSignedUrlRequest): Promise<void> {
     await Promise.all([
       this.computeUrl(options),
       ...this.variants.map((variant) => variant.computeUrl(options)),

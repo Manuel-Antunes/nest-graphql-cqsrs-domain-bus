@@ -1,9 +1,9 @@
 import { writeFile } from 'node:fs/promises';
 import { Readable } from 'node:stream';
+import { Storage } from '@nestjs/storage';
 import sharp from 'sharp';
 
-import { Drive } from '../../infrastructure/drive/drive';
-import { TestDrive } from '../../infrastructure/testing/test-drive';
+import { TestDisks } from '../../infrastructure/testing/test-disks';
 import {
   CannotCreateAttachmentException,
   DiskNotBoundException,
@@ -23,15 +23,12 @@ const png = () =>
     .toBuffer();
 
 describe('Attachment', () => {
-  let testDrive: TestDrive;
-  let drive: Drive;
+  let storage: Storage;
 
-  beforeAll(async () => {
-    testDrive = await TestDrive.create();
-    drive = new Drive(testDrive.options);
+  beforeEach(() => {
+    const { default: fallback, disks } = TestDisks.options();
+    storage = new Storage(new Map(Object.entries(disks)), fallback);
   });
-
-  afterAll(() => testDrive.stop());
 
   describe('static constructors', () => {
     it('makes a pending attachment of bytes in memory, told apart by the bytes', async () => {
@@ -151,7 +148,7 @@ describe('Attachment', () => {
       );
       const temporary = attachment.source?.local as string;
 
-      const write = await attachment.store(drive, {
+      const write = await attachment.store(storage, {
         disk: 'private',
         path: 'docs/stored.txt',
       });
@@ -173,13 +170,13 @@ describe('Attachment', () => {
     });
 
     it('undoes a store: the copy deleted, the attachment pending again', async () => {
-      await drive.use('public').put('staged/key', 'bytes');
+      await storage.disk('public').put('staged/key', 'bytes');
       const attachment = Attachment.fromDisk('staged/key', {
         size: 5,
         mimeType: 'text/plain',
       });
 
-      const write = await attachment.store(drive, {
+      const write = await attachment.store(storage, {
         disk: 'public',
         path: 'final/key.txt',
       });
@@ -187,37 +184,41 @@ describe('Attachment', () => {
 
       expect(attachment.pending).toBe(true);
       expect(attachment.bound).toBe(false);
-      expect(await drive.use('public').exists('final/key.txt')).toBe(false);
-      expect(await drive.use('public').exists('staged/key')).toBe(true);
+      expect(await storage.disk('public').exists('final/key.txt')).toBe(false);
+      expect(await storage.disk('public').exists('staged/key')).toBe(true);
     });
 
     it('copies an object between disks', async () => {
-      await drive.use('private').put('elsewhere/key', 'moved');
+      await storage.disk('private').put('elsewhere/key', 'moved');
       const attachment = Attachment.fromDisk('elsewhere/key', {
         disk: 'private',
         size: 5,
         mimeType: 'text/plain',
       });
 
-      const write = await attachment.store(drive, {
+      const write = await attachment.store(storage, {
         disk: 'public',
         path: 'here/key.txt',
       });
       await write.commit();
 
-      expect(await drive.use('public').get('here/key.txt')).toBe('moved');
-      expect(await drive.use('private').exists('elsewhere/key')).toBe(false);
+      expect(await storage.disk('public').getText('here/key.txt')).toBe(
+        'moved',
+      );
+      expect(await storage.disk('private').exists('elsewhere/key')).toBe(false);
     });
 
     it('computes a signed url on a private disk and a plain one on a public disk', async () => {
       const onPrivate = await Attachment.fromBuffer(Buffer.from('p'), 'p.txt');
-      await onPrivate.store(drive, { disk: 'private', path: 'a/p.txt' });
+      await onPrivate.store(storage, { disk: 'private', path: 'a/p.txt' });
       const onPublic = await Attachment.fromBuffer(Buffer.from('q'), 'q.txt');
-      await onPublic.store(drive, { disk: 'public', path: 'a/q.txt' });
+      await onPublic.store(storage, { disk: 'public', path: 'a/q.txt' });
 
-      expect(TestDrive.isSigned(await onPrivate.computeUrl())).toBe(true);
+      expect(TestDisks.isSigned(storage, await onPrivate.computeUrl())).toBe(
+        true,
+      );
       expect(await onPublic.computeUrl()).toBe(
-        `${TestDrive.BASE_URL}/public/a/q.txt`,
+        `${TestDisks.BASE_URL}/public/a/q.txt`,
       );
     });
 
@@ -229,7 +230,9 @@ describe('Attachment', () => {
         mimeType: 'text/plain',
       });
 
-      expect(() => attachment.getStream()).toThrow(DiskNotBoundException);
+      await expect(attachment.getStream()).rejects.toThrow(
+        DiskNotBoundException,
+      );
     });
   });
 

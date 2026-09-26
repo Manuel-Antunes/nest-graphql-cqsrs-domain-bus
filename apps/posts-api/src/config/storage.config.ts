@@ -12,6 +12,11 @@ const StorageEnvSchema = z.object({
   DRIVE_AWS_ACCESS_KEY_ID: z.string().optional(),
   DRIVE_AWS_SECRET_ACCESS_KEY: z.string().optional(),
   DRIVE_AWS_REGION: z.string().optional(),
+  AWS_ACCESS_KEY_ID: z.string().optional(),
+  AWS_SECRET_ACCESS_KEY: z.string().optional(),
+  AWS_SESSION_TOKEN: z.string().optional(),
+  AWS_REGION: z.string().optional(),
+  AWS_DEFAULT_REGION: z.string().optional(),
   NODE_ENV: z.string().optional(),
 });
 
@@ -20,7 +25,8 @@ export const storageConfig = registerAs('storage', () => {
   return {
     defaultDisk: parsed.DRIVE_DISK,
     bucket: parsed.DRIVE_BUCKET,
-    region: parsed.DRIVE_AWS_REGION,
+    region:
+      parsed.DRIVE_AWS_REGION ?? parsed.AWS_REGION ?? parsed.AWS_DEFAULT_REGION,
     endpoint: parsed.DRIVE_S3_ENDPOINT,
     publicEndpoint: parsed.DRIVE_S3_PUBLIC_ENDPOINT,
     forcePathStyle:
@@ -32,8 +38,13 @@ export const storageConfig = registerAs('storage', () => {
             accessKeyId: parsed.DRIVE_AWS_ACCESS_KEY_ID,
             secretAccessKey: parsed.DRIVE_AWS_SECRET_ACCESS_KEY,
           }
-        : undefined,
-    supportsACL: false,
+        : parsed.AWS_ACCESS_KEY_ID && parsed.AWS_SECRET_ACCESS_KEY
+          ? {
+              accessKeyId: parsed.AWS_ACCESS_KEY_ID,
+              secretAccessKey: parsed.AWS_SECRET_ACCESS_KEY,
+              sessionToken: parsed.AWS_SESSION_TOKEN,
+            }
+          : undefined,
   };
 });
 

@@ -96,7 +96,7 @@ export class VariantGenerator {
       if (converter.blurhashOptions) {
         variant.blurhash = await this.blurhashOf(output, converter, attachment);
       }
-      const write = await variant.store(this.manager.drive, {
+      const write = await variant.store(this.manager.storage, {
         disk: this.manager.diskOf(attachment),
         path: posix.join(
           AttachmentPath.variantFolder(attachment, this.manager.layout),

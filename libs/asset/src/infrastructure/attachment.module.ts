@@ -23,10 +23,11 @@ import { VariantQueue } from './variants/variant-queue';
  * runs every `attachment()` column's lifecycle, the converters variants are made with, the queue
  * they are made on, and, optionally, the route that serves attachments by key id.
  *
- * It stores on the {@link Drive} `DriveModule` provides, and knows nothing about what backs a disk.
+ * It stores on the disks `@nestjs/storage`'s `StorageModule` provides, and knows nothing about what
+ * backs one.
  *
  * ```ts
- * DriveModule.forRoot({ default: 'public', services: { public: () => new FSDriver({ … }) } }),
+ * StorageModule.forRoot({ default: 'public', disks: { public: new LocalDisk({ root, publicUrl }) } }),
  * EventEmitterModule.forRoot(),
  * AttachmentModule.forRoot({
  *   preComputeUrl: true,

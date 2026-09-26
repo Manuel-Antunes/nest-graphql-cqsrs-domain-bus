@@ -2,7 +2,7 @@
 
 Files an entity holds, as a value — a port of
 [`@jrmc/adonis-attachment`](https://github.com/batosai/adonis-attachment) to Nest and MikroORM, over
-[flydrive](https://flydrive.dev). `NOTICE.md` accounts for what came from there.
+[`@nestjs/storage`](https://github.com/nestjs/storage). `NOTICE.md` accounts for what came from where.
 
 ```ts
 export const UserSchema = defineEntity({
@@ -25,8 +25,8 @@ await user.avatar.getUrl('thumbnail');   // once the variant is made
 
 | | what it is |
 |---|---|
-| **Drive** | every disk the application stores on, by name: flydrive's `DriveManager`. `DriveModule` provides it |
-| **Disk** | flydrive's `Disk`, over any driver — S3, GCS, the local file system, or one of your own |
+| **Storage** | every disk the application stores on, by name: `@nestjs/storage`'s `Storage`, which its `StorageModule` provides |
+| **Disk** | `@nestjs/storage`'s `StorageDisk`: `S3Disk` (S3 and every S3-compatible store), `LocalDisk`, `InMemoryDisk`, or a class of your own |
 | **Asset** | a file on a disk: path, size, extension, MIME type, metadata, and the reads and URLs that go through its disk |
 | **Attachment** | an asset an entity holds in an `attachment()` column, with the variants made of it |
 | **Variant** | an asset a converter made of an attachment — a thumbnail, a preview — kept in the attachment's column |
@@ -35,20 +35,18 @@ await user.avatar.getUrl('thumbnail');   // once the variant is made
 
 ## Wiring
 
-The drive and the attachments are two modules, as `@adonisjs/drive` and `adonis-attachment` are two
-packages. **The library knows no provider.** The composition root builds the drivers, with whatever
-rules its storage has — a signing endpoint, a CDN, ACLs — and hands them over:
+The disks and the attachments are two modules, as `@adonisjs/drive` and `adonis-attachment` are two
+packages. **The library knows no provider.** The composition root builds the disks, with whatever
+rules its storage has — a CDN, a signing endpoint, credentials — and hands them to `@nestjs/storage`:
 
 ```ts
-DriveModule.forRootAsync({
-  inject: [storageConfig.KEY],
-  useFactory: (storage: StorageConfig) => ({
-    default: 'public',
-    services: {
-      public: () => new S3Driver({ client, bucket: storage.bucket, visibility: 'public' }),
-      private: () => new S3Driver({ client, bucket: storage.bucket, visibility: 'private' }),
-    },
-  }),
+StorageModule.forRootAsync({ useClass: BucketDisks }),   // a StorageOptionsFactory
+StorageModule.forRoot({
+  default: 'public',
+  disks: {
+    public: new S3Disk({ bucket, region, publicUrl: 'https://cdn.example.com' }),
+    private: new S3Disk({ bucket, region }),
+  },
 }),
 EventEmitterModule.forRoot(),            // optional: see Events
 AttachmentModule.forRoot({
@@ -64,7 +62,18 @@ AttachmentModule.forRoot({
 bucket as a `public` and a `private` disk, the public one served from a CDN, and every URL built for
 the address the browser reaches the storage at when that is not the service's. Both modules are
 global. `AttachmentModule` needs the MikroORM connection; a service that only reads and writes disks
-imports `DriveModule` alone and injects the `Drive`.
+imports `StorageModule` alone and injects `Storage` — or a disk, with `@InjectDisk(name)`.
+
+**A disk with a `publicUrl` serves its files there; any other signs.** That is how an attachment's
+URL is resolved — `computeUrl`, and `preComputeUrl` — and it is the whole of what used to be a disk's
+visibility.
+
+**An application that bundles this library declares the packages it loads**, as it does for every
+library here — a `require` from `apps/<app>/dist` resolves only what that app's `package.json`
+names, and the Lambda bundling fails with `Could not resolve "file-type"` otherwise. `file-type` and
+`mime-types` wherever the `Attachment` class is reached at all (an entity mapping `attachment()` is
+enough); `exifreader`, `blurhash` and `sharp` where `AttachmentModule` runs. `sharp` is native and SST
+keeps it external: a function that converts images needs it installed, not bundled.
 
 `AttachmentModule`'s options are `adonis-attachment`'s `config/attachment.ts`. Every column option
 set there is the default of every column that does not set its own:
@@ -77,7 +86,7 @@ set there is the default of every column that does not set its own:
 | `preComputeUrl` | `false` | resolve URLs on load and save |
 | `meta` | `false` | read dimensions, EXIF, duration, pages when a file is stored |
 | `keepSource` | `false` | leave the object an `Attachment.fromDisk` was made of where it is |
-| `signedUrl` | flydrive's | the options signed URLs are made with |
+| `signedUrl` | `@nestjs/storage`'s — 15 minutes | the options signed URLs are made with: `expiresIn`, `filename`, `disposition` |
 | `bin` | the `PATH` | where `ffmpeg`, `ffprobe`, `pdftoppm`, `pdfinfo` and `soffice` are |
 | `timeout` | `30000` | milliseconds an external program may run |
 | `queue.concurrency` | `1` | attachments whose variants are made at once |
@@ -138,7 +147,7 @@ Attachment.fromDisk('tmp/uploads/123', { size, mimeType, keepSource: false })
 Each tells what the file is — by its bytes (`file-type`), or by its name (`mime-types`) — and makes a
 **pending** attachment. Nothing is stored until the entity holding it is flushed. `fromDisk` is how a
 browser uploads without the bytes crossing the service: it `PUT`s to a URL from
-`drive.use().getSignedUploadUrl(key)`, and hands the key back. Storing it TAKES the object, so the
+`storage.disk().signedUpload(key, { contentType })`, and hands the key back. Storing it TAKES the object, so the
 service must check the key is one it issued to that caller first — `apps/posts-api`'s `UploadArea`.
 
 Outside any entity, `AttachmentManager.store(await Asset.fromBuffer(pdf, 'report.pdf'), { folder:
@@ -235,13 +244,12 @@ the default `maxParamLength` of 100: `new FastifyAdapter({ maxParamLength: 1024 
 
 ## Testing
 
-`TestDrive` (`@nestposts/asset/infrastructure/testing/test-drive`) is a `public` and a `private` disk
-on the local file system, with URLs under `http://files.test` — signed ones for the private disk,
-checked by `TestDrive.isSigned`. No storage service runs:
+`TestDisks` (`@nestposts/asset/infrastructure/testing/test-disks`) is `@nestjs/storage`'s
+`InMemoryDisk`, twice: a `public` disk with URLs under `http://files.test/public`, and a `private` one
+whose URLs are signed — `TestDisks.isSigned(storage, url)` checks them. No storage service runs:
 
 ```ts
-drive = await TestDrive.create();
-imports: [DriveModule.forRoot(drive.options), AttachmentModule.forRoot({})]
+imports: [TestDisks.module(), AttachmentModule.forRoot({})]
 ```
 
 The converters that run `ffmpeg` and Poppler are covered where those programs work, and skipped
