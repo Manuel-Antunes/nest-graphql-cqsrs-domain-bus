@@ -14,15 +14,19 @@ inputs:
     description: "Passed on to `setup`. See the rationale for the default 22 there."
     default: "22"
     required: false
+  dockerhub-username:
+    description: >
+      From `vars.DOCKERHUB_USERNAME`: the Docker ID the pulls are authenticated as. A composite action
+      cannot read `vars` or `secrets` by itself.
+    required: true
+  dockerhub-token:
+    description: >
+      From `secrets.DOCKERHUB_TOKEN`: a personal access token of that Docker ID. The suites only pull
+      public images, so `Public Repo Read-only` is all it needs.
+    required: true
 runs:
   using: composite
   steps:
-    - name: Login to Docker Hub
-      uses: docker/login-action@v4
-      env:
-        DOCKERHUB_OIDC_CONNECTIONID: ${{ vars.DOCKERHUB_OIDC_CONNECTIONID }}
-      with:
-        username: ${{ vars.DOCKERHUB_ORGANIZATION }}
     - name: Resolve the requested checks
       id: selection
       run: |
@@ -36,6 +40,13 @@ runs:
       shell: bash
       env:
         CHECKS: ${{ inputs.checks }}
+
+    - name: Login to Docker Hub
+      if: ${{ steps.selection.outputs.test == 'true' || steps.selection.outputs.test_e2e == 'true' }}
+      uses: docker/login-action@v4
+      with:
+        username: ${{ inputs.dockerhub-username }}
+        password: ${{ inputs.dockerhub-token }}
 
     - name: Set up the environment
       uses: ./tools/github/setup

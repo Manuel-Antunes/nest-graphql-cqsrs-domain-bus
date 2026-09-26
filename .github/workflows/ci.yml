@@ -12,7 +12,6 @@ concurrency:
 
 permissions:
   contents: read
-  id-token: write
 
 jobs:
   test:
@@ -23,6 +22,8 @@ jobs:
       - uses: ./tools/github/ci
         with:
           checks: test
+          dockerhub-username: ${{ vars.DOCKERHUB_USERNAME }}
+          dockerhub-token: ${{ secrets.DOCKERHUB_TOKEN }}
 
   test-e2e:
     name: test:e2e
@@ -33,6 +34,8 @@ jobs:
       - uses: ./tools/github/ci
         with:
           checks: test-e2e
+          dockerhub-username: ${{ vars.DOCKERHUB_USERNAME }}
+          dockerhub-token: ${{ secrets.DOCKERHUB_TOKEN }}
 
   web:
     name: web
@@ -42,3 +45,5 @@ jobs:
       - uses: ./tools/github/ci
         with:
           checks: web
+          dockerhub-username: ${{ vars.DOCKERHUB_USERNAME }}
+          dockerhub-token: ${{ secrets.DOCKERHUB_TOKEN }}
