@@ -1,8 +1,8 @@
-import { AssetSchema } from '@nestposts/asset/domain/schemas/asset.schema';
+import { z } from 'zod';
 
-export const AssetInputSchema = AssetSchema.pick({
-  name: true,
-  size: true,
-  extname: true,
-  mimeType: true,
+export const AssetInputSchema = z.object({
+  name: z.string(),
+  size: z.number(),
+  extname: z.string(),
+  mimeType: z.string(),
 });

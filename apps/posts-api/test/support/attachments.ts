@@ -1,14 +1,16 @@
 import type { TestingModule } from '@nestjs/testing';
-import { DiskService } from '@nestposts/asset/domain/storage/disk.service';
-import { AssetInfrastructureModule } from '@nestposts/asset/infrastructure/asset-infrastructure.module';
-import type { TestStorage } from '@nestposts/asset/infrastructure/testing/test-storage';
+import { AttachmentModule } from '@nestposts/asset/infrastructure/attachment.module';
+import { Drive } from '@nestposts/asset/infrastructure/drive/drive';
+import { DriveModule } from '@nestposts/asset/infrastructure/drive/drive.module';
+import type { TestDrive } from '@nestposts/asset/infrastructure/testing/test-drive';
 import type { UserId } from '@nestposts/users/domain/user/vo/user-id';
 
 import type { AssetUpload } from '../../src/application/asset/upload-area';
 import { UploadArea } from '../../src/application/asset/upload-area';
 
-export const attachmentsOn = (storage: TestStorage) => [
-  AssetInfrastructureModule.forRoot(storage.options),
+export const attachmentsOn = (drive: TestDrive) => [
+  DriveModule.forRoot(drive.options),
+  AttachmentModule.forRoot({}),
 ];
 
 export async function givenAnUpload(
@@ -17,7 +19,7 @@ export async function givenAnUpload(
   body = 'image-bytes',
 ): Promise<AssetUpload> {
   const key = UploadArea.keyFor(uploader);
-  await module.get(DiskService).getDisk().put(key, body);
+  await module.get(Drive).use().put(key, body);
   return {
     name: key,
     size: body.length,
@@ -27,7 +29,7 @@ export async function givenAnUpload(
 }
 
 export const storedIn = (module: TestingModule, key: string) =>
-  module.get(DiskService).getDisk().exists(key);
+  module.get(Drive).use().exists(key);
 
 export const contentsOf = (module: TestingModule, key: string) =>
-  module.get(DiskService).getDisk().get(key);
+  module.get(Drive).use().get(key);

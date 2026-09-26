@@ -1,6 +1,6 @@
 import type { IQueryHandler } from '@nestjs/cqrs';
 import { Query, QueryHandler } from '@nestjs/cqrs';
-import { DiskService } from '@nestposts/asset/domain/storage/disk.service';
+import { Drive } from '@nestposts/asset/infrastructure/drive/drive';
 import type { UserId } from '@nestposts/users/domain/user/vo/user-id';
 
 import { UploadArea } from '../upload-area';
@@ -24,11 +24,11 @@ export namespace GeneratePresignedUrlQuery {
 
   @QueryHandler(GeneratePresignedUrl)
   export class Handler implements IQueryHandler<GeneratePresignedUrl> {
-    constructor(private readonly disks: DiskService) {}
+    constructor(private readonly drive: Drive) {}
 
     async execute(query: GeneratePresignedUrl): Promise<PresignedUpload> {
       const key = UploadArea.keyFor(query.uploaderId);
-      const url = await this.disks.getDisk().getSignedUploadUrl(key, {
+      const url = await this.drive.use().getSignedUploadUrl(key, {
         contentType: query.mimeType,
         expiresIn: UPLOAD_URL_TTL_SECONDS,
       });

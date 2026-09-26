@@ -1,4 +1,4 @@
-import { AssetSchema } from '@nestposts/asset/domain/schemas/asset.schema';
+import { Attachment } from '@nestposts/asset/domain/asset/attachment';
 import { z } from 'zod';
 
 import { PostContent } from '../vo/post-content';
@@ -11,7 +11,7 @@ export const PostSchema = z
     title: PostTitle.field(),
     content: PostContent.field(),
     createdAt: z.date(),
-    asset: AssetSchema.nullish(),
+    asset: z.instanceof(Attachment).nullish(),
     updatedAt: z.date(),
     version: z.number().int().min(1),
     publishedAt: z.date().nullable().default(null),

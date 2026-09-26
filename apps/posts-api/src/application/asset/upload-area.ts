@@ -1,12 +1,13 @@
 import { randomUUID } from 'node:crypto';
-import { Asset } from '@nestposts/asset/domain/data-objects/asset';
-import type { IAsset } from '@nestposts/asset/domain/schemas/asset.schema';
+import { Attachment } from '@nestposts/asset/domain/asset/attachment';
 import type { UserId } from '@nestposts/users/domain/user/vo/user-id';
 
-export type AssetUpload = Pick<
-  IAsset,
-  'name' | 'size' | 'extname' | 'mimeType'
->;
+export interface AssetUpload {
+  name: string;
+  size: number;
+  extname: string;
+  mimeType: string;
+}
 
 export class UploadNotOwnedException extends Error {
   constructor(
@@ -25,19 +26,17 @@ export const UploadArea = {
     return `${prefixOf(uploader)}${Date.now()}-${randomUUID()}`;
   },
 
-  stage(upload: AssetUpload, uploader: UserId): Asset {
+  stage(upload: AssetUpload, uploader: UserId): Attachment {
     if (
       !upload.name.startsWith(prefixOf(uploader)) ||
       upload.name.includes('..')
     ) {
       throw new UploadNotOwnedException(upload.name, uploader);
     }
-    return new Asset({
-      name: upload.name,
+    return Attachment.fromDisk(upload.name, {
       size: upload.size,
       extname: upload.extname,
       mimeType: upload.mimeType,
-      persisted: false,
     });
   },
 };

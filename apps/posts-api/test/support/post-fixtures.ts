@@ -1,5 +1,5 @@
 import type { TestingModule } from '@nestjs/testing';
-import { Asset } from '@nestposts/asset/domain/data-objects/asset';
+import type { Attachment } from '@nestposts/asset/domain/asset/attachment';
 import { delegateRef } from '@nestposts/platform/domain/shared/delegation/delegate';
 import { Post } from '@nestposts/posts/domain/post/post.entity';
 import { PostId } from '@nestposts/posts/domain/post/vo/post-id';
@@ -30,7 +30,7 @@ export async function givenAPost(
     author?: Author;
     createdAt?: Date;
     tags?: Tag[];
-    asset?: Asset;
+    asset?: Attachment;
   } = {},
 ): Promise<Post> {
   const em = freshEm(module);

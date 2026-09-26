@@ -1,7 +1,6 @@
 import { CommandBus } from '@nestjs/cqrs';
 import type { TestingModule } from '@nestjs/testing';
-import type { TestStorage } from '@nestposts/asset/infrastructure/testing/test-storage';
-import { setupTestStorage } from '@nestposts/asset/infrastructure/testing/test-storage';
+import { TestDrive } from '@nestposts/asset/infrastructure/testing/test-drive';
 import { ACTIVE_FILTER } from '@nestposts/platform/infrastructure/persistence/soft-delete/soft-delete-orm.entity';
 import { PostDeletedEvent } from '@nestposts/posts/domain/post/event/post-deleted.event';
 import { PostNotFoundException } from '@nestposts/posts/domain/post/exception/post-not-found.exception';
@@ -28,7 +27,7 @@ import { PostRequest } from '../../shared/post-request';
 import { DeletePostCommand } from './delete-post.command';
 
 describe('DeletePostCommand.Handler', () => {
-  let storage: TestStorage;
+  let drive: TestDrive;
   let module: TestingModule;
   let events: RecordingEvents;
 
@@ -45,15 +44,15 @@ describe('DeletePostCommand.Handler', () => {
     );
 
   beforeAll(async () => {
-    storage = await setupTestStorage();
+    drive = await TestDrive.create();
   });
 
-  afterAll(() => storage?.stop());
+  afterAll(() => drive?.stop());
 
   beforeEach(async () => {
     module = await createCqrsTestingModule(
       [DeletePostCommand.Handler],
-      attachmentsOn(storage),
+      attachmentsOn(drive),
     );
     events = new RecordingEvents(module);
   });
@@ -79,7 +78,7 @@ describe('DeletePostCommand.Handler', () => {
       author,
       asset: UploadArea.stage(upload, author.id),
     });
-    const stored = post.asset?.name as string;
+    const stored = post.asset?.path as string;
     await expect(storedIn(module, stored)).resolves.toBe(true);
 
     await execute(new DeletePostCommand.DeletePost(post.id));

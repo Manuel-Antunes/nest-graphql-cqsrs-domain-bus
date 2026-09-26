@@ -1,6 +1,6 @@
 import { AutoMap } from '@automapper/classes';
 import { Collection, rel } from '@mikro-orm/core';
-import { Asset } from '@nestposts/asset/domain/data-objects/asset';
+import type { Attachment } from '@nestposts/asset/domain/asset/attachment';
 import { AggregateRoot } from '@nestposts/platform/domain/shared/aggregate-root';
 import { BaseEntity } from '@nestposts/platform/domain/shared/base-entity';
 import type { DelegatedRef } from '@nestposts/platform/domain/shared/delegation/delegate';
@@ -49,7 +49,7 @@ export class Post
 
   _content: string;
 
-  asset: Asset | null = null;
+  asset: Attachment | null = null;
 
   @AutoMap(() => PostContent)
   get content(): PostContent {

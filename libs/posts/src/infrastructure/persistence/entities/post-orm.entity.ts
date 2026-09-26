@@ -1,4 +1,4 @@
-import { attachment } from '@nestposts/asset/infrastructure/database/types/attachment-database.type';
+import { attachment } from '@nestposts/asset/infrastructure/database/attachment.type';
 import {
   defineEntity,
   p,
@@ -37,7 +37,11 @@ export const PostEntitySchema = defineEntity({
     id: p.type(PostIdType).primary(),
     title: p.type(PostTitleType),
     content: p.type(PostContentType),
-    asset: attachment({ disk: 'public', folder: 'assets' }).nullable(),
+    asset: attachment({
+      disk: 'public',
+      folder: 'assets',
+      preComputeUrl: true,
+    }).nullable(),
     author: () => p.manyToOne(AuthorshipEntitySchema).ref(),
     createdAt: p.datetime(),
     updatedAt: p.datetime(),

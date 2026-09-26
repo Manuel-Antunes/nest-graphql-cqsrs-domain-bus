@@ -11,9 +11,6 @@
   "references": [
     {
       "path": "../database/tsconfig.lib.json"
-    },
-    {
-      "path": "../core/validated-dto/tsconfig.lib.json"
     }
   ]
 }

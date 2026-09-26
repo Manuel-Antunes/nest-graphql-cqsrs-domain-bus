@@ -1,16 +1,17 @@
 import { CqrsModule, QueryBus } from '@nestjs/cqrs';
 import type { TestingModule } from '@nestjs/testing';
 import { Test } from '@nestjs/testing';
-import { DiskService } from '@nestposts/asset/domain/storage/disk.service';
-import { AssetInfrastructureModule } from '@nestposts/asset/infrastructure/asset-infrastructure.module';
-import type { TestStorage } from '@nestposts/asset/infrastructure/testing/test-storage';
-import { setupTestStorage } from '@nestposts/asset/infrastructure/testing/test-storage';
+import { Drive } from '@nestposts/asset/infrastructure/drive/drive';
+import { DriveModule } from '@nestposts/asset/infrastructure/drive/drive.module';
 import { UserId } from '@nestposts/users/domain/user/vo/user-id';
 
+import type { MinioStorage } from '../../../../test/support/minio-storage';
+import { startMinioStorage } from '../../../../test/support/minio-storage';
+import { BucketDisks } from '../../../infrastructure/storage/bucket-disks';
 import { GeneratePresignedUrlQuery } from './generate-presigned-url.query';
 
 describe('GeneratePresignedUrlQuery.Handler', () => {
-  let storage: TestStorage;
+  let minio: MinioStorage;
   let module: TestingModule;
   const uploader = UserId.generate();
 
@@ -22,13 +23,13 @@ describe('GeneratePresignedUrlQuery.Handler', () => {
       );
 
   beforeAll(async () => {
-    storage = await setupTestStorage();
+    minio = await startMinioStorage();
     module = await Test.createTestingModule({
       imports: [
         CqrsModule.forRoot(),
-        AssetInfrastructureModule.forRoot({
-          ...storage.options,
-          attachments: false,
+        DriveModule.forRootAsync({
+          imports: [minio.configModule()],
+          useClass: BucketDisks,
         }),
       ],
       providers: [GeneratePresignedUrlQuery.Handler],
@@ -38,7 +39,7 @@ describe('GeneratePresignedUrlQuery.Handler', () => {
 
   afterAll(async () => {
     await module?.close();
-    await storage?.stop();
+    await minio?.stop();
   });
 
   it('signs a key in the uploader’s staging area', async () => {
@@ -58,7 +59,7 @@ describe('GeneratePresignedUrlQuery.Handler', () => {
     });
 
     expect(put.status).toBe(200);
-    const disk = module.get(DiskService).getDisk();
+    const disk = module.get(Drive).use();
     await expect(disk.get(key)).resolves.toBe('uploaded-bytes');
     await expect(disk.getMetaData(key)).resolves.toMatchObject({
       contentType: 'text/plain',

@@ -5,7 +5,6 @@
   "dependencies": {
     "@aws-sdk/client-s3": "catalog:",
     "@aws-sdk/client-sesv2": "catalog:",
-    "@aws-sdk/lib-storage": "catalog:",
     "@aws-sdk/s3-request-presigner": "catalog:",
     "@nestjs-modules/mailer": "catalog:",
     "@nestposts/auth": "workspace:*",

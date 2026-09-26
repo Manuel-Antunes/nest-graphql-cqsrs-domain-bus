@@ -1,7 +1,6 @@
 import { CommandBus } from '@nestjs/cqrs';
 import type { TestingModule } from '@nestjs/testing';
-import type { TestStorage } from '@nestposts/asset/infrastructure/testing/test-storage';
-import { setupTestStorage } from '@nestposts/asset/infrastructure/testing/test-storage';
+import { TestDrive } from '@nestposts/asset/infrastructure/testing/test-drive';
 import { PostUpdatedEvent } from '@nestposts/posts/domain/post/event/post-updated.event';
 import { InvalidPostException } from '@nestposts/posts/domain/post/exception/invalid-post.exception';
 import { PostNotFoundException } from '@nestposts/posts/domain/post/exception/post-not-found.exception';
@@ -131,7 +130,7 @@ describe('UpdatePostCommand.Handler', () => {
 });
 
 describe('UpdatePostCommand.Handler, with an attachment', () => {
-  let storage: TestStorage;
+  let drive: TestDrive;
   let module: TestingModule;
 
   const execute = (command: UpdatePostCommand.UpdatePost) =>
@@ -146,19 +145,19 @@ describe('UpdatePostCommand.Handler, with an attachment', () => {
       author,
       asset: UploadArea.stage(upload, author.id),
     });
-    return { author, post, stored: post.asset?.name as string };
+    return { author, post, stored: post.asset?.path as string };
   };
 
   beforeAll(async () => {
-    storage = await setupTestStorage();
+    drive = await TestDrive.create();
   });
 
-  afterAll(() => storage?.stop());
+  afterAll(() => drive?.stop());
 
   beforeEach(async () => {
     module = await createCqrsTestingModule(
       [UpdatePostCommand.Handler],
-      attachmentsOn(storage),
+      attachmentsOn(drive),
     );
   });
 
@@ -179,7 +178,7 @@ describe('UpdatePostCommand.Handler, with an attachment', () => {
     );
 
     const saved = await freshEm(module).findOneOrFail(Post, { id: post.id });
-    const replaced = saved.asset?.name as string;
+    const replaced = saved.asset?.path as string;
     expect(replaced).toMatch(/^assets\/[0-9a-f-]{36}\.png$/);
     expect(replaced).not.toBe(stored);
     expect(saved).toMatchObject({
@@ -207,7 +206,7 @@ describe('UpdatePostCommand.Handler, with an attachment', () => {
 
     const saved = await freshEm(module).findOneOrFail(Post, { id: post.id });
     expect(saved.title).toEqual(PostTitle.parse('Novo título'));
-    expect(saved.asset?.name).not.toBe(stored);
+    expect(saved.asset?.path).not.toBe(stored);
     await expect(storedIn(module, stored)).resolves.toBe(false);
   });
 
@@ -229,7 +228,7 @@ describe('UpdatePostCommand.Handler, with an attachment', () => {
     ).rejects.toThrow(UploadNotOwnedException);
 
     const saved = await freshEm(module).findOneOrFail(Post, { id: post.id });
-    expect(saved.asset?.name).toBe(stored);
+    expect(saved.asset?.path).toBe(stored);
     await expect(storedIn(module, stored)).resolves.toBe(true);
   });
 

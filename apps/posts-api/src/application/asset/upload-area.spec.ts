@@ -1,4 +1,4 @@
-import { Asset } from '@nestposts/asset/domain/data-objects/asset';
+import { Attachment } from '@nestposts/asset/domain/asset/attachment';
 import { UserId } from '@nestposts/users/domain/user/vo/user-id';
 
 import { UploadArea, UploadNotOwnedException } from './upload-area';
@@ -30,9 +30,9 @@ describe('UploadArea', () => {
 
     const asset = UploadArea.stage(upload(key), uploader);
 
-    expect(asset).toBeInstanceOf(Asset);
-    expect(asset.name).toBe(key);
-    expect(asset.persisted).toBe(false);
+    expect(asset).toBeInstanceOf(Attachment);
+    expect(asset.pending).toBe(true);
+    expect(asset).toMatchObject({ extname: 'png', mimeType: 'image/png' });
   });
 
   it('refuses a key somebody else uploaded, or that is not an upload at all', () => {

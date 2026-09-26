@@ -1,8 +1,7 @@
 import { ForeignKeyConstraintViolationException } from '@mikro-orm/core';
 import { CommandBus } from '@nestjs/cqrs';
 import type { TestingModule } from '@nestjs/testing';
-import type { TestStorage } from '@nestposts/asset/infrastructure/testing/test-storage';
-import { setupTestStorage } from '@nestposts/asset/infrastructure/testing/test-storage';
+import { TestDrive } from '@nestposts/asset/infrastructure/testing/test-drive';
 import { PostPreCreatedEvent } from '@nestposts/posts/domain/post/event/post-pre-created.event';
 import { InvalidPostException } from '@nestposts/posts/domain/post/exception/invalid-post.exception';
 import { PostAlreadyExistsException } from '@nestposts/posts/domain/post/exception/post-already-exists.exception';
@@ -185,7 +184,7 @@ describe('CreatePostCommand.Handler', () => {
 });
 
 describe('CreatePostCommand.Handler, with an attachment', () => {
-  let storage: TestStorage;
+  let drive: TestDrive;
   let module: TestingModule;
   let author: Awaited<ReturnType<typeof givenAnAuthor>>;
 
@@ -195,15 +194,15 @@ describe('CreatePostCommand.Handler, with an attachment', () => {
     );
 
   beforeAll(async () => {
-    storage = await setupTestStorage();
+    drive = await TestDrive.create();
   });
 
-  afterAll(() => storage?.stop());
+  afterAll(() => drive?.stop());
 
   beforeEach(async () => {
     module = await createCqrsTestingModule(
       [CreatePostCommand.Handler],
-      attachmentsOn(storage),
+      attachmentsOn(drive),
     );
     author = await givenAnAuthor(module);
   });
@@ -226,9 +225,9 @@ describe('CreatePostCommand.Handler, with an attachment', () => {
     );
 
     const saved = await freshEm(module).findOneOrFail(Post, { id });
-    const stored = saved.asset?.name as string;
+    const stored = saved.asset?.path as string;
     expect(stored).toMatch(/^assets\/[0-9a-f-]{36}\.png$/);
-    expect(saved.asset?.persisted).toBe(true);
+    expect(saved.asset?.pending).toBe(false);
     expect(saved.asset?.url).toContain(stored);
     await expect(contentsOf(module, stored)).resolves.toBe('image-bytes');
     await expect(storedIn(module, upload.name)).resolves.toBe(false);

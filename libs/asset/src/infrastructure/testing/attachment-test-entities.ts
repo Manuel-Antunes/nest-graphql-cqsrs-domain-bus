@@ -1,7 +1,10 @@
+import { readFile } from 'node:fs/promises';
 import type { InferEntity } from '@nestposts/database';
 import { defineEntity, p } from '@nestposts/database';
 
-import { attachment } from '../database/types/attachment-database.type';
+import type { ConverterInput } from '../../domain/converter/converter';
+import { Converter } from '../../domain/converter/converter';
+import { attachment, attachments } from '../database/attachment.type';
 
 export class TestDocument {
   props: Record<string, unknown>;
@@ -16,11 +19,11 @@ export class TestDocument {
   set label(value: string) {
     this.props.label = value;
   }
-  get asset() {
-    return this.props.asset;
+  get file() {
+    return this.props.file;
   }
-  set asset(value: unknown) {
-    this.props.asset = value;
+  set file(value: unknown) {
+    this.props.file = value;
   }
   get status() {
     return this.props.status as string;
@@ -45,6 +48,23 @@ export class TestDocuments {
   }
 }
 
+/** A converter with no dependency: the text of a file, in capitals. */
+export class UppercaseConverter extends Converter {
+  async handle(input: ConverterInput): Promise<Buffer> {
+    const text = Buffer.isBuffer(input)
+      ? input.toString('utf8')
+      : await readFile(input, 'utf8');
+    return Buffer.from(text.toUpperCase());
+  }
+}
+
+/** A converter that always fails. */
+export class BrokenConverter extends Converter {
+  async handle(): Promise<ConverterInput> {
+    throw new Error('this converter always fails');
+  }
+}
+
 export const TestDocumentEmbeddable = defineEntity({
   name: 'TestDocument',
   embeddable: true,
@@ -53,12 +73,8 @@ export const TestDocumentEmbeddable = defineEntity({
   class: TestDocument,
   properties: {
     label: () => p.string(),
-    asset: () =>
-      attachment({
-        folder: 'cases/documents',
-        preComputeUrl: true,
-        disk: 'private',
-      }).nullable(),
+    file: () =>
+      attachment({ folder: 'cases/documents', disk: 'private' }).nullable(),
     status: () => p.string().nullable(),
   },
 });
@@ -83,11 +99,7 @@ export const TestPostSchema = defineEntity({
     cover: () =>
       attachment({ folder: 'posts/covers', disk: 'public' }).nullable(),
     avatar: () =>
-      attachment({
-        folder: 'posts/avatars',
-        disk: 'private',
-        preComputeUrl: true,
-      }).nullable(),
+      attachment({ folder: 'posts/avatars', disk: 'private' }).nullable(),
     manual: () =>
       attachment({
         folder: 'posts/manual',
@@ -100,6 +112,21 @@ export const TestPostSchema = defineEntity({
         disk: 'private',
         keepSource: true,
       }).nullable(),
+    named: () =>
+      attachment({ folder: 'posts/:title', rename: false }).nullable(),
+    described: () =>
+      attachment({ folder: 'posts/described', meta: true }).nullable(),
+    shouted: () =>
+      attachment({
+        folder: 'posts/shouted',
+        variants: ['upper'],
+      }).nullable(),
+    flaky: () =>
+      attachment({
+        folder: 'posts/flaky',
+        variants: ['upper', 'broken'],
+      }).nullable(),
+    gallery: () => attachments({ folder: 'posts/gallery' }).nullable(),
     documents: () => p.embedded(TestDocumentsEmbeddable).nullable(),
   },
 });
@@ -159,6 +186,13 @@ export const StrategyPostSchema = defineEntity({
           `tenants/${ctx.tenantId}/${String(path[path.length - 1])}`,
         disk: 'private',
         keepSource: (_post, { ctx }) => ctx.keepEverything === true,
+      }).nullable(),
+    renamed: () =>
+      attachment({
+        folder: 'renamed',
+        disk: 'public',
+        rename: async (post: { slug: string } | undefined, { originalName }) =>
+          `${post?.slug}-${originalName}`,
       }).nullable(),
   },
 });

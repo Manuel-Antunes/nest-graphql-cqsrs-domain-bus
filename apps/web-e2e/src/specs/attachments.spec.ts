@@ -44,9 +44,9 @@ test.describe
         extname: 'png',
         mimeType: 'image/png',
         size: RED_PIXEL.length,
-        persisted: true,
+        disk: 'public',
       });
-      firstKey = stored?.asset?.name as string;
+      firstKey = stored?.asset?.path as string;
       expect(firstKey).toMatch(ATTACHED_KEY);
       expect(await storage.read(firstKey)).toEqual(RED_PIXEL);
       expect(await storage.keys(Storage.STAGING_PREFIX)).toEqual([]);
@@ -87,7 +87,7 @@ test.describe
       await post.replaceAttachment(Png.named('blue.png', BLUE_PIXEL));
 
       const stored = await postRecords.attachmentOf(postId);
-      secondKey = stored?.asset?.name as string;
+      secondKey = stored?.asset?.path as string;
       expect(secondKey).toMatch(ATTACHED_KEY);
       expect(secondKey).not.toBe(firstKey);
       expect(await storage.read(secondKey)).toEqual(BLUE_PIXEL);

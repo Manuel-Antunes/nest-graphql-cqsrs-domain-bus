@@ -8,11 +8,12 @@ export interface StoredPost {
 
 export interface StoredAttachment {
   asset: {
-    name: string;
+    disk: string;
+    path: string;
+    originalName: string;
     size: number;
     extname: string;
     mimeType: string;
-    persisted: boolean;
   } | null;
   deleted_at: Date | null;
 }

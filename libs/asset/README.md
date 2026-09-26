@@ -1,128 +1,248 @@
 # asset
 
-Files in S3-compatible storage, held by entities as a value. A column declared with `attachment()`
-stores an `Asset`; the `AssetAttachmentSubscriber` does everything storage-related on its behalf, on
-MikroORM's own events, so no handler ever touches a bucket.
+Files an entity holds, as a value — a port of
+[`@jrmc/adonis-attachment`](https://github.com/batosai/adonis-attachment) to Nest and MikroORM, over
+[flydrive](https://flydrive.dev). `NOTICE.md` accounts for what came from there.
 
 ```ts
-export const PostSchema = defineEntity({
-  name: 'Post',
+export const UserSchema = defineEntity({
+  class: User,
   properties: {
     id: () => p.uuid().primary(),
-    cover: () => attachment({ folder: 'posts/covers', disk: 'public' }).nullable(),
+    avatar: () =>
+      attachment({ folder: 'users/avatars', variants: ['thumbnail'] }).nullable(),
   },
 });
 
-post.cover = new Asset({ name: 'tmp/upload.png', size, extname: 'png', mimeType: 'image/png' });
+user.avatar = await Attachment.fromFile(request.file);
 await em.flush();
-post.cover.name; // posts/covers/<uuid>.png
-post.cover.url;  // ready to serve
+
+user.avatar.url;                         // with preComputeUrl
+await user.avatar.getUrl('thumbnail');   // once the variant is made
 ```
+
+## The concepts
+
+| | what it is |
+|---|---|
+| **Drive** | every disk the application stores on, by name: flydrive's `DriveManager`. `DriveModule` provides it |
+| **Disk** | flydrive's `Disk`, over any driver — S3, GCS, the local file system, or one of your own |
+| **Asset** | a file on a disk: path, size, extension, MIME type, metadata, and the reads and URLs that go through its disk |
+| **Attachment** | an asset an entity holds in an `attachment()` column, with the variants made of it |
+| **Variant** | an asset a converter made of an attachment — a thumbnail, a preview — kept in the attachment's column |
+| **Converter** | what makes a variant: `ImageConverter`, `VideoThumbnailConverter`, `PdfThumbnailConverter`, `DocumentThumbnailConverter`, `AutodetectConverter`, or a class of your own |
+| **File** | where a pending asset's bytes are: a buffer, a local path, a download, a stream, an upload, or an object already on a disk |
 
 ## Wiring
 
-Once, at the composition root, beside `DatabaseModule`:
+The drive and the attachments are two modules, as `@adonisjs/drive` and `adonis-attachment` are two
+packages. **The library knows no provider.** The composition root builds the drivers, with whatever
+rules its storage has — a signing endpoint, a CDN, ACLs — and hands them over:
 
 ```ts
-AssetInfrastructureModule.forRootAsync({
-  inject: [storageConfig.KEY],                 // registerAs('storage', () => ({ ...assetStorageOptionsFromEnv(process.env) }))
-  useFactory: (storage: StorageConfig) => storage,
-})
-AssetInfrastructureModule.forRoot({ bucket: 'uploads' })
+DriveModule.forRootAsync({
+  inject: [storageConfig.KEY],
+  useFactory: (storage: StorageConfig) => ({
+    default: 'public',
+    services: {
+      public: () => new S3Driver({ client, bucket: storage.bucket, visibility: 'public' }),
+      private: () => new S3Driver({ client, bucket: storage.bucket, visibility: 'private' }),
+    },
+  }),
+}),
+EventEmitterModule.forRoot(),            // optional: see Events
+AttachmentModule.forRoot({
+  preComputeUrl: true,
+  converters: {
+    thumbnail: ImageConverter.resize(300).blurhash(),
+    preview: AutodetectConverter.resize(720),
+  },
+}),
 ```
 
-The module is **global**: the composition root calls `forRoot` once, and the `DiskService` port
-(`getDisk('public' | 'private')` hands back a flydrive `Disk`) is injectable anywhere after that. It
-also registers the subscriber and opens the ambient `AssetContext` on every request and message. A
-service that only needs the `DiskService`, and has no MikroORM connection, passes
-`attachments: false`.
+`apps/posts-api/src/infrastructure/storage/bucket-disks.ts` is a worked example: one S3-compatible
+bucket as a `public` and a `private` disk, the public one served from a CDN, and every URL built for
+the address the browser reaches the storage at when that is not the service's. Both modules are
+global. `AttachmentModule` needs the MikroORM connection; a service that only reads and writes disks
+imports `DriveModule` alone and injects the `Drive`.
 
-`assetStorageOptionsFromEnv(env)` parses `DRIVE_DISK`, `DRIVE_BUCKET`, `DRIVE_CDN_URL`,
-`DRIVE_S3_ENDPOINT`, `DRIVE_S3_PUBLIC_ENDPOINT`, `DRIVE_S3_FORCE_PATH_STYLE`, `DRIVE_AWS_REGION`,
-`DRIVE_AWS_ACCESS_KEY_ID` and `DRIVE_AWS_SECRET_ACCESS_KEY`. Both disks are the same bucket; they
-differ in visibility, and the public one is served from `DRIVE_CDN_URL` when there is one. A CDN URL
-is a base the key is appended to, so it carries the bucket's path when the CDN needs one.
+`AttachmentModule`'s options are `adonis-attachment`'s `config/attachment.ts`. Every column option
+set there is the default of every column that does not set its own:
 
-Path-style addressing (`http://host/bucket/key`) is used outside production, and wherever
-`DRIVE_S3_FORCE_PATH_STYLE=true` — which an image built for production still needs when its storage
-is MinIO behind a network alias, where `bucket.minio` resolves to nothing.
+| option | default | |
+|---|---|---|
+| `converters` | `{}` | the converters variants are made with, by name |
+| `folder` | `uploads` | |
+| `rename` | `true` | a random UUID with the file's extension |
+| `preComputeUrl` | `false` | resolve URLs on load and save |
+| `meta` | `false` | read dimensions, EXIF, duration, pages when a file is stored |
+| `keepSource` | `false` | leave the object an `Attachment.fromDisk` was made of where it is |
+| `signedUrl` | flydrive's | the options signed URLs are made with |
+| `bin` | the `PATH` | where `ffmpeg`, `ffprobe`, `pdftoppm`, `pdfinfo` and `soffice` are |
+| `timeout` | `30000` | milliseconds an external program may run |
+| `queue.concurrency` | `1` | attachments whose variants are made at once |
+| `variant` | beside the file | `basePath` and `ignoreFolder`, as Adonis's |
+| `secret` | none | what key ids are sealed with; without it there are none |
+| `lock` | in process | a lock shared by every process that may make the same variants |
 
-Writes carry **no object ACL** unless `supportsACL: true`: a bucket with `BucketOwnerEnforced`
-ownership rejects every `PutObject` that sends one, and who may read what is then the bucket's
-policy, not the object's.
+Beside those, `isGlobal`, `context` (the ambient context below, on by default) and `route`.
 
-## When the browser reaches the storage somewhere else
+## Columns
 
-A signed URL is bound to the host it was signed for. Behind a Docker network the service reaches
-MinIO as `minio:9000` while the browser reaches it as `localhost:9000`, so a URL signed for the
-first one is useless to the second. `publicEndpoint` (`DRIVE_S3_PUBLIC_ENDPOINT`) is the address
-outside the network: operations still go to `endpoint`, and every URL — signed reads, signed
-uploads, and unsigned reads when there is no CDN — is built against the public one. On AWS both are
-the same endpoint and the option stays unset.
+```ts
+avatar: () => attachment({ disk: 'private', folder: 'users/:slug', meta: true }).nullable(),
+gallery: () => attachments({ folder: 'galleries' }).nullable(),
+```
 
-## The lifecycle of an attachment
+`attachment()` is `@attachment()` and `attachments()` is `@attachments()`: a `json` column holding the
+durable fields — disk, path, original name, size, extension, MIME type, metadata, variants — and never
+a URL, which is derived and may expire. MikroORM's own property options do what the decorator's
+`serializeAs` and `serialize` did: `.serializedName()`, `.hidden()`, `.serializer()`.
 
-| when | what the subscriber does |
-|---|---|
-| load | binds the disk and resolves the URL (signed for a private disk). It never moves an object, not even one whose row says `persisted: false` |
-| flush, staged asset | moves the object under `<folder>/<uuid>.<ext>` (copies it with `keepSource`) and recomputes the change set, so the row stores the owned key |
-| flush, replaced or cleared | queues the old object for deletion |
-| delete | queues the row's object for deletion |
-| commit | deletes what was queued |
-| rollback | moves every promoted object back to its staging key (deletes the copy with `keepSource`) and reverts the `Asset` in memory |
+Every option may be a strategy, evaluated once per file stored against the entity that holds it,
+the property path, the file's original name and the ambient context — synchronous or not:
 
-Inside an explicit transaction the deletes wait for the commit, because a rollback would leave the
-row pointing at them. A nested transaction's savepoint fires its own commit, so an attachment
-replaced inside one is deleted when the savepoint is released, not when the outer transaction
-commits.
+```ts
+attachment({ folder: 'posts/:slug' })                                  // :slug is the entity's slug, slugged
+attachment({ folder: () => new Date().toISOString().slice(0, 7) })
+attachment({ folder: (post) => `posts/${post?.id}` })
+attachment({ folder: (_post, { ctx }) => `tenants/${ctx.tenantId}/covers` })
+attachment({ rename: async (_post, { originalName }) => `copy-of-${originalName}` })
+attachment({ rename: ':id.jpg' })
+```
 
-The column holds the durable fields only: a URL is derived, a signed one expires, and storing it
-would make every load differ from its own snapshot and flush a spurious `UPDATE`.
+A strategy only decides where a **new** file goes: the stored path is the truth on every read after
+that. `ctx` is `AttachmentContext` — process-wide globals (`AttachmentContext.setGlobals`) overlaid
+with the scope a middleware (HTTP) or an interceptor (every other transport) opens per call, carrying
+the call's `x-tenant`.
 
 An embeddable holding an attachment must be mapped flattened (the default). An `object: true`
 embeddable is one opaque JSON column, its attachments are never columns of their own, and the
 subscriber says so at boot.
 
-## Strategies and the ambient context
+## Making attachments
 
-Every option may be a function of the owning entity and of the ambient context, evaluated once per
-attach or load:
+The factories of Adonis's `attachmentManager` are static constructors, on `Attachment` and on `Asset`:
 
 ```ts
-attachment({ folder: () => new Date().toISOString().slice(0, 7) })
-attachment({ folder: (post) => `posts/${post?.slug}` })
-attachment({ folder: (_post, { ctx, path }) => `tenants/${ctx.tenantId}/${path.at(-1)}` })
+await Attachment.fromBuffer(buffer, 'photo.jpg')
+await Attachment.fromBase64('data:image/png;base64,…', 'pixel.png')
+await Attachment.fromPath('/tmp/report.pdf')
+await Attachment.fromUrl('https://example.com/photo.jpg')
+await Attachment.fromStream(stream, 'video.mkv')
+await Attachment.fromFile(file)            // multer's, @fastify/multipart's or AdonisJS's shape
+await Attachment.fromFiles(files)
+Attachment.fromDisk('tmp/uploads/123', { size, mimeType, keepSource: false })
 ```
 
-`ctx` is `AssetContext`: process-wide globals (`AssetContext.setGlobals`) overlaid with the scope
-the middleware (HTTP) or the interceptor (every other transport) opens per call, which carries the
-`x-tenant` of the request. A strategy only decides where a **new** object goes; the stored key is
-the truth on every read after that.
+Each tells what the file is — by its bytes (`file-type`), or by its name (`mime-types`) — and makes a
+**pending** attachment. Nothing is stored until the entity holding it is flushed. `fromDisk` is how a
+browser uploads without the bytes crossing the service: it `PUT`s to a URL from
+`drive.use().getSignedUploadUrl(key)`, and hands the key back. Storing it TAKES the object, so the
+service must check the key is one it issued to that caller first — `apps/posts-api`'s `UploadArea`.
 
-## Assets that are not uploads
+Outside any entity, `AttachmentManager.store(await Asset.fromBuffer(pdf, 'report.pdf'), { folder:
+'reports' })` stores at once.
 
-- `Asset.fromUrl(url, folder, name)` downloads the bytes when it is attached.
-- `Asset.fromBuffer(contents, { fileName, extname, mimeType })` writes generated bytes straight to
-  the owned key.
-- `publishDownload(disk, fileName, contents, contentType)` stores a generated file under
-  `tmp/downloads/<random>/` and returns a short, **unsigned** URL. It expects that prefix to be
-  publicly readable and expired by a lifecycle rule; the random segment is the capability.
-- `disk.getSignedUploadUrl(key, { contentType, expiresIn })` is how a browser uploads without the
-  bytes crossing the service: it `PUT`s to the URL, and hands the key back as a staged `Asset`. The
-  service must check the key is one it issued to that user before attaching it — attaching MOVES the
-  object, so a key taken from somebody else would take their file.
-- `DiskService.uploadStream` uploads a stream whose length is unknown, as a multipart upload.
-  `Disk.putStream` cannot: a single `PutObject` needs a `Content-Length`.
+## The lifecycle, run by one global subscriber
+
+| when | what `AttachmentSubscriber` does |
+|---|---|
+| load | binds each attachment to its disk, resolves its URLs when `preComputeUrl`, seals its `keyId` |
+| flush | stores every pending attachment where its options put it — reading its `meta` first — and recomputes the change set so the row holds the stored path |
+| flush, replaced or cleared | queues the old attachment, and its variants, for deletion |
+| delete | queues the row's attachments for deletion |
+| commit | deletes what was queued, lets go of each source, seals key ids, and queues the variants |
+| rollback | deletes what was stored and puts every attachment back as it was, pending |
+
+A store **copies**: the source — a staged upload, a temporary download — is let go of only once the
+transaction commits, which is what lets a rollback put everything back. Inside an explicit
+transaction nothing is deleted before the commit, because a rollback would leave the row pointing at
+it.
+
+## Converters and variants
+
+```ts
+ImageConverter.resize(300)
+ImageConverter.resize({ width: 400, height: 400, fit: 'cover' }).format('jpeg', { quality: 80 })
+ImageConverter.format('avif').blurhash({ componentX: 4, componentY: 3 })
+VideoThumbnailConverter.at(2).resize(720)
+PdfThumbnailConverter.page(1).resize(720)
+DocumentThumbnailConverter.create().resize(720)
+AutodetectConverter.resize(1280)
+```
+
+Every step answers with a new converter, so one can be shared and specialised. They write `webp`
+unless told otherwise, rotate by the EXIF orientation, and strip metadata — GPS included — from
+what they write. `sharp` makes the images; `ffmpeg`, Poppler and LibreOffice make the frames and pages
+they start from, and are looked for on the `PATH` or where `bin` says. Each package and program is
+needed only by the converter that uses it: a process that never converts an image never loads
+`sharp`, and one that does without it is told to install it (`MissingPackageException`).
+
+A converter of your own extends `Converter`, as a mail extends `Mail`:
+
+```ts
+export class Gif2WebpConverter extends Converter {
+  async handle(input: ConverterInput): Promise<ConverterInput> {
+    return sharp(input, { animated: true }).webp().toBuffer();
+  }
+}
+```
+
+The variants a column declares are made **after** the transaction that stored the attachment commits,
+on `VariantQueue`, one attachment at a time under a lock: the row is read again in the schema it
+lives in, the variants are stored beside the attachment and recorded on the row, and the ones they
+replace are deleted. A variant made of an attachment since replaced is thrown away.
+`await queue.idle()` waits for the queue — what a spec, a script, or a Lambda about to answer needs.
+
+`RegenerateService` makes them again — `entity(post, { variants: ['thumbnail'] })`, or
+`all(Post, { attributes: ['cover'], schema: 'tenant_acme' })` — replacing the ones there are.
+
+## Events
+
+With `EventEmitterModule.forRoot()` imported, `AttachmentEventService` emits the generation on
+`@nestjs/event-emitter`, the way `@nestjs-modules/mailer`'s `MailerEventService` emits the mailer's.
+Without it, nothing is emitted and nothing fails.
+
+| event | payload |
+|---|---|
+| `AttachmentEvent.VARIANT_STARTED` — `attachment.variant_started` | `VariantGenerationStarted` |
+| `AttachmentEvent.VARIANT_COMPLETED` — `attachment.variant_completed` | `VariantGenerationCompleted`, with `generated` |
+| `AttachmentEvent.VARIANT_FAILED` — `attachment.variant_failed` | `VariantGenerationFailed`, with `error` |
+
+```ts
+@OnEvent(AttachmentEvent.VARIANT_COMPLETED)
+onVariants({ entity, primaryKey, generated }: VariantGenerationCompleted) {}
+```
+
+## Serving by key id
+
+With a `secret`, every attachment carries a `keyId` — the row, the property and the file, sealed with
+AES-256-GCM — and `AttachmentServer.serve(keyId, variant?)` answers with its bytes, making a variant
+that does not exist yet on the spot. `route` mounts it as `router.attachments()` was:
+
+```ts
+AttachmentModule.forRoot({
+  secret: env.ATTACHMENT_SECRET,
+  converters: { thumbnail: ImageConverter.resize(300) },
+  route: { path: 'attachments', decorators: [AllowAnonymous()] },
+})
+```
+
+`GET /attachments/:keyId/:name?variant=thumbnail`. The key id is the capability, which is why the
+route takes decorators — a global guard would refuse it otherwise. On Fastify, a key id is longer than
+the default `maxParamLength` of 100: `new FastifyAdapter({ maxParamLength: 1024 })`.
 
 ## Testing
 
-`setupTestStorage()` (`@nestposts/asset/infrastructure/testing/test-storage`) starts a MinIO
-container with an empty bucket and hands back the options to boot the module with:
+`TestDrive` (`@nestposts/asset/infrastructure/testing/test-drive`) is a `public` and a `private` disk
+on the local file system, with URLs under `http://files.test` — signed ones for the private disk,
+checked by `TestDrive.isSigned`. No storage service runs:
 
 ```ts
-storage = await setupTestStorage();
-AssetInfrastructureModule.forRoot(storage.options);
+drive = await TestDrive.create();
+imports: [DriveModule.forRoot(drive.options), AttachmentModule.forRoot({})]
 ```
 
-MinIO has no object ACLs, so that bucket answers anonymous reads under `tmp/` only, like a deployed
-bucket whose download prefix is public, and everything else is read through a signed URL.
+The converters that run `ffmpeg` and Poppler are covered where those programs work, and skipped
+where they do not.

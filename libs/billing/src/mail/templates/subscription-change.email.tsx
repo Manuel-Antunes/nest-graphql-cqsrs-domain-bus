@@ -8,6 +8,8 @@ import {
   Hr,
   Html,
   Preview,
+  pixelBasedPreset,
+  Tailwind,
   Text,
 } from 'react-email';
 
@@ -18,35 +20,6 @@ export interface SubscriptionChangeEmailProps
   extends SubscriptionChangeNotificationData {
   name: string | null;
 }
-
-const body = {
-  backgroundColor: '#f4f4f5',
-  fontFamily: 'Helvetica, Arial, sans-serif',
-  padding: '24px 0',
-};
-
-const container = {
-  backgroundColor: '#ffffff',
-  borderRadius: '8px',
-  margin: '0 auto',
-  maxWidth: '480px',
-  padding: '32px',
-};
-
-const heading = { color: '#18181b', fontSize: '22px', margin: '0 0 16px' };
-
-const paragraph = { color: '#3f3f46', fontSize: '15px', lineHeight: '24px' };
-
-const button = {
-  backgroundColor: '#18181b',
-  borderRadius: '6px',
-  color: '#ffffff',
-  fontSize: '15px',
-  padding: '12px 20px',
-  textDecoration: 'none',
-};
-
-const footer = { color: '#a1a1aa', fontSize: '12px', lineHeight: '18px' };
 
 const dateOf = (iso: string | null) =>
   iso
@@ -80,23 +53,32 @@ export const SubscriptionChangeEmail = defineEmailTemplate(
     <Html lang="en">
       <Head />
       <Preview>{explanation(change)}</Preview>
-      <Body style={body}>
-        <Container style={container}>
-          <Heading style={heading}>
-            {SUBSCRIPTION_CHANGE_SUBJECTS[change.event]}
-          </Heading>
-          <Text style={paragraph}>{name ? `Hi ${name},` : 'Hi,'}</Text>
-          <Text style={paragraph}>{explanation(change)}</Text>
-          <Button href={url} style={button}>
-            Manage billing
-          </Button>
-          <Hr />
-          <Text style={footer}>
-            You are receiving this email because of a change to your
-            subscription on Nest Posts.
-          </Text>
-        </Container>
-      </Body>
+      <Tailwind config={{ presets: [pixelBasedPreset] }}>
+        <Body className="bg-zinc-100 py-6 font-[Helvetica,Arial,sans-serif]">
+          <Container className="mx-auto max-w-[480px] rounded-[8px] bg-white p-8">
+            <Heading className="m-0 mb-4 text-[22px] text-zinc-900">
+              {SUBSCRIPTION_CHANGE_SUBJECTS[change.event]}
+            </Heading>
+            <Text className="text-[15px] leading-6 text-zinc-700">
+              {name ? `Hi ${name},` : 'Hi,'}
+            </Text>
+            <Text className="text-[15px] leading-6 text-zinc-700">
+              {explanation(change)}
+            </Text>
+            <Button
+              href={url}
+              className="rounded-[6px] bg-zinc-900 px-5 py-3 text-[15px] text-white no-underline"
+            >
+              Manage billing
+            </Button>
+            <Hr />
+            <Text className="text-xs leading-[18px] text-zinc-400">
+              You are receiving this email because of a change to your
+              subscription on Nest Posts.
+            </Text>
+          </Container>
+        </Body>
+      </Tailwind>
     </Html>
   ),
 );

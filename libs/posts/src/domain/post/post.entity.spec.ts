@@ -1,5 +1,5 @@
 import { MikroORM } from '@mikro-orm/core';
-import { Asset } from '@nestposts/asset/domain/data-objects/asset';
+import { Attachment } from '@nestposts/asset/domain/asset/attachment';
 import { metadataOnly } from '@nestposts/database/testing';
 import type { DelegatedRef } from '@nestposts/platform/domain/shared/delegation/delegate';
 import { delegateRef } from '@nestposts/platform/domain/shared/delegation/delegate';
@@ -364,12 +364,11 @@ describe('Post', () => {
 
     it('lets go of its attachment, so the file goes with the post', () => {
       const post = aPost();
-      post.asset = new Asset({
-        name: 'assets/cover.png',
+      post.asset = Attachment.restore({
+        path: 'assets/cover.png',
         size: 4,
         extname: 'png',
         mimeType: 'image/png',
-        persisted: true,
       });
 
       post.softDelete(later);

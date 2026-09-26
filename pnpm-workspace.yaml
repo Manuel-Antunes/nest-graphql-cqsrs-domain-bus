@@ -13,7 +13,6 @@ allowBuilds:
 catalog:
   '@aws-sdk/client-s3': 3.850.0
   '@aws-sdk/client-sesv2': 3.918.0
-  '@aws-sdk/lib-storage': 3.850.0
   '@aws-sdk/s3-request-presigner': 3.850.0
   '@base-ui/react': ^1.8.0
   '@better-auth-ui/core': ^1.7.26
@@ -40,20 +39,25 @@ catalog:
   '@tanstack/react-store': ^0.11.1
   '@tanstack/react-table': ^9.2.4
   '@types/html-to-text': ^9.0.4
+  '@types/mime-types': ^3.0.1
   '@types/nodemailer': 8.0.2
   '@types/react': ^19
   '@types/react-dom': ^19
   better-auth: ^1.7.3
+  blurhash: ^2.0.5
   bowser: ^2.14.1
   class-variance-authority: ^0.7.1
   clsx: ^2.1.1
   cn: ^0.3.2
   date-fns: ^4.4.0
+  exifreader: ^4.46.0
+  file-type: ^22.1.1
   firebase-admin: ^13.4.0
   flydrive: ^2.1.0
   html-to-text: ^9.0.5
   ical-generator: ^11.1.1
   input-otp: ^1.5.0
+  mime-types: ^3.0.2
   nodemailer: 8.0.11
   nx: 23.2.1
   react: 19.2.8
@@ -62,6 +66,7 @@ catalog:
   react-email: ^6.11.0
   react-hook-form: ^7.88.0
   recharts: 3.8.0
+  sharp: ^0.35.4
   sonner: ^2.0.7
   standardwebhooks: ^1.0.0
   tailwind-merge: ^3.3.1

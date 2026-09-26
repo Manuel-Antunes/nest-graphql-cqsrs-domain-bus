@@ -13,7 +13,7 @@ import {
 } from '@automapper/core';
 import { AutomapperProfile, InjectMapper } from '@automapper/nestjs';
 import { Injectable } from '@nestjs/common';
-import type { Asset } from '@nestposts/asset/domain/data-objects/asset';
+import type { Attachment } from '@nestposts/asset/domain/asset/attachment';
 import { PostCreatedEvent } from '@nestposts/posts/domain/post/event/post-created.event';
 import { PostPreCreatedEvent } from '@nestposts/posts/domain/post/event/post-pre-created.event';
 import { PostUpdatedEvent } from '@nestposts/posts/domain/post/event/post-updated.event';
@@ -37,14 +37,14 @@ import { valueObjectConverter } from './value-object.converter';
 const authorOf = (args: Record<string, unknown>): Author =>
   args.author as Author;
 
-const assetViewOf = (asset: Asset | null): AssetView | null =>
+const assetViewOf = (asset: Attachment | null): AssetView | null =>
   asset
     ? new AssetView({
-        name: asset.name,
+        name: asset.path,
         size: asset.size,
         extname: asset.extname,
         mimeType: asset.mimeType,
-        url: asset.toJSON().url ?? null,
+        url: asset.url ?? null,
       })
     : null;
 
