@@ -1,6 +1,6 @@
 import type { z } from 'zod';
 
-export interface StandardSchemaV1<Input = unknown, Output = Input> {
+export interface StandardSchemaV1<Input = unknown, _Output = Input> {
   readonly '~standard': {
     version: 1;
     vendor: string;

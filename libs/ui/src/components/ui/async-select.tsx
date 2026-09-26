@@ -35,13 +35,13 @@ export interface Option {
   icon?: React.ReactNode;
 }
 
-export interface AsyncSelectBaseSingleProps<T> {
+export interface AsyncSelectBaseSingleProps<_T> {
   multi?: false;
   value: string;
   onChange: (value: string) => void;
 }
 
-export interface AsyncSelectBaseMultiProps<T> {
+export interface AsyncSelectBaseMultiProps<_T> {
   multi: true;
   value: string[];
   onChange: (value: string[]) => void;

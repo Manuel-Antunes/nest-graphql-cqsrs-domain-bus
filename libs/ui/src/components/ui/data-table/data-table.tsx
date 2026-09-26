@@ -429,7 +429,7 @@ export function DataTable<TData, FilterSchema extends ZodType<any>>({
           data.forEach((row, index) => {
             const key = getRowSpanKey(row);
             if (!groups.has(key)) groups.set(key, []);
-            groups.get(key)!.push(index);
+            groups.get(key)?.push(index);
           });
 
           groups.forEach((indices, key) => {

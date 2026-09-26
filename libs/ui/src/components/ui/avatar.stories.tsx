@@ -4,7 +4,7 @@ import { Avatar, AvatarFallback, AvatarImage } from './avatar';
 
 const meta = {
   title: 'Shadcn/avatar',
-  render: (args) => (
+  render: (_args) => (
     <Avatar>
       <AvatarImage src="https://github.com/shadcn.png" alt="@shadcn" />
       <AvatarFallback>Shadcn</AvatarFallback>
@@ -22,7 +22,7 @@ type Story = StoryObj<typeof meta>;
 
 export const AvatarWithImage: Story = {
   args: {},
-  render: (args) => (
+  render: (_args) => (
     <Avatar>
       <AvatarImage src="https://github.com/shadcn.png" alt="@shadcn" />
       <AvatarFallback>Shadcn</AvatarFallback>
@@ -31,7 +31,7 @@ export const AvatarWithImage: Story = {
 };
 export const AvatarWithFallback: Story = {
   args: {},
-  render: (args) => (
+  render: (_args) => (
     <Avatar>
       <AvatarImage src="" alt="@shadcn" />
       <AvatarFallback>CN</AvatarFallback>

@@ -236,11 +236,11 @@ describe('gqlSubscriptionOptions', () => {
       transport.current.handlers.next({ onBulkGenerate: snapshot() });
 
       const extracted = cache.extract() as Record<string, any>;
-      expect(extracted['ROOT_SUBSCRIPTION']).toBeDefined();
+      expect(extracted.ROOT_SUBSCRIPTION).toBeDefined();
       // The root field of a subscription is not a query field. Filing it under
       // ROOT_QUERY is what `writeQuery` would have done, and it would make a
       // `readQuery` for an unrelated query see a field it never selected.
-      expect(extracted['ROOT_QUERY']).toBeUndefined();
+      expect(extracted.ROOT_QUERY).toBeUndefined();
     });
 
     it('skips the write when writeToCache is false', () => {
@@ -323,7 +323,7 @@ describe('composed with useSubscription', () => {
     act(() => transport.current.handlers.next({ onBulkGenerate: snapshot() }));
 
     expect(
-      (cache.extract() as Record<string, any>)['ROOT_SUBSCRIPTION'],
+      (cache.extract() as Record<string, any>).ROOT_SUBSCRIPTION,
     ).toBeDefined();
   });
 

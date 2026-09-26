@@ -1,0 +1,270 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.14/schema.json",
+  "root": false,
+  "extends": "//",
+  "files": {
+    "includes": ["**", "!src/gql"]
+  },
+  "overrides": [
+    {
+      "includes": ["**"],
+      "linter": {
+        "domains": {
+          "next": "recommended",
+          "react": "recommended",
+          "test": "recommended"
+        }
+      }
+    },
+    {
+      "includes": ["**/*.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "useImportType": "warn"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/fixtures/**/*.ts"],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "noEmptyPattern": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/model/**", "src/support/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["@nestposts/*/src/**", "@nestposts/*/dist/**"],
+                    "message": "Import a workspace package through its exports map (@nestposts/<pkg>/<path>), not through src/ or dist/."
+                  },
+                  {
+                    "group": [
+                      "../**/environment/**",
+                      "../**/infrastructure/**",
+                      "../**/pages/**",
+                      "../**/components/**",
+                      "../**/workflows/**",
+                      "../**/fixtures/**",
+                      "../**/stack/**",
+                      "../**/specs/**"
+                    ],
+                    "message": "model/ and support/ are the innermost layer of the e2e suite: they depend on nothing else in it."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/environment/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["@nestposts/*/src/**", "@nestposts/*/dist/**"],
+                    "message": "Import a workspace package through its exports map (@nestposts/<pkg>/<path>), not through src/ or dist/."
+                  },
+                  {
+                    "group": [
+                      "../**/infrastructure/**",
+                      "../**/pages/**",
+                      "../**/components/**",
+                      "../**/workflows/**",
+                      "../**/fixtures/**",
+                      "../**/stack/**",
+                      "../**/specs/**"
+                    ],
+                    "message": "environment/ is what the global setup hands the workers; it knows no client, screen or workflow."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/infrastructure/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["@nestposts/*/src/**", "@nestposts/*/dist/**"],
+                    "message": "Import a workspace package through its exports map (@nestposts/<pkg>/<path>), not through src/ or dist/."
+                  },
+                  {
+                    "group": [
+                      "../**/pages/**",
+                      "../**/components/**",
+                      "../**/workflows/**",
+                      "../**/fixtures/**",
+                      "../**/stack/**",
+                      "../**/specs/**"
+                    ],
+                    "message": "infrastructure/ talks to the system from outside the browser; it knows no screen and no workflow."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/pages/**", "src/components/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["@nestposts/*/src/**", "@nestposts/*/dist/**"],
+                    "message": "Import a workspace package through its exports map (@nestposts/<pkg>/<path>), not through src/ or dist/."
+                  },
+                  {
+                    "group": [
+                      "../**/environment/**",
+                      "../**/infrastructure/**",
+                      "../**/workflows/**",
+                      "../**/fixtures/**",
+                      "../**/stack/**",
+                      "../**/specs/**"
+                    ],
+                    "message": "A page or component object drives the browser and nothing else: a database, a mailbox or a flow across screens belongs to a workflow."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/workflows/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["@nestposts/*/src/**", "@nestposts/*/dist/**"],
+                    "message": "Import a workspace package through its exports map (@nestposts/<pkg>/<path>), not through src/ or dist/."
+                  },
+                  {
+                    "group": [
+                      "../**/fixtures/**",
+                      "../**/stack/**",
+                      "../**/specs/**"
+                    ],
+                    "message": "A workflow is composed by the fixtures, never the other way round, and knows nothing about provisioning the stack."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/stack/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["@nestposts/*/src/**", "@nestposts/*/dist/**"],
+                    "message": "Import a workspace package through its exports map (@nestposts/<pkg>/<path>), not through src/ or dist/."
+                  },
+                  {
+                    "group": [
+                      "../**/pages/**",
+                      "../**/components/**",
+                      "../**/fixtures/**",
+                      "../**/specs/**"
+                    ],
+                    "message": "stack/ provisions the system for the global setup; it drives no screen."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/specs/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["@nestposts/*/src/**", "@nestposts/*/dist/**"],
+                    "message": "Import a workspace package through its exports map (@nestposts/<pkg>/<path>), not through src/ or dist/."
+                  },
+                  {
+                    "group": [
+                      "../**/stack/**",
+                      "../**/environment/**",
+                      "../**/pages/**",
+                      "../**/components/**"
+                    ],
+                    "message": "A spec is told through the fixtures: screens come as `app`, workflows as fixtures, the run's settings as `environment`."
+                  },
+                  {
+                    "group": [
+                      "@playwright/test",
+                      "pg",
+                      "testcontainers",
+                      "@testcontainers/*",
+                      "@aws-sdk/*",
+                      "@polar-sh/*",
+                      "graphql",
+                      "graphql-sse"
+                    ],
+                    "message": "A spec reaches the system through the fixtures and the objects they give it (`../fixtures/test`), not through a driver of its own."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/specs/**/*.spec.ts"],
+      "plugins": ["../../tools/biome/playwright.grit"]
+    }
+  ]
+}

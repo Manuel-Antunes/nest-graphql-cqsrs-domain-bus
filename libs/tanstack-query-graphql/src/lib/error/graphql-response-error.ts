@@ -60,8 +60,8 @@ export function statusOfGraphQLError(
 
   const direct =
     readNumber(extensions, 'status') ??
-    readNumber(extensions['http'], 'status') ??
-    readNumber(extensions['originalError'], 'statusCode');
+    readNumber(extensions.http, 'status') ??
+    readNumber(extensions.originalError, 'statusCode');
   if (direct !== undefined) {
     return direct;
   }

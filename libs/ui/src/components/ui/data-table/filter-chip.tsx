@@ -198,7 +198,7 @@ export function FilterChip({
         size="sm"
         className="h-8 border-gray-200 border-dashed bg-transparent"
       >
-        {columnHeader}:{' ' + getDisplayValue()}
+        {columnHeader}:{` ${getDisplayValue()}`}
         <ChevronDown className="ml-1 h-3 w-3" />
       </Button>
     );
@@ -207,7 +207,7 @@ export function FilterChip({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger render={<Button variant="outline" size="sm" />}>
-        {columnHeader}:{' ' + getDisplayValue()}
+        {columnHeader}:{` ${getDisplayValue()}`}
         <ChevronDown className="ml-1 h-3 w-3" />
       </PopoverTrigger>
       <PopoverContent className="w-80 p-0" align="start">

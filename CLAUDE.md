@@ -34,7 +34,7 @@ The only exceptions:
    is a class that extends `String` and the rule's *safe* fix, which `pnpm lint:fix` applies, turns it
    into the primitive and breaks every call site; and the
    `biome-ignore-all` on `libs/database/src/index.ts` described under **Linting** below.
-   `libs/ui` is otherwise covered by an `overrides` entry rather than by suppressions: its components
+   `libs/ui` is otherwise covered by its own `libs/ui/biome.json` rather than by suppressions: its components
    come from shadcn's and reui's registries, and the rules they break by design (exhaustive effect
    dependencies, index keys on positional lists, a few a11y rules on composite widgets) are off for
    `libs/ui/**` so that refreshing one is a copy and not a merge. Its TypeScript carries no comments
@@ -87,17 +87,33 @@ messages, log lines, GraphQL descriptions and test names. Do not mass-translate 
 separate, explicit task. Follow the English rule for anything you add or substantially rewrite, and
 leave surrounding Portuguese alone unless asked.
 
-### Linting and formatting: one Biome, one config, run from the root
+### Linting and formatting: one Biome run, a global config, and one per project that differs
 
-**Biome is the formatter and the linter**, for TypeScript, JavaScript, JSON, CSS and GraphQL. There
-is one `biome.json` at the root and **no per-project config**: `pnpm lint` is `biome check .` over
-the whole repository — 735 files in about 100ms, which is less than Nx's own per-task overhead, so
-there is no `lint` target to run through `nx run-many` and no way for a project to be silently
-skipped. `pnpm lint:fix` is the same with `--write`. `biome.json` is in `nx.json`'s `sharedGlobals`,
-so a change to it invalidates every cached task that depends on it.
+**Biome is the formatter and the linter**, for TypeScript, JavaScript, JSON, CSS and GraphQL, and it
+runs **once, from the root**: `pnpm lint` is `biome check .` over the whole repository — some 1,700
+files in about half a second, which is less than Nx's own per-task overhead, so there is no `lint`
+target to run through `nx run-many` and no way for a project to be silently skipped. `pnpm lint:fix`
+is the same with `--write`. Warnings do not fail the run; errors do.
 
-The per-area rules that used to be separate ESLint configs are `overrides` entries in that one file,
-matched by path. Warnings do not fail the run; errors do.
+**The root `biome.json` holds only what is global** — the formatter, the parsers, import sorting and
+the rules every project follows. **A project with rules of its own carries them in its own
+`biome.json`** — `apps/web`, `apps/web-e2e`, `libs/ui` and `infra` — which starts with
+`"root": false, "extends": "//"` and lists its exceptions as `overrides`, with paths relative to
+itself. The one run reaches them all: Biome applies to each file the nearest configuration above it.
+These are the per-area rules that used to be separate ESLint configs. The root file is in `nx.json`'s
+`sharedGlobals`, so a change to it invalidates every cached task that depends on it; a project's own
+is already one of that project's inputs.
+
+- **Inside a folder with its own `biome.json`, no path the root names applies any more.** Paths in an
+  extended configuration are resolved from the extending file's folder, so a root override or
+  `files.includes` entry that says `apps/web-e2e/...` silently stops matching the moment
+  `apps/web-e2e/biome.json` exists. Measured, with nothing in that file but `extends`: the Playwright
+  plugin, the e2e layer rules and the fixtures' exception all went off with `pnpm lint` still green,
+  and `apps/web/public`'s SVGs started being linted. So the root names no project path at all — every
+  path-scoped rule and every exclusion lives in the configuration of the folder it is about.
+- **An override's rule options replace the root's; they do not add to them.** A
+  `noRestrictedImports` override repeats the root's `@nestposts/*/src/**` group, or that import is
+  allowed wherever the override applies.
 
 - **`style/useImportType` is OFF by default, and that is not taste.** The NestJS projects compile
   with `emitDecoratorMetadata`, and Nest's DI reads the `design:paramtypes` it emits. Turn the rule
@@ -105,8 +121,8 @@ matched by path. Warnings do not fail the run; errors do.
   `import type` — the metadata then says `Object`, the provider resolves to `undefined`, the build
   still succeeds and the failure is at runtime, far from the edit. It is off **globally** and turned
   back on only for the three places that carry no decorators (`apps/web` outside `src/nest/**`,
-  `apps/web-e2e`, `infra`), because that way round a new library inherits the safe default instead of
-  the dangerous one.
+  `apps/web-e2e`, `infra`), each in its own `biome.json`, because that way round a new library
+  inherits the safe default instead of the dangerous one.
 - **`assist/source/organizeImports` sorts EXPORTS as well as imports, and in a barrel that is a
   load-bearing order.** Sorted, `libs/database/src/index.ts` hoists its `export * from
   '@mikro-orm/core'` above the local `export *` lines; the CommonJS barrel then requires the ESM
@@ -123,9 +139,11 @@ matched by path. Warnings do not fail the run; errors do.
   fit — no application here declares a third-party dependency of its own, they all resolve from the
   root `package.json`, so it reported 613 violations of a deliberate design.
 - **Generated code is not linted**: `src/gql/**` (codegen) in `apps/web` and `apps/web-e2e`,
-  `apps/migrator`'s `src/migrations/**`, which MikroORM writes, and `apps/web/public/**`.
+  `apps/migrator`'s `src/migrations/**`, which MikroORM writes, and `apps/web/public/**` — each
+  excluded by the `files.includes` of the configuration it lives under.
 - **What ESLint had and Biome does not ship is `tools/biome`**, three GritQL plugins wired by path
-  in `biome.json` — `playwright.grit`, `graphql-operations.grit`, `tailwind.grit`.
+  in the `biome.json` of the project each one checks — `playwright.grit` in `apps/web-e2e`,
+  `graphql-operations.grit` and `tailwind.grit` in `apps/web`.
   `tools/biome/README.md` is the guide: what each checks, and, at least as important, the things
   that **could not** be written and are therefore no longer checked anywhere. A plugin is a pattern
   plus `register_diagnostic`; it reads the file it is handed and nothing else — no schema, no
@@ -1298,7 +1316,7 @@ page through `Visitor`; `visitors.arrive()` opens another person's browser), and
 outside the browser (`infrastructure/`: one `*Records` class per concern of the database, Mailpit, the
 wire, S3, Polar, GraphQL). `fixtures/` is the only composition root, `environment/` is what the global
 setup hands the workers, and `stack/` provisions. One `noRestrictedImports` override per layer in
-`biome.json` refuses an import against that direction — a page object reaching a mailbox, a spec
+`apps/web-e2e/biome.json` refuses an import against that direction — a page object reaching a mailbox, a spec
 reaching `pg` or `@playwright/test` — so a new spec lands in the shape or
 fails `pnpm lint`.
 

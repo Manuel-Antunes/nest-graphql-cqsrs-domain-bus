@@ -34,6 +34,24 @@ class UserRegisteredEvent {
   constructor(readonly userId: string) {}
 }
 
+class HeadWatchingEventLog extends MikroOrmEventLog {
+  readonly reading: Promise<void>;
+  private headRead: () => void = () => undefined;
+
+  constructor(em: EntityManager) {
+    super(em);
+    this.reading = new Promise((resolve) => {
+      this.headRead = resolve;
+    });
+  }
+
+  override async head(): Promise<string> {
+    const head = await super.head();
+    this.headRead();
+    return head;
+  }
+}
+
 describe('the EventBus, event sourced', () => {
   let orm: MikroORM;
   let log: MikroOrmEventLog;
@@ -58,7 +76,7 @@ describe('the EventBus, event sourced', () => {
    * A container: the one `EventBus` there is, with the decorator pointed at it — the same two steps
    * `onApplicationBootstrap` takes, in the same order.
    */
-  const busOf = (sagas: unknown[] = []) => {
+  const busOf = (reader: MikroOrmEventLog, sagas: unknown[] = []) => {
     const commandBus = { execute: () => Promise.resolve() };
     const bus = new EventBus(
       commandBus as never,
@@ -66,7 +84,7 @@ describe('the EventBus, event sourced', () => {
       { publish: () => undefined } as never,
     );
     bus.registerSagas(sagas as never[]);
-    new EventSourcedEventBus({ get: () => bus } as never, log, orm.em, {
+    new EventSourcedEventBus({ get: () => bus } as never, reader, orm.em, {
       interval: 20,
     }).onApplicationBootstrap();
     return bus;
@@ -80,25 +98,28 @@ describe('the EventBus, event sourced', () => {
       log,
     );
     return {
-      eventBus: { publish: (event: object) => void bus.publish(event) },
+      eventBus: { publish: (event: object) => bus.publish(event) },
       stop: () => undefined,
     };
   };
 
-  const containerThatSubscribes = () => busOf();
+  const containerThatSubscribes = () => {
+    const reader = new HeadWatchingEventLog(orm.em);
+    return { bus: busOf(reader), reading: reader.reading };
+  };
 
   const settle = () => new Promise((resolve) => setTimeout(resolve, 120));
 
   describe('what one container writes', () => {
     it('reaches a subscriber on another container, as the real class', async () => {
-      const source = containerThatSubscribes();
+      const subscribing = containerThatSubscribes();
       const arrived = firstValueFrom(
-        source.pipe(ofType(PostCompletedEvent), timeout(4000)),
+        subscribing.bus.pipe(ofType(PostCompletedEvent), timeout(4000)),
       );
-      await settle();
+      await subscribing.reading;
 
       const publishing = containerThatPublishes();
-      publishing.eventBus.publish(
+      await publishing.eventBus.publish(
         new PostCompletedEvent(
           'p-1',
           'Nest',
@@ -116,15 +137,15 @@ describe('the EventBus, event sourced', () => {
     });
 
     it('delivers only the types the subscription asked for', async () => {
-      const source = containerThatSubscribes();
+      const subscribing = containerThatSubscribes();
       const arrived = firstValueFrom(
-        source.pipe(ofType(PostCompletedEvent), timeout(4000)),
+        subscribing.bus.pipe(ofType(PostCompletedEvent), timeout(4000)),
       );
-      await settle();
+      await subscribing.reading;
 
       const publishing = containerThatPublishes();
-      publishing.eventBus.publish(new UserRegisteredEvent('u-1'));
-      publishing.eventBus.publish(
+      await publishing.eventBus.publish(new UserRegisteredEvent('u-1'));
+      await publishing.eventBus.publish(
         new PostCompletedEvent('p-2', 'Nest', new Date()),
       );
 
@@ -136,18 +157,17 @@ describe('the EventBus, event sourced', () => {
   describe('where a new subscriber starts', () => {
     it('at the head: what happened before it subscribed is not its business', async () => {
       const publishing = containerThatPublishes();
-      publishing.eventBus.publish(
+      await publishing.eventBus.publish(
         new PostCompletedEvent('before', 'Nest', new Date()),
       );
-      await settle();
 
-      const source = containerThatSubscribes();
+      const subscribing = containerThatSubscribes();
       const arrived = firstValueFrom(
-        source.pipe(ofType(PostCompletedEvent), timeout(4000)),
+        subscribing.bus.pipe(ofType(PostCompletedEvent), timeout(4000)),
       );
-      await settle();
+      await subscribing.reading;
 
-      publishing.eventBus.publish(
+      await publishing.eventBus.publish(
         new PostCompletedEvent('after', 'Nest', new Date()),
       );
 
@@ -160,14 +180,16 @@ describe('the EventBus, event sourced', () => {
     it('keeps subject$ on this process, which is where @EventsHandler is bound', async () => {
       const subscribing = containerThatSubscribes();
       const seen: unknown[] = [];
-      const local = subscribing.subject$.subscribe((event) => seen.push(event));
-      const remote = firstValueFrom(
-        subscribing.pipe(ofType(PostCompletedEvent), timeout(4000)),
+      const local = subscribing.bus.subject$.subscribe((event) =>
+        seen.push(event),
       );
-      await settle();
+      const remote = firstValueFrom(
+        subscribing.bus.pipe(ofType(PostCompletedEvent), timeout(4000)),
+      );
+      await subscribing.reading;
 
       const publishing = containerThatPublishes();
-      publishing.eventBus.publish(
+      await publishing.eventBus.publish(
         new PostCompletedEvent('p-3', 'Nest', new Date()),
       );
 
@@ -215,10 +237,9 @@ describe('the EventBus, event sourced', () => {
       }).onApplicationBootstrap();
 
       const publishing = containerThatPublishes();
-      publishing.eventBus.publish(
+      await publishing.eventBus.publish(
         new PostCompletedEvent('remote', 'Nest', new Date()),
       );
-      await settle();
       await settle();
 
       expect(executed).toEqual([]);
@@ -244,12 +265,12 @@ describe('the EventBus, event sourced', () => {
     };
 
     it('is not skipped by a subscriber that already read past its position', async () => {
-      const source = containerThatSubscribes();
+      const subscribing = containerThatSubscribes();
       const seen: string[] = [];
-      source
+      const subscription = subscribing.bus
         .pipe(ofType(PostCompletedEvent))
         .subscribe((event) => void seen.push(event.postId));
-      await settle();
+      await subscribing.reading;
 
       const slow = await appendInOpenTransaction(
         new PostCompletedEvent('slow', 'took its position first', new Date()),
@@ -258,32 +279,31 @@ describe('the EventBus, event sourced', () => {
         new PostCompletedEvent('fast', 'committed first', new Date()),
       );
       await fast.commit();
-
-      await settle();
-      await settle();
+      await vi.waitFor(() => expect(seen).toEqual(['fast']), {
+        timeout: 4000,
+      });
 
       await slow.commit();
 
-      await settle();
-      await settle();
-
-      expect(seen).toContain('fast');
-      expect(seen).toContain('slow');
+      await vi.waitFor(() => expect(seen).toEqual(['fast', 'slow']), {
+        timeout: 4000,
+      });
+      subscription.unsubscribe();
     });
   });
 
   describe('one log, every tenant', () => {
     it('says which tenant each event was appended in', async () => {
-      const source = containerThatSubscribes();
+      const subscribing = containerThatSubscribes();
       const arrived = firstValueFrom(
-        source.pipe(
+        subscribing.bus.pipe(
           ofType(PostCompletedEvent),
           take(2),
           toArray(),
           timeout(4000),
         ),
       );
-      await settle();
+      await subscribing.reading;
 
       for (const tenant of ['acme', 'globex']) {
         await RequestContext.create(
@@ -306,11 +326,11 @@ describe('the EventBus, event sourced', () => {
     it('and which trace', async () => {
       const traceparent =
         '00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01';
-      const source = containerThatSubscribes();
+      const subscribing = containerThatSubscribes();
       const arrived = firstValueFrom(
-        source.pipe(ofType(PostCompletedEvent), timeout(4000)),
+        subscribing.bus.pipe(ofType(PostCompletedEvent), timeout(4000)),
       );
-      await settle();
+      await subscribing.reading;
 
       await RequestContext.create(orm.em.fork(), () =>
         log.append([

@@ -4,7 +4,7 @@
 // `no-skipped-test`. What is left is the rule that actually caught bugs — `missing-playwright-await`,
 // from the plugin's `flat/recommended` — plus `no-conditional-expect`.
 //
-// Scoped to `apps/web-e2e/src/specs/**` by `biome.json`, which is the scope the ESLint config had:
+// Scoped to `apps/web-e2e/src/specs/**` by `apps/web-e2e/biome.json`, which is the scope the ESLint config had:
 // a helper under `src/support/**` may legitimately assert outside a test block.
 
 language js

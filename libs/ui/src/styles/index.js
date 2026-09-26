@@ -1,4 +1,4 @@
-import fs from 'fs';
+import fs from 'node:fs';
 import { converter, formatCss, parse } from 'culori';
 
 const hslToOklch = converter('oklch');

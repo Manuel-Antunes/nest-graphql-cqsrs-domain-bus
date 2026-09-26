@@ -42,12 +42,10 @@ export const SkeletonCardNotification: Story = {
       <Skeleton className="h-4 w-full bg-slate-400" />
 
       <Skeleton
-        className={
-          buttonVariants({
-            variant: 'default',
-            size: 'default',
-          }) + 'w-full bg-slate-400'
-        }
+        className={`${buttonVariants({
+          variant: 'default',
+          size: 'default',
+        })}w-full bg-slate-400`}
       />
     </Skeleton>
   ),

@@ -227,7 +227,7 @@ export function applyInterfaceObjects(
           }) }`,
           { noLocation: true },
         ).definitions[0] as ObjectTypeDefinitionNode
-      ).fields![0]!.directives![0] as ConstDirectiveNode;
+      ).fields?.[0]?.directives?.[0] as ConstDirectiveNode;
 
     const fields = (definition.fields ?? []).map(
       (field): FieldDefinitionNode => {

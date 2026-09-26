@@ -42,7 +42,7 @@ export interface ToolFormProps
       agentInvoked: boolean;
       resolve: (result: WebMcpToolResult) => void;
     },
-  ) => void | WebMcpToolResult | Promise<WebMcpToolResult | void>;
+  ) => undefined | WebMcpToolResult | Promise<WebMcpToolResult | undefined>;
   onToolActivated?: () => void;
   onToolCancel?: () => void;
   asChild?: boolean;

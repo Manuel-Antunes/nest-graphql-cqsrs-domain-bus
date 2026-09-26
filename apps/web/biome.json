@@ -1,0 +1,45 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.14/schema.json",
+  "root": false,
+  "extends": "//",
+  "files": {
+    "includes": ["**", "!public", "!src/gql", "!schema.graphql"]
+  },
+  "overrides": [
+    {
+      "includes": ["**"],
+      "linter": {
+        "domains": {
+          "next": "recommended",
+          "react": "recommended",
+          "test": "recommended"
+        }
+      }
+    },
+    {
+      "includes": ["src/**/*.{ts,tsx}", "!src/nest/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "useImportType": "warn"
+          },
+          "nursery": {
+            "useSortedClasses": {
+              "level": "warn",
+              "options": {
+                "functions": ["cn", "cva", "clsx", "twMerge"]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/**/*.ts", "src/**/*.tsx", "!src/gql/**"],
+      "plugins": [
+        "../../tools/biome/graphql-operations.grit",
+        "../../tools/biome/tailwind.grit"
+      ]
+    }
+  ]
+}

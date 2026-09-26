@@ -6,7 +6,7 @@ import { useMcpTool } from './hooks';
 
 export interface WebMcpNavigationProps {
   pathname: string;
-  push: (path: string) => Promise<unknown> | void;
+  push: (path: string) => Promise<unknown> | undefined;
   pathParams?: Record<string, string>;
 }
 

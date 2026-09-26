@@ -47,8 +47,9 @@ src/
                     (Poll, Totp, Unique)
 ```
 
-**The dependency rule is checked, not only written down.** `biome.json` carries one
-`noRestrictedImports` override per layer, so a page object that imports a workflow, a mailbox or the
+**The dependency rule is checked, not only written down.** `apps/web-e2e/biome.json` — this
+project's own configuration, extending the root's — carries one `noRestrictedImports` override per
+layer, so a page object that imports a workflow, a mailbox or the
 stack — or a spec that imports `@playwright/test`, `pg` or `stack/` — fails `pnpm lint`:
 
 | layer | may import | may not import |

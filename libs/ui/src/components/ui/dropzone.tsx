@@ -175,10 +175,10 @@ type UseDropzoneProps<TUploadRes, TUploadError> = {
   shiftOnMaxFiles?: boolean;
 } & (TUploadError extends string
   ? {
-      shapeUploadError?: (error: TUploadError) => string | void;
+      shapeUploadError?: (error: TUploadError) => string | undefined;
     }
   : {
-      shapeUploadError: (error: TUploadError) => string | void;
+      shapeUploadError: (error: TUploadError) => string | undefined;
     });
 
 interface UseDropzoneReturn<TUploadRes, TUploadError> {
@@ -307,7 +307,7 @@ const useDropzone = <TUploadRes, TUploadError = string>(
       }
       dispatch({ type: 'update-status', id, status: 'pending' });
       const fileStatus = fileStatuses.find((file) => file.id === id);
-      if (!fileStatus || fileStatus.status !== 'error') {
+      if (fileStatus?.status !== 'error') {
         return;
       }
       await _uploadFile(fileStatus.file, id);

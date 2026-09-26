@@ -30,7 +30,7 @@ npx nx run @nestposts/ui:ui-add -- @reui/<name>    # a reui component
 `apps/web/components.json` points its `ui` and `utils` aliases here too, so a registry item added from
 the application (`npx shadcn add @better-auth-ui/<item>`) writes its primitives into this package and
 its own views into the application. Every file that comes from a registry has its comments stripped
-and is formatted by Biome; `biome.json` has an override for `libs/ui/**` that turns off the rules a
+and is formatted by Biome; this package's own `biome.json` turns off, for everything in it, the rules a
 copied component breaks by design (exhaustive effect dependencies, a handful of a11y rules on
 composite widgets, index keys on positional lists) — they are upstream's decisions, and rewriting them
 here would make every refresh a merge.

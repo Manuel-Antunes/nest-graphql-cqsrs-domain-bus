@@ -265,7 +265,7 @@ function getPolyfill(): ModelContextPolyfill | null {
   const mc = document.modelContext as
     | (ModelContextAPI & { [POLYFILL_MARKER]?: true })
     | undefined;
-  return mc && mc[POLYFILL_MARKER] ? (mc as ModelContextPolyfill) : null;
+  return mc?.[POLYFILL_MARKER] ? (mc as ModelContextPolyfill) : null;
 }
 
 export function hasNativeModelContext(): boolean {

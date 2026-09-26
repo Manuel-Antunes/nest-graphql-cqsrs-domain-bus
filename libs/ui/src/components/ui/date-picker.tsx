@@ -77,7 +77,7 @@ export function DatePicker({
         {value ? (
           format(value, 'dd MMM, yyyy', { locale: ptBR }).replace(
             /^(\d+\s)(\w)/,
-            (match, day, firstLetter) => day + firstLetter.toUpperCase(),
+            (_match, day, firstLetter) => day + firstLetter.toUpperCase(),
           )
         ) : (
           <span>{placeholder}</span>

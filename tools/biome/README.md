@@ -1,14 +1,16 @@
 # `tools/biome` — the rules Biome does not ship
 
-Three GritQL plugins, wired by path in the root `biome.json`. They exist because the move from ESLint
-to Biome left three holes, and each of these fills the part of its hole that can be filled without the
-thing Biome cannot give a plugin: a schema, a stylesheet, or a second file.
+Three GritQL plugins, wired by path in the `biome.json` of the project each one checks —
+`apps/web-e2e/biome.json` and `apps/web/biome.json`, whose paths are relative to the project. They
+exist because the move from ESLint to Biome left three holes, and each of these fills the part of its
+hole that can be filled without the thing Biome cannot give a plugin: a schema, a stylesheet, or a
+second file.
 
 A plugin is a pattern plus `register_diagnostic`. It reads the file it is handed and nothing else —
 no I/O, no configuration, no type information — and it cannot autofix. That single constraint is what
 decides, below, which rules are here and which could not be.
 
-| file | scope in `biome.json` | replaces |
+| file | scope | replaces |
 |---|---|---|
 | `playwright.grit` | `apps/web-e2e/src/specs/**/*.spec.ts` | `eslint-plugin-playwright` |
 | `graphql-operations.grit` | `apps/web/src/**`, minus `src/gql/**` | `@graphql-eslint/eslint-plugin`'s naming convention |
@@ -80,7 +82,8 @@ These are the gaps, stated so that nobody reads the table above as full coverage
 - **`no-duplicate-classes`** needs a backreference (`\b(\w+)\b.*\b\1\b`). The regex engine Biome
   compiles these against has none — the pattern compiles and silently never matches, which is worth
   knowing before writing another rule that way.
-- **Class sorting** is Biome's own `nursery/useSortedClasses`, already on in `biome.json`.
+- **Class sorting** is Biome's own `nursery/useSortedClasses`, already on in `apps/web/biome.json` and
+  `libs/ui/biome.json`.
 - **An unused variable** (`no-unused-variables`). It needs a backreference — a `$name` defined and
   never repeated — and the regex engine has none. Codegen does not refuse one either.
 - **An unused or a duplicate fragment across files** (`no-unused-fragments`,
