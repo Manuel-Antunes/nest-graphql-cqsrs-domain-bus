@@ -70,29 +70,27 @@ describe('the tenant schema an organization brings with it', () => {
   });
 
   it('goes away with the row, everything in it included', async () => {
-    const organization = await givenAnOrganization('globex');
-    await expect(schemasNamed('globex')).resolves.toHaveLength(1);
+    const organization = await givenAnOrganization('vandelay');
+    await expect(schemasNamed('vandelay')).resolves.toHaveLength(1);
 
     await inRequestContext(orm.em, async () => {
       const em = orm.em.fork();
       await em.nativeDelete(Organization, { id: organization.id });
     });
 
-    await expect(schemasNamed('globex')).resolves.toEqual([]);
+    await expect(schemasNamed('vandelay')).resolves.toEqual([]);
   });
 
   it('is idempotent: a second organization with a slug already taken does not fail the insert', async () => {
-    await givenAnOrganization('initech');
+    await givenAnOrganization('oscorp');
     await orm.em
       .getConnection()
-      .execute(`create schema if not exists "tenant_umbrella"`);
-    born.push('umbrella');
+      .execute(`create schema if not exists "tenant_wonka"`);
+    born.push('wonka');
 
-    await expect(givenAnOrganization('umbrella')).resolves.toBeInstanceOf(
+    await expect(givenAnOrganization('wonka')).resolves.toBeInstanceOf(
       Organization,
     );
-    await expect(schemasNamed('umbrella')).resolves.toEqual([
-      'tenant_umbrella',
-    ]);
+    await expect(schemasNamed('wonka')).resolves.toEqual(['tenant_wonka']);
   });
 });
