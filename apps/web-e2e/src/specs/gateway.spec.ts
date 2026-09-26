@@ -1,39 +1,6 @@
-import { createClient } from 'graphql-sse';
-
 import { expect, test } from '../fixtures/test';
-import { graphql } from '../gql';
-import { gatewayUrl } from '../support/stack';
-
-const FederatedMe = graphql(`
-  query FederatedMe {
-    me {
-      __typename
-      email
-      unreadNotificationCount
-      notifications(first: 1) {
-        id
-      }
-    }
-    unreadNotificationCount
-  }
-`);
-
-const WritePost = graphql(`
-  mutation WritePost($input: CreatePostInput!) {
-    createPost(input: $input) {
-      id
-    }
-  }
-`);
-
-const RetitlePost = graphql(`
-  mutation RetitlePost($input: UpdatePostInput!) {
-    updatePost(input: $input) {
-      id
-      version
-    }
-  }
-`);
+import { OnPostUpdated } from '../infrastructure/graphql/operations/posts.operations';
+import { FederatedMe } from '../infrastructure/graphql/operations/users.operations';
 
 /**
  * **The web talks to one endpoint, and it is a federation gateway.**
@@ -45,12 +12,12 @@ const RetitlePost = graphql(`
 test.describe('the federation gateway', () => {
   test('one operation reads the user from the posts subgraph and what they were told from the notifications one', async ({
     accounts,
-    signIn,
-    executeGraphql,
+    authentication,
+    graphql,
   }) => {
-    await signIn(accounts.author);
+    await authentication.signIn(accounts.author);
 
-    const answer = await executeGraphql(FederatedMe);
+    const answer = await graphql.execute(FederatedMe);
 
     expect(answer.errors, JSON.stringify(answer.errors)).toBeUndefined();
     expect(answer.data?.me).toMatchObject({
@@ -64,47 +31,23 @@ test.describe('the federation gateway', () => {
 
   test('a subscription runs through the gateway, over SSE', async ({
     accounts,
-    signIn,
-    executeGraphql,
+    authentication,
+    publishing,
+    endpoints,
   }) => {
-    await signIn(accounts.author);
-    const written = await executeGraphql(WritePost, {
-      input: {
-        title: `Federated ${Date.now()}`,
-        content: 'through the gateway',
-      },
-    });
-    expect(written.errors, JSON.stringify(written.errors)).toBeUndefined();
-    const postId = written.data?.createPost.id as string;
-
-    const client = createClient({ url: gatewayUrl(), retryAttempts: 0 });
-    const received: Array<{ id: string; title: string }> = [];
-    const unsubscribe = client.subscribe<{
-      onPostUpdated: { id: string; title: string };
-    }>(
-      {
-        query:
-          'subscription($postId: ID) { onPostUpdated(postId: $postId) { id title } }',
-        variables: { postId },
-      },
-      {
-        next: ({ data }) => {
-          if (data) received.push(data.onPostUpdated);
-        },
-        error: () => undefined,
-        complete: () => undefined,
-      },
+    await authentication.signIn(accounts.author);
+    const postId = await publishing.publishThroughTheApi(
+      `Federated ${Date.now()}`,
+      'through the gateway',
     );
 
-    await expect(async () => {
-      const retitled = await executeGraphql(RetitlePost, {
-        input: { id: postId, title: `Retitled ${Date.now()}` },
-      });
-      expect(retitled.errors).toBeUndefined();
-      expect(received.map(({ id }) => id)).toContain(postId);
-    }).toPass({ timeout: 20_000 });
+    const updates = endpoints.subscribeAtGateway(OnPostUpdated, { postId });
 
-    unsubscribe();
-    await client.dispose();
+    await expect(async () => {
+      await publishing.retitle(postId, `Retitled ${Date.now()}`);
+      expect(
+        updates.received.map(({ onPostUpdated }) => onPostUpdated.id),
+      ).toContain(postId);
+    }).toPass({ timeout: 20_000 });
   });
 });

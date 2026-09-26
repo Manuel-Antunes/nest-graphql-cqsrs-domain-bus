@@ -1,6 +1,7 @@
 'use client';
 
 import { Component } from 'react';
+import { unstable_rethrow } from 'next/navigation';
 
 import { ErrorNotice } from '@/app/_components/error-notice';
 
@@ -25,6 +26,7 @@ export class QueryErrorBoundary extends Component<
 
   override render() {
     if (this.state.failed) {
+      unstable_rethrow(this.state.error);
       return <ErrorNotice title={this.props.title} error={this.state.error} />;
     }
     return this.props.children;

@@ -9,6 +9,8 @@ import { AuthInfrastructureModule } from '@nestposts/auth/infrastructure/auth-in
 import { SubscriptionChangeNotification } from '@nestposts/billing/domain/billing/notification/subscription-change.notification';
 import { CqsrsModule } from '@nestposts/cqsrs';
 import { DatabaseModule, TenancyModule } from '@nestposts/database';
+import { CalendarEventRescheduledNotification } from '@nestposts/events/domain/calendar-event/notification/calendar-event-rescheduled.notification';
+import { CalendarEventScheduledNotification } from '@nestposts/events/domain/calendar-event/notification/calendar-event-scheduled.notification';
 import { MailModule } from '@nestposts/mail/mail.module';
 import { plainTextFromHtml } from '@nestposts/mail/plain-text.plugin';
 import { ReactEmailTemplateResolver } from '@nestposts/mail/react-email-template.resolver';
@@ -135,6 +137,8 @@ import { InterfacesModule } from './interfaces/interfaces.module';
         ...authNotifications,
         OrganizationInvitationNotification,
         SubscriptionChangeNotification,
+        CalendarEventScheduledNotification,
+        CalendarEventRescheduledNotification,
       ],
       inject: [firebaseConfig.KEY],
       useFactory: ({ push }: FirebaseConfig) => ({ push }),

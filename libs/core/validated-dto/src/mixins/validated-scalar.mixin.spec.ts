@@ -520,7 +520,7 @@ describe('ValidatedDto.Scalar', () => {
   describe('Rejeições', () => {
     it('recusa um schema de objeto e aponta o mixin certo', () => {
       expect(() => ValidatedScalar(z.object({ a: z.string() }))).toThrow(
-        /ValidatedDto.Embeddable/,
+        /for an object, use ValidatedDto/,
       );
     });
   });

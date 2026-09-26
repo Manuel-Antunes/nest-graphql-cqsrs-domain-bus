@@ -1,0 +1,94 @@
+input CreateEventInput {
+  title: String!
+  description: String
+  startDate: DateTime!
+  endDate: DateTime!
+
+  """
+  Absent = blue
+  """
+  color: String
+
+  """
+  Who owns the event: an id from `members`
+  """
+  responsibleId: ID!
+  participantIds: [ID!]
+
+  """
+  Its members are added to the participants
+  """
+  teamId: ID
+}
+
+"""
+An event owned by the caller
+"""
+input CreateMyEventInput {
+  title: String!
+  description: String
+  startDate: DateTime!
+  endDate: DateTime!
+
+  """
+  Absent = blue
+  """
+  color: String
+  participantIds: [ID!]
+
+  """
+  Its members are added to the participants
+  """
+  teamId: ID
+}
+
+"""
+Absent keeps the current value; so does null, except where it says otherwise
+"""
+input UpdateEventInput {
+  id: ID!
+  title: String
+
+  """
+  null removes the description
+  """
+  description: String
+  startDate: DateTime
+  endDate: DateTime
+  color: String
+  responsibleId: ID
+
+  """
+  Replaces the participants
+  """
+  participantIds: [ID!]
+
+  """
+  Its members are added to the participants; null removes the event from its team
+  """
+  teamId: ID
+}
+
+type Mutation {
+  """
+  An event for somebody else; only who holds `event: create` in the active organization, whose tenant
+  this must be
+  """
+  createEvent(input: CreateEventInput!): Event!
+
+  """
+  An event owned by the caller
+  """
+  createMyEvent(input: CreateMyEventInput!): Event!
+
+  """
+  Only who holds `event: update` in the active organization, whose tenant this must be; a change of
+  dates raises CalendarEventRescheduled
+  """
+  updateEvent(input: UpdateEventInput!): Event!
+
+  """
+  Only who holds `event: delete` in the active organization, whose tenant this must be
+  """
+  deleteEvent(id: ID!): Boolean!
+}

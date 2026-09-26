@@ -1,0 +1,47 @@
+"""
+A calendar event of the tenant the request names
+"""
+type Event {
+  id: ID!
+  title: String!
+  description: String
+  startDate: DateTime!
+  endDate: DateTime!
+
+  """
+  One of blue, green, red, yellow, purple, orange or gray
+  """
+  color: String!
+
+  """
+  Who owns the event
+  """
+  responsible: IUser!
+
+  """
+  Everybody else attending it; never the responsible
+  """
+  participants: [IUser!]!
+
+  """
+  The team the event belongs to, if any
+  """
+  team: Team
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+type EventConnection {
+  edges: [EventEdge!]!
+  pageInfo: PageInfo!
+
+  """
+  Total of items; null when the source does not count
+  """
+  totalCount: Int
+}
+
+type EventEdge {
+  cursor: String!
+  node: Event!
+}

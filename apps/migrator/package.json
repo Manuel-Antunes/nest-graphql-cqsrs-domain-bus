@@ -21,6 +21,7 @@
   "dependencies": {
     "@nestposts/auth": "workspace:*",
     "@nestposts/database": "workspace:*",
+    "@nestposts/events": "workspace:*",
     "@nestposts/notifications": "workspace:*",
     "@nestposts/observability": "workspace:*",
     "@nestposts/organizations": "workspace:*",

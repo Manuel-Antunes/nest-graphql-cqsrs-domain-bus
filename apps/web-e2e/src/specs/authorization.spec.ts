@@ -1,29 +1,9 @@
 import { expect, test } from '../fixtures/test';
-import { graphql } from '../gql';
-
-const ReaderCreatePost = graphql(`
-  mutation ReaderCreatePost {
-    createPost(input: { title: "Do leitor", content: "c" }) {
-      id
-    }
-  }
-`);
-
-const FeedTotalCount = graphql(`
-  query FeedTotalCount {
-    posts(first: 1) {
-      totalCount
-    }
-  }
-`);
-
-const WhoAmI = graphql(`
-  query WhoAmI {
-    me {
-      __typename
-    }
-  }
-`);
+import {
+  CreatePost,
+  FeedTotalCount,
+} from '../infrastructure/graphql/operations/posts.operations';
+import { WhoAmI } from '../infrastructure/graphql/operations/users.operations';
 
 /**
  * Os três estados de `/posts/new`, que é onde a autorização deste sistema é visível: quem não entrou,
@@ -32,49 +12,47 @@ const WhoAmI = graphql(`
  */
 test.describe('autorização', () => {
   test('anônimo não escreve, e a página diz por onde entrar', async ({
-    page,
+    app,
   }) => {
-    await page.goto('/posts/new');
+    await app.newPost.open();
 
-    await expect(page.getByText('Entre para escrever')).toBeVisible();
-    await expect(
-      page.getByRole('link', { name: 'Ir para o login' }),
-    ).toBeVisible();
-    await expect(page.getByLabel('Título')).toHaveCount(0);
+    await expect(app.newPost.signInPrompt).toBeVisible();
+    await expect(app.newPost.loginLink).toBeVisible();
+    await expect(app.newPost.titleField).toHaveCount(0);
   });
 
   test('autenticado sem o papel author não escreve', async ({
-    page,
+    app,
     accounts,
-    signIn,
+    authentication,
   }) => {
-    await signIn(accounts.reader);
+    await authentication.signIn(accounts.reader);
 
-    await page.goto('/posts/new');
+    await app.newPost.open();
 
-    await expect(
-      page.getByText('Esta conta não tem a role author'),
-    ).toBeVisible();
-    await expect(page.getByLabel('Título')).toHaveCount(0);
+    await expect(app.newPost.notAnAuthor).toBeVisible();
+    await expect(app.newPost.titleField).toHaveCount(0);
   });
 
-  test('o autor escreve', async ({ page, accounts, signIn }) => {
-    await signIn(accounts.author);
+  test('o autor escreve', async ({ app, accounts, authentication }) => {
+    await authentication.signIn(accounts.author);
 
-    await page.goto('/posts/new');
+    await app.newPost.open();
 
-    await expect(page.getByLabel('Título')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Publicar' })).toBeEnabled();
+    await expect(app.newPost.titleField).toBeVisible();
+    await expect(app.newPost.publishButton).toBeEnabled();
   });
 
   test('a recusa vem do servidor, não da tela: o leitor é barrado na mutation', async ({
     accounts,
-    signIn,
-    executeGraphql,
+    authentication,
+    graphql,
   }) => {
-    await signIn(accounts.reader);
+    await authentication.signIn(accounts.reader);
 
-    const refused = await executeGraphql(ReaderCreatePost);
+    const refused = await graphql.execute(CreatePost, {
+      input: { title: 'Do leitor', content: 'c' },
+    });
 
     expect(refused.data?.createPost ?? null).toBeNull();
     expect(JSON.stringify(refused.errors)).toMatch(
@@ -83,31 +61,28 @@ test.describe('autorização', () => {
   });
 
   test('e a leitura é anônima de propósito: o feed responde sem sessão', async ({
-    executeGraphql,
+    graphql,
   }) => {
-    const posts = await executeGraphql(FeedTotalCount);
+    const posts = await graphql.execute(FeedTotalCount);
 
     expect(posts.errors, JSON.stringify(posts.errors)).toBeUndefined();
     expect(typeof posts.data?.posts.totalCount).toBe('number');
   });
 
   test('me é polimórfico: o autor casa com ... on Author, o leitor não', async ({
-    page,
     accounts,
-    signIn,
-    executeGraphql,
+    authentication,
+    graphql,
   }) => {
     const typeOfMe = async () =>
-      (await executeGraphql(WhoAmI)).data?.me.__typename;
+      (await graphql.execute(WhoAmI)).data?.me.__typename;
 
-    await signIn(accounts.reader);
+    await authentication.signIn(accounts.reader);
     expect(await typeOfMe()).toBe('User');
 
-    await page.getByRole('button', { name: 'Account' }).click();
-    await page.getByRole('menuitem', { name: 'Sign Out' }).click();
-    await page.waitForURL('**/auth/sign-in**');
+    await authentication.signOut();
 
-    await signIn(accounts.author);
+    await authentication.signIn(accounts.author);
     expect(await typeOfMe()).toBe('Author');
   });
 });

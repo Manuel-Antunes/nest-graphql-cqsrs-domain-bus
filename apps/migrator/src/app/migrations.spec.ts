@@ -66,6 +66,8 @@ describe('migrating the system, then every tenant', () => {
         'notifications',
         'notification_deliveries',
         'devices',
+        'calendar_events',
+        'calendar_events_participants',
         'mikro_orm_migrations',
       ]),
     );
@@ -91,6 +93,8 @@ describe('migrating the system, then every tenant', () => {
     ).toEqual([
       { name: 'Migration20260924124449_tenant' },
       { name: 'Migration20260924124450_default_tag' },
+      { name: 'Migration20260925012004_calendar_events' },
+      { name: 'Migration20260926174755_calendar_event_sequence' },
     ]);
   });
 
@@ -102,6 +106,6 @@ describe('migrating the system, then every tenant', () => {
         context.orm,
         'select count(*)::int as applied from tenant_root.mikro_orm_migrations',
       ),
-    ).toEqual([{ applied: 2 }]);
+    ).toEqual([{ applied: 4 }]);
   });
 });

@@ -1,7 +1,7 @@
 import { SESv2Client, SendEmailCommand } from '@aws-sdk/client-sesv2';
 import type { ConfigType } from '@nestjs/config';
 import { registerAs } from '@nestjs/config';
-import type { MailModuleOptions } from '@nestposts/mail/mail.module';
+import type { MailModuleOptions } from '@nestposts/mail/mail.module-definition';
 import { z } from 'zod';
 
 const MailEnvSchema = z.object({

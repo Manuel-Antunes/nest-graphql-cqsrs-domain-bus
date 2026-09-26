@@ -1,71 +1,11 @@
-import type { Locator, Page } from '@playwright/test';
-
 import { expect, test } from '../fixtures/test';
-import type { Account } from '../support/accounts';
-import type { BillingRun } from '../support/billing-stack';
-import { WEBHOOK_PATH } from '../support/billing-stack';
-import type { E2eProduct } from '../support/polar';
-import { PolarCheckout, PolarPortal } from '../support/polar-pages';
-import { WEB_URL } from '../support/stack';
+import { BillingRun } from '../infrastructure/polar/billing-run';
+import type { Account } from '../model/account';
+import { EmailSubject } from '../model/email';
+import { Poll } from '../support/poll';
 
-const BILLING_PAGE = '/settings/billing';
 const WEBHOOK_TO_INBOX_MS = 120_000;
 const REDELIVERY_SETTLE_MS = 15_000;
-
-const ACTIVATED = 'Your subscription is active';
-const CANCELED = 'Your subscription was canceled';
-const REVOKED = 'Your subscription has ended';
-const NOT_AN_AUTHOR = 'Esta conta não tem a role author';
-
-const run = (billing: BillingRun | null): BillingRun => {
-  if (!billing) {
-    throw new Error('this run has no Polar sandbox');
-  }
-  return billing;
-};
-
-const cardTitled = (page: Page, title: string | RegExp): Locator =>
-  page.locator('[data-slot="card"]').filter({
-    has: page.locator('[data-slot="card-title"]', { hasText: title }),
-  });
-
-const subscriptionCard = (page: Page) => cardTitled(page, /^Subscription$/);
-
-const priceOf = ({ amount, currency }: E2eProduct) =>
-  new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency,
-    maximumFractionDigits: 0,
-  }).format(amount / 100);
-
-const showsSubscription = async (
-  page: Page,
-  planName: string,
-  period: RegExp,
-): Promise<void> => {
-  await expect(async () => {
-    await page.goto(BILLING_PAGE);
-    const card = subscriptionCard(page);
-    await expect(card.getByText(planName)).toBeVisible({ timeout: 5_000 });
-    await expect(card.getByText(period)).toBeVisible({ timeout: 5_000 });
-  }).toPass({ timeout: 60_000 });
-};
-
-const canWrite = async (page: Page): Promise<void> => {
-  await expect(async () => {
-    await page.goto('/posts/new');
-    await expect(page.getByLabel('Título')).toBeVisible({ timeout: 5_000 });
-  }).toPass({ timeout: 60_000 });
-};
-
-const cannotWrite = async (page: Page): Promise<void> => {
-  await expect(async () => {
-    await page.goto('/posts/new');
-    await expect(page.getByText(NOT_AN_AUTHOR)).toBeVisible({
-      timeout: 5_000,
-    });
-  }).toPass({ timeout: 60_000 });
-};
 
 /**
  * **Billing, the whole way round, against Polar's sandbox** — the settings screen, Polar's hosted
@@ -83,7 +23,7 @@ const cannotWrite = async (page: Page): Promise<void> => {
  * makes a redelivered or late event harmless, and the redelivery below is the proof.
  *
  * It runs only when the stack came up with billing — a sandbox token in `.env.test` or
- * `E2E_POLAR_ACCESS_TOKEN` (see `support/billing-stack.ts`).
+ * `E2E_POLAR_ACCESS_TOKEN` (see `stack/billing-stack.ts`).
  */
 test.describe
   .serial('billing through Polar', () => {
@@ -95,138 +35,120 @@ test.describe
     let buyer: Account;
 
     test('the plans are the products Polar sells, and nothing is subscribed yet', async ({
-      page,
-      freshAccount,
-      signIn,
+      app,
+      registration,
+      authentication,
       billing,
     }) => {
-      const { products } = run(billing);
-      subscriber = await freshAccount('Subscriber', {
+      const { products } = BillingRun.required(billing);
+      subscriber = await registration.freshAccount('Subscriber', {
         domain: 'mailinator.com',
       });
-      await signIn(subscriber);
+      await authentication.signIn(subscriber);
 
-      await page.goto(BILLING_PAGE);
+      await app.billingSettings.open();
 
-      await expect(
-        subscriptionCard(page).getByText('No active subscription'),
-      ).toBeVisible();
+      await expect(app.billingSettings.subscription.none).toBeVisible();
       for (const product of [products.free, products.pro]) {
-        const plan = cardTitled(page, product.name);
-        await expect(plan.getByText(priceOf(product))).toBeVisible();
-        await expect(plan.getByText('per month')).toBeVisible();
-        await expect(
-          plan.getByRole('button', { name: 'Choose plan' }),
-        ).toBeEnabled();
+        const plan = app.billingSettings.plan(product.name);
+        await expect(plan.price(product)).toBeVisible();
+        await expect(plan.perMonth).toBeVisible();
+        await expect(plan.chooseButton).toBeEnabled();
       }
     });
 
     test('a free plan is checked out in Polar and comes back as the subscription', async ({
-      page,
-      signIn,
+      app,
+      authentication,
+      subscriptions,
       billing,
     }) => {
-      const { free } = run(billing).products;
-      await signIn(subscriber);
-      await page.goto(BILLING_PAGE);
+      const { free } = BillingRun.required(billing).products;
+      await authentication.signIn(subscriber);
 
-      await cardTitled(page, free.name)
-        .getByRole('button', { name: 'Choose plan' })
-        .click();
-      await new PolarCheckout(
-        page,
-        `${WEB_URL}${BILLING_PAGE}`,
-      ).subscribeForFree(subscriber.email);
+      await subscriptions.subscribeForFree(free, subscriber.email);
 
-      await showsSubscription(page, free.name, /^Renews on /);
+      await app.billingSettings.untilSubscriptionShows(
+        free.name,
+        /^Renews on /,
+      );
+      await expect(app.billingSettings.subscription.active).toBeVisible();
       await expect(
-        subscriptionCard(page).getByText('active', { exact: true }),
-      ).toBeVisible();
-      await expect(
-        cardTitled(page, free.name).getByRole('button', {
-          name: 'Current plan',
-        }),
+        app.billingSettings.plan(free.name).currentPlanButton,
       ).toBeDisabled();
     });
 
     test('the activation webhook makes the subscriber an author, and emails them', async ({
-      page,
-      signIn,
+      app,
+      authentication,
       mailbox,
+      subscriptions,
     }) => {
-      const mail = await mailbox.waitFor(subscriber.email, ACTIVATED, {
-        timeout: WEBHOOK_TO_INBOX_MS,
+      const mail = await mailbox.waitFor(
+        subscriber.email,
+        EmailSubject.SUBSCRIPTION_ACTIVE,
+        { timeout: WEBHOOK_TO_INBOX_MS },
+      );
+      expect(mail.html).toContain(subscriptions.billingUrl);
+
+      await authentication.signIn(subscriber);
+      await app.newPost.untilAuthorized();
+
+      const postId = await app.newPost.publish({
+        title: `Subscribed ${Date.now()}`,
+        content: 'written with a plan',
       });
-      expect(mail.html).toContain(`${WEB_URL}${BILLING_PAGE}`);
-
-      await signIn(subscriber);
-      await canWrite(page);
-
-      await page.getByLabel('Título').fill(`Subscribed ${Date.now()}`);
-      await page.getByLabel('Conteúdo').fill('written with a plan');
-      await page.getByRole('button', { name: 'Publicar' }).click();
-      await expect(
-        page.getByRole('link', { name: 'Abrir o post' }),
-      ).toBeVisible();
+      expect(postId).toMatch(/^[0-9a-f-]{36}$/);
     });
 
     test('a webhook Polar did not sign is refused, and changes nothing', async ({
-      page,
-      signIn,
-      request,
+      app,
+      authentication,
+      billingWebhooks,
     }) => {
-      const forged = await request.post(`${WEB_URL}${WEBHOOK_PATH}`, {
-        headers: {
-          'webhook-id': `msg_${Date.now()}`,
-          'webhook-timestamp': String(Math.floor(Date.now() / 1000)),
-          'webhook-signature': 'v1,Zm9yZ2Vk',
-        },
-        data: {
-          type: 'subscription.revoked',
-          data: { customer: { external_id: subscriber.credentialId } },
-        },
-      });
+      const status = await billingWebhooks.forge(
+        'subscription.revoked',
+        subscriber.credentialId,
+      );
 
-      expect(forged.status()).toBe(400);
-      await signIn(subscriber);
-      await canWrite(page);
+      expect(status).toBe(400);
+      await authentication.signIn(subscriber);
+      await app.newPost.untilAuthorized();
     });
 
     test("cancelling in Polar's portal schedules the end of the period, and says so", async ({
-      page,
-      signIn,
+      app,
+      authentication,
+      subscriptions,
       mailbox,
       billing,
     }) => {
-      const { free } = run(billing).products;
-      await signIn(subscriber);
-      await page.goto(BILLING_PAGE);
+      const { free } = BillingRun.required(billing).products;
+      await authentication.signIn(subscriber);
+      await app.billingSettings.open();
+      await expect(app.billingSettings.subscription.cancelButton).toHaveCount(
+        0,
+      );
 
-      await expect(
-        subscriptionCard(page).getByRole('button', {
-          name: 'Cancel subscription',
-        }),
-      ).toHaveCount(0);
-      await subscriptionCard(page)
-        .getByRole('button', { name: 'Manage billing' })
-        .click();
-      await new PolarPortal(page).cancelSubscription();
+      await subscriptions.cancelInThePortal();
 
-      await showsSubscription(page, free.name, /^Ends on /);
-      const mail = await mailbox.waitFor(subscriber.email, CANCELED, {
-        timeout: WEBHOOK_TO_INBOX_MS,
-      });
+      await app.billingSettings.untilSubscriptionShows(free.name, /^Ends on /);
+      const mail = await mailbox.waitFor(
+        subscriber.email,
+        EmailSubject.SUBSCRIPTION_CANCELED,
+        { timeout: WEBHOOK_TO_INBOX_MS },
+      );
       expect(mail.text).toContain(`${free.name} stays active until`);
-      await canWrite(page);
+      await app.newPost.untilAuthorized();
     });
 
     test('the end of the period takes the author role away', async ({
-      page,
-      signIn,
+      app,
+      authentication,
       mailbox,
       billing,
     }) => {
-      const { polar } = run(billing);
+      const { polar } = BillingRun.required(billing);
       const subscription = await polar.activeSubscriptionOf(
         subscriber.credentialId,
       );
@@ -234,114 +156,97 @@ test.describe
 
       await polar.revoke(subscription?.id as string);
 
-      await mailbox.waitFor(subscriber.email, REVOKED, {
+      await mailbox.waitFor(subscriber.email, EmailSubject.SUBSCRIPTION_ENDED, {
         timeout: WEBHOOK_TO_INBOX_MS,
       });
-      await signIn(subscriber);
-      await cannotWrite(page);
-      await page.goto(BILLING_PAGE);
-      await expect(
-        subscriptionCard(page).getByText('No active subscription'),
-      ).toBeVisible();
+      await authentication.signIn(subscriber);
+      await app.newPost.untilRefused();
+      await app.billingSettings.open();
+      await expect(app.billingSettings.subscription.none).toBeVisible();
     });
 
     test('an activation delivered again after the end grants nothing and emails nobody', async ({
-      page,
-      signIn,
+      app,
+      authentication,
       mailbox,
       billing,
     }) => {
-      const { polar, webhookEndpoint } = run(billing);
-      const deliveriesOf = (eventId: string) =>
-        polar
-          .deliveries(webhookEndpoint, subscriber.credentialId)
-          .then((all) =>
-            all.filter((delivery) => delivery.eventId === eventId),
-          );
-      const activation = (
-        await polar.deliveries(webhookEndpoint, subscriber.credentialId)
-      ).find((delivery) => delivery.type === 'subscription.active');
+      const run = BillingRun.required(billing);
+      const activation = (await run.deliveriesTo(subscriber)).find(
+        (delivery) => delivery.type === 'subscription.active',
+      );
       expect(activation?.succeeded).toBe(true);
       const eventId = activation?.eventId as string;
 
-      await polar.redeliver(eventId);
+      await run.polar.redeliver(eventId);
 
       await expect
         .poll(
           async () =>
-            (await deliveriesOf(eventId)).filter(
+            (await run.deliveriesOf(subscriber, eventId)).filter(
               (delivery) => delivery.httpCode === 200,
             ).length,
           { timeout: 90_000 },
         )
         .toBe(2);
-      await signIn(subscriber);
-      await cannotWrite(page);
-      await page.waitForTimeout(REDELIVERY_SETTLE_MS);
-      const activations = (await mailbox.to(subscriber.email)).filter(
-        (mail) => mail.subject === ACTIVATED,
-      );
-      expect(activations).toHaveLength(1);
+      await authentication.signIn(subscriber);
+      await app.newPost.untilRefused();
+      await Poll.pause(REDELIVERY_SETTLE_MS);
+      expect(
+        await mailbox.withSubject(
+          subscriber.email,
+          EmailSubject.SUBSCRIPTION_ACTIVE,
+        ),
+      ).toHaveLength(1);
     });
 
     test('a paid plan is bought with a card, and its buyer becomes an author', async ({
-      page,
-      freshAccount,
-      signIn,
+      app,
+      registration,
+      authentication,
+      subscriptions,
       mailbox,
       billing,
     }) => {
-      const { pro } = run(billing).products;
-      buyer = await freshAccount('Buyer', { domain: 'mailinator.com' });
-      await signIn(buyer);
-      await page.goto(BILLING_PAGE);
+      const { pro } = BillingRun.required(billing).products;
+      buyer = await registration.freshAccount('Buyer', {
+        domain: 'mailinator.com',
+      });
+      await authentication.signIn(buyer);
 
-      await cardTitled(page, pro.name)
-        .getByRole('button', { name: 'Choose plan' })
-        .click();
-      await new PolarCheckout(
-        page,
-        `${WEB_URL}${BILLING_PAGE}`,
-      ).subscribeWithCard(buyer.email, buyer.name);
+      await subscriptions.subscribeWithCard(pro, buyer);
 
-      await showsSubscription(page, pro.name, /^Renews on /);
-      await mailbox.waitFor(buyer.email, ACTIVATED, {
+      await app.billingSettings.untilSubscriptionShows(pro.name, /^Renews on /);
+      await mailbox.waitFor(buyer.email, EmailSubject.SUBSCRIPTION_ACTIVE, {
         timeout: WEBHOOK_TO_INBOX_MS,
       });
-      await canWrite(page);
+      await app.newPost.untilAuthorized();
     });
 
     test("the portal opens on the buyer's subscription and comes back to billing", async ({
-      page,
-      signIn,
+      app,
+      authentication,
+      subscriptions,
       billing,
     }) => {
-      const { pro } = run(billing).products;
-      await signIn(buyer);
-      await page.goto(BILLING_PAGE);
+      const { pro } = BillingRun.required(billing).products;
+      await authentication.signIn(buyer);
 
-      await subscriptionCard(page)
-        .getByRole('button', { name: 'Manage billing' })
-        .click();
+      const portal = await subscriptions.openPortal();
 
-      await page.waitForURL((url) => url.hostname.endsWith('polar.sh'));
-      await expect(page.getByText(pro.name).first()).toBeVisible({
-        timeout: 60_000,
-      });
-      await page.getByRole('link', { name: /^Back to / }).click();
-      await page.waitForURL(`${WEB_URL}${BILLING_PAGE}`);
-      await expect(subscriptionCard(page).getByText(pro.name)).toBeVisible();
+      await expect(portal.plan(pro.name)).toBeVisible({ timeout: 60_000 });
+      await subscriptions.returnFromThePortal();
+      await expect(
+        app.billingSettings.subscription.plan(pro.name),
+      ).toBeVisible();
     });
 
     test('Polar delivered every event to the web, and the web accepted every one', async ({
       billing,
     }) => {
-      const { polar, webhookEndpoint } = run(billing);
+      const run = BillingRun.required(billing);
       const typesOf = async (account: Account) => {
-        const deliveries = await polar.deliveries(
-          webhookEndpoint,
-          account.credentialId,
-        );
+        const deliveries = await run.deliveriesTo(account);
         expect(
           deliveries.filter((delivery) => delivery.httpCode !== 200),
         ).toEqual([]);

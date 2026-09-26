@@ -1,0 +1,33 @@
+"""
+A span of time; an event overlaps it when it ends at or after `from` and starts at or before `to`
+"""
+input EventRangeInput {
+  from: DateTime
+  to: DateTime
+}
+
+extend type Query {
+  """
+  The events of this tenant that overlap the range, in the order they start, as a Relay cursor
+  connection. Whoever holds `event: read` in the organization behind this tenant — its owners and its
+  admins — sees every event; anybody else sees the ones they are the responsible for or a participant of.
+  """
+  events(
+    range: EventRangeInput
+
+    """
+    Only the events of this team; absent = every team, and the events of none
+    """
+    teamId: ID
+
+    """
+    How many events to bring; absent = 500, which is also the most
+    """
+    first: Int
+
+    """
+    Cursor of the last event already seen
+    """
+    after: String
+  ): EventConnection!
+}

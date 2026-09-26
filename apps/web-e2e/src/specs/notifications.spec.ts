@@ -1,33 +1,9 @@
 import { expect, test } from '../fixtures/test';
-import { graphql } from '../gql';
-
-const MyNotifications = graphql(`
-  query MyNotifications {
-    notifications {
-      id
-      type
-      data
-      read
-    }
-  }
-`);
-
-const ReadNotification = graphql(`
-  mutation ReadNotification($id: ID!) {
-    markNotificationAsRead(id: $id) {
-      id
-      read
-      readAt
-    }
-  }
-`);
-
-interface StoredNotification {
-  id: string;
-  type: string;
-  notifiable_type: string;
-  data: { postId: string; title: string; url: string };
-}
+import {
+  MyNotifications,
+  ReadNotification,
+} from '../infrastructure/graphql/operations/notifications.operations';
+import { EmailSender, EmailSubject } from '../model/email';
 
 /**
  * **Publishing a post notifies its author** — by the database and by email, through a service of its
@@ -44,23 +20,17 @@ test.describe
     let postId: string;
 
     test('publishing a post in the browser', async ({
-      page,
       accounts,
-      signIn,
+      authentication,
+      publishing,
     }) => {
-      await signIn(accounts.author);
-      await page.goto('/posts/new');
+      await authentication.signIn(accounts.author);
 
-      await page.getByLabel('Título').fill(title);
-      await page
-        .getByLabel('Conteúdo')
-        .fill('a post somebody should hear about');
-      await page.getByRole('button', { name: 'Publicar' }).click();
+      postId = await publishing.publishInTheForm({
+        title,
+        content: 'a post somebody should hear about',
+      });
 
-      const href = await page
-        .getByRole('link', { name: 'Abrir o post' })
-        .getAttribute('href');
-      postId = href?.split('/').pop() as string;
       expect(postId).toMatch(/^[0-9a-f-]{36}$/);
     });
 
@@ -68,10 +38,8 @@ test.describe
       accounts,
       mailbox,
     }) => {
-      const mailsAboutThePost = async () =>
-        (await mailbox.to(accounts.author.email)).filter((mail) =>
-          mail.subject.includes(title),
-        );
+      const mailsAboutThePost = () =>
+        mailbox.withSubjectContaining(accounts.author.email, title);
 
       await expect
         .poll(async () => (await mailsAboutThePost()).length, {
@@ -80,8 +48,8 @@ test.describe
         .toBe(1);
 
       const [mail] = await mailsAboutThePost();
-      expect(mail.subject).toBe(`Your post “${title}” is live`);
-      expect(mail.from).toBe('no-reply@nestposts.test');
+      expect(mail.subject).toBe(EmailSubject.postIsLive(title));
+      expect(mail.from).toBe(EmailSender.ADDRESS);
       expect(mail.html).toContain(`Hi ${accounts.author.name},`);
       expect(mail.html).toContain(`/posts/${postId}`);
       expect(mail.text).toContain(title);
@@ -89,13 +57,9 @@ test.describe
 
     test('the notification is stored, and each channel delivered it once', async ({
       accounts,
-      postsStore,
+      notificationRecords,
     }) => {
-      const stored = await postsStore.query<StoredNotification>(
-        `select n.id, n.type, n.notifiable_type, n.data
-           from notifications n
-           join users u on u.id = n.notifiable_id
-          where u.email = ? and n.data ->> 'postId' = ?`,
+      const stored = await notificationRecords.toUserAboutPost(
         accounts.author.email,
         postId,
       );
@@ -106,24 +70,19 @@ test.describe
         data: { postId, title },
       });
 
-      const deliveries = await postsStore.query<{ channel: string }>(
-        'select channel from notification_deliveries where notification_id = ? order by channel',
-        stored[0].id,
-      );
-      expect(deliveries.map(({ channel }) => channel)).toEqual([
-        'database',
-        'email',
-      ]);
+      expect(
+        await notificationRecords.channelsThatDelivered(stored[0].id),
+      ).toEqual(['database', 'email']);
     });
 
     test('the author reads it through the API and marks it as read', async ({
       accounts,
-      signIn,
-      executeGraphql,
+      authentication,
+      graphql,
     }) => {
-      await signIn(accounts.author);
+      await authentication.signIn(accounts.author);
 
-      const listed = await executeGraphql(MyNotifications);
+      const listed = await graphql.execute(MyNotifications);
       expect(listed.errors, JSON.stringify(listed.errors)).toBeUndefined();
       const notification = listed.data?.notifications.find(
         (candidate) =>
@@ -134,7 +93,7 @@ test.describe
         read: false,
       });
 
-      const marked = await executeGraphql(ReadNotification, {
+      const marked = await graphql.execute(ReadNotification, {
         id: notification?.id as string,
       });
       expect(marked.errors, JSON.stringify(marked.errors)).toBeUndefined();

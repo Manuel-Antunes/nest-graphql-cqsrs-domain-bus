@@ -25,7 +25,7 @@ import { UnconfiguredPushNotifications } from './push/unconfigured-push-notifica
  * })
  * ```
  *
- * `email` sends through the `MailSender` a global `MailModule` binds, so the application that
+ * `email` sends through the `MailService` a global `MailModule` binds, so the application that
  * delivers imports that too. An application that only NOTIFIES — raises the event — needs neither.
  */
 @Module({

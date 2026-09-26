@@ -1,6 +1,6 @@
 import { expect, test } from '../fixtures/test';
-import { until } from '../support/posts-api';
-import { ATTACHMENTS_PREFIX, STAGING_PREFIX } from '../support/storage';
+import { Storage } from '../infrastructure/storage/storage';
+import { Png } from '../model/post';
 
 const RED_PIXEL = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGO4o6EBAAMQAS0ujiXaAAAAAElFTkSuQmCC',
@@ -12,13 +12,9 @@ const BLUE_PIXEL = Buffer.from(
   'base64',
 );
 
-const aPng = (name: string, buffer: Buffer) => ({
-  name,
-  mimeType: 'image/png',
-  buffer,
-});
-
-const ATTACHED_KEY = new RegExp(`^${ATTACHMENTS_PREFIX}[0-9a-f-]{36}\\.png$`);
+const ATTACHED_KEY = new RegExp(
+  `^${Storage.ATTACHMENTS_PREFIX}[0-9a-f-]{36}\\.png$`,
+);
 
 test.describe
   .serial('a post carries its file from the browser to the bucket', () => {
@@ -27,29 +23,23 @@ test.describe
     let secondKey: string;
 
     test('creating a post with a file keeps the file under the post, and nothing in staging', async ({
-      page,
+      app,
       accounts,
-      signIn,
-      postsStore,
+      authentication,
+      publishing,
+      postRecords,
       storage,
     }) => {
-      await signIn(accounts.author);
-      await page.goto('/posts/new');
+      await authentication.signIn(accounts.author);
 
-      await page.getByLabel('Título').fill('Post com anexo');
-      await page.getByLabel('Conteúdo').fill('um pixel vermelho');
-      await page.getByLabel('Anexo').setInputFiles(aPng('red.png', RED_PIXEL));
-      await page.getByRole('button', { name: 'Publicar' }).click();
+      postId = await publishing.publishInTheForm({
+        title: 'Post com anexo',
+        content: 'um pixel vermelho',
+        attachment: Png.named('red.png', RED_PIXEL),
+      });
 
-      await expect(
-        page.getByText('Resposta da mutation — versão 1'),
-      ).toBeVisible();
-      const href = await page
-        .getByRole('link', { name: 'Abrir o post' })
-        .getAttribute('href');
-      postId = href?.split('/').pop() as string;
-
-      const stored = await postsStore.attachmentOf(postId);
+      await expect(app.newPost.answeredVersion(1)).toBeVisible();
+      const stored = await postRecords.attachmentOf(postId);
       expect(stored?.asset).toMatchObject({
         extname: 'png',
         mimeType: 'image/png',
@@ -59,83 +49,79 @@ test.describe
       firstKey = stored?.asset?.name as string;
       expect(firstKey).toMatch(ATTACHED_KEY);
       expect(await storage.read(firstKey)).toEqual(RED_PIXEL);
-      expect(await storage.keys(STAGING_PREFIX)).toEqual([]);
+      expect(await storage.keys(Storage.STAGING_PREFIX)).toEqual([]);
 
       expect(
-        await until(
-          async () => (await postsStore.post(postId))?.version === 2,
-          30_000,
-        ),
+        await postRecords.whenVersion(postId, 2, 30_000),
         'the saga completes the post before anything else touches it',
-      ).toBe(true);
+      ).toBeDefined();
     });
 
     test('the post page shows the file, served from the bucket', async ({
-      page,
+      app,
     }) => {
-      await page.goto(`/posts/${postId}`);
+      const post = app.post(postId);
 
-      const image = page.getByRole('img', { name: 'Anexo do post' });
-      await expect(image).toBeVisible();
-      const src = (await image.getAttribute('src')) as string;
-      expect(src).toContain(firstKey);
+      await post.open();
 
-      const served = await page.request.get(src);
+      await expect(post.attachment).toBeVisible();
+      const source = await post.attachmentSource();
+      expect(source).toContain(firstKey);
+
+      const served = await app.fetch(source);
       expect(served.status()).toBe(200);
       expect(await served.body()).toEqual(RED_PIXEL);
     });
 
     test('replacing the file keeps the new one and deletes the old one', async ({
-      page,
+      app,
       accounts,
-      signIn,
-      postsStore,
+      authentication,
+      postRecords,
       storage,
     }) => {
-      await signIn(accounts.author);
-      await page.goto(`/posts/${postId}`);
+      await authentication.signIn(accounts.author);
+      const post = app.post(postId);
+      await post.open();
 
-      await page
-        .getByLabel('Novo anexo')
-        .setInputFiles(aPng('blue.png', BLUE_PIXEL));
-      await page
-        .getByRole('button', { name: 'Enviar o que foi preenchido' })
-        .click();
-      await expect(page.getByText('updatePost aceito')).toBeVisible();
+      await post.replaceAttachment(Png.named('blue.png', BLUE_PIXEL));
 
-      const stored = await postsStore.attachmentOf(postId);
+      const stored = await postRecords.attachmentOf(postId);
       secondKey = stored?.asset?.name as string;
       expect(secondKey).toMatch(ATTACHED_KEY);
       expect(secondKey).not.toBe(firstKey);
       expect(await storage.read(secondKey)).toEqual(BLUE_PIXEL);
       await expect.poll(() => storage.exists(firstKey)).toBe(false);
-      expect(await storage.keys(STAGING_PREFIX)).toEqual([]);
+      expect(await storage.keys(Storage.STAGING_PREFIX)).toEqual([]);
 
-      await expect(
-        page.getByRole('img', { name: 'Anexo do post' }),
-      ).toHaveAttribute('src', new RegExp(secondKey));
+      await expect(post.attachment).toHaveAttribute(
+        'src',
+        new RegExp(secondKey),
+      );
     });
 
     test('deleting the post deletes its file', async ({
-      page,
+      app,
       accounts,
-      signIn,
-      postsStore,
+      authentication,
+      postRecords,
       storage,
     }) => {
-      await signIn(accounts.author);
-      await page.goto(`/posts/${postId}`);
+      await authentication.signIn(accounts.author);
+      const post = app.post(postId);
+      await post.open();
 
-      await page.getByRole('button', { name: 'Excluir post' }).click();
-      await expect(page).toHaveURL(/\/feed$/);
+      await post.delete();
 
-      const stored = await postsStore.attachmentOf(postId);
+      const stored = await postRecords.attachmentOf(postId);
       expect(
         stored?.deleted_at,
         'the row stays, deleted logically',
       ).not.toBeNull();
       expect(stored?.asset).toBeNull();
       await expect.poll(() => storage.exists(secondKey)).toBe(false);
-      expect(await storage.keys(ATTACHMENTS_PREFIX)).not.toContain(secondKey);
+      expect(await storage.keys(Storage.ATTACHMENTS_PREFIX)).not.toContain(
+        secondKey,
+      );
     });
   });

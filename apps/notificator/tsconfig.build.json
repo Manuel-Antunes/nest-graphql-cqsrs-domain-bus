@@ -53,6 +53,9 @@
       "path": "../../libs/core/lambda/tsconfig.lib.json"
     },
     {
+      "path": "../../libs/events/tsconfig.lib.json"
+    },
+    {
       "path": "../../libs/database/tsconfig.lib.json"
     },
     {

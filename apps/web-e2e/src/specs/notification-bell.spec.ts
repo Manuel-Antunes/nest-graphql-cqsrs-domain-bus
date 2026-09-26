@@ -1,5 +1,4 @@
 import { expect, test } from '../fixtures/test';
-import type { ServiceDatabase } from '../support/database';
 
 /**
  * **The bell in the header is the database channel, read in the browser.**
@@ -14,88 +13,71 @@ test.describe
     const title = `Belled ${Date.now()}`;
     let postId: string;
 
-    const storedFor = (postsStore: ServiceDatabase, id: string) =>
-      postsStore.query<{ id: string; read_at: string | null }>(
-        `select id, read_at from notifications where data ->> 'postId' = ?`,
-        id,
-      );
-
     test('a new notification puts a dot on the bell, and opening it reads everything', async ({
-      page,
+      app,
       accounts,
-      signIn,
-      postsStore,
+      authentication,
+      publishing,
+      notificationRecords,
     }) => {
-      await signIn(accounts.author);
-      await page.goto('/posts/new');
-      await page.getByLabel('Título').fill(title);
-      await page.getByLabel('Conteúdo').fill('a post the bell should ring for');
-      await page.getByRole('button', { name: 'Publicar' }).click();
-      const href = await page
-        .getByRole('link', { name: 'Abrir o post' })
-        .getAttribute('href');
-      postId = href?.split('/').pop() as string;
+      await authentication.signIn(accounts.author);
+      postId = await publishing.publishInTheForm({
+        title,
+        content: 'a post the bell should ring for',
+      });
 
       await expect
-        .poll(async () => (await storedFor(postsStore, postId)).length, {
-          timeout: 30_000,
-        })
+        .poll(
+          async () => (await notificationRecords.aboutPost(postId)).length,
+          {
+            timeout: 30_000,
+          },
+        )
         .toBe(1);
 
-      await expect(async () => {
-        await page.goto('/feed');
-        await expect(
-          page.getByRole('button', { name: /^Notifications, \d+ unread$/ }),
-        ).toBeVisible({ timeout: 2_000 });
-      }).toPass();
+      await app.feed.reopenUntil(async () => {
+        await expect(app.notificationBell.unread).toBeVisible({
+          timeout: 2_000,
+        });
+      });
 
-      await page.getByRole('button', { name: /^Notifications/ }).click();
-      const item = page
-        .getByRole('list', { name: 'Notifications' })
-        .getByRole('listitem')
-        .filter({ hasText: title });
-      await expect(item).toHaveAttribute('data-fresh', 'true');
-      await expect(
-        item.getByRole('link', { name: 'Your post is live' }),
-      ).toHaveAttribute('href', `/posts/${postId}`);
+      await app.notificationBell.open();
+      const item = app.notificationBell.item(title);
+      await expect(item.row).toHaveAttribute('data-fresh', 'true');
+      await expect(item.link('Your post is live')).toHaveAttribute(
+        'href',
+        `/posts/${postId}`,
+      );
 
-      await expect(
-        page.getByRole('button', { name: 'Notifications', exact: true }),
-      ).toBeVisible();
+      await expect(app.notificationBell.allRead).toBeVisible();
       await expect
-        .poll(async () => (await storedFor(postsStore, postId))[0]?.read_at)
+        .poll(
+          async () => (await notificationRecords.aboutPost(postId))[0]?.read_at,
+        )
         .not.toBeNull();
     });
 
     test('deleting a notification removes it for good, and the ledger remembers it was delivered', async ({
-      page,
+      app,
       accounts,
-      signIn,
-      postsStore,
+      authentication,
+      notificationRecords,
     }) => {
-      const [stored] = await storedFor(postsStore, postId);
-      await signIn(accounts.author);
-      await page.goto('/feed');
-      await page.getByRole('button', { name: /^Notifications/ }).click();
-      const item = page
-        .getByRole('list', { name: 'Notifications' })
-        .getByRole('listitem')
-        .filter({ hasText: title });
-      await expect(item).not.toHaveAttribute('data-fresh');
+      const [stored] = await notificationRecords.aboutPost(postId);
+      await authentication.signIn(accounts.author);
+      await app.feed.open();
+      await app.notificationBell.open();
+      const item = app.notificationBell.item(title);
+      await expect(item.row).not.toHaveAttribute('data-fresh');
 
-      await item.getByRole('button', { name: /^Delete notification/ }).click();
+      await item.delete();
 
-      await expect(item).toHaveCount(0);
+      await expect(item.row).toHaveCount(0);
       await expect
-        .poll(async () => (await storedFor(postsStore, postId)).length)
+        .poll(async () => (await notificationRecords.aboutPost(postId)).length)
         .toBe(0);
-      const ledger = await postsStore.query<{ channel: string }>(
-        'select channel from notification_deliveries where notification_id = ? order by channel',
-        stored.id,
-      );
-      expect(ledger.map(({ channel }) => channel)).toEqual([
-        'database',
-        'email',
-      ]);
+      expect(
+        await notificationRecords.channelsThatDelivered(stored.id),
+      ).toEqual(['database', 'email']);
     });
   });

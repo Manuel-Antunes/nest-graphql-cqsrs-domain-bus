@@ -1,7 +1,4 @@
-import {
-  emailTemplateNamed,
-  renderEmailTemplate,
-} from '@nestposts/mail/email-template';
+import { ReactEmailTemplateResolver } from '@nestposts/mail/react-email-template.resolver';
 import { InvalidNotificationException } from '@nestposts/notifications/domain/notification/exception/invalid-notification.exception';
 import { Notification } from '@nestposts/notifications/domain/notification/notification';
 import { NotificationRecipient } from '@nestposts/notifications/domain/notification/notification-recipient';
@@ -61,13 +58,11 @@ describe('PostCreatedNotification', () => {
     expect(mail).toBeInstanceOf(PostCreatedNotificationMail);
     expect(message.hasTo('ana@example.com', 'Ana')).toBe(true);
     expect(message.hasSubject('Your post “Hello, world” is live')).toBe(true);
-    expect(message.hasView(PostCreatedEmail)).toBe(true);
+    expect(message.hasHtmlView(PostCreatedEmail)).toBe(true);
 
-    const { view } = message.toObject();
-    const html = await renderEmailTemplate(
-      emailTemplateNamed(view?.template ?? ''),
-      view?.context ?? {},
-    );
+    const { html } = (
+      await mail.buildWithContents(new ReactEmailTemplateResolver())
+    ).toObject().message;
     expect(html).toContain('Hi Ana,');
     expect(html).toContain('Hello, world');
     expect(html).toContain(`href="${url}"`);

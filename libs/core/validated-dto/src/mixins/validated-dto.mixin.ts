@@ -212,7 +212,7 @@ function materializeEmbedded(field: EmbeddedField, value: unknown): unknown {
  * The value object instance → what goes into JSON.
  *
  * A scalar **collapses** to the raw value: a `PostId` comes out as `"uuid"`, not as `{ value: … }`.
- * That is the difference between a single-column `@Embeddable` and a multi-column one — the latter
+ * That is the difference between a single-value value object and a multi-field one — the latter
  * stays an object, and class-transformer itself is what flattens it.
  */
 function plainifyEmbedded(
@@ -545,10 +545,12 @@ export function ValidatedDto<Schema extends z.ZodType<any>, Extras = {}>(
   options?: ValidatedDtoOptions,
 ): (new (
   data?: DistributiveOmit<z.input<Schema>, keyof Extras> & Extras,
-) => Omit<z.infer<Schema>, keyof Extras> & Extras) & {
+) => Omit<z.infer<Schema>, keyof Extras> &
+  Extras &
+  CompositeInstanceOf<Schema>) & {
   __schema: Schema;
   __constructorProps: DistributiveOmit<z.input<Schema>, keyof Extras> & Extras;
-} {
+} & CompositeStaticOf<Schema> {
   const {
     exposeAll = true,
     maxObjectDepth = 3,
@@ -557,12 +559,14 @@ export function ValidatedDto<Schema extends z.ZodType<any>, Extras = {}>(
   } = options ?? {};
 
   if (schema instanceof z.ZodObject) {
-    return createObjectClass(schema, {
+    const Base = createObjectClass(schema, {
       exposeAll,
       maxObjectDepth,
       DECORATOR_REGISTRY,
       EMBEDDED_REGISTRY: embeddedRegistry,
-    }) as any;
+    });
+    asCompositeValueObject(Base, schema, DECORATOR_REGISTRY);
+    return Base as any;
   }
 
   if (schema instanceof z.ZodDiscriminatedUnion) {
@@ -977,13 +981,16 @@ function valuesEqual(a: unknown, b: unknown): boolean {
 }
 
 /**
- * Marks on the prototype that a class is a multi-field value object. Same role as
- * `SCALAR_VALUE_OBJECT`: every `Embeddable` generates its own base, so there is no common `instanceof`.
+ * Marks on the prototype that a class is a multi-field value object — an object `ValidatedDto`. Same
+ * role as `SCALAR_VALUE_OBJECT`: every call generates its own base, so there is no common `instanceof`.
  */
-export const EMBEDDABLE_VALUE_OBJECT = Symbol.for('validated-dto:embeddable');
+export const COMPOSITE_VALUE_OBJECT = Symbol.for('validated-dto:composite');
 
-/** The instance side an `Embeddable` adds to the generated DTO. */
-export interface EmbeddableValueObject<Out> {
+/**
+ * The instance side every object `ValidatedDto` has: it is a **multi-field value object** as well as a
+ * DTO — Java's `record`, with the Zod schema in place of the canonical constructor.
+ */
+export interface CompositeValueObject<Out> {
   /** **Value** equality, field by field — the `equals` of a Java `record`. */
   equals(other: unknown): boolean;
   /** A copy with some fields swapped. The value object does not change: it is replaced. */
@@ -995,17 +1002,49 @@ export interface EmbeddableValueObject<Out> {
   assertValid(): this;
 }
 
-type AnyEmbeddableConstructor = abstract new (...args: any[]) => any;
+type AnyCompositeConstructor = abstract new (...args: any[]) => any;
+
+/** The static side every object `ValidatedDto` has. Polymorphic `this`: `Money.parse(x)` is a `Money`. */
+export interface CompositeValueObjectStatic<Schema extends z.ZodObject<any>> {
+  schema: Schema;
+  /** Constructs with validation: returns the instance or throws `ZodError`. `new` does not validate. */
+  parse<T extends AnyCompositeConstructor>(
+    this: T,
+    value: unknown,
+  ): InstanceType<T>;
+  safeParse<T extends AnyCompositeConstructor>(
+    this: T,
+    value: unknown,
+  ):
+    | { success: true; data: InstanceType<T>; error?: undefined }
+    | { success: false; data?: undefined; error: z.ZodError };
+  is<T extends AnyCompositeConstructor>(
+    this: T,
+    value: unknown,
+  ): value is InstanceType<T>;
+  /** Embeds it into another DTO's shape as *this* class, rather than as an anonymous one. */
+  field<T extends AnyCompositeConstructor>(
+    this: T,
+    options?: ScalarFieldOptions,
+  ): z.ZodType<InstanceType<T>, z.input<Schema>>;
+}
+
+type CompositeInstanceOf<Schema> =
+  Schema extends z.ZodObject<any>
+    ? CompositeValueObject<z.infer<Schema>>
+    : unknown;
+
+type CompositeStaticOf<Schema> =
+  Schema extends z.ZodObject<any>
+    ? CompositeValueObjectStatic<Schema>
+    : unknown;
 
 /**
- * Generates a **multi-field value object** class — Java's `@Embeddable record`.
- *
- * It is `ValidatedDto` plus value object identity: `equals` by value, `with` to copy while swapping a
- * field, `toJSON`, and the `field()` that embeds it into another DTO as *this* class (rather than as an
- * anonymous class reassembled from the shape).
+ * What makes an object DTO a value object: value equality, `with`, `toJSON`, validation of the current
+ * state, and `parse`/`safeParse`/`is`/`field` on the class.
  *
  * ```ts
- * export class Money extends ValidatedDto.Embeddable(
+ * export class Money extends ValidatedDto(
  *   z.object({ amount: z.number().nonnegative(), currency: z.enum(['BRL', 'USD']) }),
  * ) {
  *   plus(other: Money): Money {
@@ -1016,50 +1055,14 @@ type AnyEmbeddableConstructor = abstract new (...args: any[]) => any;
  * const OrderSchema = z.object({ id: OrderId.field(), total: Money.field() });
  * ```
  */
-export function Embeddable<Schema extends z.ZodObject<any>>(
-  schema: Schema,
-  options?: ValidatedDtoOptions,
-): (new (
-  data?: z.input<Schema>,
-) => z.infer<Schema> & EmbeddableValueObject<z.infer<Schema>>) & {
-  schema: Schema;
-  parse<T extends AnyEmbeddableConstructor>(
-    this: T,
-    value: unknown,
-  ): InstanceType<T>;
-  safeParse<T extends AnyEmbeddableConstructor>(
-    this: T,
-    value: unknown,
-  ):
-    | { success: true; data: InstanceType<T>; error?: undefined }
-    | { success: false; data?: undefined; error: z.ZodError };
-  is<T extends AnyEmbeddableConstructor>(
-    this: T,
-    value: unknown,
-  ): value is InstanceType<T>;
-  field<T extends AnyEmbeddableConstructor>(
-    this: T,
-    options?: ScalarFieldOptions,
-  ): z.ZodType<InstanceType<T>, z.input<Schema>>;
-  __copyMetadataToChild(childClass: any): void;
-} {
-  const {
-    exposeAll = true,
-    maxObjectDepth = 3,
-    DECORATOR_REGISTRY = GLOBAL_DECORATOR_REGISTRY,
-    EMBEDDED_REGISTRY: embeddedRegistry,
-  } = options ?? {};
-
-  const Base = createObjectClass(schema, {
-    exposeAll,
-    maxObjectDepth,
-    DECORATOR_REGISTRY,
-    EMBEDDED_REGISTRY: embeddedRegistry,
-  }) as any;
-
+function asCompositeValueObject(
+  Base: any,
+  schema: z.ZodObject<any>,
+  registry: DECORATOR_REGISTRY_TYPE,
+): void {
   const keys = Object.keys(schema.shape);
 
-  Object.defineProperty(Base.prototype, EMBEDDABLE_VALUE_OBJECT, {
+  Object.defineProperty(Base.prototype, COMPOSITE_VALUE_OBJECT, {
     value: true,
     enumerable: false,
     writable: false,
@@ -1073,7 +1076,7 @@ export function Embeddable<Schema extends z.ZodObject<any>>(
           return false;
         }
         if (
-          (other as any)[EMBEDDABLE_VALUE_OBJECT] === true &&
+          (other as any)[COMPOSITE_VALUE_OBJECT] === true &&
           !(other instanceof Base)
         ) {
           return false;
@@ -1154,7 +1157,7 @@ export function Embeddable<Schema extends z.ZodObject<any>>(
   ): z.ZodType {
     const decorators = fieldOptions?.decorators ?? [];
     if (decorators.length === 0) {
-      const cached = EMBEDDABLE_FIELD_CACHE.get(this);
+      const cached = COMPOSITE_FIELD_CACHE.get(this);
       if (cached) {
         return cached;
       }
@@ -1167,21 +1170,18 @@ export function Embeddable<Schema extends z.ZodObject<any>>(
     EMBEDDED_REGISTRY.add(fieldSchema, { kind: 'object', target: this });
 
     if (decorators.length > 0) {
-      (fieldOptions?.DECORATOR_REGISTRY ?? DECORATOR_REGISTRY).add(
-        fieldSchema,
-        { decorators },
-      );
+      (fieldOptions?.DECORATOR_REGISTRY ?? registry).add(fieldSchema, {
+        decorators,
+      });
     } else {
-      EMBEDDABLE_FIELD_CACHE.set(this, fieldSchema);
+      COMPOSITE_FIELD_CACHE.set(this, fieldSchema);
     }
     return fieldSchema;
   };
-
-  return Base;
 }
 
-/** An embeddable's `field()` is stable per class, like the scalar's. */
-const EMBEDDABLE_FIELD_CACHE = new WeakMap<object, z.ZodType>();
+/** A composite's `field()` is stable per class, like the scalar's. */
+const COMPOSITE_FIELD_CACHE = new WeakMap<object, z.ZodType>();
 
 /**
  * The **single-value** value object — see {@link ValidatedScalar}.

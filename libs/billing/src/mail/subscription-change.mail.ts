@@ -21,7 +21,7 @@ export class SubscriptionChangeMail extends Mail {
     this.message
       .to(this.recipient.address, this.recipient.name ?? undefined)
       .subject(SUBSCRIPTION_CHANGE_SUBJECTS[this.change.event])
-      .view(SubscriptionChangeEmail, {
+      .htmlView(SubscriptionChangeEmail, {
         name: this.recipient.name,
         ...this.change,
       });

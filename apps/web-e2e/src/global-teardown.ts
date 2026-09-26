@@ -1,4 +1,5 @@
-import { RunningStack } from './support/running-stack';
+import { RunEnvironment } from './environment/run-environment';
+import { RunningStack } from './stack/running-stack';
 
 /**
  * `E2E_KEEP_STACK=1` leaves everything running, which is the only way to ask the broker, the dev
@@ -7,7 +8,7 @@ import { RunningStack } from './support/running-stack';
  * reaper when the session ends.
  */
 export default async function globalTeardown(): Promise<void> {
-  if (process.env.E2E_KEEP_STACK === '1') {
+  if (new RunEnvironment().keepsStack) {
     process.stdout.write('### E2E_KEEP_STACK=1: a stack fica de pé\n');
     return;
   }

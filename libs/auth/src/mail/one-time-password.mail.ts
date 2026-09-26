@@ -21,7 +21,7 @@ export class OneTimePasswordMail extends Mail {
       .subject(
         ONE_TIME_PASSWORD_WORDING[this.password.purpose].VERIFY_YOUR_EMAIL,
       )
-      .view(OneTimePasswordTemplate, {
+      .htmlView(OneTimePasswordTemplate, {
         code: this.password.code,
         email: this.recipient.address,
         purpose: this.password.purpose,

@@ -76,10 +76,32 @@ notificator's delivery ledger would skip as already sent.
 ## Teams
 
 `teams: { enabled: true }`. Better Auth then owns two more tables, `team` and `team_member`, and a
-column on each of `session` (`active_team_id`) and `invitation` (`team_id`). The first two are
-generated like every other Better Auth table; `invitation` is mapped here, so `teamId` is on
-`Invitation`. better-auth-ui's organization screens show the teams tab, the team switcher and the team
-picker in the invite dialog.
+column on each of `session` (`active_team_id`) and `invitation` (`team_id`). All of them are mapped
+here: `Team` and `TeamMember` join `ORGANIZATION_MODELS`, and `invitation` carries `teamId`.
+better-auth-ui's organization screens show the teams tab, the team switcher and the team picker in
+the invite dialog.
+
+**The team tables are connected by references, like `member` is.** `Team.organization` is a
+`Ref<Organization>`, and `TeamMember.team` and `TeamMember.user` are a `Ref<Team>` and a
+`Ref<AuthUser>`; the adapter maps Better Auth's `organizationId`, `teamId` and `userId` onto them by
+column (`organization_id`, …), as it does for `member`. Every one of those foreign keys is
+`on delete cascade`, and that is Better Auth's rule, not a choice made here: the schema it generates
+for itself declares its references with `cascade` by default, and it relies on it —
+`deleteOrganization` removes the members and the invitations and then the organization, never the
+teams, and a team member goes with its team or its user the same way. `Migration…_team_references`
+turned the generated `varchar(255)` columns into those keys, after deleting the teams and team
+members an organization's deletion had already orphaned. `Team` declares `memberCount` without an
+initializer, because Better Auth writes it (`incrementOne` on every membership) and MikroORM reads an
+initializer as a column default. It has no collection of its members: the adapter serializes the
+whole entity and refuses a one-to-many property, so `TeamMemberRepository` is how a team's members
+are read — the calendar of `@nestposts/events` expands a team into participants with it.
+
+`Invitation.teamId` stays a string, deliberately: Better Auth writes the ids of **every** team an
+invitation names there, joined by commas, and splits them when it is accepted. It is a list, not a
+reference.
+
+Better Auth creates a **default team** named after the organization when it creates the
+organization, and nothing marks it as such. It is an ordinary team here.
 
 ## `OrganizationNotSelected` and `ActiveMemberNotFound` are different failures
 
@@ -112,3 +134,24 @@ three things that make an organization one:
   otherwise; the verdict is remembered per request, because a guard on field resolvers runs once per
   field. A message passes: its publisher checked the tenant it carries. It is also what keeps an
   unknown tenant from being created — a header naming one is refused before any query runs.
+- **A handler checked against the active organization works only in its tenant.** `@OrgRoles`,
+  `@MemberHasPermission` and `@RequireActiveOrg` (`@thallesp/nestjs-better-auth`) ask Better Auth
+  about the session's **active** organization — the library calls `hasPermission` and
+  `getActiveMemberRole` without an `organizationId` — while the rows a request touches are the named
+  tenant's. Membership alone would let an owner of one organization, with it active, name another
+  where they are only a member and act there with the first one's role. So on a handler carrying any
+  of those decorators the guard also requires the tenant to be the active organization's, and refuses
+  the root tenant, which is no organization's. The metadata keys are read off the library's own
+  decorators (`RequireActiveOrg().KEY`, `MemberHasPermission(…).KEY`; `@OrgRoles` sets the first),
+  so a rename upstream cannot leave the check silently off. The web names the active organization as
+  the tenant, so for it the two are always the same; the rule is for whoever names one by hand.
+
+## Permissions
+
+`access.ts` is the organization's access control, and Better Auth evaluates it: `hasPermission` on
+the server, `WebAuth.hasOrgPermission` in `apps/web`, `@MemberHasPermission` on a resolver. Beside
+Better Auth's own statements it declares two resources: `post` (`WRITE_A_POST`, from `libs/auth`) and
+**`event`** (`MANAGE_EVENTS`: `read`, `create`, `update`, `delete`), which owners and admins hold and
+members do not. On an event they are about *every* event of the organization — reading them all,
+scheduling one for somebody else, changing or removing any — and never about the caller's own: any
+member creates their own events, and sees the ones they attend. `access.spec.ts` pins who holds it.

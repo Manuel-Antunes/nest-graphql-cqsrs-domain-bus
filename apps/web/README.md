@@ -138,6 +138,32 @@ The session this application reads (`useSession()` in `app/_providers/session-pr
 one better-auth-ui keeps in TanStack Query, prefetched by the layout — so signing in or out in those
 screens reaches the header and the pages without a reload.
 
+## Events
+
+`/events/<view>-view` (`day`, `week`, `month`, `year`, `agenda`) is the calendar of the active
+tenant. Its components live in `src/calendar`, brought over from the digital-twin project. There is
+no query of its own for the screen: the layout prefetches `me`, `members` and `teams` together —
+`PrefetchQueries`, one `Promise.all` over the same `QueryClient`, hydrated at once — and the provider
+reads them back with `useSuspenseQueries`, then the events of the visible year with `events`,
+filtered by team on the server and by person in the browser. The ids the screens hold are the
+tenant's profile ids, the ones `me` answers with, never Better Auth's user ids: `members` is the people
+picker, and it is also what `responsibleId` and `participantIds` take.
+
+Whether the caller manages the calendar is not a field of the API. It is asked of Better Auth, on the
+server, by the layout: `WebAuth.hasOrgPermission({ event: [...MANAGE_EVENTS] })`, the same statement
+`@MemberHasPermission` checks on `createEvent`, `updateEvent` and `deleteEvent` (see
+`libs/organizations`' Permissions). Whoever holds it — an owner or an admin of the active organization
+— sees every event, picks the responsible, edits, deletes and drags events to another time; anybody
+else sees the events they attend and creates their own. The root tenant is no organization's, so
+there nobody manages and everybody keeps their own events. The dialogs are `@nestposts/ui`'s Base UI
+primitives, the form is react-hook-form through the design system's `Form`, and the date, person and
+team filters live in the URL, through nuqs.
+
+`WebAuth` answers the other three questions the same way, for any screen that needs to show or hide a
+control: `hasRole` (the system roles on the user), `hasPermission` (the system access control, through
+the admin plugin's `userHasPermission`) and `hasOrgRole` (the caller's role in the active organization).
+They hide controls; the API is what refuses.
+
 ## Billing
 
 `/settings/billing` is better-auth-ui's billing view (`components/auth/billing`, copied from its

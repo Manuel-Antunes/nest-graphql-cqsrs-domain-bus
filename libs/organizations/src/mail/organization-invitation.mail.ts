@@ -18,7 +18,7 @@ export class OrganizationInvitationMail extends Mail {
       .subject(
         `${this.invitation.inviterName} invited you to ${this.invitation.organizationName}`,
       )
-      .view(OrganizationInvitationTemplate, {
+      .htmlView(OrganizationInvitationTemplate, {
         url: this.invitation.url,
         email: this.recipient.address,
         organizationName: this.invitation.organizationName,

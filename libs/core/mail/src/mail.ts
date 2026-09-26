@@ -1,9 +1,11 @@
+import type { TemplateResolver } from '@nestjs-modules/mailer';
+
 import type { Recipient } from './message';
 import { Message } from './message';
 
 /**
- * A class-based email `BaseMail`: one class per kind of email,
- * holding what it needs and composing its own {@link Message} in {@link prepare}.
+ * A class-based email, `@adonisjs/mail`'s `BaseMail`: one class per kind of email, holding what it
+ * needs and composing its own {@link Message} in {@link prepare}.
  *
  * ```ts
  * export class PostCreatedNotificationMail extends Mail {
@@ -14,14 +16,21 @@ import { Message } from './message';
  *   }
  *
  *   prepare() {
- *     this.message.to(this.to).view(PostCreatedEmail, this.post);
+ *     this.message
+ *       .to(this.to)
+ *       .htmlView(PostCreatedEmail, this.post)
+ *       .textView(PostCreatedEmail.text, this.post);
  *   }
  * }
  * ```
  *
- * A mail does not send itself. It is handed to a {@link MailSender}, which builds it and passes the
- * result to the transport — which is what lets the same class be delivered by SMTP locally, by SES
- * on AWS and by a recording sender in a spec.
+ * A mail does not send itself: `MailService.sendMail(mail)` builds it and hands the result to the
+ * mailer, which is what lets the same class be delivered by SMTP locally, by SES on AWS and by a
+ * recording stand-in in a spec.
+ *
+ * Its views are rendered when it is sent, by the mailer, unless `prepare` renders them itself with
+ * `await this.message.computeContents(resolver)` — then the mail leaves with its bodies, and the
+ * mailer renders nothing.
  */
 export abstract class Mail {
   /** The subject, applied before {@link prepare} runs, which may still override it. */
@@ -37,7 +46,7 @@ export abstract class Mail {
 
   #built = false;
 
-  /** Composes the message: recipients, body, attachments. */
+  /** Composes the message: recipients, bodies, attachments. */
   abstract prepare(): void | Promise<void>;
 
   /** Prepares the message once, however many times it is asked for. */
@@ -48,6 +57,14 @@ export abstract class Mail {
     this.#defineSender();
     await this.prepare();
     return this.message;
+  }
+
+  /**
+   * Builds the message and renders its views, as {@link Message.computeContents} does: how a spec reads
+   * the HTML and the text of a mail without sending it.
+   */
+  async buildWithContents(resolver: TemplateResolver): Promise<Message> {
+    return (await this.build()).computeContents(resolver);
   }
 
   #defineSubject() {

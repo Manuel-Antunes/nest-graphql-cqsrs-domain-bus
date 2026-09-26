@@ -1,8 +1,5 @@
-import {
-  emailTemplateNamed,
-  renderEmailTemplate,
-} from '@nestposts/mail/email-template';
 import type { Mail } from '@nestposts/mail/mail';
+import { ReactEmailTemplateResolver } from '@nestposts/mail/react-email-template.resolver';
 import { EMAIL_CHANNEL } from '@nestposts/notifications/domain/channel/channel-names';
 import type { MailNotification } from '@nestposts/notifications/domain/channel/mail-notification';
 import type { Notification } from '@nestposts/notifications/domain/notification/notification';
@@ -35,15 +32,14 @@ const delivered = async (
   const recipient = NotificationRecipient.of(entry.notifiable, [EMAIL_CHANNEL]);
   const notification = entry.notification as Notification & MailNotification;
   const mail = (await notification.toMail(recipient)) as Mail;
-  const { message, view } = (await mail.build()).toObject();
-  if (!view) throw new Error(`${type} renders no view`);
+  const { message, views } = (
+    await mail.buildWithContents(new ReactEmailTemplateResolver())
+  ).toObject();
+  if (!views.html) throw new Error(`${type} renders no view`);
   return {
     subject: String(message.subject),
     to: message.to,
-    html: await renderEmailTemplate(
-      emailTemplateNamed(view.template),
-      view.context,
-    ),
+    html: String(message.html),
   };
 };
 

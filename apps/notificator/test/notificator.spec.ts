@@ -5,9 +5,9 @@ import {
   ROOT_TENANT_SCHEMA,
   TENANT_MIGRATIONS,
 } from '@nestposts/database';
-import { MailSender } from '@nestposts/mail/mail-sender';
-import type { CapturingMailSender } from '@nestposts/mail/testing/capturing-mail-sender';
-import { capturingMailSender } from '@nestposts/mail/testing/capturing-mail-sender';
+import { CalendarEventId } from '@nestposts/events/domain/calendar-event/vo/calendar-event-id';
+import { MailService } from '@nestposts/mail/mail.service';
+import { CapturingMailService } from '@nestposts/mail/testing/capturing-mail.service';
 import { migrate } from '@nestposts/migrator/main';
 import { tenantMigrations } from '@nestposts/migrator/migrations/tenant/index';
 import { NotificationDelivery } from '@nestposts/notifications/domain/delivery/notification-delivery';
@@ -38,12 +38,13 @@ interface RenderedMail {
   subject: string;
   html: string;
   text: string;
+  icalEvent?: { method: string; content: string };
 }
 
 describe('the notificator service', () => {
   let notificator: InProcessService;
   let postsApi: MemoryClient;
-  let mails: CapturingMailSender;
+  let mails: CapturingMailService;
 
   const notificationFrom = (
     notificationId = NotificationId.generate().value,
@@ -105,15 +106,15 @@ describe('the notificator service', () => {
 
   const mailsTo = (address: string) =>
     mails.sent
-      .map((sent) => JSON.parse(sent.response as string) as RenderedMail)
+      .map((sent) => JSON.parse(sent.message as string) as RenderedMail)
       .filter((mail) => mail.to.some((to) => to.address === address));
 
   beforeAll(async () => {
     await migrate();
     notificator = await startInProcessService(
       await Test.createTestingModule({ imports: [AppModule] })
-        .overrideProvider(MailSender)
-        .useFactory(capturingMailSender)
+        .overrideProvider(MailService)
+        .useClass(CapturingMailService)
         .overrideProvider(TENANT_MIGRATIONS)
         .useValue({ migrationsList: tenantMigrations })
         .compile(),
@@ -123,7 +124,7 @@ describe('the notificator service', () => {
       servers: [notificator.server],
       serializer: new MemoryEventEnvelopeSerializer(),
     });
-    mails = notificator.app.get(MailSender);
+    mails = notificator.app.get<MailService, CapturingMailService>(MailService);
   });
 
   afterAll(() => notificator.close());
@@ -157,6 +158,61 @@ describe('the notificator service', () => {
     expect(mail.html).toContain('Hi Ana,');
     expect(mail.html).toContain(`href="${message.data.data.url}"`);
     expect(mail.text).toContain('Nest + GraphQL');
+  });
+
+  it('emails a calendar invitation with its .ics, one revision later when the event moves', async () => {
+    const notificationId = NotificationId.generate().value;
+    const calendarEventId = CalendarEventId.generate().value;
+    const moved = new EventEnvelope(
+      new NotificationReceivedEvent(
+        notificationId,
+        'events.CalendarEventRescheduled',
+        'users.User',
+        'rui',
+        {
+          calendarEventId,
+          title: 'Planning',
+          description: null,
+          startDate: '2026-10-02T16:00:00.000Z',
+          endDate: '2026-10-02T17:30:00.000Z',
+          previousStartDate: '2026-10-01T09:00:00.000Z',
+          previousEndDate: '2026-10-01T10:00:00.000Z',
+          sequence: 1,
+          responsible: { name: 'Ana', email: 'ana@example.com' },
+          participants: [{ name: 'Rui', email: 'rui@example.com' }],
+          url: 'http://localhost:4200/events',
+          issuedAt: '2026-09-26T12:30:00.000Z',
+        },
+        ['email'],
+        { notifiableName: 'Rui', routes: { email: 'rui@example.com' } },
+        new Date('2026-09-26T12:30:00.000Z'),
+      ),
+      {
+        [TRANSPORT_MESSAGE_TYPE]: 'notifications.NotificationReceived#1.0.0',
+        [TRANSPORT_IDENTIFIER]: `evt-${notificationId}`,
+        [TRANSPORT_TIMESTAMP]: '2026-09-26T12:30:00.000Z',
+        [TRANSPORT_ORIGIN]: 'posts-api',
+        [TRANSPORT_TAGS]: `notificationId=${notificationId}`,
+      },
+    );
+
+    await deliver(moved);
+    await until(async () => (await deliveriesOf(notificationId)).length === 1);
+
+    const [mail] = mailsTo('rui@example.com');
+    const ics = (mail.icalEvent?.content ?? '').replace(/\r\n[ \t]/g, '');
+    expect(mail.subject).toBe('Rescheduled: Planning');
+    expect(mail.html).toContain('Friday, October 2, 2026');
+    expect(mail.text).toContain('has a new time');
+    expect(mail.icalEvent?.method).toBe('REQUEST');
+    expect(ics).toContain(`UID:${calendarEventId}@nestposts`);
+    expect(ics).toContain('SEQUENCE:1');
+    expect(ics).toContain('DTSTART:20261002T160000Z');
+    expect(ics).toMatch(
+      /ORGANIZER;CN="?Nest Posts"?:mailto:no-reply@nestposts.local/,
+    );
+    expect(ics).toMatch(/ATTENDEE;ROLE=CHAIR[^\r\n]*ana@example.com/);
+    expect(ics).toMatch(/ATTENDEE;[^\r\n]*rui@example.com/);
   });
 
   it('remembers the message it received, and who sent it', async () => {

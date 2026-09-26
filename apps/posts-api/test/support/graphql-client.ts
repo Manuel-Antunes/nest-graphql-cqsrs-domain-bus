@@ -57,21 +57,25 @@ export class GraphqlClient {
   }
 
   async createOrganization(name: string, slug: string): Promise<string> {
-    const response = await fetch(
-      `${this.origin}/api/auth/organization/create`,
-      {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', cookie: this.cookie },
-        body: JSON.stringify({ name, slug }),
-      },
-    );
+    const { id } = await this.auth<{ id: string }>('organization/create', {
+      name,
+      slug,
+    });
+    return id;
+  }
+
+  async auth<T>(path: string, body: Record<string, unknown>): Promise<T> {
+    const response = await fetch(`${this.origin}/api/auth/${path}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie: this.cookie },
+      body: JSON.stringify(body),
+    });
     if (!response.ok) {
       throw new Error(
-        `organization/create failed (${response.status}): ${await response.text()}`,
+        `${path} failed (${response.status}): ${await response.text()}`,
       );
     }
-    const { id } = (await response.json()) as { id: string };
-    return id;
+    return (await response.json()) as T;
   }
 
   private headers(): Record<string, string> {

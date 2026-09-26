@@ -1,0 +1,12 @@
+extend type Query {
+  """
+  Who can be the responsible for or a participant of an event: the members of the organization behind
+  this tenant, as the profiles `me` answers with, or, in the root tenant, only the caller
+  """
+  members: [IUser!]!
+
+  """
+  The teams of the organization behind this tenant, by name; none in the root tenant
+  """
+  teams: [Team!]!
+}

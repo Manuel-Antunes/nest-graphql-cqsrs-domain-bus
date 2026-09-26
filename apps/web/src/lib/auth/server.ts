@@ -3,15 +3,20 @@ import 'server-only';
 import { cookies } from 'next/headers';
 import type { AuthSocialProvider } from '@better-auth-ui/core';
 import type { AuthServer } from '@better-auth-ui/core/server';
+import type { PermissionRequest } from '@nestposts/auth/domain/auth/auth.service';
 import { AuthService } from '@nestposts/auth/domain/auth/auth.service';
 import { BETTER_AUTH } from '@nestposts/auth/infrastructure/better-auth/tokens';
+import type { OrganizationPermissionRequest } from '@nestposts/organizations/domain/organization/organization.service';
 import { OrganizationService } from '@nestposts/organizations/domain/organization/organization.service';
+import type { OrganizationRole } from '@nestposts/organizations/domain/organization/schemas/member-role.schema';
+import { OrganizationId } from '@nestposts/organizations/domain/organization/vo/organization-id';
 
 import { env } from '@/env.mjs';
 import { Endpoints } from '@/lib/endpoints';
 import { billingConfig } from '@/nest/config/billing.config';
 import { Nest } from '@/nest/container';
 
+import type { SystemRole } from './roles';
 import type { Session } from './session';
 
 interface BetterAuthHandler {
@@ -55,6 +60,30 @@ export class WebAuth {
         ? (['github'] as const)
         : []),
     ];
+  }
+
+  static async hasRole(roles: readonly SystemRole[]): Promise<boolean> {
+    return (await WebAuth.auth()).hasRole(roles);
+  }
+
+  static async hasPermission(permissions: PermissionRequest): Promise<boolean> {
+    return (await WebAuth.auth()).hasPermission(permissions);
+  }
+
+  static async hasOrgRole(
+    roles: readonly OrganizationRole[],
+  ): Promise<boolean> {
+    return (await WebAuth.organizations()).hasOrganizationRole(roles);
+  }
+
+  static async hasOrgPermission(
+    permissions: OrganizationPermissionRequest,
+    organizationId?: string,
+  ): Promise<boolean> {
+    return (await WebAuth.organizations()).hasOrganizationPermission(
+      permissions,
+      organizationId ? OrganizationId.parse(organizationId) : undefined,
+    );
   }
 
   static billingEnabled(): boolean {

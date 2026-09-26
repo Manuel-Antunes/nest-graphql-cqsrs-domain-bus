@@ -1,45 +1,24 @@
-import type { ResultOf } from '@graphql-typed-document-node/core';
-import { print } from 'graphql';
-
-import type { GraphQlAnswer } from '../fixtures/test';
-import { expect, signInThroughTheForm, test } from '../fixtures/test';
-import { graphql } from '../gql';
-import { WEB_URL } from '../support/stack';
-
-const MeAtTheApi = graphql(`
-  query MeAtTheApi {
-    me {
-      __typename
-      email
-    }
-  }
-`);
+import { expect, test } from '../fixtures/test';
+import { WhoAmI } from '../infrastructure/graphql/operations/users.operations';
 
 test.describe('autenticação pelo navegador', () => {
   test('o cookie de sessão é escrito pelo Better Auth do próprio apps/web', async ({
-    page,
+    app,
     accounts,
-    signIn,
+    authentication,
+    environment,
   }) => {
-    const signUps: string[] = [];
-    page.on('request', (request) => {
-      if (request.url().includes('/api/auth/')) {
-        signUps.push(new URL(request.url()).origin);
-      }
-    });
+    const origins = app.originsRequesting('/api/auth/');
 
-    await signIn(accounts.author);
+    await authentication.signIn(accounts.author);
 
-    const session = (await page.context().cookies()).find((cookie) =>
-      cookie.name.includes('better-auth'),
-    );
-
+    const session = await authentication.sessionCookie();
     expect(session, 'nenhum cookie de sessão').toBeDefined();
     expect(session?.httpOnly, 'a sessão não pode ser legível por script').toBe(
       true,
     );
     expect(
-      signUps.filter((origin) => origin !== new URL(WEB_URL).origin),
+      origins.filter((origin) => origin !== new URL(environment.webUrl).origin),
       'o login não pode sair para outra origem: o Better Auth que responde é o deste app',
     ).toEqual([]);
   });
@@ -52,26 +31,17 @@ test.describe('autenticação pelo navegador', () => {
    * O documento é o mesmo tipado que o resto da suíte usa: o que muda é o transporte, não a query.
    */
   test('o cookie que o web escreveu é aceito pela posts-api', async ({
-    page,
     accounts,
-    signIn,
-    apiUrl,
-    request,
+    authentication,
+    endpoints,
   }) => {
-    await signIn(accounts.author);
-    const cookies = (await page.context().cookies())
-      .filter((cookie) => cookie.name.includes('better-auth'))
-      .map((cookie) => `${cookie.name}=${cookie.value}`)
-      .join('; ');
-
-    const response = await request.post(`${apiUrl}/graphql`, {
-      headers: { 'content-type': 'application/json', 'cookie': cookies },
-      data: { query: print(MeAtTheApi) },
+    await authentication.signIn(accounts.author);
+    const postsApi = endpoints.postsApi({
+      cookie: await authentication.cookieHeader(),
     });
 
-    const answer = (await response.json()) as GraphQlAnswer<
-      ResultOf<typeof MeAtTheApi>
-    >;
+    const answer = await postsApi.execute(WhoAmI);
+
     expect(answer.errors, JSON.stringify(answer.errors)).toBeUndefined();
     expect(answer.data?.me.email).toBe(accounts.author.email);
     expect(
@@ -81,72 +51,67 @@ test.describe('autenticação pelo navegador', () => {
   });
 
   test('a sessão sobrevive a um reload, porque é uma linha e não um estado de cliente', async ({
-    page,
+    app,
     accounts,
-    signIn,
+    authentication,
   }) => {
-    await signIn(accounts.author);
+    await authentication.signIn(accounts.author);
 
-    await page.reload();
+    await app.reload();
 
-    await expect(page.getByText(accounts.author.email).first()).toBeVisible();
+    await expect(app.header.identity(accounts.author.email)).toBeVisible();
   });
 
   test('credenciais erradas não autenticam, e a recusa aparece na tela', async ({
     page,
+    app,
     accounts,
+    authentication,
   }) => {
-    await signInThroughTheForm(page, {
+    await authentication.attemptSignIn({
       email: accounts.author.email,
       password: 'senha-errada-de-proposito',
     });
 
-    await expect(
-      page.getByText('The sign-in details are incorrect. Please try again.'),
-    ).toBeVisible();
+    await expect(app.signIn.incorrectCredentials).toBeVisible();
     await expect(page).toHaveURL(/\/auth\/sign-in/);
-    await expect(page.getByRole('link', { name: 'Sign in' })).toBeVisible();
+    await expect(app.header.signInLink).toBeVisible();
   });
 
   test('quem já entrou é reconhecido ao voltar ao login', async ({
     page,
+    app,
     accounts,
-    signIn,
+    authentication,
   }) => {
-    await signIn(accounts.author);
+    await authentication.signIn(accounts.author);
 
-    await page.goto('/login');
+    await app.visit('/login');
 
     await expect(page).toHaveURL(/\/auth\/sign-in\?redirectTo=/);
-    await expect(page.getByText(accounts.author.email).first()).toBeVisible();
+    await expect(app.header.identity(accounts.author.email)).toBeVisible();
   });
 
   test('sair apaga a sessão, e o cabeçalho volta a oferecer entrar', async ({
-    page,
+    app,
     accounts,
-    signIn,
+    authentication,
   }) => {
-    await signIn(accounts.author);
+    await authentication.signIn(accounts.author);
 
-    await page.getByRole('button', { name: 'Account' }).click();
-    await page.getByRole('menuitem', { name: 'Sign Out' }).click();
-    await page.waitForURL('**/auth/sign-in**');
+    await authentication.signOut();
 
-    await expect(page.getByRole('link', { name: 'Sign in' })).toBeVisible();
-    expect(
-      (await page.context().cookies()).filter(
-        (cookie) => cookie.name.includes('better-auth') && cookie.value !== '',
-      ),
-    ).toHaveLength(0);
+    await expect(app.header.signInLink).toBeVisible();
+    expect(await authentication.liveSessionCookies()).toHaveLength(0);
   });
 
   test('o papel do autor chega ao cabeçalho: a role está na credencial, não no cliente', async ({
-    page,
+    app,
     accounts,
-    signIn,
+    authentication,
   }) => {
-    await signIn(accounts.author);
+    await authentication.signIn(accounts.author);
 
-    await expect(page.getByText('author', { exact: true })).toBeVisible();
+    await expect(app.header.role('author')).toBeVisible();
   });
 });

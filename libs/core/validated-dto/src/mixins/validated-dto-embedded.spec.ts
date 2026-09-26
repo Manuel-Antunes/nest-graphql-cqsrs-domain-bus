@@ -6,11 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
 import { DECORATOR_REGISTRY } from '../schemas/registries/decorators.registry';
-import {
-  Embeddable,
-  InheritValidatedMetadata,
-  ValidatedDto,
-} from './validated-dto.mixin';
+import { InheritValidatedMetadata, ValidatedDto } from './validated-dto.mixin';
 import { ValidatedScalar } from './validated-scalar.mixin';
 
 const PostIdSchema = z.uuid().brand<'PostId'>();
@@ -222,13 +218,13 @@ describe('ValidatedDto — value objects embutidos', () => {
     });
   });
 
-  describe('Embeddable: value object de vários campos', () => {
+  describe('an object DTO is a multi-field value object', () => {
     const MoneySchema = z.object({
       amount: z.number().nonnegative('amount não pode ser negativo'),
       currency: z.enum(['BRL', 'USD']).default('BRL'),
     });
 
-    class Money extends Embeddable(MoneySchema) {
+    class Money extends ValidatedDto(MoneySchema) {
       plus(other: Money): Money {
         return this.with({ amount: this.amount + other.amount });
       }
@@ -329,14 +325,14 @@ describe('ValidatedDto — value objects embutidos', () => {
     });
 
     describe('a igualdade e as famílias de value object', () => {
-      class Weight extends Embeddable(
+      class Weight extends ValidatedDto(
         z.object({
           amount: z.number(),
           currency: z.enum(['BRL', 'USD']).default('BRL'),
         }),
       ) {}
 
-      it('um embeddable de outra família nunca é igual, mesmo com o shape idêntico', () => {
+      it('um value object de outra família nunca é igual, mesmo com o shape idêntico', () => {
         expect(
           new Money({ amount: 10 }).equals(new Weight({ amount: 10 })),
         ).toBe(false);
@@ -355,7 +351,7 @@ describe('ValidatedDto — value objects embutidos', () => {
     });
 
     describe('a igualdade campo a campo', () => {
-      class Registro extends Embeddable(
+      class Registro extends ValidatedDto(
         z.object({
           em: z.date(),
           etiquetas: z.array(z.string()).default([]),
@@ -438,7 +434,7 @@ describe('ValidatedDto — value objects embutidos', () => {
         expect(instanceToPlain(order)).toEqual(plain);
       });
 
-      it('valida o embeddable pelo schema dele', async () => {
+      it('valida o value object pelo schema dele', async () => {
         const order = new OrderDto({ id: ID, total: { amount: -1 } });
 
         const errors = await validate(order);
@@ -446,7 +442,7 @@ describe('ValidatedDto — value objects embutidos', () => {
         expect(errors.map((error) => error.property)).toEqual(['total']);
       });
 
-      it('marca o design:type com a classe do embeddable', () => {
+      it('marca o design:type com a classe do value object', () => {
         expect(
           Reflect.getMetadata('design:type', OrderDto.prototype, 'total'),
         ).toBe(Money);
@@ -454,7 +450,7 @@ describe('ValidatedDto — value objects embutidos', () => {
     });
 
     it('embute escalares dentro de si', () => {
-      class Authorship extends Embeddable(
+      class Authorship extends ValidatedDto(
         z.object({ authorId: PostId.field(), name: TagName.field() }),
       ) {}
 

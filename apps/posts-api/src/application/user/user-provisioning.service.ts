@@ -28,8 +28,29 @@ export class UserProvisioning {
     }
     const roles = rolesOf(identity);
     const existing = await this.users.findByEmail(identity.email);
-    const user = existing ?? (await this.register(identity, roles, now));
-    return this.granting(user, roles, now);
+    if (existing && (await this.isProvisioned(existing, roles))) {
+      return existing;
+    }
+    const provisioned = await this.users.exclusively(identity.email, async () =>
+      this.granting(
+        (await this.users.findByEmail(identity.email)) ??
+          (await this.register(identity, roles, now)),
+        roles,
+        now,
+      ),
+    );
+    return existing ?? provisioned;
+  }
+
+  private async isProvisioned(
+    user: User,
+    roles: readonly string[],
+  ): Promise<boolean> {
+    return (
+      roles.every((role) => user.hasRole(role)) &&
+      (!user.hasRole(AUTHOR_ROLE) ||
+        (await this.authors.findById(user.id)) !== null)
+    );
   }
 
   private async register(

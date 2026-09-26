@@ -6,4 +6,8 @@ export class WebLinks {
   post(postId: PostId): string {
     return new URL(`/posts/${postId.value}`, this.baseUrl).toString();
   }
+
+  calendar(): string {
+    return new URL('/events', this.baseUrl).toString();
+  }
 }

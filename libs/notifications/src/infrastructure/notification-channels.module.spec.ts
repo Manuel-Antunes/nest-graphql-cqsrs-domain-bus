@@ -13,8 +13,8 @@ import {
   testDatabaseConfig,
 } from '@nestposts/database/testing';
 import { Mail } from '@nestposts/mail/mail';
-import { MailSender } from '@nestposts/mail/mail-sender';
-import { RecordingMailSender } from '@nestposts/mail/testing/recording-mail-sender';
+import { MailService } from '@nestposts/mail/mail.service';
+import { RecordingMailService } from '@nestposts/mail/testing/recording-mail.service';
 
 import {
   DATABASE_CHANNEL,
@@ -100,13 +100,13 @@ class FakePush extends PushNotifications {
   }
 }
 
-const mails = new RecordingMailSender();
+const mails = new RecordingMailService();
 const push = new FakePush();
 
 @Global()
 @Module({
-  providers: [{ provide: MailSender, useValue: mails }],
-  exports: [MailSender],
+  providers: [{ provide: MailService, useValue: mails }],
+  exports: [MailService],
 })
 class RecordingMailModule {}
 

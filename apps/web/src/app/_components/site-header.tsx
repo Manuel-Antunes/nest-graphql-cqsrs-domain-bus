@@ -24,6 +24,7 @@ const routes = [
   { href: '/', label: 'Roteiro' },
   { href: '/feed', label: 'Feed' },
   { href: '/posts/new', label: 'Escrever' },
+  { href: '/events', label: 'Eventos' },
   { href: '/saga', label: 'Saga' },
   { href: '/live', label: 'Tempo real' },
   { href: '/me', label: 'Identidade' },
@@ -54,7 +55,10 @@ export function SiteHeader() {
               href={route.href}
               className={cn(
                 'rounded-md px-2 py-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground',
-                pathname === route.href && 'bg-accent text-foreground',
+                (pathname === route.href ||
+                  (route.href !== '/' &&
+                    pathname.startsWith(`${route.href}/`))) &&
+                  'bg-accent text-foreground',
               )}
             >
               {route.label}

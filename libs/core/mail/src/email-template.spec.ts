@@ -41,15 +41,30 @@ describe('email templates', () => {
     );
   });
 
-  it('renders the HTML and the plain text of one template', async () => {
+  it('renders one component twice: as HTML, and as its plain text', async () => {
     const template = defineEmailTemplate('spec/template-render', Hello);
 
     await expect(
       renderEmailTemplate(template, { name: 'Ana' }),
     ).resolves.toContain('<p>Hello, Ana</p>');
     await expect(
-      renderEmailTemplate(template, { name: 'Ana' }, { plainText: true }),
+      renderEmailTemplate(template.text, { name: 'Ana' }),
     ).resolves.toBe('Hello, Ana');
+  });
+
+  it('registers the plain text beside the HTML, under the text template’s .txt', () => {
+    const template = defineEmailTemplate('spec/template-text', Hello);
+
+    expect(template.text.name).toBe('spec/template-text.txt');
+    expect(emailTemplateNamed('spec/template-text.txt')).toBe(template.text);
+  });
+
+  it('refuses a name that another template’s plain text already holds', () => {
+    defineEmailTemplate('spec/template-owner', Hello);
+
+    expect(() => defineEmailTemplate('spec/template-owner.txt', Hello)).toThrow(
+      EmailTemplateConflictException,
+    );
   });
 
   it('resolves a template for the mailer with the context as its props', async () => {
@@ -61,5 +76,16 @@ describe('email templates', () => {
     );
 
     expect(resolved.content).toContain('<p>Hello, Bia</p>');
+  });
+
+  it('resolves a template’s .txt as its plain text, through the same contract', async () => {
+    defineEmailTemplate('spec/template-plain', Hello);
+
+    const resolved = await new ReactEmailTemplateResolver().resolve(
+      'spec/template-plain.txt',
+      { name: 'Bia' },
+    );
+
+    expect(resolved.content).toBe('Hello, Bia');
   });
 });

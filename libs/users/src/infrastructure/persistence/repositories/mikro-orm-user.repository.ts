@@ -32,6 +32,25 @@ export class MikroOrmUserRepository extends UserRepository {
     return inRequestContext(this.em, () => this.em.findOne(User, { email }));
   }
 
+  exclusively<T>(email: Email, work: () => Promise<T>): Promise<T> {
+    return inRequestContext(this.em, () =>
+      this.em.transactional(
+        async (em) => {
+          await em
+            .getConnection()
+            .execute(
+              'select pg_advisory_xact_lock(hashtext(?))',
+              [`${em.schema ?? ''}.users:${email.value}`],
+              'all',
+              em.getTransactionContext(),
+            );
+          return work();
+        },
+        { clear: true },
+      ),
+    );
+  }
+
   async restore(userId: UserId): Promise<void> {
     await this.em.nativeUpdate(
       User,

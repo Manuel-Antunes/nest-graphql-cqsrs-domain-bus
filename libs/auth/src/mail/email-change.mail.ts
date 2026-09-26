@@ -17,7 +17,7 @@ export class EmailChangeMail extends Mail {
   prepare(): void {
     this.message
       .to(this.recipient.address, this.recipient.name ?? undefined)
-      .view(EmailChangeTemplate, {
+      .htmlView(EmailChangeTemplate, {
         url: this.change.url,
         currentEmail: this.recipient.address,
         newEmail: this.change.newEmail,

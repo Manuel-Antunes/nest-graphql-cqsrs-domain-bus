@@ -69,12 +69,12 @@ export function connectionOf<E extends object, T>(
   }));
   return {
     edges,
-    pageInfo: {
+    pageInfo: new PageInfo({
       hasNextPage: page.hasNextPage,
       hasPreviousPage: page.hasPrevPage,
       startCursor: page.startCursor,
       endCursor: page.endCursor,
-    },
+    }),
     totalCount: page.totalCount,
   };
 }

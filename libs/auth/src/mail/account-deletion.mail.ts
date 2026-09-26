@@ -19,7 +19,7 @@ export class AccountDeletionMail extends Mail {
   prepare(): void {
     this.message
       .to(this.recipient.address, this.recipient.name ?? undefined)
-      .view(AccountDeletionTemplate, {
+      .htmlView(AccountDeletionTemplate, {
         url: this.link.url,
         email: this.recipient.address,
         expirationHours: Math.max(

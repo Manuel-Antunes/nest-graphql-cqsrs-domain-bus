@@ -14,10 +14,16 @@ import { mikroOrmAdapter } from 'better-auth-mikro-orm';
 
 import { Member } from '../../domain/organization/member.entity';
 import { Organization } from '../../domain/organization/organization.entity';
+import { Team } from '../../domain/organization/team.entity';
+import { TeamMember } from '../../domain/organization/team-member.entity';
 import { OrganizationId } from '../../domain/organization/vo/organization-id';
 import { OrganizationSlug } from '../../domain/organization/vo/organization-slug';
+import { TeamId } from '../../domain/organization/vo/team-id';
+import { TeamName } from '../../domain/organization/vo/team-name';
 import { organizationAuthPluginProviders } from '../better-auth/organization-better-auth.plugin';
 import { OrganizationEntities } from './organization-entities';
+import { MikroOrmTeamRepository } from './repositories/mikro-orm-team.repository';
+import { MikroOrmTeamMemberRepository } from './repositories/mikro-orm-team-member.repository';
 
 describe('better-auth writing through the organization entities', () => {
   let orm: AnyMikroORM;
@@ -113,11 +119,27 @@ describe('better-auth writing through the organization entities', () => {
     role: string,
   ) => created('member', { id, organizationId, userId, role, createdAt: NOW });
 
+  const givenATeam = (id: string, organizationId: string) =>
+    created('team', {
+      id,
+      name: 'Design',
+      organizationId,
+      memberCount: 0,
+      createdAt: NOW,
+      updatedAt: NOW,
+    });
+
+  const givenATeamMembership = (id: string, teamId: string, userId: string) =>
+    created('teamMember', { id, teamId, userId, createdAt: NOW });
+
   it('finds our classes by the model names better-auth derives', () => {
     const metadata = orm.getMetadata();
 
     expect(metadata.getByClassName('Organization').class).toBe(Organization);
     expect(metadata.getByClassName('Member').class).toBe(Member);
+    expect(metadata.getByClassName('Team').class).toBe(Team);
+    expect(metadata.getByClassName('TeamMember').class).toBe(TeamMember);
+    expect(metadata.getByClassName('TeamMember').tableName).toBe('team_member');
     expect(metadata.getByClassName('Organization').tableName).toBe(
       'organization',
     );
@@ -199,5 +221,121 @@ describe('better-auth writing through the organization entities', () => {
 
     expect(member.role.value).toBe('admin');
     expect(member.isAdmin()).toBe(true);
+  });
+
+  it('a team and its member better-auth wrote come back as the domain entities, connected by references', async () => {
+    await givenACredential('cred_5', 'lia@example.com');
+    await givenAnOrganization('org_5', 'globex');
+    await givenATeam('team_5', 'org_5');
+    await givenATeamMembership('team_member_5', 'team_5', 'cred_5');
+
+    const team = await found(Team, { id: TeamId.parse('team_5') }, [
+      'organization',
+    ]);
+    const [member] = await inContext(async () => {
+      const members = await new MikroOrmTeamMemberRepository(orm.em).findAllIn(
+        TeamId.parse('team_5'),
+      );
+      await orm.em.populate(members, ['team', 'user']);
+      return members;
+    });
+
+    expect(team.name).toBeInstanceOf(TeamName);
+    expect(team.name.value).toBe('Design');
+    expect(team.belongsTo(OrganizationId.parse('org_5'))).toBe(true);
+    expect(team.belongsTo(OrganizationId.parse('org_1'))).toBe(false);
+    expect(team.organization.getEntity().slug.value).toBe('globex');
+    expect(member.identifies(CredentialId.parse('cred_5'))).toBe(true);
+    expect(member.team.getEntity().name.value).toBe('Design');
+    expect(member.user.getEntity()).toBeInstanceOf(AuthUser);
+  });
+
+  it('and better-auth reads a team member back flat, as the ids it wrote', async () => {
+    await givenACredential('cred_9', 'noa@example.com');
+    await givenAnOrganization('org_9', 'wayne');
+    await givenATeam('team_9', 'org_9');
+    await givenATeamMembership('team_member_9', 'team_9', 'cred_9');
+
+    const row = await inContext(() =>
+      adapter.findOne<Record<string, unknown>>({
+        model: 'teamMember',
+        where: [
+          { field: 'teamId', value: 'team_9' },
+          { field: 'userId', value: 'cred_9' },
+        ],
+      }),
+    );
+
+    expect(row).toMatchObject({
+      id: 'team_member_9',
+      teamId: 'team_9',
+      userId: 'cred_9',
+    });
+  });
+
+  it('takes an organization’s teams and their members with it, which better-auth leaves to the database', async () => {
+    await givenACredential('cred_10', 'max@example.com');
+    await givenAnOrganization('org_10', 'stark');
+    await givenATeam('team_10', 'org_10');
+    await givenATeamMembership('team_member_10', 'team_10', 'cred_10');
+
+    await inContext(() =>
+      adapter.deleteMany({
+        model: 'member',
+        where: [{ field: 'organizationId', value: 'org_10' }],
+      }),
+    );
+    await inContext(() =>
+      adapter.delete({
+        model: 'organization',
+        where: [{ field: 'id', value: 'org_10' }],
+      }),
+    );
+
+    const left = await inContext(() =>
+      Promise.all([
+        orm.em.fork().count(Team, { id: TeamId.parse('team_10') }),
+        orm.em.fork().count(TeamMember, { team: TeamId.parse('team_10') }),
+      ]),
+    );
+    expect(left).toEqual([0, 0]);
+  });
+
+  it('lists an organization’s teams by name, and nobody else’s', async () => {
+    await givenAnOrganization('org_7', 'cyberdyne');
+    await givenAnOrganization('org_8', 'tyrell');
+    await created('team', {
+      id: 'team_7b',
+      name: 'Sales',
+      organizationId: 'org_7',
+      memberCount: 0,
+      createdAt: NOW,
+    });
+    await givenATeam('team_7a', 'org_7');
+    await givenATeam('team_8', 'org_8');
+
+    const teams = await inContext(() =>
+      new MikroOrmTeamRepository(orm.em).findAllIn(
+        OrganizationId.parse('org_7'),
+      ),
+    );
+
+    expect(teams.map((team) => team.id.value)).toEqual(['team_7a', 'team_7b']);
+  });
+
+  it('keeps counting a team’s members through the column better-auth increments', async () => {
+    await givenAnOrganization('org_6', 'massive-dynamic');
+    await givenATeam('team_6', 'org_6');
+
+    await inContext(() =>
+      adapter.incrementOne({
+        model: 'team',
+        where: [{ field: 'id', value: 'team_6' }],
+        increment: { memberCount: 1 },
+      }),
+    );
+
+    const team = await found(Team, { id: TeamId.parse('team_6') });
+    expect(team.memberCount).toBe(1);
   });
 });

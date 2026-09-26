@@ -24,7 +24,7 @@ export class PostCreatedNotificationMail extends Mail {
     this.message
       .to(this.recipient.address, this.recipient.name ?? undefined)
       .subject(`Your post “${this.post.title}” is live`)
-      .view(PostCreatedEmail, {
+      .htmlView(PostCreatedEmail, {
         authorName: this.recipient.name,
         title: this.post.title,
         url: this.post.url,

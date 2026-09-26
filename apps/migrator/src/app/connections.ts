@@ -3,6 +3,7 @@ import { Migrator } from '@mikro-orm/migrations';
 import { SeedManager } from '@mikro-orm/seeder';
 import type { DatabaseEntities, PostgresOptions } from '@nestposts/database';
 import { postgresDatabase, SYSTEM_SCHEMA } from '@nestposts/database';
+import { eventsEntities } from '@nestposts/events/infrastructure/events-infrastructure.module';
 import { notificationsEntities } from '@nestposts/notifications/infrastructure/notifications-infrastructure.module';
 import { OrganizationEntities } from '@nestposts/organizations/infrastructure/persistence/organization-entities';
 import { SoftDeleteSubscriber } from '@nestposts/platform/infrastructure/persistence/soft-delete/soft-delete.subscriber';
@@ -34,6 +35,7 @@ export const migratorTables = (): DatabaseEntities => [
   ...OrganizationEntities.withAuth(),
   ...postsEntities,
   ...usersEntities,
+  ...eventsEntities,
   ...notificationsEntities,
   ...transportEntities,
   ...eventLogEntities,

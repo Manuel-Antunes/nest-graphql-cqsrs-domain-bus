@@ -7,6 +7,14 @@
   --font-mono: var(--font-jetbrains-mono), 'JetBrains Mono', monospace;
 }
 
+@theme inline {
+  --color-calendar-disabled-hour: color-mix(
+    in oklab,
+    var(--muted) 60%,
+    transparent
+  );
+}
+
 @theme {
   --animate-notification-settle: notification-settle 2.6s ease-out both;
 

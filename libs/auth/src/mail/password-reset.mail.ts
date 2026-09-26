@@ -17,7 +17,7 @@ export class PasswordResetMail extends Mail {
   prepare(): void {
     this.message
       .to(this.recipient.address, this.recipient.name ?? undefined)
-      .view(PasswordResetTemplate, {
+      .htmlView(PasswordResetTemplate, {
         url: this.link.url,
         email: this.recipient.address,
         expirationMinutes: this.link.expiresInMinutes,

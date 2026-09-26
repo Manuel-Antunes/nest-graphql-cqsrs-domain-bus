@@ -1,16 +1,7 @@
-import {
-  expect,
-  openAuthView,
-  signInThroughTheForm,
-  test,
-} from '../fixtures/test';
-import { Registrar, VERIFY_EMAIL_SUBJECT } from '../support/accounts';
-import { codeIn, linkIn } from '../support/mailbox';
-import { WEB_URL } from '../support/stack';
-import { totpNow } from '../support/totp';
-
-const fresh = (name: string) =>
-  `${name}-${Date.now()}-${Math.round(Math.random() * 1e6)}@example.com`;
+import { expect, test } from '../fixtures/test';
+import { EmailSender, EmailSubject } from '../model/email';
+import { Unique } from '../support/unique';
+import { Registration } from '../workflows/auth/registration.workflow';
 
 /**
  * **Every email authentication sends is a notification, and every one of them arrives.**
@@ -23,264 +14,174 @@ const fresh = (name: string) =>
 test.describe('the emails authentication sends', () => {
   test('signing up sends a verification link, and following it signs the person in', async ({
     page,
+    app,
     mailbox,
-    postsStore,
+    inbox,
   }) => {
-    const email = fresh('newcomer');
-    const publishedByTheWeb = async () =>
-      (
-        await postsStore.query<{ total: number }>(
-          "select count(*) as total from transport_message_inbox where origin = 'web'",
-        )
-      )[0]?.total ?? 0;
-    const before = await publishedByTheWeb();
+    const email = Unique.email('newcomer');
+    const before = await inbox.countFrom('web');
 
-    await openAuthView(page, '/auth/sign-up');
-    await page.getByRole('textbox', { name: 'Name' }).fill('Newcomer');
-    await page.getByRole('textbox', { name: 'Email' }).fill(email);
-    await page
-      .getByRole('textbox', { name: 'Password', exact: true })
-      .fill(Registrar.PASSWORD);
-    await page.getByRole('button', { name: 'Sign Up' }).click();
+    await app.signUp.open();
+    await app.signUp.submit({
+      name: 'Newcomer',
+      email,
+      password: Registration.PASSWORD,
+    });
 
     await expect(page).toHaveURL(/\/auth\/verify-email/);
-    await expect(
-      page.getByText('Check your email for a verification link'),
-    ).toBeVisible();
+    await expect(app.signUp.verificationNotice).toBeVisible();
 
-    const mail = await mailbox.waitFor(email, VERIFY_EMAIL_SUBJECT);
-    expect(mail.from).toBe('no-reply@nestposts.test');
+    const mail = await mailbox.waitFor(email, EmailSubject.VERIFY_EMAIL);
+    expect(mail.from).toBe(EmailSender.ADDRESS);
     expect(mail.html).toContain('Nest Posts');
     expect(
-      await publishedByTheWeb(),
+      await inbox.countFrom('web'),
       "the notificator recorded the web's notification in its inbox",
     ).toBeGreaterThan(before);
 
-    await page.goto(linkIn(mail, '/api/auth/verify-email'));
+    await app.visit(mail.link('/api/auth/verify-email'));
 
-    await expect(page.getByText(email).first()).toBeVisible();
+    await expect(app.header.identity(email)).toBeVisible();
   });
 
   test('an unverified address is refused at sign-in, and is sent a fresh link', async ({
-    page,
+    app,
     mailbox,
+    registration,
+    authentication,
   }) => {
-    const email = fresh('unverified');
-    const signedUp = await fetch(`${WEB_URL}/api/auth/sign-up/email`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'origin': WEB_URL },
-      body: JSON.stringify({
-        email,
-        name: 'Unverified',
-        password: Registrar.PASSWORD,
-      }),
-    });
-    expect(signedUp.ok).toBe(true);
-    const first = await mailbox.waitFor(email, VERIFY_EMAIL_SUBJECT);
+    const email = Unique.email('unverified');
+    await registration.signUpUnverified(email, 'Unverified');
+    const first = await mailbox.waitFor(email, EmailSubject.VERIFY_EMAIL);
 
-    await signInThroughTheForm(page, {
+    await authentication.attemptSignIn({
       email,
-      password: Registrar.PASSWORD,
+      password: Registration.PASSWORD,
     });
 
-    const again = await mailbox.waitFor(email, VERIFY_EMAIL_SUBJECT, {
+    const again = await mailbox.waitFor(email, EmailSubject.VERIFY_EMAIL, {
       after: new Set([first.id]),
     });
     expect(again.id).not.toBe(first.id);
-    await expect(page.getByRole('button', { name: 'Account' })).toHaveCount(0);
+    await expect(app.header.accountButton).toHaveCount(0);
   });
 
   test('a forgotten password is replaced through the emailed link', async ({
-    page,
-    mailbox,
-    freshAccount,
+    app,
+    registration,
+    passwordRecovery,
+    authentication,
   }) => {
-    const account = await freshAccount('Forgetful');
+    const account = await registration.freshAccount('Forgetful');
 
-    await openAuthView(page, '/auth/forgot-password');
-    await page.getByRole('textbox', { name: 'Email' }).fill(account.email);
-    await page.getByRole('button', { name: 'Send reset link' }).click();
-    await expect(page).toHaveURL(/\/auth\/reset-link-sent/);
+    await passwordRecovery.resetPassword(account.email, 'segredo456');
+    await authentication.attemptSignIn({ ...account, password: 'segredo456' });
 
-    const mail = await mailbox.waitFor(account.email, 'Reset your password');
-    await page.goto(linkIn(mail, '/api/auth/reset-password/'));
-    await expect(page).toHaveURL(/\/auth\/reset-password\?token=/);
-    await page.getByRole('textbox', { name: 'Password' }).fill('segredo456');
-    await page.getByRole('button', { name: 'Reset Password' }).click();
-    await expect(page).toHaveURL(/\/auth\/sign-in/);
-
-    await signInThroughTheForm(page, { ...account, password: 'segredo456' });
-    await expect(page.getByText(account.email).first()).toBeVisible();
+    await expect(app.header.identity(account.email)).toBeVisible();
   });
 
   test('a magic link signs in without a password', async ({
     page,
-    mailbox,
-    freshAccount,
+    app,
+    registration,
+    passwordless,
   }) => {
-    const account = await freshAccount('Linked');
+    const account = await registration.freshAccount('Linked');
 
-    await openAuthView(page, '/auth/magic-link');
-    await page.getByRole('textbox', { name: 'Email' }).fill(account.email);
-    await page.getByRole('button', { name: 'Send Magic Link' }).click();
-    await expect(page).toHaveURL(/\/auth\/magic-link-sent/);
-
-    const mail = await mailbox.waitFor(account.email, 'Sign in to Nest Posts');
-    await page.goto(linkIn(mail, '/api/auth/magic-link/verify'));
+    await passwordless.withMagicLink(account.email);
 
     await expect(page).toHaveURL(/\/feed/);
-    await expect(page.getByText(account.email).first()).toBeVisible();
+    await expect(app.header.identity(account.email)).toBeVisible();
   });
 
   test('an emailed code signs in without a password', async ({
     page,
-    mailbox,
-    freshAccount,
+    app,
+    registration,
+    passwordless,
   }) => {
-    const account = await freshAccount('Coded');
+    const account = await registration.freshAccount('Coded');
 
-    await openAuthView(page, '/auth/email-otp');
-    await page.getByRole('textbox', { name: 'Email' }).fill(account.email);
-    await page.getByRole('button', { name: 'Send code' }).click();
-
-    const mail = await mailbox.waitFor(account.email, 'Your sign-in code');
-    await page.getByRole('textbox', { name: 'Code' }).fill(codeIn(mail));
+    await passwordless.withEmailedCode(account.email);
 
     await expect(page).toHaveURL(/\/feed/);
-    await expect(page.getByText(account.email).first()).toBeVisible();
+    await expect(app.header.identity(account.email)).toBeVisible();
   });
 
   test('an emailed code signs up an address nobody registered, and its profile is named after it', async ({
     page,
-    mailbox,
+    app,
+    passwordless,
   }) => {
-    const email = fresh('stranger');
+    const email = Unique.email('stranger');
     const localPart = email.split('@')[0];
 
-    await openAuthView(page, '/auth/email-otp');
-    await page.getByRole('textbox', { name: 'Email' }).fill(email);
-    await page.getByRole('button', { name: 'Send code' }).click();
-    const mail = await mailbox.waitFor(email, 'Your sign-in code');
-    await page.getByRole('textbox', { name: 'Code' }).fill(codeIn(mail));
+    await passwordless.withEmailedCode(email);
     await expect(page).toHaveURL(/\/feed/);
 
-    await page.goto('/me');
+    await app.me.open();
 
-    await expect(page.getByText('me falhou')).toHaveCount(0);
-    await expect(
-      page.getByText(localPart, { exact: true }).first(),
-    ).toBeVisible();
+    await expect(app.me.failure).toHaveCount(0);
+    await expect(app.me.named(localPart)).toBeVisible();
   });
 
   test('two factor: the second step can be a code sent by email', async ({
     page,
-    mailbox,
-    freshAccount,
+    app,
+    registration,
+    authentication,
+    twoFactor,
   }) => {
-    const account = await freshAccount('Guarded');
-    await signInThroughTheForm(page, account);
-    await expect(page.getByText(account.email).first()).toBeVisible();
+    const account = await registration.freshAccount('Guarded');
+    await authentication.signIn(account);
+    await twoFactor.enrollAuthenticator(account.password);
+    await authentication.forgetSession();
 
-    const enabled = await page.request.post('/api/auth/two-factor/enable', {
-      headers: { origin: WEB_URL },
-      data: { password: account.password },
-    });
-    const { totpURI } = (await enabled.json()) as { totpURI: string };
-    const secret = new URL(totpURI).searchParams.get('secret') as string;
-    const enrolled = await page.request.post(
-      '/api/auth/two-factor/verify-totp',
-      { headers: { origin: WEB_URL }, data: { code: totpNow(secret) } },
-    );
-    expect(enrolled.ok(), await enrolled.text()).toBe(true);
-    await page.context().clearCookies();
-
-    await signInThroughTheForm(page, account);
-    await expect(page).toHaveURL(/\/auth\/two-factor/);
-    await page.getByRole('button', { name: 'Use an emailed code' }).click();
-    await page.getByRole('button', { name: 'Email me a code' }).click();
-
-    const mail = await mailbox.waitFor(account.email, 'Your two-factor code');
-    await page
-      .getByRole('textbox', { name: 'Emailed code' })
-      .fill(codeIn(mail));
+    await authentication.attemptSignIn(account);
+    await twoFactor.completeWithEmailedCode(account.email);
 
     await expect(page).toHaveURL(/\/feed/);
-    await expect(page.getByText(account.email).first()).toBeVisible();
+    await expect(app.header.identity(account.email)).toBeVisible();
   });
 
   test('a new email address is confirmed at the current one and verified at the new one', async ({
-    page,
-    mailbox,
-    freshAccount,
-    postsStore,
+    registration,
+    authentication,
+    accountLifecycle,
+    credentialRecords,
   }) => {
-    const account = await freshAccount('Moving');
-    const newEmail = fresh('moved');
-    await signInThroughTheForm(page, account);
-    await expect(page.getByText(account.email).first()).toBeVisible();
+    const account = await registration.freshAccount('Moving');
+    const newEmail = Unique.email('moved');
+    await authentication.signIn(account);
 
-    await openAuthView(page, '/settings/account');
-    await page.getByRole('textbox', { name: 'Email' }).fill(newEmail);
-    await page.getByRole('button', { name: 'Update email' }).click();
-    await expect(
-      page.getByText('Check your email to confirm the change'),
-    ).toBeVisible();
-
-    const confirmation = await mailbox.waitFor(
+    const confirmation = await accountLifecycle.requestEmailChange(
       account.email,
-      'Confirm your email change',
+      newEmail,
     );
     expect(confirmation.html).toContain(newEmail);
-    await page.goto(linkIn(confirmation, '/api/auth/verify-email'));
-
-    const verification = await mailbox.waitFor(newEmail, VERIFY_EMAIL_SUBJECT);
-    await page.goto(linkIn(verification, '/api/auth/verify-email'));
+    await accountLifecycle.confirmEmailChange(confirmation, newEmail);
 
     await expect
-      .poll(
-        async () =>
-          (
-            await postsStore.query<{ email: string }>(
-              'select email from auth_user where id = ?',
-              account.credentialId,
-            )
-          )[0]?.email,
-      )
+      .poll(() => credentialRecords.emailOf(account.credentialId))
       .toBe(newEmail);
   });
 
   test('deleting the account is confirmed by email before anything is removed', async ({
-    page,
-    mailbox,
-    freshAccount,
-    postsStore,
+    registration,
+    authentication,
+    accountLifecycle,
+    credentialRecords,
   }) => {
-    const account = await freshAccount('Leaving');
-    const credentials = () =>
-      postsStore.query(
-        'select id from auth_user where id = ?',
-        account.credentialId,
-      );
-    await signInThroughTheForm(page, account);
-    await expect(page.getByText(account.email).first()).toBeVisible();
+    const account = await registration.freshAccount('Leaving');
+    await authentication.signIn(account);
 
-    await openAuthView(page, '/settings/security');
-    await page.getByRole('button', { name: 'Delete account' }).click();
-    await page
-      .getByRole('alertdialog')
-      .getByRole('button', { name: 'Delete account' })
-      .click();
-    await expect(
-      page.getByText('Check your email to confirm account deletion.'),
-    ).toBeVisible();
-    expect(await credentials()).toHaveLength(1);
+    await accountLifecycle.requestDeletion();
+    expect(await credentialRecords.exists(account.credentialId)).toBe(true);
 
-    const mail = await mailbox.waitFor(
-      account.email,
-      'Confirm the deletion of your account',
-    );
-    await page.goto(linkIn(mail, '/api/auth/delete-user/callback'));
+    await accountLifecycle.confirmDeletion(account.email);
 
-    await expect.poll(async () => (await credentials()).length).toBe(0);
+    await expect
+      .poll(() => credentialRecords.exists(account.credentialId))
+      .toBe(false);
   });
 });

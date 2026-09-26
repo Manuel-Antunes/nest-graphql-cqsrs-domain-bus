@@ -32,6 +32,30 @@ export async function PrefetchQuery<
   );
 }
 
+export async function PrefetchQueries<TResults extends readonly unknown[]>({
+  options,
+  children,
+}: {
+  options: {
+    readonly [K in keyof TResults]: FetchQueryOptions<
+      TResults[K],
+      Error,
+      TResults[K],
+      QueryKey
+    >;
+  };
+  children: React.ReactNode;
+}) {
+  const queryClient = makeQueryClient();
+  await Promise.all(options.map((option) => queryClient.prefetchQuery(option)));
+
+  return (
+    <HydrationBoundary state={dehydrate(queryClient)}>
+      {children}
+    </HydrationBoundary>
+  );
+}
+
 export async function PrefetchInfiniteQuery<
   TQueryFnData,
   TError,

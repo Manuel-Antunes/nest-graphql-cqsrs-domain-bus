@@ -6,30 +6,37 @@ import type {
   NestInterceptor,
 } from '@nestjs/common';
 import { Injectable } from '@nestjs/common';
-import { AUTHOR_ROLE } from '@nestposts/users/domain/user/author.entity';
 import { User } from '@nestposts/users/domain/user/user.entity';
 import type { Observable } from 'rxjs';
 import { concatMap } from 'rxjs';
 
 import type { IUserView } from '../../dto/graphql/user.view';
-import { AuthorView, UserView } from '../../dto/graphql/user.view';
+import { UserProfile } from '../mapper/user.profile';
 
 @Injectable()
-export class UserViewInterceptor implements NestInterceptor<User, IUserView> {
+export class UserViewInterceptor
+  implements
+    NestInterceptor<User | readonly User[], IUserView | readonly IUserView[]>
+{
   constructor(@InjectMapper() private readonly mapper: Mapper) {}
 
   intercept(
     _context: ExecutionContext,
-    next: CallHandler<User>,
-  ): Observable<IUserView> {
+    next: CallHandler<User | readonly User[]>,
+  ): Observable<IUserView | readonly IUserView[]> {
     return next
       .handle()
       .pipe(
-        concatMap((user) =>
-          user.hasRole(AUTHOR_ROLE)
-            ? this.mapper.mapAsync(user, User, AuthorView)
-            : this.mapper.mapAsync(user, User, UserView),
+        concatMap(
+          (users): Promise<IUserView | readonly IUserView[]> =>
+            users instanceof User
+              ? this.viewOf(users)
+              : Promise.all(users.map((user) => this.viewOf(user))),
         ),
       );
+  }
+
+  private viewOf(user: User): Promise<IUserView> {
+    return this.mapper.mapAsync(user, User, UserProfile.viewTypeOf(user));
   }
 }

@@ -9,6 +9,7 @@ import { UnknownIdentityException } from '@nestposts/users/domain/user/exception
 import { IdentityProvider } from '@nestposts/users/domain/user/identity.provider';
 import { User } from '@nestposts/users/domain/user/user.entity';
 import type { CredentialId } from '@nestposts/users/domain/user/vo/credential-id';
+import { Email } from '@nestposts/users/domain/user/vo/email';
 
 import {
   createCqrsTestingModule,
@@ -104,6 +105,55 @@ describe('UserProvisioning', () => {
 
     expect(same.id.equals(first.id)).toBe(true);
     expect(await freshEm(module).count(User)).toBe(1);
+  });
+
+  describe('requests that meet the credential at once', () => {
+    const AT_ONCE = 4;
+
+    const atOnce = () =>
+      Promise.all(Array.from({ length: AT_ONCE }, () => provision()));
+
+    beforeEach(async () => {
+      await Promise.all(
+        Array.from({ length: AT_ONCE }, () =>
+          freshEm(module).getConnection().execute('select pg_sleep(0.05)'),
+        ),
+      );
+    });
+
+    it('create one profile between them', async () => {
+      const users = await atOnce();
+
+      expect(new Set(users.map((user) => user.id.value)).size).toBe(1);
+      expect(await freshEm(module).count(User)).toBe(1);
+    });
+
+    it('give an author one authorship between them', async () => {
+      signUp(AUTHOR_ROLE);
+
+      const users = await atOnce();
+
+      expect(users.every((user) => user.hasRole(AUTHOR_ROLE))).toBe(true);
+      expect(await freshEm(module).count(User)).toBe(1);
+      expect(await countAuthorships()).toBe(1);
+    });
+
+    it('promote an existing profile once', async () => {
+      await provision();
+      await identities.grantRole(credentialId, AUTHOR_ROLE);
+
+      const users = await atOnce();
+
+      expect(users.every((user) => user.hasRole(AUTHOR_ROLE))).toBe(true);
+      expect(await countAuthorships()).toBe(1);
+      expect(
+        (
+          await freshEm(module).findOneOrFail(User, {
+            email: Email.parse(EMAIL),
+          })
+        ).version,
+      ).toBe(2);
+    });
   });
 
   describe('promotion is a row, not a second identity', () => {

@@ -2,6 +2,7 @@ import { createElement } from 'react';
 
 import { defineEmailTemplate } from './email-template';
 import { Mail } from './mail';
+import { ReactEmailTemplateResolver } from './react-email-template.resolver';
 
 const Greeting = defineEmailTemplate(
   'spec/mail-greeting',
@@ -20,7 +21,10 @@ class WelcomeMail extends Mail {
 
   prepare() {
     this.prepared += 1;
-    this.message.to(this.recipient).view(Greeting, { name: 'Ana' });
+    this.message
+      .to(this.recipient)
+      .htmlView(Greeting, { name: 'Ana' })
+      .textView(Greeting.text, { name: 'Ana' });
   }
 }
 
@@ -32,7 +36,21 @@ describe('Mail', () => {
     expect(message.hasFrom('team@example.com', 'The team')).toBe(true);
     expect(message.hasReplyTo('support@example.com')).toBe(true);
     expect(message.hasTo('ana@example.com')).toBe(true);
-    expect(message.hasView(Greeting)).toBe(true);
+    expect(message.hasHtmlView(Greeting)).toBe(true);
+    expect(message.hasTextView(Greeting.text)).toBe(true);
+    expect(message.toObject().message.html).toBeUndefined();
+  });
+
+  it('builds with its views rendered, without sending', async () => {
+    const mail = new WelcomeMail('ana@example.com');
+
+    const { message } = (
+      await mail.buildWithContents(new ReactEmailTemplateResolver())
+    ).toObject();
+
+    expect(message.html).toContain('<p>Hello Ana</p>');
+    expect(message.text).toBe('Hello Ana');
+    expect(mail.prepared).toBe(1);
   });
 
   it('prepares once however many times it is built', async () => {

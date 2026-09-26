@@ -1,12 +1,9 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { expect, test } from '../fixtures/test';
+import { OAuthProvider } from '../infrastructure/auth/oauth-provider';
+import { Pkce } from '../infrastructure/auth/pkce';
+import { FederatedMe } from '../infrastructure/graphql/operations/users.operations';
 
-import { expect, signInThroughTheForm, test } from '../fixtures/test';
-import { gatewayUrl, WEB_URL } from '../support/stack';
-
-const CALLBACK = new URL(
-  '/oauth-callback',
-  WEB_URL.replace('localhost', '127.0.0.1'),
-).href;
+const SCOPE = 'openid profile email read:posts';
 
 /**
  * **This system is an OAuth 2.1 provider, and its consent screen is better-auth-ui's.**
@@ -22,109 +19,62 @@ const CALLBACK = new URL(
  */
 test.describe('the OAuth provider', () => {
   test('a user authorizes an application on the consent screen, and its token answers for them', async ({
-    browser,
-    page,
     accounts,
-    signIn,
+    authentication,
+    oauth,
+    oauthProvider,
+    endpoints,
+    environment,
+    visitors,
   }) => {
-    const admin = await browser.newContext();
-    const adminPage = await admin.newPage();
-    await signInThroughTheForm(adminPage, accounts.admin);
-    await expect(
-      adminPage.getByText(accounts.admin.email).first(),
-    ).toBeVisible();
-    const registered = await adminPage.request.post(
-      '/api/auth/oauth2/create-client',
-      {
-        headers: { origin: WEB_URL },
-        data: {
-          client_name: 'Posts CLI',
-          redirect_uris: [CALLBACK],
-          application_type: 'native',
-          token_endpoint_auth_method: 'none',
-          scope: 'openid profile email read:posts',
-        },
-      },
-    );
-    expect(registered.status(), await registered.text()).toBe(201);
-    const { client_id: clientId } = (await registered.json()) as {
-      client_id: string;
-    };
-    await admin.close();
+    const callback = oauthProvider.loopbackCallback;
+    const admin = await visitors.arrive();
+    await admin.authentication.signIn(accounts.admin);
+    const clientId = await admin.oauth.registerClient({
+      name: 'Posts CLI',
+      redirectUri: callback,
+      scope: SCOPE,
+    });
+    await admin.leave();
 
-    await signIn(accounts.reader);
-    const verifier = randomBytes(32).toString('base64url');
-    const authorize = new URL('/api/auth/oauth2/authorize', WEB_URL);
-    authorize.search = new URLSearchParams({
-      response_type: 'code',
-      client_id: clientId,
-      redirect_uri: CALLBACK,
-      scope: 'openid profile email read:posts',
+    await authentication.signIn(accounts.reader);
+    const pkce = Pkce.generate();
+    const consent = await oauth.requestConsent({
+      clientId,
+      redirectUri: callback,
+      scope: SCOPE,
       state: 'e2e-state',
-      resource: gatewayUrl(),
-      code_challenge: createHash('sha256').update(verifier).digest('base64url'),
-      code_challenge_method: 'S256',
-    }).toString();
-    await page.goto(authorize.href);
+      resource: environment.gatewayUrl,
+      pkce,
+    });
 
-    await expect(page).toHaveURL(/\/auth\/oauth-consent/);
-    await expect(page.getByText('Authorize Posts CLI')).toBeVisible();
-    await expect(page.getByText('Read your posts')).toBeVisible();
-    await page.getByRole('button', { name: 'Allow' }).click();
+    await expect(consent.requestBy('Posts CLI')).toBeVisible();
+    await expect(consent.scope('Read your posts')).toBeVisible();
+    const returned = await oauth.allow(callback);
 
-    await page.waitForURL((url) => url.href.startsWith(CALLBACK));
-    const returned = new URL(page.url());
     expect(returned.searchParams.get('state')).toBe('e2e-state');
-    const code = returned.searchParams.get('code') as string;
-
-    const tokens = await fetch(`${WEB_URL}/api/auth/oauth2/token`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        grant_type: 'authorization_code',
-        code,
-        redirect_uri: CALLBACK,
-        client_id: clientId,
-        code_verifier: verifier,
-        resource: gatewayUrl(),
-      }),
+    const tokens = await oauthProvider.exchange({
+      code: returned.searchParams.get('code') as string,
+      clientId,
+      redirectUri: callback,
+      resource: environment.gatewayUrl,
+      pkce,
     });
     expect(tokens.status).toBe(200);
-    const { access_token: accessToken } = (await tokens.json()) as {
-      access_token: string;
-    };
-
-    const userinfo = await fetch(`${WEB_URL}/api/auth/oauth2/userinfo`, {
-      headers: { authorization: `Bearer ${accessToken}` },
-    });
-    expect(await userinfo.json()).toMatchObject({
+    expect(await oauthProvider.userinfo(tokens.accessToken)).toMatchObject({
       email: accounts.reader.email,
     });
+    expect(OAuthProvider.audienceOf(tokens.accessToken)).toContain(
+      environment.gatewayUrl,
+    );
 
-    const [, payload] = accessToken.split('.');
-    const { aud } = JSON.parse(
-      Buffer.from(payload, 'base64url').toString(),
-    ) as {
-      aud: string | string[];
-    };
-    expect([aud].flat()).toContain(gatewayUrl());
-
-    const federated = await fetch(gatewayUrl(), {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        authorization: `Bearer ${accessToken}`,
-      },
-      body: JSON.stringify({
-        query:
-          '{ me { email unreadNotificationCount } unreadNotificationCount }',
-      }),
-    });
-    expect(await federated.json()).toEqual({
-      data: {
-        me: { email: accounts.reader.email, unreadNotificationCount: 0 },
-        unreadNotificationCount: 0,
-      },
+    const federated = await endpoints
+      .gateway({ authorization: `Bearer ${tokens.accessToken}` })
+      .execute(FederatedMe);
+    expect(federated.errors, JSON.stringify(federated.errors)).toBeUndefined();
+    expect(federated.data).toMatchObject({
+      me: { email: accounts.reader.email, unreadNotificationCount: 0 },
+      unreadNotificationCount: 0,
     });
   });
 });

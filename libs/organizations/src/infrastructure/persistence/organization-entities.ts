@@ -5,25 +5,31 @@ import { organizationAuthPluginProviders } from '../better-auth/organization-bet
 import { InvitationEntitySchema } from './entities/invitation-orm.entity';
 import { MemberEntitySchema } from './entities/member-orm.entity';
 import { OrganizationEntitySchema } from './entities/organization-orm.entity';
+import { TeamMemberEntitySchema } from './entities/team-member-orm.entity';
+import { TeamEntitySchema } from './entities/team-orm.entity';
 
 /** The Better Auth models this module maps by hand, so `@nestposts/auth` does not generate them. */
 export const ORGANIZATION_MODELS = [
   'organization',
   'member',
   'invitation',
+  'team',
+  'teamMember',
 ] as const;
 
-/** The three tables this module owns, mapped onto its own domain classes. */
+/** The tables this module owns, mapped onto its own domain classes. */
 export const organizationEntities = [
   OrganizationEntitySchema,
   MemberEntitySchema,
   InvitationEntitySchema,
+  TeamEntitySchema,
+  TeamMemberEntitySchema,
 ];
 
 /**
  * **Every table authentication owns in a system that has organizations** — Better Auth's, generated
  * with the organization plugin ON (which is what gives `session` its `active_organization_id`), plus
- * this module's three.
+ * this module's own.
  *
  * One composition point, so `apps/migrator`, the standalone runtime and the modules cannot disagree
  * about which tables exist.

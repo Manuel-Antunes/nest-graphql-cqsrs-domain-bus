@@ -4,8 +4,8 @@ import type { TestingModule } from '@nestjs/testing';
 import { Test } from '@nestjs/testing';
 import { CqsrsModule } from '@nestposts/cqsrs';
 import { inRequestContext, MikroORM } from '@nestposts/database';
-import { MailSender } from '@nestposts/mail/mail-sender';
-import { RecordingMailSender } from '@nestposts/mail/testing/recording-mail-sender';
+import { MailService } from '@nestposts/mail/mail.service';
+import { RecordingMailService } from '@nestposts/mail/testing/recording-mail.service';
 import { NotificationDelivery } from '@nestposts/notifications/domain/delivery/notification-delivery';
 import { NotificationReceivedEvent } from '@nestposts/notifications/domain/notification/event/notification-received.event';
 import { UnknownNotificationTypeException } from '@nestposts/notifications/domain/notification/exception/notification-type.exception';
@@ -22,12 +22,12 @@ import {
 } from '../../test/support/transport-testing.module';
 import { SendNotificationCommand } from './send-notification.command';
 
-const mails = new RecordingMailSender();
+const mails = new RecordingMailService();
 
 @Global()
 @Module({
-  providers: [{ provide: MailSender, useValue: mails }],
-  exports: [MailSender],
+  providers: [{ provide: MailService, useValue: mails }],
+  exports: [MailService],
 })
 class RecordingMailModule {}
 

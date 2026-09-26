@@ -1,9 +1,4 @@
-import {
-  expect,
-  openAuthView,
-  signInThroughTheForm,
-  test,
-} from '../fixtures/test';
+import { expect, test } from '../fixtures/test';
 
 /**
  * **The admin plugin, through its screens: whoever holds `admin` manages users, nobody else does.**
@@ -13,46 +8,33 @@ import {
  */
 test.describe('administration', () => {
   test('an administrator bans a user, and the ban holds at sign-in', async ({
-    browser,
-    page,
+    app,
     accounts,
-    signIn,
-    freshAccount,
+    registration,
+    authentication,
+    visitors,
   }) => {
-    const target = await freshAccount('Troublemaker');
-    await signIn(accounts.admin);
+    const target = await registration.freshAccount('Troublemaker');
+    await authentication.signIn(accounts.admin);
 
-    await openAuthView(page, '/admin/users');
-    await page.getByRole('button', { name: target.name }).first().click();
-    const drawer = page.getByRole('dialog', { name: target.name });
-    await expect(drawer.getByText(target.email)).toBeVisible();
-    await drawer.getByRole('button', { name: 'Ban user' }).click();
-    const ban = page.getByRole('alertdialog', { name: 'Ban user' });
-    await ban.getByRole('textbox', { name: 'Ban reason' }).fill('e2e');
-    await ban.getByRole('button', { name: 'Ban user' }).click();
-    await expect(ban).toHaveCount(0);
+    await app.users.open();
+    await app.users.ban(target, 'e2e');
 
-    const context = await browser.newContext();
-    const banned = await context.newPage();
-    await signInThroughTheForm(banned, target);
-    await expect(banned).toHaveURL(/\/auth\/sign-in/);
-    await expect(banned.getByRole('button', { name: 'Account' })).toHaveCount(
-      0,
-    );
-    await context.close();
+    const banned = await visitors.arrive();
+    await banned.authentication.attemptSignIn(target);
+    await expect(banned.page).toHaveURL(/\/auth\/sign-in/);
+    await expect(banned.app.header.accountButton).toHaveCount(0);
   });
 
   test('a user who is not an administrator is refused', async ({
-    page,
+    app,
     accounts,
-    signIn,
+    authentication,
   }) => {
-    await signIn(accounts.reader);
+    await authentication.signIn(accounts.reader);
 
-    await page.goto('/admin/users');
+    await app.users.open();
 
-    await expect(
-      page.getByRole('heading', { name: 'Access denied' }),
-    ).toBeVisible();
+    await expect(app.users.accessDenied).toBeVisible();
   });
 });

@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { EventsInfrastructureModule } from '@nestposts/events/infrastructure/events-infrastructure.module';
 import { OrganizationsInfrastructureModule } from '@nestposts/organizations/infrastructure/organizations-infrastructure.module';
 import { PostsInfrastructureModule } from '@nestposts/posts/infrastructure/posts-infrastructure.module';
 import { UsersInfrastructureModule } from '@nestposts/users/infrastructure/users-infrastructure.module';
@@ -6,6 +7,18 @@ import { UsersInfrastructureModule } from '@nestposts/users/infrastructure/users
 import type { AppConfig } from '../config/app.config';
 import { appConfig } from '../config/app.config';
 import { GeneratePresignedUrlQuery } from './asset/query/generate-presigned-url.query';
+import { CalendarAttendees } from './calendar-event/calendar-attendees.service';
+import { CreateCalendarEventCommand } from './calendar-event/command/create-calendar-event.command';
+import { DeleteCalendarEventCommand } from './calendar-event/command/delete-calendar-event.command';
+import { NotifyCalendarEventRescheduledCommand } from './calendar-event/command/notify-calendar-event-rescheduled.command';
+import { NotifyCalendarEventScheduledCommand } from './calendar-event/command/notify-calendar-event-scheduled.command';
+import { UpdateCalendarEventCommand } from './calendar-event/command/update-calendar-event.command';
+import { FindCalendarEventQuery } from './calendar-event/query/find-calendar-event.query';
+import { FindCalendarEventsQuery } from './calendar-event/query/find-calendar-events.query';
+import { NotifyAttendeesOnCalendarEvent } from './calendar-event/saga/notify-attendees-on-calendar-event.saga';
+import { FindMembersQuery } from './organization/query/find-members.query';
+import { FindTeamsQuery } from './organization/query/find-teams.query';
+import { TenantOrganizations } from './organization/tenant-organizations.service';
 import { AssignTagToPostCommand } from './post/command/assign-tag-to-post.command';
 import { CompletePostCommand } from './post/command/complete-post.command';
 import { CreatePostCommand } from './post/command/create-post.command';
@@ -31,6 +44,7 @@ import { UserProvisioning } from './user/user-provisioning.service';
     PostsInfrastructureModule,
     UsersInfrastructureModule,
     OrganizationsInfrastructureModule,
+    EventsInfrastructureModule,
   ],
   providers: [
     {
@@ -57,7 +71,23 @@ import { UserProvisioning } from './user/user-provisioning.service';
     OnPostCreatedSubscription.Handler,
     OnPostUpdatedSubscription.Handler,
     UserProvisioning,
+    TenantOrganizations,
+    FindMembersQuery.Handler,
+    FindTeamsQuery.Handler,
+    CalendarAttendees,
+    CreateCalendarEventCommand.Handler,
+    UpdateCalendarEventCommand.Handler,
+    DeleteCalendarEventCommand.Handler,
+    NotifyCalendarEventScheduledCommand.Handler,
+    NotifyCalendarEventRescheduledCommand.Handler,
+    NotifyAttendeesOnCalendarEvent,
+    FindCalendarEventQuery.Handler,
+    FindCalendarEventsQuery.Handler,
   ],
-  exports: [UserProvisioning, OrganizationsInfrastructureModule],
+  exports: [
+    UserProvisioning,
+    TenantOrganizations,
+    OrganizationsInfrastructureModule,
+  ],
 })
 export class ApplicationModule {}

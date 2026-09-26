@@ -1,9 +1,4 @@
-import {
-  expect,
-  openAuthView,
-  signInThroughTheForm,
-  test,
-} from '../fixtures/test';
+import { expect, test } from '../fixtures/test';
 
 /**
  * **The security settings list every session, including one no browser opened.**
@@ -14,23 +9,18 @@ import {
  */
 test.describe('security settings', () => {
   test('a session with no user agent is listed as an unknown browser', async ({
-    page,
-    freshAccount,
-    postsStore,
+    app,
+    registration,
+    authentication,
+    credentialRecords,
   }) => {
-    const account = await freshAccount('Scripted');
-    await signInThroughTheForm(page, account);
-    await expect(page.getByText(account.email).first()).toBeVisible();
-    await postsStore.query(
-      `update session set user_agent = '' where user_id = ?`,
-      account.credentialId,
-    );
+    const account = await registration.freshAccount('Scripted');
+    await authentication.signIn(account);
+    await credentialRecords.forgetUserAgentsOf(account.credentialId);
 
-    await openAuthView(page, '/settings/security');
+    await app.securitySettings.open();
 
-    await expect(page.getByText('Unknown Browser').first()).toBeVisible();
-    await expect(
-      page.getByRole('button', { name: 'Delete account' }),
-    ).toBeVisible();
+    await expect(app.securitySettings.unknownBrowser).toBeVisible();
+    await expect(app.securitySettings.deleteAccountButton).toBeVisible();
   });
 });

@@ -383,7 +383,7 @@ export function ValidatedScalar<Schema extends z.ZodType<any, any>>(
 
   if (schema instanceof z.ZodObject) {
     throw new Error(
-      'ValidatedDto.Scalar espera um schema de valor único; para um objeto use ValidatedDto.Embeddable',
+      'ValidatedDto.Scalar expects a single-value schema; for an object, use ValidatedDto',
     );
   }
 

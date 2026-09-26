@@ -1,36 +1,28 @@
-import type { DynamicModule, Provider } from '@nestjs/common';
 import { Module } from '@nestjs/common';
-import type { MailerOptions } from '@nestjs-modules/mailer';
-import { MailerModule } from '@nestjs-modules/mailer';
+import {
+  MailerBatchService,
+  MailerEventService,
+  MailerHealthIndicator,
+  MailerService,
+} from '@nestjs-modules/mailer';
 
-import { MailSender } from './mail-sender';
-import { NestMailerSender } from './nest-mailer.sender';
-
-/** `MailModule`'s own option: whether it is global, which it is unless told otherwise. */
-export interface MailModuleExtras {
-  isGlobal?: boolean;
-}
-
-/** Exactly `@nestjs-modules/mailer`'s options, plus {@link MailModuleExtras}. */
-export type MailModuleOptions = MailerOptions & MailModuleExtras;
-
-type MailerAsyncOptions = Parameters<typeof MailerModule.forRootAsync>[0];
-
-/** Exactly `@nestjs-modules/mailer`'s async options, plus {@link MailModuleExtras}. */
-export type MailModuleAsyncOptions = Omit<MailerAsyncOptions, 'imports'> &
-  Partial<Pick<MailerAsyncOptions, 'imports'>> &
-  MailModuleExtras;
-
-const sender: Provider = { provide: MailSender, useClass: NestMailerSender };
+import { ConfigurableMailModule } from './mail.module-definition';
+import { MailService } from './mail.service';
 
 /**
- * `@nestjs-modules/mailer`, configured exactly as that module is, plus class-based mail.
+ * `@nestjs-modules/mailer`'s module, configured exactly as that one is, whose `MailerService` is
+ * {@link MailService}: the mailer, sending class-based mail as well.
  *
  * The options ARE the mailer's — transport, transports, defaults, template (adapter, dir, resolver),
- * plugins, preview — and nothing here chooses any of them. What this module adds is {@link MailSender},
- * which sends a `Mail` through the mailer, and what this library offers beside it is optional:
- * `ReactEmailTemplateResolver` for React Email templates and `plainTextFromHtml` for the text part.
- * A Handlebars adapter, or any other, works as it does with the mailer alone.
+ * plugins, preview, i18n — provided under its own `MAILER_OPTIONS`, and nothing here chooses any of
+ * them. It provides what `MailerModule` does — `MailerService`, `MailerBatchService`,
+ * `MailerEventService`, `MailerHealthIndicator` — with `MailerService` bound to the one `MailService`,
+ * so injecting either reaches the same transporters. It replaces `MailerModule` rather than sitting
+ * beside it, where each would build transporters of its own.
+ *
+ * What this library offers beside it is optional: `ReactEmailTemplateResolver` renders React Email
+ * templates, as HTML and as plain text, and `plainTextFromHtml` writes the text part of a message that
+ * has none.
  *
  * ```ts
  * MailModule.forRootAsync({
@@ -43,36 +35,20 @@ const sender: Provider = { provide: MailSender, useClass: NestMailerSender };
  * })
  * ```
  */
-@Module({})
-export class MailModule {
-  static forRoot({
-    isGlobal = true,
-    ...options
-  }: MailModuleOptions): DynamicModule {
-    return {
-      module: MailModule,
-      global: isGlobal,
-      imports: [MailerModule.forRoot(options)],
-      providers: [sender],
-      exports: [MailSender],
-    };
-  }
-
-  static forRootAsync({
-    isGlobal = true,
-    ...options
-  }: MailModuleAsyncOptions): DynamicModule {
-    return {
-      module: MailModule,
-      global: isGlobal,
-      imports: [
-        MailerModule.forRootAsync({
-          ...options,
-          imports: options.imports ?? [],
-        }),
-      ],
-      providers: [sender],
-      exports: [MailSender],
-    };
-  }
-}
+@Module({
+  providers: [
+    MailerEventService,
+    MailService,
+    { provide: MailerService, useExisting: MailService },
+    MailerBatchService,
+    MailerHealthIndicator,
+  ],
+  exports: [
+    MailService,
+    MailerService,
+    MailerBatchService,
+    MailerEventService,
+    MailerHealthIndicator,
+  ],
+})
+export class MailModule extends ConfigurableMailModule {}

@@ -1,31 +1,5 @@
 import { expect, test } from '../fixtures/test';
-import { graphql } from '../gql';
-
-const CreateFederatedPost = graphql(`
-  mutation CreateFederatedPost($title: String!) {
-    createPost(input: { title: $title, content: "the body" }) {
-      id
-    }
-  }
-`);
-
-const FederatedPostProbe = graphql(`
-  query FederatedPostProbe($id: ID!) {
-    post(id: $id) {
-      version
-      author {
-        id
-      }
-      tags(first: 1) {
-        edges {
-          node {
-            name
-          }
-        }
-      }
-    }
-  }
-`);
+import { PostCompletion } from '../infrastructure/graphql/operations/posts.operations';
 
 /**
  * **The subgraph, called the way a router calls it** — from the screen that does it on purpose.
@@ -40,27 +14,24 @@ const FederatedPostProbe = graphql(`
  */
 test.describe
   .serial('the subgraph, resolved by key', () => {
-    let postId: string;
-
     test('a complete post gives the screen something to resolve', async ({
       accounts,
-      signIn,
-      executeGraphql,
+      authentication,
+      publishing,
+      graphql,
     }) => {
-      await signIn(accounts.author);
+      await authentication.signIn(accounts.author);
 
-      const created = await executeGraphql(CreateFederatedPost, {
-        title: `Federated ${Date.now()}`,
-      });
-
-      expect(created.errors, JSON.stringify(created.errors)).toBeUndefined();
-      postId = created.data?.createPost.id as string;
+      const postId = await publishing.publishThroughTheApi(
+        `Federated ${Date.now()}`,
+        'the body',
+      );
 
       await expect
         .poll(
           async () =>
-            (await executeGraphql(FederatedPostProbe, { id: postId })).data
-              ?.post?.version,
+            (await graphql.execute(PostCompletion, { id: postId })).data?.post
+              ?.version,
           {
             message:
               'the other service has to complete the post before it carries a tag',
@@ -70,37 +41,25 @@ test.describe
     });
 
     test('the screen resolves the keys the router would send', async ({
-      page,
+      app,
     }) => {
-      await page.goto('/federation');
+      await app.federation.open();
 
-      await expect(
-        page.getByRole('heading', { name: 'Federação' }),
-      ).toBeVisible();
-      await page
-        .getByRole('button', { name: /Resolver \d+ representações/ })
-        .click();
+      await expect(app.federation.heading).toBeVisible();
+      await app.federation.resolveRepresentations();
 
-      const received = page.getByLabel('Entidades recebidas');
-      await expect(received).toContainText('"Post"');
-      await expect(received).toContainText('"Tag"');
-      await expect(received).toContainText('"Author"');
+      await expect(app.federation.received).toContainText('"Post"');
+      await expect(app.federation.received).toContainText('"Tag"');
+      await expect(app.federation.received).toContainText('"Author"');
     });
 
     test('a key that resolves to nothing is null in its own position, and so is the wrong type', async ({
-      page,
+      app,
     }) => {
-      await page.goto('/federation');
-      await page
-        .getByRole('button', { name: /Resolver \d+ representações/ })
-        .click();
+      await app.federation.open();
+      await app.federation.resolveRepresentations();
 
-      const positions = page
-        .getByRole('list', { name: 'Entidades por posição' })
-        .getByRole('listitem');
-
-      await expect(positions.first()).toBeVisible();
-      const answers = await positions.allInnerTexts();
+      const answers = await app.federation.answersByPosition();
 
       expect(
         answers.length,
@@ -113,24 +72,15 @@ test.describe
     });
 
     test('the router holds no session, and the subgraph still answers', async ({
-      browser,
+      visitors,
     }) => {
-      const context = await browser.newContext();
-      const anonymous = await context.newPage();
+      const anonymous = await visitors.arrive();
 
-      await anonymous.goto('/federation');
-      await expect(anonymous.getByText('Sem sessão')).toBeVisible();
-      await anonymous
-        .getByRole('button', { name: /Resolver \d+ representações/ })
-        .click();
+      await anonymous.app.federation.open();
+      await expect(anonymous.app.federation.withoutSession).toBeVisible();
+      await anonymous.app.federation.resolveRepresentations();
 
-      await expect(anonymous.getByLabel('Entidades recebidas')).toContainText(
-        '"Post"',
-      );
-      await expect(
-        anonymous.getByRole('link', { name: 'Sign in' }),
-      ).toBeVisible();
-
-      await context.close();
+      await expect(anonymous.app.federation.received).toContainText('"Post"');
+      await expect(anonymous.app.header.signInLink).toBeVisible();
     });
   });

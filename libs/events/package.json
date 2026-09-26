@@ -1,0 +1,29 @@
+{
+  "name": "@nestposts/events",
+  "version": "0.1.0",
+  "private": true,
+  "exports": {
+    "./package.json": "./package.json",
+    "./*": {
+      "@nestposts/source": "./src/*.ts",
+      "types": "./dist/*.d.ts",
+      "require": "./dist/*.js",
+      "default": "./dist/*.js"
+    }
+  },
+  "dependencies": {
+    "@nestposts/database": "workspace:*",
+    "@nestposts/mail": "workspace:*",
+    "@nestposts/notifications": "workspace:*",
+    "@nestposts/organizations": "workspace:*",
+    "@nestposts/platform": "workspace:*",
+    "@nestposts/users": "workspace:*",
+    "@nestposts/validated-dto": "workspace:*",
+    "ical-generator": "catalog:",
+    "react": "catalog:",
+    "react-email": "catalog:"
+  },
+  "devDependencies": {
+    "@types/react": "catalog:"
+  }
+}

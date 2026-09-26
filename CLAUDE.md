@@ -296,6 +296,12 @@ libs/organizations       organizations, members and invitations: the three table
                          that lets only its members into that tenant. Both have READMEs
 libs/posts               domain/post + domain/tag + their ORM mappings and repositories,
                          wired by PostsInfrastructureModule
+libs/events              domain/calendar-event (a calendar event: responsible, participants and an
+                         optional team of the tenant's organization) + its ORM mapping and
+                         repository, wired by EventsInfrastructureModule, and the invitations it
+                         emails with an .ics — one when an event is scheduled, the same event one
+                         SEQUENCE later when it is rescheduled; its application layer and the
+                         `events`/`members`/`teams` GraphQL surface live in apps/posts-api
 libs/notifications       notifications as a domain concept: Notification (via, and the channel
                          interfaces it implements — MailNotification, PushNotification), the
                          NotificationRecord it keeps its data in, the Notifiable mixin and its
@@ -306,7 +312,7 @@ libs/asset               files in S3-compatible storage as a value an entity hol
                          the objects on flush, and the DiskService port. It has a README
 libs/core/cqsrs          the third CQRS message (see below)
 libs/core/validated-dto  Zod → DTO/value object mixins
-libs/core/mail           class-based email (Mail, Message, MailSender) over @nestjs-modules/mailer,
+libs/core/mail           class-based email (Mail, Message, MailService) over @nestjs-modules/mailer,
                          configured with the mailer's own options; offers a React Email template
                          resolver and a plain-text plugin, and any other adapter still works. README
 libs/core/transport-eventbus  the CQRS event bus over Nest's microservice transports (see below),
@@ -723,6 +729,19 @@ ProjectPostCompletion        ◀──  posts.PostCreated.<postId>      ◀─�
   `PublishingOnDemandNotifications` commits inside a unit of work, so the callback resolves once the
   event has left — which is what makes `apps/web` a publisher (below). The notificator registers
   `authNotifications` and `OrganizationInvitationNotification` beside `PostCreatedNotification`.
+- **A calendar event invites by email, with an `.ics`.** `NotifyAttendeesOnCalendarEvent` (a saga in
+  `apps/posts-api`) turns `CalendarEventCreated` and `CalendarEventRescheduled` into a notification
+  for the responsible and every participant — `events.CalendarEventScheduled` and
+  `events.CalendarEventRescheduled`, `email` only — whose mail carries a `METHOD:REQUEST` iCalendar
+  event with the event's own `UID`. **Everyone who receives it is an `ATTENDEE`** — the responsible
+  as `CHAIR` — and the `ORGANIZER` is the mail's sender (the mailer's `defaults.from`, which
+  `MailService` gives a mail before building it): Gmail only loads an invitation for an address it
+  lists as an attendee, and an organizer receiving their own invitation got *Unable to load event*. A reschedule is the same `UID` one `SEQUENCE` later
+  (`CalendarEvent.sequence`, which each reschedule raises), which is what makes a calendar replace the
+  event it holds instead of adding a second one; the notification is keyed by
+  `<event>#<sequence>`, or the delivery ledger would drop every move after the first.
+  `CalendarEventRequest.toAttributes()` carries `x-tenant`, as `PostRequest`'s does: without it the
+  notificator would keep the delivery in the root tenant.
 - **Locally the email lands in Mailpit** (`docker compose up -d mailpit`, http://localhost:8025); on
   AWS it goes through SES, from the identity `infra/aws/mail/email.ts` creates with `MAIL_SENDER`.
 
@@ -782,7 +801,10 @@ signed in included. An organization is a tenant: `tenant_<slug>`. `libs/database
 - **The tenant a request names is checked.** `TenantMembershipGuard` (`libs/organizations`, installed
   by `TenantMembershipModule` in posts-api and the notificator) lets anybody into the root tenant and
   only an organization's members into its tenant; a message passes, because its publisher checked. The
-  verdict is remembered per request — a guard on field resolvers runs once per field.
+  verdict is remembered per request — a guard on field resolvers runs once per field. On a handler
+  carrying `@OrgRoles`, `@MemberHasPermission` or `@RequireActiveOrg` it also requires the tenant to BE
+  the active organization's: those decorators check the active organization, and without that rule an
+  owner of one organization could act with that role in another tenant of theirs.
 - **The web names the active organization.** `/api/graphql` and the web's server-side GraphQL
   transport send `x-tenant` = the session's active organization's slug (an explicit header from the
   browser wins, and is checked like any other), and the SSE client sends the same slug, which
@@ -793,7 +815,14 @@ signed in included. An organization is a tenant: `tenant_<slug>`. `libs/database
   tenant the event log stamped on it (`Tenant.of(event)`) — the log is one table for every tenant,
   and each row records the tenant it was appended in.
 - **A sign-up provisions its profile in the root tenant**; any other tenant provisions the caller's
-  profile on its first request there, through the session pipe, as before.
+  profile on its first request there, through the session pipe, as before. A screen asks several root
+  fields at once (`me`, `members`, `events`), so those first requests arrive together: whatever
+  provisioning has to WRITE runs under `UserRepository.exclusively(email)`, a transaction holding
+  `pg_advisory_xact_lock` on the schema and the address, and decides again inside it. Without it each
+  request found no profile and made its own — measured, four requests, four profiles. The path that
+  finds everything in place takes no lock. `user-provisioning.service.spec` opens the pool's
+  connections before racing, because on a cold pool only the first request has one and the race
+  never happens.
 
 The tenant then **rides the request the whole way**, and that path is worth following because it is the
 same one everything else takes:
@@ -874,8 +903,18 @@ import without dragging in the class. The value object is the *type* the domain 
   while the value objects import from `schemas/`. That is not a cycle: it runs
   `schemas/post-title.schema` → `vo/post-title` → `schemas/new-post.schema`, and no file closes
   the loop.
-- **A composite schema owns its inferred type.** `export type NewPost = z.input<typeof NewPostSchema>`
-  sits in the schema file; the entity imports the schema for `safeParse` and re-exports the type.
+- **The domain works with value objects; a schema is only the rule behind one.** A composite the
+  domain passes around or keeps is a class too — `ValidatedDto(schema)` in `vo/`, which is a
+  multi-field value object as well as a DTO (`parse`/`safeParse`/`is`/`field()` on the class,
+  `equals`/`with`/`isValid`/`assertValid` on the instance) — and the entity receives it already
+  valid and holds it, instead of taking a `z.input<…>` and running `safeParse` of its own.
+  `libs/events` is the worked example: `CalendarEventWindow` (the dates, with the "no end before the
+  start" rule) and `CalendarEventDetails` (title, description, color) are built by `parse` where the
+  input arrives, and `CalendarEvent.schedule`/`revise`/`reschedule` take them. `new` does not
+  validate; `parse` does. `libs/posts` and `libs/users` predate the rule (`NewPostSchema`,
+  `NewUserSchema` + `safeParse` in the entity).
+- **A composite schema owns its inferred type** where one is still needed:
+  `export type X = z.input<typeof XSchema>` sits in the schema file.
 - **No barrel `index.ts`.** Import the specific file — across packages too, which the wildcard
   `exports` map is there to allow.
 
@@ -915,7 +954,11 @@ This applies to the libraries' `domain/` only. The GraphQL DTO schemas under
 
 The mapping lives in `libs/*/src/infrastructure/persistence/entities/*-orm.entity.ts`, via
 `defineEntity({ class: Post, ... })`. Value objects become columns through
-`valueObjectType(PostId, { columnType })`.
+`valueObjectType(PostId, { columnType })`, and a multi-field one is mapped as an embeddable HERE, never
+in the domain or in `libs/core/validated-dto` (which knows nothing about databases):
+`defineEntity({ class: CalendarEventWindow, embeddable: true, … })` and
+`p.embedded(…).prefix(false).object(false)` on the entity, so its fields keep their own columns —
+`SoftDeletion` and `CalendarEvent`'s `details` and `window` are mapped that way.
 
 **The entity list is not a list.** `DatabaseModule.forRootAsync({ inject: [postgresConfig.KEY],
 useFactory: MikroOrmConfiguration.connection })` (`libs/database/src/database.module.ts`) is the
@@ -1042,8 +1085,8 @@ layer says what to tell the client about it.
   name (`@Resolver('Post')`, `@Query('posts')`, `@ResolveField('tags')`). No DTO carries a GraphQL
   decorator. A new field means a `.graphql` file + a resolver + registration in `interfaces.module.ts`.
 - **DTOs and VOs come from Zod schemas**: `ValidatedDto(schema)` + `@InheritValidatedMetadata()` for
-  objects, `ValidatedDto.Scalar(schema)` for single-value value objects, `.Embeddable` for multi-value
-  ones. `VO.field({ DECORATOR_REGISTRY: AUTOMAP_REGISTRY, decorators: [AutoMap()] })` is how a VO enters
+  objects — the same class is the multi-field value object — and `ValidatedDto.Scalar(schema)` for
+  single-value ones. `VO.field({ DECORATOR_REGISTRY: AUTOMAP_REGISTRY, decorators: [AutoMap()] })` is how a VO enters
   an already-decorated DTO shape.
 - **No resolver calls the mapper** (except `createPost`, which needs the session author via
   `extraArgs`). Output leaves through interceptors: `MapInterceptor`,
@@ -1230,7 +1273,7 @@ ports its containers are given.
 
 `pnpm test:web` runs the **same suite over both transports**, one after the other — Inngest first,
 because it is the default, then RabbitMQ — and nothing is skipped in either. What differs is only
-where a claim is checked, which `support/messages.ts` is: a queue bound to `posts.#` and drained
+where a claim is checked, which `infrastructure/messaging/wire.ts` is: a queue bound to `posts.#` and drained
 through the management API, or the dev server's own `/v1/events`. A test that could only be written
 against one of them would be a test of the transport rather than of the system, which is what that
 port exists to prevent.
@@ -1245,8 +1288,19 @@ chosen up front is the API's, by `FreePort`, because it signs cookies against it
 must know it before it boots. `apps/web` is the exception and stays a **process** (`next start`): it
 is the thing under the browser, and an image between the test and it would only cost the `tail`.
 There is no schema to rebuild and no queue to delete any more — the container is the clean slate. It
-registers its two accounts — one promoted to `author` — through the web's own sign-up endpoint.
-`apps/web-e2e/README.md` is the guide, including why everything shares one `AUTH_SECRET`.
+registers its three accounts — an author, a reader and an admin — through the web's own sign-up
+endpoint. `apps/web-e2e/README.md` is the guide, including why everything shares one `AUTH_SECRET`.
+
+**The suite is layered, and the layering is linted.** A spec only states claims and asks the fixtures
+for objects: page objects per screen (`pages/`, held together by `WebApp`), shared widgets
+(`components/`), workflows for a goal across screens and inboxes (`workflows/`, bound to one browser
+page through `Visitor`; `visitors.arrive()` opens another person's browser), and the system seen from
+outside the browser (`infrastructure/`: one `*Records` class per concern of the database, Mailpit, the
+wire, S3, Polar, GraphQL). `fixtures/` is the only composition root, `environment/` is what the global
+setup hands the workers, and `stack/` provisions. One `noRestrictedImports` override per layer in
+`biome.json` refuses an import against that direction — a page object reaching a mailbox, a spec
+reaching `pg` or `@playwright/test` — so a new spec lands in the shape or
+fails `pnpm lint`.
 
 Coverage excludes `index.ts`, `interfaces/`, `*.interface.ts` and `main.ts`; resolvers, mappers and
 DTOs count.

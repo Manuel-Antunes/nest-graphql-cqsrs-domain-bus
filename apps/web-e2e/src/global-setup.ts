@@ -1,4 +1,4 @@
-import { RunningStack } from './support/running-stack';
+import { RunningStack } from './stack/running-stack';
 
 export default async function globalSetup(): Promise<void> {
   process.stdout.write(

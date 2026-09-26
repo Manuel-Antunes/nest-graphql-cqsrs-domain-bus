@@ -1,10 +1,5 @@
-import {
-  expect,
-  openAuthView,
-  signInThroughTheForm,
-  test,
-} from '../fixtures/test';
-import { linkIn } from '../support/mailbox';
+import { expect, test } from '../fixtures/test';
+import { EmailSubject } from '../model/email';
 
 /**
  * **An organization grows by invitation, and the invitation is an email.**
@@ -15,72 +10,37 @@ import { linkIn } from '../support/mailbox';
  */
 test.describe('organizations', () => {
   test('an owner invites by email, and the invitee joins through the link', async ({
-    browser,
-    page,
     mailbox,
-    freshAccount,
-    postsStore,
+    registration,
+    authentication,
+    organizations,
+    organizationRecords,
+    visitors,
   }) => {
-    const owner = await freshAccount('Owner');
-    const invitee = await freshAccount('Invitee');
+    const owner = await registration.freshAccount('Owner');
+    const invitee = await registration.freshAccount('Invitee');
     const name = `Acme ${Date.now()}`;
 
-    await signInThroughTheForm(page, owner);
-    await expect(page.getByText(owner.email).first()).toBeVisible();
-    await openAuthView(page, '/settings/organizations');
-    await page
-      .getByRole('button', { name: 'Create organization' })
-      .first()
-      .click();
-    const create = page.getByRole('dialog', { name: 'Create organization' });
-    await create.getByRole('textbox', { name: 'Name' }).fill(name);
-    await create.getByRole('button', { name: 'Create organization' }).click();
-    await expect(page.getByText(name).first()).toBeVisible();
+    await authentication.signIn(owner);
+    await organizations.create(name);
+    await organizations.invite(invitee.email);
 
-    await page.getByRole('button', { name: 'Manage' }).click();
-    await expect(page).toHaveURL(/\/organization\/settings/);
-    await openAuthView(page, '/organization/people');
-    await page.getByRole('button', { name: 'Invite member' }).first().click();
-    const invite = page.getByRole('dialog', { name: 'Invite member' });
-    await invite.getByRole('textbox', { name: 'Email' }).fill(invitee.email);
-    await invite.getByRole('button', { name: 'Invite member' }).click();
-
-    const mail = await mailbox.waitFor(
+    const invitation = await mailbox.waitFor(
       invitee.email,
-      `${owner.name} invited you to ${name}`,
+      EmailSubject.invitation(owner.name, name),
     );
-    expect(mail.html).toContain(name);
+    expect(invitation.html).toContain(name);
 
-    const context = await browser.newContext();
-    const invited = await context.newPage();
-    await invited.goto(linkIn(mail, '/auth/accept-invitation'));
-    await expect(invited).toHaveURL(/\/auth\/sign-in\?redirectTo=/);
-    await invited.waitForLoadState('networkidle');
-    await invited.getByRole('textbox', { name: 'Email' }).fill(invitee.email);
-    await invited
-      .getByRole('textbox', { name: 'Password' })
-      .fill(invitee.password);
-    await invited.getByRole('button', { name: 'Sign In' }).click();
-
-    await expect(invited).toHaveURL(/\/auth\/accept-invitation/);
-    await expect(
-      invited.getByText(`You've been invited to join ${name} as Member.`),
-    ).toBeVisible();
-    await invited.getByRole('button', { name: 'Accept' }).click();
+    const invited = await visitors.arrive();
+    const acceptance = await invited.organizations.followInvitation(
+      invitation,
+      invitee,
+    );
+    await expect(acceptance.invitationTo(name)).toBeVisible();
+    await acceptance.accept();
 
     await expect
-      .poll(async () =>
-        (
-          await postsStore.query<{ role: string }>(
-            `select m.role from member m
-               join organization o on o.id = m.organization_id
-              where o.name = ? and m.user_id = ?`,
-            name,
-            invitee.credentialId,
-          )
-        ).map((row) => row.role),
-      )
+      .poll(() => organizationRecords.rolesOf(name, invitee.credentialId))
       .toEqual(['member']);
-    await context.close();
   });
 });

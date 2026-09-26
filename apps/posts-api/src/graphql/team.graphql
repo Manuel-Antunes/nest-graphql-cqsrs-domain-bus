@@ -1,0 +1,7 @@
+"""
+A team of an organization
+"""
+type Team {
+  id: ID!
+  name: String!
+}

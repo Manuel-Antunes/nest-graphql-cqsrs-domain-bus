@@ -1,6 +1,9 @@
 import { basename } from 'node:path';
 import type { Readable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
+import type { TemplateResolver } from '@nestjs-modules/mailer';
+import type { ICalCalendar } from 'ical-generator';
+import ical, { ICalCalendarMethod } from 'ical-generator';
 import type { SendMailOptions } from 'nodemailer';
 
 import type { EmailTemplate } from './email-template';
@@ -13,6 +16,24 @@ export type AttachmentOptions = Exclude<
   SendMailOptions['attachments'],
   undefined
 >[number];
+
+/** What an iCalendar file is for, as RFC 5546 names it: `REQUEST` invites, `CANCEL` calls off. */
+export type CalendarEventMethod =
+  | 'PUBLISH'
+  | 'REQUEST'
+  | 'REPLY'
+  | 'ADD'
+  | 'CANCEL'
+  | 'REFRESH'
+  | 'COUNTER'
+  | 'DECLINECOUNTER';
+
+/** How an iCalendar event travels: its method, its file name, the encoding of its content. */
+export interface CalendarEventOptions {
+  method?: CalendarEventMethod;
+  filename?: string;
+  encoding?: string;
+}
 
 /** The part of a message nodemailer's `sendMail` understands, and nothing else. */
 export interface NodeMailerMessage {
@@ -30,25 +51,46 @@ export interface NodeMailerMessage {
   headers?: Record<string, string | string[]>;
   html?: string;
   text?: string;
+  icalEvent?: CalendarEventOptions & {
+    content?: string;
+    path?: string;
+    href?: string;
+  };
 }
 
 /**
- * A template to render the body with, by NAME, and what it is rendered with: the mailer's `template`
- * and `context`. The message is plain data until it is sent, so a message built in one process can be
- * rendered in another that knows the same template.
+ * A template to render a body with, by NAME, and the data it is rendered with. A view is plain data
+ * until it is rendered, so a message built in one process can be rendered in another that knows the
+ * same template.
  */
 export interface MessageView {
   template: string;
-  context: Record<string, unknown>;
+  data: Record<string, unknown>;
 }
 
-/** What a built message is: the nodemailer fields, and the view its body is rendered from. */
+/** The views a message's bodies are rendered from: the HTML, and its plain-text alternative. */
+export interface MessageBodyTemplates {
+  html?: MessageView;
+  text?: MessageView;
+}
+
+/** What a built message is: the nodemailer fields, and the views its bodies are rendered from. */
 export interface CompiledMessage {
   message: NodeMailerMessage;
-  view?: MessageView;
+  views: MessageBodyTemplates;
 }
 
 type RecipientField = 'to' | 'cc' | 'bcc' | 'replyTo';
+
+type ViewTemplate = { name: string } | string;
+
+const templateNameOf = (template: ViewTemplate): string =>
+  typeof template === 'string' ? template : template.name;
+
+const viewOf = (template: ViewTemplate, data: object): MessageView => ({
+  template: templateNameOf(template),
+  data: { ...data } as Record<string, unknown>,
+});
 
 const addressOf = (recipient: Recipient): string =>
   typeof recipient === 'string' ? recipient : recipient.address;
@@ -68,15 +110,17 @@ const recipientFrom = (address: string, name?: string): Recipient =>
  * this.message
  *   .to(recipient.email, recipient.name)
  *   .subject('Your post is live')
- *   .view(PostCreatedEmail, { title, url });
+ *   .htmlView(PostCreatedEmail, { title, url })
+ *   .textView(PostCreatedEmail.text, { title, url });
  * ```
  *
- * The body is either `html`/`text`, set directly, or a {@link view}: a template and its context,
- * rendered by the mailer when the message is sent. A message with both keeps the explicit HTML.
+ * Each body is either set directly — {@link html}, {@link text} — or rendered from a view —
+ * {@link htmlView}, {@link textView} — and the one set directly wins. A view is rendered when the
+ * message is sent, by the mailer, unless {@link computeContents} rendered it first.
  */
 export class Message {
   readonly #message: NodeMailerMessage = {};
-  #view?: MessageView;
+  readonly #views: MessageBodyTemplates = {};
 
   /** Adds a `to` recipient. */
   to(address: string, name?: string): this {
@@ -129,34 +173,112 @@ export class Message {
     return this;
   }
 
-  /** Sets the HTML body directly, which takes precedence over a {@link view}. */
+  /** Sets the HTML body directly, which takes precedence over an {@link htmlView}. */
   html(content: string): this {
     this.#message.html = content;
     return this;
   }
 
-  /** Sets the plain-text body. Without one, it is rendered from the {@link view}. */
+  /** Sets the plain-text body directly, which takes precedence over a {@link textView}. */
   text(content: string): this {
     this.#message.text = content;
     return this;
   }
 
   /**
-   * Renders the body from a template, when the message is sent: the mailer is handed `template` and
-   * `context`, and whatever renders templates in it — `ReactEmailTemplateResolver`, a Handlebars
-   * adapter — does the rest.
+   * Renders the HTML body from a template: sent as it is, it is the mailer's `template`, rendered by
+   * its resolver or its adapter; {@link computeContents} renders it earlier.
    *
-   * A React Email template is passed as the `EmailTemplate` `defineEmailTemplate` returned, which types
-   * its props; any other engine's by the name it knows the template by. Either way the context must be
-   * plain data: the message is serialised before it is rendered.
+   * A React Email template is passed as what `defineEmailTemplate` returned, which types its props; any
+   * other engine's by the name it knows the template by. Either way the data must be plain: the
+   * message is serialised before it is rendered.
    */
-  view<P extends object>(template: EmailTemplate<P>, props: P): this;
-  view(template: string, context?: Record<string, unknown>): this;
-  view(template: { name: string } | string, context: object = {}): this {
-    this.#view = {
-      template: typeof template === 'string' ? template : template.name,
-      context: { ...context } as Record<string, unknown>,
+  htmlView<P extends object>(template: EmailTemplate<P, false>, props: P): this;
+  htmlView(template: string, data?: Record<string, unknown>): this;
+  htmlView(template: ViewTemplate, data: object = {}): this {
+    this.#views.html = viewOf(template, data);
+    return this;
+  }
+
+  /**
+   * Renders the plain-text body from a template: sent as it is, it is the mailer's `textTemplate`,
+   * resolved by its template resolver when it has one; {@link computeContents} renders it earlier.
+   *
+   * A React Email template's is its `text` — the component `htmlView` names, rendered again as plain
+   * text. Without a text body or a text view, `plainTextFromHtml` writes the text part from the HTML.
+   */
+  textView<P extends object>(template: EmailTemplate<P, true>, props: P): this;
+  textView(template: string, data?: Record<string, unknown>): this;
+  textView(template: ViewTemplate, data: object = {}): this {
+    this.#views.text = viewOf(template, data);
+    return this;
+  }
+
+  /**
+   * Renders the views now, through the mailer's resolver contract: the HTML view into the HTML body
+   * and the text view into the text body, each with its own data, and each unless that body was set
+   * directly. Called in a mail's `prepare`, the mail leaves already rendered and the mailer sends the
+   * bodies as they are; left uncalled, the views are rendered when the message is sent.
+   */
+  async computeContents(resolver: TemplateResolver): Promise<this> {
+    const { html, text } = this.#views;
+    if (!this.#message.html && html) {
+      this.#message.html = (
+        await resolver.resolve(html.template, html.data)
+      ).content;
+    }
+    if (!this.#message.text && text) {
+      this.#message.text = (
+        await resolver.resolve(text.template, text.data)
+      ).content;
+    }
+    return this;
+  }
+
+  /**
+   * Attaches an iCalendar event — an invitation, its update, its cancellation — as the message's
+   * `text/calendar` alternative, which a mail client offers to put on the calendar.
+   *
+   * Given a function, it is handed an `ical-generator` calendar to fill, created with the method the
+   * options name, so that the file's `METHOD` and the MIME part's agree; given a string, that string is
+   * the `.ics`.
+   *
+   * ```ts
+   * this.message.icalEvent(
+   *   (calendar) => calendar.createEvent({ id, sequence, start, end, summary, organizer, attendees }),
+   *   { method: 'REQUEST' },
+   * );
+   * ```
+   */
+  icalEvent(
+    contents: ((calendar: ICalCalendar) => void) | string,
+    options: CalendarEventOptions = {},
+  ): this {
+    this.#message.icalEvent = {
+      content:
+        typeof contents === 'string'
+          ? contents
+          : Message.calendarOf(contents, options),
+      ...options,
     };
+    return this;
+  }
+
+  /** Attaches an iCalendar event from a `.ics` on disk. */
+  icalEventFromFile(
+    file: string | URL,
+    options: CalendarEventOptions = {},
+  ): this {
+    this.#message.icalEvent = {
+      path: typeof file === 'string' ? file : fileURLToPath(file),
+      ...options,
+    };
+    return this;
+  }
+
+  /** Attaches an iCalendar event nodemailer fetches from a URL when it sends. */
+  icalEventFromUrl(url: string, options: CalendarEventOptions = {}): this {
+    this.#message.icalEvent = { href: url, ...options };
     return this;
   }
 
@@ -233,11 +355,12 @@ export class Message {
     return this.#message.subject === subject;
   }
 
-  hasView<P extends object>(template: EmailTemplate<P> | string): boolean {
-    return (
-      this.#view?.template ===
-      (typeof template === 'string' ? template : template.name)
-    );
+  hasHtmlView<P extends object>(template: EmailTemplate<P> | string): boolean {
+    return this.#views.html?.template === templateNameOf(template);
+  }
+
+  hasTextView<P extends object>(template: EmailTemplate<P> | string): boolean {
+    return this.#views.text?.template === templateNameOf(template);
   }
 
   hasHeader(key: string, value?: string | string[]): boolean {
@@ -252,11 +375,15 @@ export class Message {
     );
   }
 
-  /** The message as plain data: what a sender hands to nodemailer, and what a queue could carry. */
+  /** The message as plain data: what `MailService` hands to the mailer, and what a queue could carry. */
   toObject(): CompiledMessage {
+    const { html, text } = this.#views;
     return {
       message: copyOf(this.#message),
-      ...(this.#view ? { view: { ...this.#view } } : {}),
+      views: {
+        ...(html ? { html: { ...html } } : {}),
+        ...(text ? { text: { ...text } } : {}),
+      },
     };
   }
 
@@ -292,6 +419,15 @@ export class Message {
     );
   }
 
+  private static calendarOf(
+    fill: (calendar: ICalCalendar) => void,
+    { method }: CalendarEventOptions,
+  ): string {
+    const calendar = ical(method ? { method: ICalCalendarMethod[method] } : {});
+    fill(calendar);
+    return calendar.toString();
+  }
+
   #attach(attachment: AttachmentOptions): this {
     this.#message.attachments = [
       ...(this.#message.attachments ?? []),
@@ -309,4 +445,5 @@ const copyOf = (message: NodeMailerMessage): NodeMailerMessage => ({
   ...(message.replyTo ? { replyTo: [...message.replyTo] } : {}),
   ...(message.attachments ? { attachments: [...message.attachments] } : {}),
   ...(message.headers ? { headers: { ...message.headers } } : {}),
+  ...(message.icalEvent ? { icalEvent: { ...message.icalEvent } } : {}),
 });

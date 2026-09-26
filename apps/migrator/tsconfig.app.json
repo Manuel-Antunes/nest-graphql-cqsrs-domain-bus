@@ -30,6 +30,9 @@
       "path": "../../libs/notifications/tsconfig.lib.json"
     },
     {
+      "path": "../../libs/events/tsconfig.lib.json"
+    },
+    {
       "path": "../../libs/database/tsconfig.lib.json"
     },
     {

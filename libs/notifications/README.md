@@ -77,7 +77,7 @@ parses the service account, the application decides where it is read from.
 
 `notifications` is the registration: a type nothing listed answers for fails the delivery with
 `UnknownNotificationTypeException`. `push` is optional — without `FIREBASE_CREDENTIALS` the channel
-sends nothing and says so, and a retry would not change that. `email` sends through the `MailSender` a
+sends nothing and says so, and a retry would not change that. `email` sends through the `MailService` a
 global `MailModule` binds.
 
 ## Notifying someone who is not an aggregate

@@ -1,6 +1,9 @@
 import { MapMemberError } from '@automapper/core';
 import type { ArgumentsHost, ExceptionFilter } from '@nestjs/common';
 import { Catch } from '@nestjs/common';
+import { CalendarEventNotFoundException } from '@nestposts/events/domain/calendar-event/exception/calendar-event-not-found.exception';
+import { InvalidCalendarEventException } from '@nestposts/events/domain/calendar-event/exception/invalid-calendar-event.exception';
+import { TeamNotFoundException } from '@nestposts/organizations/domain/organization/exception/team-not-found.exception';
 import { AlreadyDeletedException } from '@nestposts/platform/domain/shared/soft-delete/already-deleted.exception';
 import { NotDeletedException } from '@nestposts/platform/domain/shared/soft-delete/not-deleted.exception';
 import { InvalidPostException } from '@nestposts/posts/domain/post/exception/invalid-post.exception';
@@ -9,6 +12,7 @@ import { PostNotFoundException } from '@nestposts/posts/domain/post/exception/po
 import { InvalidTagException } from '@nestposts/posts/domain/tag/exception/invalid-tag.exception';
 import { TagAlreadyExistsException } from '@nestposts/posts/domain/tag/exception/tag-already-exists.exception';
 import { TagNotFoundException } from '@nestposts/posts/domain/tag/exception/tag-not-found.exception';
+import { UserNotFoundException } from '@nestposts/users/domain/user/exception/user-not-found.exception';
 import { GraphQLError } from 'graphql';
 import { ZodError, z } from 'zod';
 
@@ -21,6 +25,10 @@ import { UploadNotOwnedException } from '../../application/asset/upload-area';
   TagNotFoundException,
   PostAlreadyExistsException,
   TagAlreadyExistsException,
+  InvalidCalendarEventException,
+  CalendarEventNotFoundException,
+  TeamNotFoundException,
+  UserNotFoundException,
   AlreadyDeletedException,
   NotDeletedException,
   UploadNotOwnedException,
@@ -45,7 +53,10 @@ export class DomainExceptionFilter implements ExceptionFilter {
   private static codeOf(exception: Error): string {
     if (
       exception instanceof PostNotFoundException ||
-      exception instanceof TagNotFoundException
+      exception instanceof TagNotFoundException ||
+      exception instanceof CalendarEventNotFoundException ||
+      exception instanceof TeamNotFoundException ||
+      exception instanceof UserNotFoundException
     ) {
       return 'NOT_FOUND';
     }

@@ -32,7 +32,8 @@ describe('posts (e2e)', () => {
   let credentialId: string;
   const rootEm = () =>
     app.get(MikroORM).em.fork({ schema: ROOT_TENANT_SCHEMA });
-  const profileCount = () => rootEm().count(User);
+  const profileCount = () =>
+    rootEm().count(User, { email: Email.parse('manuel@example.com') });
   let profilesAfterSignUp: number;
   const subscribers = () => eventBus.subject$.observers.length;
   const asked: unknown[] = [];
@@ -140,7 +141,7 @@ describe('posts (e2e)', () => {
 
       expect(author.hasRole(AUTHOR_ROLE)).toBe(true);
       expect(await em.findOne(Authorship, { user: author.id })).not.toBeNull();
-      expect(await em.count(User)).toBe(profilesAfterSignUp);
+      expect(await profileCount()).toBe(profilesAfterSignUp);
     });
 
     it('a identidade que a porta devolve é a mesma que a sessão carrega', async () => {

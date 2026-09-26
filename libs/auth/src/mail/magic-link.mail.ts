@@ -18,7 +18,7 @@ export class MagicLinkMail extends Mail {
   prepare(): void {
     this.message
       .to(this.recipient.address, this.recipient.name ?? undefined)
-      .view(MagicLinkTemplate, {
+      .htmlView(MagicLinkTemplate, {
         url: this.link.url,
         email: this.recipient.address,
         expirationMinutes: this.link.expiresInMinutes,

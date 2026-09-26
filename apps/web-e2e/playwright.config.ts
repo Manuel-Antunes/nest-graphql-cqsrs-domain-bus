@@ -3,7 +3,7 @@ import { defineConfig, devices } from '@playwright/test';
 /**
  * Where the web will answer. Defined here rather than imported, because Nx loads this file with
  * Node's type stripping to infer the project's targets, and that resolves no extensionless relative
- * import. `src/support/stack.ts` reads the same variables.
+ * import. `src/environment/run-environment.ts` reads the same variables.
  */
 const WEB_PORT = process.env.WEB_PORT ?? '4300';
 const WEB_URL = process.env.WEB_URL ?? `http://localhost:${WEB_PORT}`;

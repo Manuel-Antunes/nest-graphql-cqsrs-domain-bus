@@ -8,4 +8,5 @@ export abstract class UserRepository {
   abstract findById(userId: UserId): Promise<User | null>;
   abstract findByEmail(email: Email): Promise<User | null>;
   abstract restore(userId: UserId): Promise<void>;
+  abstract exclusively<T>(email: Email, work: () => Promise<T>): Promise<T>;
 }

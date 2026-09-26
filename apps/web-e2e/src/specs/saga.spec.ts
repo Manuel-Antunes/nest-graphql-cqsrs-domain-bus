@@ -1,42 +1,8 @@
-import type { ResultOf } from '@graphql-typed-document-node/core';
-import { print } from 'graphql';
+import { expect, test } from '../fixtures/test';
+import { PostEvent } from '../model/post';
+import { Poll } from '../support/poll';
 
-import type { GraphQlAnswer } from '../fixtures/test';
-import { expect, signInThroughTheForm, test } from '../fixtures/test';
-import { graphql } from '../gql';
-import { until } from '../support/posts-api';
-
-const PRE_CREATED = 'posts.PostPreCreated';
-const CREATED = 'posts.PostCreated';
-const UPDATED = 'posts.PostUpdated';
-
-const stripVersion = (messageType: string): string => messageType.split('#')[0];
-
-const EditSagaPost = graphql(`
-  mutation EditSagaPost($id: ID!) {
-    updatePost(input: { id: $id, title: "Saga editada" }) {
-      version
-    }
-  }
-`);
-
-const CreateCorrelatedPost = graphql(`
-  mutation CreateCorrelatedPost($title: String!) {
-    createPost(input: { title: $title, content: "oi" }) {
-      id
-    }
-  }
-`);
-
-const CreateTenantPost = graphql(`
-  mutation CreateTenantPost {
-    createPost(input: { title: "Com tenant", content: "oi" }) {
-      id
-    }
-  }
-`);
-
-type TenantPostAnswer = GraphQlAnswer<ResultOf<typeof CreateTenantPost>>;
+const { PRE_CREATED, CREATED, UPDATED } = PostEvent;
 
 /**
  * **A saga coreografada, vista do navegador** — e conferida onde o navegador não chega.
@@ -51,25 +17,19 @@ test.describe
     let postId: string;
 
     test('o formulário responde PRÉ-CRIADO: versão 1, sem tag', async ({
-      page,
+      app,
       accounts,
-      signIn,
+      authentication,
+      publishing,
     }) => {
-      await signIn(accounts.author);
-      await page.goto('/posts/new');
+      await authentication.signIn(accounts.author);
 
-      await page.getByLabel('Título').fill('Saga pelo navegador');
-      await page.getByLabel('Conteúdo').fill('escrito no formulário');
-      await page.getByRole('button', { name: 'Publicar' }).click();
+      postId = await publishing.publishInTheForm({
+        title: 'Saga pelo navegador',
+        content: 'escrito no formulário',
+      });
 
-      await expect(
-        page.getByText('Resposta da mutation — versão 1'),
-      ).toBeVisible();
-
-      const href = await page
-        .getByRole('link', { name: 'Abrir o post' })
-        .getAttribute('href');
-      postId = href?.split('/').pop() as string;
+      await expect(app.newPost.answeredVersion(1)).toBeVisible();
       expect(postId).toMatch(/^[0-9a-f-]{36}$/);
     });
 
@@ -82,30 +42,32 @@ test.describe
      * outro, que é a pior forma de uma asserção existir.
      */
     test('a página do post alcança a versão 2, com a tag que o outro serviço decidiu', async ({
-      page,
+      app,
     }) => {
-      await expect(async () => {
-        await page.goto(`/posts/${postId}`);
-        await expect(page.getByText('Untagged').first()).toBeVisible({
-          timeout: 1_000,
-        });
-      }).toPass({ timeout: 30_000 });
+      const post = app.post(postId);
+
+      await post.reopenUntil(
+        async () => {
+          await expect(post.tag('Untagged')).toBeVisible({ timeout: 1_000 });
+        },
+        { timeout: 30_000 },
+      );
     });
 
     test('o estado durável de cada serviço é exatamente o esperado', async ({
-      postsStore,
-      taggingStore,
+      postRecords,
+      eventLog,
     }) => {
-      const post = await postsStore.post(postId);
+      const post = await postRecords.find(postId);
 
       expect(post).toMatchObject({ version: 2 });
       expect(
         post?.published_at,
         'um post completo está publicado',
       ).not.toBeNull();
-      expect(await postsStore.tagsOf(postId)).toEqual(['Untagged']);
+      expect(await postRecords.tagsOf(postId)).toEqual(['Untagged']);
       expect(
-        (await taggingStore.streamOf(postId)).map(stripVersion),
+        await eventLog.streamOf(postId),
         'a fila não é a fonte: o event store dele é',
       ).toEqual([PRE_CREATED, CREATED]);
     });
@@ -122,28 +84,23 @@ test.describe
      * EVERY row: a service that ingested its own echo would leave one that fits none of the three.
      */
     test('cada serviço só ingere o que o outro produziu: a marca de origem corta o laço', async ({
-      postsStore,
+      inbox,
     }) => {
-      const inbox =
-        (await until(async () => {
-          const rows = await postsStore.inbox();
-          return rows.some(
-            (row) =>
-              row.message_type.startsWith('notifications.') &&
-              row.origin === 'posts-api',
-          )
-            ? rows
-            : undefined;
-        }, 20_000)) ?? (await postsStore.inbox());
-      const ingestedByPosts = inbox.filter(
+      const rows = await inbox.onceAny(
+        (row) =>
+          row.message_type.startsWith('notifications.') &&
+          row.origin === 'posts-api',
+        20_000,
+      );
+      const ingestedByPosts = rows.filter(
         (row) =>
           row.message_type.startsWith(CREATED) && row.origin === 'tagging',
       );
-      const ingestedByTagging = inbox.filter(
+      const ingestedByTagging = rows.filter(
         (row) =>
           row.message_type.startsWith('posts.') && row.origin === 'posts-api',
       );
-      const deliveredByNotificator = inbox.filter((row) =>
+      const deliveredByNotificator = rows.filter((row) =>
         row.message_type.startsWith('notifications.'),
       );
 
@@ -151,7 +108,7 @@ test.describe
         ingestedByPosts.length +
           ingestedByTagging.length +
           deliveredByNotificator.length,
-      ).toBe(inbox.length);
+      ).toBe(rows.length);
       expect(
         ingestedByPosts.length,
         'a posts-api não ingeriu nada',
@@ -175,12 +132,13 @@ test.describe
     });
 
     test('reentregar a MESMA mensagem não produz uma segunda decisão', async ({
-      messages,
-      taggingStore,
+      wire,
+      eventLog,
+      inbox,
     }) => {
-      const ingested = await taggingStore.eventOf(postId, PRE_CREATED);
+      const ingested = await eventLog.eventOf(postId, PRE_CREATED);
 
-      const accepted = await messages('nestposts.e2e.redelivery').redeliver(
+      const accepted = await wire('nestposts.e2e.redelivery').redeliver(
         ingested,
         `${PRE_CREATED}.${postId}`,
         `postId=${postId}`,
@@ -190,34 +148,27 @@ test.describe
         accepted,
         'o transporte não endereçou a reentrega: o binding mudou',
       ).toBe(true);
-      await new Promise((resolve) => setTimeout(resolve, 4000));
+      await Poll.pause(4_000);
       expect(
-        await taggingStore.countEvents(postId, CREATED),
+        await eventLog.count(postId, CREATED),
         'inbox e agregado seguraram a duplicata',
       ).toBe(1);
-      expect(await taggingStore.inboxRowsFor(ingested.identifier)).toBe(1);
+      expect(await inbox.rowsFor(ingested.identifier)).toBe(1);
     });
 
     test('o canal de RÉPLICA mantém o stream do Post completo no outro serviço', async ({
       accounts,
-      signIn,
-      executeGraphql,
-      taggingStore,
+      authentication,
+      publishing,
+      eventLog,
     }) => {
-      await signIn(accounts.author);
+      await authentication.signIn(accounts.author);
 
-      const edited = await executeGraphql(EditSagaPost, { id: postId });
+      const version = await publishing.retitle(postId, 'Saga editada');
 
-      expect(edited.errors, JSON.stringify(edited.errors)).toBeUndefined();
-      expect(edited.data?.updatePost.version).toBe(3);
-
-      const replicated = await until(async () => {
-        const stream = (await taggingStore.streamOf(postId)).map(stripVersion);
-        return stream.includes(UPDATED) ? stream : undefined;
-      }, 20_000);
-
+      expect(version).toBe(3);
       expect(
-        replicated,
+        await eventLog.whenStreamHas(postId, UPDATED, 20_000),
         'ninguém reage ao PostUpdated no tagging — ele está lá para a próxima decisão não ser tomada contra meia história',
       ).toEqual([PRE_CREATED, CREATED, UPDATED]);
     });
@@ -227,35 +178,31 @@ test.describe
   .serial('o que a request carrega atravessa os dois processos', () => {
     test('uma request, um correlation id', async ({
       accounts,
-      signIn,
-      executeGraphql,
-      messages,
+      authentication,
+      publishing,
+      wire,
     }) => {
-      const wire = messages('nestposts.e2e.correlation-spy');
-      await wire.watch('posts.#');
-      await signIn(accounts.author);
+      const spy = wire('nestposts.e2e.correlation-spy');
+      await spy.watch('posts.#');
+      await authentication.signIn(accounts.author);
 
-      const created = await executeGraphql(CreateCorrelatedPost, {
-        title: 'Uma request só',
-      });
-      expect(created.errors, JSON.stringify(created.errors)).toBeUndefined();
-      const seen = await wire.of(created.data?.createPost.id as string);
+      const postId = await publishing.publishThroughTheApi('Uma request só');
+      const seen = await spy.of(postId);
 
       expect(seen.size, 'o transporte não trouxe os dois eventos da saga').toBe(
         2,
       );
-      const [born, completed] = ['PostPreCreated', 'PostCreated'].map(
-        (name) => seen.get(name)?.headers,
-      );
-      expect(born?.['cqrs-transport-origin']).toBe('posts-api');
+      const born = seen.get('PostPreCreated');
+      const completed = seen.get('PostCreated');
+      expect(born?.origin).toBe('posts-api');
       expect(
-        completed?.['cqrs-transport-origin'],
+        completed?.origin,
         'o segundo evento é decisão do outro processo',
       ).toBe('tagging');
       expect(
-        completed?.['cqrs-transport-correlation-id'],
+        completed?.correlationId,
         'a saga inteira sob um correlation id só',
-      ).toBe(born?.['cqrs-transport-correlation-id']);
+      ).toBe(born?.correlationId);
     });
 
     /**
@@ -267,73 +214,42 @@ test.describe
      * and the browser names it in capitals to prove the header is normalised on the way.
      */
     test('o x-tenant do navegador chega aos dois processos, e volta na decisão do outro', async ({
-      browser,
-      freshAccount,
-      postsStore,
-      messages,
+      registration,
+      postRecords,
+      wire,
+      visitors,
     }) => {
-      const wire = messages('nestposts.e2e.tenant-spy');
-      await wire.watch('posts.#');
-      const author = await freshAccount('Tenanted');
-      await postsStore.promoteToAuthor(author.credentialId);
+      const spy = wire('nestposts.e2e.tenant-spy');
+      await spy.watch('posts.#');
+      const author = await registration.freshAuthor('Tenanted');
       const slug = `acme-${Date.now()}`;
 
-      const context = await browser.newContext({
+      const tenanted = await visitors.arrive({
         extraHTTPHeaders: { 'x-tenant': slug.toUpperCase() },
       });
-      const page = await context.newPage();
-      await signInThroughTheForm(page, author);
-      await expect(page.getByText(author.email).first()).toBeVisible();
-      const organization = await page.evaluate(
-        async ([name, organizationSlug]) => {
-          const response = await fetch('/api/auth/organization/create', {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ name, slug: organizationSlug }),
-          });
-          return response.status;
-        },
-        [`Acme ${slug}`, slug] as const,
-      );
-      expect(organization).toBe(200);
+      await tenanted.authentication.signIn(author);
+      await tenanted.organizations.createThroughTheApi(`Acme ${slug}`, slug);
 
-      const created = await page.evaluate<TenantPostAnswer, string>(
-        async (query) => {
-          const response = await fetch('/api/graphql', {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ query }),
-          });
-          return response.json() as Promise<TenantPostAnswer>;
-        },
-        print(CreateTenantPost),
-      );
-      expect(created.errors, JSON.stringify(created.errors)).toBeUndefined();
-      const seen = await wire.of(created.data?.createPost.id as string);
+      const postId =
+        await tenanted.publishing.publishThroughTheApi('Com tenant');
+      const seen = await spy.of(postId);
 
-      const [born, completed] = ['PostPreCreated', 'PostCreated'].map(
-        (name) => seen.get(name)?.headers,
+      const born = seen.get('PostPreCreated');
+      const completed = seen.get('PostCreated');
+      expect(born?.tenant, 'o header do navegador entrou na PostRequest').toBe(
+        slug,
       );
       expect(
-        born?.['x-tenant'],
-        'o header do navegador entrou na PostRequest',
-      ).toBe(slug);
-      expect(
-        completed?.['x-tenant'],
+        completed?.tenant,
         'o tagging republicou sob o contexto que recebeu: o tenant atravessou os dois processos',
       ).toBe(slug);
       expect(
-        completed?.['cqrs-transport-origin'],
+        completed?.origin,
         'e mesmo carregando o tenant do outro serviço, a autoria continua sendo a sua',
       ).toBe('tagging');
       expect(
-        await postsStore.query(
-          `select id from "tenant_${slug}".posts where id = ?`,
-          created.data?.createPost.id,
-        ),
+        await postRecords.existsInTenant(slug, postId),
         'the post was written in the organization’s own schema',
-      ).toHaveLength(1);
-
-      await context.close();
+      ).toBe(true);
     });
   });

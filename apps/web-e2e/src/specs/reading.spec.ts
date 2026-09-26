@@ -1,21 +1,5 @@
 import { expect, test } from '../fixtures/test';
-import { graphql } from '../gql';
-
-const MissingPost = graphql(`
-  query MissingPost($id: ID!) {
-    post(id: $id) {
-      id
-    }
-  }
-`);
-
-const PostByInvalidId = graphql(`
-  query PostByInvalidId {
-    post(id: "isto-nao-e-um-uuid") {
-      id
-    }
-  }
-`);
+import { PostById } from '../infrastructure/graphql/operations/posts.operations';
 
 /**
  * O caminho de leitura, que é anônimo de propósito: um post escrito por um autor tem de aparecer para
@@ -27,42 +11,36 @@ test.describe
     let title: string;
 
     test('um post escrito pelo autor aparece no feed', async ({
-      page,
+      app,
       accounts,
-      signIn,
+      authentication,
+      publishing,
     }) => {
       title = `Lido de fora ${Date.now()}`;
 
-      await signIn(accounts.author);
-      await page.goto('/posts/new');
-      await page.getByLabel('Título').fill(title);
-      await page.getByLabel('Conteúdo').fill('o corpo');
-      await page.getByRole('button', { name: 'Publicar' }).click();
-      await expect(page.getByText(/Resposta da mutation/)).toBeVisible();
+      await authentication.signIn(accounts.author);
+      await publishing.publishInTheForm({ title, content: 'o corpo' });
 
-      await page.goto('/feed');
+      await app.feed.open();
 
-      await expect(page.getByText(title).first()).toBeVisible();
+      await expect(app.feed.mentions(title)).toBeVisible();
     });
 
     test('e aparece para quem nunca entrou, com o autor e a tag resolvidos', async ({
-      browser,
       accounts,
+      visitors,
     }) => {
-      const context = await browser.newContext();
-      const page = await context.newPage();
+      const stranger = await visitors.arrive();
 
-      await page.goto('/feed');
+      await stranger.app.feed.open();
 
-      await expect(page.getByText(title).first()).toBeVisible();
+      await expect(stranger.app.feed.mentions(title)).toBeVisible();
       await expect(
-        page.getByText(accounts.author.email).first(),
+        stranger.app.feed.mentions(accounts.author.email),
         'o byline é o @ResolveField author, resolvido sem sessão',
       ).toBeVisible();
-      await expect(page.getByText('Untagged').first()).toBeVisible();
-      await expect(page.getByRole('link', { name: 'Sign in' })).toBeVisible();
-
-      await context.close();
+      await expect(stranger.app.feed.mentions('Untagged')).toBeVisible();
+      await expect(stranger.app.header.signInLink).toBeVisible();
     });
 
     /**
@@ -71,9 +49,9 @@ test.describe
      * primeira. Uma seleção inválida, por outro lado, é erro antes de existir query.
      */
     test('um id que não existe responde null, e não um erro', async ({
-      executeGraphql,
+      graphql,
     }) => {
-      const missing = await executeGraphql(MissingPost, {
+      const missing = await graphql.execute(PostById, {
         id: '00000000-0000-4000-8000-000000000000',
       });
 
@@ -82,9 +60,11 @@ test.describe
     });
 
     test('e um id que não é um id é recusado pelo schema', async ({
-      executeGraphql,
+      graphql,
     }) => {
-      const invalid = await executeGraphql(PostByInvalidId);
+      const invalid = await graphql.execute(PostById, {
+        id: 'isto-nao-e-um-uuid',
+      });
 
       expect(JSON.stringify(invalid.errors)).toMatch(
         /BAD_USER_INPUT|inválido|invalid/i,
