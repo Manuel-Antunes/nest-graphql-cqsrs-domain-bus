@@ -8,8 +8,8 @@ delivery or to let the message go.
 ```ts
 @EventPattern(EventAddress.everyEventOf(POSTS_NAMESPACE))
 @RetryPolicy({ maxRetries: 3, skipHandlerToken: ParkedPostAlert })
-posts(@TransportEvent() event: DomainEvent): Promise<void> {
-  return this.ingestion.ingest(event);
+posts(@Payload() envelope: OutboxEnvelope): Promise<void> {
+  return this.ingestion.ingest(envelope);
 }
 ```
 
@@ -96,7 +96,13 @@ rounds up to the second), an `expiration` in milliseconds on RabbitMQ.
 ## A failure has to reach the handler to be retried
 
 The policy sees what the handler's promise rejects with. In this repository a controller calls
-`EventIngestion.ingest`, and the work an event sets off — a saga dispatching a command — runs after
-that call's transaction. `EventIngestion` opens its unit of work with `failOnTrackedFailure`, so a
-command a saga dispatched that throws rejects the ingestion, and it forgets the inbox row it wrote,
-so the redelivery is acted on instead of dropped as a duplicate.
+`EventIngestion.ingest`, and the work an event sets off — a projection, a saga dispatching a command —
+runs inside that call's unit of work and its one transaction. `EventIngestion` opens the unit with
+`failOnTrackedFailure`, so a reaction that throws rejects the ingestion, and the transaction rolls
+back whole: the inbox row goes with the reactions' writes and the outbox rows they staged. The
+redelivery the policy asks for is therefore new work to the inbox, acted on instead of dropped as a
+duplicate — and giving up leaves nothing half-done behind.
+
+This policy is the **inbound** retry, and only that. What a service publishes has a retry of its own,
+further upstream: `@nestjs/outbox`'s relay retries a publish with backoff until a broker takes it, and
+dead-letters it after the last attempt (`<APP>_OUTBOX_RETRY_ATTEMPTS`).

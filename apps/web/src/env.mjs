@@ -6,6 +6,7 @@ import { AuthEnvSchema } from './nest/config/schemas/auth-env.schema';
 import { AwsEnvSchema } from './nest/config/schemas/aws-env.schema';
 import { BillingEnvSchema } from './nest/config/schemas/billing-env.schema';
 import { InngestEnvSchema } from './nest/config/schemas/inngest-env.schema';
+import { OutboxEnvSchema } from './nest/config/schemas/outbox-env.schema';
 import { PostgresEnvSchema } from './nest/config/schemas/postgres-env.schema';
 import { RabbitmqEnvSchema } from './nest/config/schemas/rabbitmq-env.schema';
 
@@ -16,6 +17,7 @@ export const env = createEnv({
     ...AwsEnvSchema.shape,
     ...BillingEnvSchema.shape,
     ...InngestEnvSchema.shape,
+    ...OutboxEnvSchema.shape,
     ...PostgresEnvSchema.shape,
     ...RabbitmqEnvSchema.shape,
     POSTS_SUBGRAPH_URL: z.string().optional(),

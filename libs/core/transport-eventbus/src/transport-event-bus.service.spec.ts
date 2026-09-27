@@ -1,19 +1,24 @@
-import { Inject, Injectable } from '@nestjs/common';
-import { DiscoveryModule } from '@nestjs/core';
+import { Inject, Injectable, Module } from '@nestjs/common';
 import type { ICommandHandler, IEvent, IEventHandler } from '@nestjs/cqrs';
 import {
   AggregateRoot,
   CommandBus,
   CommandHandler,
-  CqrsModule,
   EventPublisher,
   EventsHandler,
   ofType,
   Saga,
 } from '@nestjs/cqrs';
-import { ClientProxy } from '@nestjs/microservices';
+import type { OutboxEnvelope } from '@nestjs/outbox';
+import { ClientProxyTransport } from '@nestjs/outbox';
 import type { TestingModule } from '@nestjs/testing';
 import { Test } from '@nestjs/testing';
+import { CqsrsModule } from '@nestposts/cqsrs';
+import { DatabaseModule } from '@nestposts/database';
+import {
+  TestSchemaModule,
+  testDatabaseConfig,
+} from '@nestposts/database/testing';
 import { EventType } from '@nestposts/platform/domain/shared/event-type';
 import type { Observable } from 'rxjs';
 import { map } from 'rxjs';
@@ -23,37 +28,15 @@ import {
   TRANSPORT_EVENT_BUS_SERVICE,
 } from './constants';
 import { ExcludeDef } from './decorators/exclude-def.decorator';
-import { EVERY_NAMESPACE, Publisher } from './decorators/publisher.decorator';
 import {
   TRANSPORT_MESSAGE_TYPE,
   TRANSPORT_ORIGIN,
-} from './outbound/event-envelope';
-import {
-  CorrelatedRequestContext,
-  RequestContextCodec,
-} from './request-context';
+} from './outbound/message-headers';
+import { OutboxPackets } from './outbound/outbox-packets';
 import { RecordingClient } from './testing/recording-client';
-import { transportEventBusProviders } from './transport-event-bus.providers';
+import { TransportEventBusModule } from './transport-event-bus.module';
 import type { TransportEventBusService } from './transport-event-bus.service';
-import { TransportIdentity } from './transport-identity';
 
-/**
- * The integration suite of nestjs-transport-eventbus, ported assertion for assertion.
- *
- * It is what proves the vendored base still behaves as it did — what leaves and what does not, what
- * `@ExcludeDef` costs, `publishAll`, a saga, a service that injects the bus, and an aggregate committed
- * through the transport publisher — on `@nestjs/cqrs` 12, where the event identity that made half of it
- * work no longer exists. See `NOTICE.md`.
- *
- * Two things are translated rather than copied, and the fixture names are upstream's on purpose so the
- * correspondence stays readable: what an event may leave through is **its namespace** and not a
- * `@TransportType` it carries (the `Rabbit*` fixtures are the ones in the namespace this service's
- * destination takes; `Default*` are in one nothing takes), and upstream's own mode — no namespaces at
- * all, everything under one pattern — is the last describe.
- *
- * Upstream's fixtures wrote into a `Storage` provider; here a handler records into the same map, which
- * keeps the assertions readable side by side with theirs.
- */
 @Injectable()
 class Storage {
   private readonly data = new Map<string, unknown>();
@@ -227,18 +210,16 @@ class TestEventService {
   }
 }
 
-@Injectable()
-@Publisher(SHOP)
-class RabbitPublisher {
-  readonly client: ClientProxy;
+class Rabbit extends RecordingClient {}
 
-  constructor() {
-    this.client = new RecordingClient();
-  }
-}
+@Module({
+  providers: [{ provide: Rabbit, useValue: new Rabbit() }],
+  exports: [Rabbit],
+})
+class RabbitModule {}
 
-const metadataOf = (message: { data: unknown }) =>
-  (message.data as { metadata: Record<string, string> }).metadata;
+const headersOf = (message: { data: unknown }) =>
+  (message.data as OutboxEnvelope).headers;
 
 describe('the transport event bus (the vendored base)', () => {
   let module: TestingModule;
@@ -249,15 +230,26 @@ describe('the transport event bus (the vendored base)', () => {
 
   beforeAll(async () => {
     module = await Test.createTestingModule({
-      imports: [CqrsModule.forRoot(), DiscoveryModule],
+      imports: [
+        CqsrsModule.forRoot(),
+        DatabaseModule.forRoot(
+          testDatabaseConfig({ allowGlobalContext: true }),
+        ),
+        TestSchemaModule.forRoot(),
+        TransportEventBusModule.forRoot({
+          identity: 'the-suite',
+          outbox: {
+            imports: [RabbitModule],
+            destinations: {
+              [SHOP]: ClientProxyTransport(Rabbit, {
+                toPacket: OutboxPackets.memory,
+              }),
+            },
+            useFactory: () => ({ relay: 'drain' }),
+          },
+        }),
+      ],
       providers: [
-        ...transportEventBusProviders,
-        {
-          provide: TransportIdentity,
-          useValue: TransportIdentity.named('the-suite'),
-        },
-        { provide: RequestContextCodec, useClass: CorrelatedRequestContext },
-        RabbitPublisher,
         Storage,
         TestEventService,
         DefaultEventHandler,
@@ -276,7 +268,7 @@ describe('the transport event bus (the vendored base)', () => {
     eventBus = module.get(TRANSPORT_EVENT_BUS_SERVICE);
     storage = module.get(Storage);
     commandBus = module.get(CommandBus);
-    rabbit = module.get(RabbitPublisher).client as RecordingClient;
+    rabbit = module.get(Rabbit);
   });
 
   afterAll(() => module.close());
@@ -287,8 +279,6 @@ describe('the transport event bus (the vendored base)', () => {
   });
 
   const sentMessages = () => rabbit.sent.map((message) => message.data);
-  const afterFloatingPublishesSettle = () =>
-    new Promise((resolve) => setImmediate(resolve));
 
   describe('what goes out, and what runs locally', () => {
     it('calls the DefaultEvent handler and sends nothing: no destination takes its namespace', async () => {
@@ -348,7 +338,7 @@ describe('the transport event bus (the vendored base)', () => {
     it('carries the event under the message type its @EventType declares', async () => {
       await eventBus.publish(new RabbitWithDefEvent('carried'));
 
-      expect(metadataOf(rabbit.sent[0])).toMatchObject({
+      expect(headersOf(rabbit.sent[0])).toMatchObject({
         [TRANSPORT_MESSAGE_TYPE]: 'shop.RabbitWithDef#1.0.0',
         [TRANSPORT_ORIGIN]: 'the-suite',
       });
@@ -371,7 +361,7 @@ describe('the transport event bus (the vendored base)', () => {
       expect(rabbit.sent).toHaveLength(1);
     });
 
-    it("carries the events an aggregate commits, once commit()'s unawaited publish settles", async () => {
+    it('carries the events an aggregate commits by the time the command answers', async () => {
       await commandBus.execute(
         new TryAggregateRootCommand('TryAggregateRootEvent'),
       );
@@ -379,69 +369,7 @@ describe('the transport event bus (the vendored base)', () => {
       expect(storage.get('TryAggregateRootEvent')).toBe(
         'TryAggregateRootEvent',
       );
-
-      await afterFloatingPublishesSettle();
-
       expect(rabbit.sent).toHaveLength(1);
-    });
-  });
-});
-
-describe("upstream's own mode: one destination, every namespace", () => {
-  let module: TestingModule;
-  let eventBus: TransportEventBusService;
-  let everything: RecordingClient;
-  let storage: Storage;
-
-  @Injectable()
-  @Publisher(EVERY_NAMESPACE)
-  class EverythingPublisher {
-    readonly client: ClientProxy;
-
-    constructor() {
-      this.client = new RecordingClient();
-    }
-  }
-
-  beforeAll(async () => {
-    module = await Test.createTestingModule({
-      imports: [CqrsModule.forRoot(), DiscoveryModule],
-      providers: [
-        ...transportEventBusProviders,
-        {
-          provide: TransportIdentity,
-          useValue: TransportIdentity.named('the-suite'),
-        },
-        { provide: RequestContextCodec, useClass: CorrelatedRequestContext },
-        EverythingPublisher,
-        Storage,
-        InternalEventHandler,
-      ],
-    }).compile();
-    await module.init();
-
-    eventBus = module.get(TRANSPORT_EVENT_BUS_SERVICE);
-    everything = module.get(EverythingPublisher).client as RecordingClient;
-    storage = module.get(Storage);
-  });
-
-  afterAll(() => module.close());
-
-  it('carries an event that declares no namespace at all, which nothing else would', async () => {
-    await eventBus.publish(new InternalEvent('InternalEvent'));
-
-    expect(everything.sent).toHaveLength(1);
-    expect(storage.get('InternalEvent')).toBe('InternalEvent');
-  });
-
-  it('sends it under the single pattern, with its class name as the message type', async () => {
-    everything.clear();
-
-    await eventBus.publish(new InternalEvent('InternalEvent'));
-
-    expect(everything.patterns()).toEqual(['TRANSPORT_EVENT_BUS_PATTERN']);
-    expect(metadataOf(everything.sent[0])).toMatchObject({
-      [TRANSPORT_MESSAGE_TYPE]: 'InternalEvent',
     });
   });
 });

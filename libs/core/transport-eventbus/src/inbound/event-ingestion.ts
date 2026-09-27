@@ -2,16 +2,17 @@ import { EntityManager } from '@mikro-orm/core';
 import { Injectable, Logger, Optional } from '@nestjs/common';
 import type { AsyncContext } from '@nestjs/cqrs';
 import { EventBus } from '@nestjs/cqrs';
-import { UnitOfWork } from '@nestposts/cqsrs';
-import { inRequestContext } from '@nestposts/database';
+import type { OutboxEnvelope } from '@nestjs/outbox';
+import { OutboxInbox } from '@nestjs/outbox';
+import { UnitOfWork, UnitOfWorkTransaction } from '@nestposts/cqsrs';
 
 import type { Ingestion } from '../outbound/transport-metadata';
-import { ingestionOf } from '../outbound/transport-metadata';
 import { EventLog } from '../persistence/event-log/event-log';
-import { MessageInbox } from '../persistence/message-inbox';
+import { MikroOrmOutboxStore } from '../persistence/outbox/mikro-orm-outbox.store';
 import { RequestContextCodec } from '../request-context';
 import { ingesting } from '../tracing';
 import { TransportIdentity } from '../transport-identity';
+import { envelopeOf, messageOf, reconstruct } from './event-reconstruction';
 
 /**
  * **The inbound half: an event that arrived becomes an event of this process, exactly once.**
@@ -29,23 +30,30 @@ import { TransportIdentity } from '../transport-identity';
  * describes the system when you list the broker's bindings.
  *
  * ## What it receives
- * The **event**, already an instance of its real class: the transporter's deserializer
- * ({@link EventEnvelopeDeserializer}) did that, and left on it the mark of where it came from. A
- * message that arrives without that mark is a wiring mistake — the transport was built without the
- * deserializer — and it is refused by name rather than quietly skipping the inbox.
+ * The `OutboxEnvelope` the producer's outbox published, as the controller took it with `@Payload()`
+ * — `@nestjs/outbox`'s own consumer pattern. The event is rebuilt from it here, as an instance of its
+ * real class and marked with where it came from; a payload that is not an envelope is a wiring
+ * mistake, refused by name rather than quietly skipping the inbox.
  *
  * ## The three guards that make each delivery one thing
  * In order, and each covers what the others do not:
  * 1. **origin**: an event this service produced and got back is dropped. It cuts the resend loop;
- * 2. **inbox**: {@link MessageInbox} writes the identifier in the SAME transaction as the append.
- *    A redelivery finds the row and does nothing;
+ * 2. **inbox**: `@nestjs/outbox`'s {@link OutboxInbox} records `(this service, the message)` in the
+ *    SAME transaction as everything the message causes. A redelivery finds the row and does nothing;
  * 3. **the aggregate**: the handler on the other side decides against its own state. It is the last
  *    line of defence and the only one that survives an emptied inbox.
  *
- * ## What the transaction covers
- * The inbox row and the {@link EventLog} append. The event reaches the local bus **after**
- * it commits — a handler triggered from inside the transaction inherits it through the async store and
- * then finds it gone (`Transaction is already committed`).
+ * ## What the transaction covers — everything
+ * One message is one unit of work, and the unit runs in a transaction: the inbox row, the
+ * {@link EventLog} append, every reaction the event sets off on the local bus (a projection, a saga's
+ * command — they join the unit) and whatever those reactions publish, which goes to the outbox. It
+ * commits whole or rolls back whole, so a reaction that fails takes the inbox row with it and the
+ * redelivery is new again; a crash in the middle leaves nothing half-remembered.
+ *
+ * The event reaches the local bus while the transaction is open, because that is what makes its
+ * reactions part of it. What reacts WITHOUT being tracked by the unit — a subscription's stream —
+ * sees it before the transaction commits, and must read what the event carries rather than query for
+ * what the reactions wrote.
  */
 @Injectable()
 export class EventIngestion {
@@ -53,7 +61,9 @@ export class EventIngestion {
 
   constructor(
     private readonly em: EntityManager,
-    private readonly inbox: MessageInbox,
+    private readonly inbox: OutboxInbox,
+    private readonly store: MikroOrmOutboxStore,
+    private readonly transaction: UnitOfWorkTransaction,
     private readonly context: RequestContextCodec,
     private readonly eventBus: EventBus,
     private readonly identity: TransportIdentity,
@@ -65,27 +75,30 @@ export class EventIngestion {
     @Optional() private readonly log?: EventLog,
   ) {}
 
+  /** The name this service's inbox rows are kept under: its own, which never changes. */
+  get consumer(): string {
+    return this.identity.applicationName;
+  }
+
   /**
    * Ingests one event. It is what each application's controllers call.
    *
    * A failure is logged **and rethrown**: the log exists because a transport that rejects a message
    * usually does not say why — from the outside the integration simply does not happen, and the only
    * sign is a saga that never closes. The rethrow keeps the message rejected, which is the right
-   * behaviour for a poison message.
-   */
-  /**
-   * **One message, one unit of work** — which is what makes the caller's `await` mean "the whole
-   * thing", not "the transaction".
+   * behaviour for a poison message, and gives the transport's retry something to act on.
    *
-   * Publishing an ingested event sets off the saga and the projections, and `@nestjs/cqrs` hands
-   * them the event and returns. Whoever called this — `processSqsEvent`, in a function — would
-   * otherwise answer while the saga was still deciding, and Lambda freezes the container the moment
-   * the handler returns: the log ends one line after the saga said what it was about to do. Inside a
-   * unit, that work registers itself and the unit waits for it, so this promise covers the chain.
+   * **One message, one unit of work** — which is what makes the caller's `await` mean "the whole
+   * thing", not "the transaction". Publishing an ingested event sets off the saga and the projections,
+   * and `@nestjs/cqrs` hands them the event and returns. Whoever called this — `processSqsEvent`, in a
+   * function — would otherwise answer while the saga was still deciding, and Lambda freezes the
+   * container the moment the handler returns. Inside a unit, that work registers itself and the unit
+   * waits for it, so this promise covers the chain.
    */
-  async ingest(event: object): Promise<void> {
+  async ingest(delivered: OutboxEnvelope): Promise<void> {
     try {
-      const message = this.messageOf(event);
+      const envelope = envelopeOf(delivered);
+      const message = messageOf(envelope);
       if (message.origin && message.origin === this.identity.applicationName) {
         this.logger.debug(
           `inbox ← ${message.messageType} (${message.identifier}) dropped: this service's own echo`,
@@ -100,96 +113,64 @@ export class EventIngestion {
        * and the Lambda freeze is back.
        */
       const context = this.context.decode(message);
+      const event = reconstruct(envelope);
 
       /**
-       * The span is **outside** the unit of work, and that is the whole point of the order. What this
-       * service publishes in reaction is staged while the handler runs and only leaves at
-       * `commit()` — which happens after the work returns. With the span inside the unit, the commit
-       * ran after it had ended, `injectTraceContext` found no span in the context, and every message
-       * this service produced went out with no `traceparent`: the next service opened a trace of its
-       * own and the saga read as one trace per hop.
+       * The span is **outside** the unit of work, and that is the whole point of the order: what the
+       * reactions publish is staged while they run and recorded at the unit's prepare phase, and the
+       * `traceparent` it carries is the one active then. With the span inside the unit, every
+       * message this service produced would go out with none, and the next service would open a
+       * trace of its own.
        */
-      const admission = { registered: false };
-      try {
-        await ingesting(message, () =>
-          UnitOfWork.run(
-            async () => {
-              admission.registered = await this.ingestMessage(
-                event,
-                message,
-                context,
-              );
-            },
-            context,
-            { failOnTrackedFailure: true },
-          ),
-        );
-      } catch (failure) {
-        if (admission.registered) {
-          await this.release(message);
-        }
-        throw failure;
-      }
+      await ingesting(message, () =>
+        UnitOfWork.run(() => this.admit(event, message, context), context, {
+          failOnTrackedFailure: true,
+          transaction: this.transaction,
+        }),
+      );
     } catch (failure) {
       this.logger.error(
-        `inbox ← failed to ingest ${event?.constructor?.name ?? typeof event}; it will be REJECTED`,
+        `inbox ← failed to ingest ${(delivered as Partial<OutboxEnvelope>)?.topic ?? 'a message'}; it will be REJECTED`,
         failure instanceof Error ? failure.stack : String(failure),
       );
       throw failure;
     }
   }
 
-  private async ingestMessage(
+  private async admit(
     event: object,
     message: Ingestion,
     context?: AsyncContext,
-  ): Promise<boolean> {
-    return inRequestContext(this.em, async () => {
-      const ingested = await this.em.transactional(async () => {
-        if (
-          !(await this.inbox.register(
-            message.identifier,
-            message.messageType,
-            message.origin,
-          ))
-        ) {
-          this.logger.log(
-            `inbox ← ${message.messageType} (${message.identifier}) dropped: already ingested`,
-          );
-          return false;
-        }
+  ): Promise<void> {
+    const outcome = await this.inbox.processInTransaction(
+      this.em,
+      this.consumer,
+      message.identifier,
+      async () => {
         this.logger.debug(
           `inbox ← ${message.messageType} (${message.identifier}) from '${message.origin ?? 'unknown'}'`,
         );
+        await this.store.describeInbox(
+          this.em,
+          this.consumer,
+          message.identifier,
+          message,
+        );
         await this.log?.append([event]);
-        return true;
-      });
-
-      if (ingested) {
         this.publish(event, context);
-      }
-      return ingested;
-    });
-  }
-
-  private async release(message: Ingestion): Promise<void> {
-    try {
-      await inRequestContext(this.em, () =>
-        this.inbox.forget(message.identifier),
-      );
-    } catch (failure) {
-      this.logger.error(
-        `inbox ← could not forget ${message.messageType} (${message.identifier}); its redelivery ` +
-          'will be dropped as a duplicate',
-        failure instanceof Error ? failure.stack : String(failure),
+      },
+    );
+    if (outcome.duplicate) {
+      this.logger.log(
+        `inbox ← ${message.messageType} (${message.identifier}) dropped: already ingested`,
       );
     }
   }
 
   /**
-   * On the **local** bus, and after the transaction — never on the transport one, which would offer
-   * the event straight back to the destinations. The origin mark would refuse it, but publishing it
-   * there would still be saying the wrong thing.
+   * On the **local** bus — never on the transport one, which would offer the event straight back to
+   * the destinations. The origin mark would refuse it, but publishing it there would still be saying
+   * the wrong thing.
    */
   private publish(event: object, context?: AsyncContext): void {
     if (context) {
@@ -197,18 +178,5 @@ export class EventIngestion {
       return;
     }
     this.eventBus.publish(event);
-  }
-
-  private messageOf(event: object): Ingestion {
-    const message = ingestionOf(event);
-    if (!message) {
-      throw new TypeError(
-        `${event?.constructor?.name ?? typeof event} did not come through @TransportEvent(): there ` +
-          `is no message to remember, so the inbox cannot tell a redelivery from a new fact. Take ` +
-          `the parameter with @TransportEvent(), and declare the transport's ` +
-          `EventEnvelopeDeserializer in its options.`,
-      );
-    }
-    return message;
   }
 }

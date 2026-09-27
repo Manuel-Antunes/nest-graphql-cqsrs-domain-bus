@@ -6,16 +6,13 @@ import {
   eventTypeOf,
 } from '@nestposts/platform/domain/shared/event-type';
 
-import { reconstruct } from '../../inbound/event-reconstruction';
-import type { EnvelopeMetadata } from '../../outbound/event-envelope';
+import { rebuild } from '../../inbound/event-reconstruction';
 import {
   decodeData,
-  EventEnvelope,
   encodeData,
-  TRANSPORT_IDENTIFIER,
   TRANSPORT_MESSAGE_TYPE,
   TRANSPORT_TIMESTAMP,
-} from '../../outbound/event-envelope';
+} from '../../outbound/message-headers';
 import { identifierOf } from '../../outbound/transport-metadata';
 import type { TraceCarrier } from '../../tracing';
 import { EventTrace, injectTraceContext } from '../../tracing';
@@ -261,15 +258,18 @@ const traceContextOf = (event: object): string | null => {
 };
 
 const eventOf = (row: StoredRow): object =>
-  reconstruct(
-    new EventEnvelope(
-      decodeData(JSON.parse(row.payload) as Record<string, unknown>),
-      {
+  rebuild(
+    {
+      origin: undefined,
+      identifier: row.identifier,
+      messageType: row.messageType,
+      metadata: {
         [TRANSPORT_MESSAGE_TYPE]: row.messageType,
-        [TRANSPORT_IDENTIFIER]: row.identifier,
         [TRANSPORT_TIMESTAMP]: new Date(row.occurredAt).toISOString(),
-      } as EnvelopeMetadata,
-    ),
+      },
+      tags: [],
+    },
+    decodeData(JSON.parse(row.payload) as Record<string, unknown>),
   );
 
 const messageTypeOf = (event: object): string =>

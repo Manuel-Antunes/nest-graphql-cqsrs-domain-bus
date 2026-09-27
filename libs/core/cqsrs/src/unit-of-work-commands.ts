@@ -6,7 +6,7 @@ import { CommandBus } from '@nestjs/cqrs';
 
 import 'reflect-metadata';
 
-import { UnitOfWork } from './unit-of-work';
+import { UnitOfWork, UnitOfWorkTransaction } from './unit-of-work';
 
 /**
  * The key `@EventsHandler` writes, copied rather than imported: it lives in
@@ -52,14 +52,35 @@ export class UnitOfWorkCommands implements OnApplicationBootstrap {
   ) {}
 
   onApplicationBootstrap(): void {
-    this.aroundCommands(this.moduleRef.get(CommandBus, { strict: false }));
+    const transaction = this.transaction();
+    this.aroundCommands(
+      this.moduleRef.get(CommandBus, { strict: false }),
+      transaction,
+    );
     const handlers = this.aroundHandlers();
     this.logger.log(
-      `every command runs in a unit of work; ${handlers} event handler(s) register their work on it`,
+      `every command runs in a unit of work${transaction ? ' and its transaction' : ''}; ` +
+        `${handlers} event handler(s) register their work on it`,
     );
   }
 
-  private aroundCommands(bus: CommandBus): void {
+  /**
+   * The application's {@link UnitOfWorkTransaction}, when it binds one. Resolved here rather than
+   * injected because it is bound by whichever global module knows the database, and a service with
+   * none still runs every command in a unit — without a transaction.
+   */
+  private transaction(): UnitOfWorkTransaction | undefined {
+    try {
+      return this.moduleRef.get(UnitOfWorkTransaction, { strict: false });
+    } catch {
+      return undefined;
+    }
+  }
+
+  private aroundCommands(
+    bus: CommandBus,
+    transaction: UnitOfWorkTransaction | undefined,
+  ): void {
     if (wrapped.has(bus)) {
       return;
     }
@@ -73,10 +94,9 @@ export class UnitOfWorkCommands implements OnApplicationBootstrap {
      * different request gets a unit of its own.
      */
     bus.execute = ((command: never, context: never) =>
-      UnitOfWork.run(
-        () => execute(command, context),
-        context,
-      )) as typeof bus.execute;
+      UnitOfWork.run(() => execute(command, context), context, {
+        transaction,
+      })) as typeof bus.execute;
   }
 
   private aroundHandlers(): number {

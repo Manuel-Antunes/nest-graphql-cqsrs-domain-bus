@@ -2,9 +2,9 @@ import { MikroORM } from '@mikro-orm/core';
 import { MikroOrmModule } from '@mikro-orm/nestjs';
 import type { Provider } from '@nestjs/common';
 import { Injectable } from '@nestjs/common';
-import { DiscoveryModule } from '@nestjs/core';
 import type { IEventHandler } from '@nestjs/cqrs';
 import { AsyncContext, CqrsModule, EventsHandler } from '@nestjs/cqrs';
+import type { OutboxEnvelope } from '@nestjs/outbox';
 import type { TestingModule } from '@nestjs/testing';
 import { Test } from '@nestjs/testing';
 import { UnitOfWorkCommands } from '@nestposts/cqsrs';
@@ -16,34 +16,23 @@ import {
 import { EventType } from '@nestposts/platform/domain/shared/event-type';
 
 import {
-  EventEnvelope,
-  TRANSPORT_IDENTIFIER,
+  encodeData,
   TRANSPORT_MESSAGE_TYPE,
   TRANSPORT_ORIGIN,
   TRANSPORT_TAGS,
   TRANSPORT_TIMESTAMP,
-} from '../outbound/event-envelope';
-import { MemoryEventEnvelopeSerializer } from '../outbound/serializers/memory-event-envelope.serializer';
+} from '../outbound/message-headers';
 import { EventLog } from '../persistence/event-log/event-log';
-import {
-  MessageInbox,
-  MikroOrmMessageInbox,
-} from '../persistence/message-inbox';
-import { transportEntities } from '../persistence/message-inbox.entity';
+import { MikroOrmOutboxStore } from '../persistence/outbox/mikro-orm-outbox.store';
+import { outboxEntities } from '../persistence/outbox/outbox.entities';
 import {
   CORRELATION_ID,
   CorrelatedRequestContext,
-  RequestContextCodec,
   TransportRequestContext,
 } from '../request-context';
-import {
-  eventIngestionProviders,
-  transportEventBusProviders,
-} from '../transport-event-bus.providers';
+import { TransportEventBusModule } from '../transport-event-bus.module';
 import { TransportIdentity } from '../transport-identity';
-import { MemoryEventEnvelopeDeserializer } from './deserializers/memory-event-envelope.deserializer';
 import { EventIngestion } from './event-ingestion';
-import { TransportEventPipe } from './transport-event.pipe';
 
 @EventType({ namespace: 'posts', tags: ['postId'] })
 class PostCreatedEvent {
@@ -74,38 +63,31 @@ class PostCreatedHandler implements IEventHandler<PostCreatedEvent> {
   }
 }
 
-const serializer = new MemoryEventEnvelopeSerializer();
-const deserializer = new MemoryEventEnvelopeDeserializer();
-const pipe = new TransportEventPipe();
-
 const arrivingFrom = (
   origin: string,
   identifier = 'evt-1',
-  metadata: Record<string, string> = {},
+  headers: Record<string, string> = {},
   messageType = 'posts.PostCreated#1.0.0',
-): object => {
-  const envelope = new EventEnvelope(
-    { postId: 'p-1', occurredAt: new Date('2026-09-08T12:00:00.000Z') },
-    {
-      [TRANSPORT_MESSAGE_TYPE]: messageType,
-      [TRANSPORT_IDENTIFIER]: identifier,
-      [TRANSPORT_TIMESTAMP]: '2026-09-08T12:00:00.000Z',
-      [TRANSPORT_ORIGIN]: origin,
-      [TRANSPORT_TAGS]: 'postId=p-1',
-      ...metadata,
-    },
-  );
-  const wire = JSON.parse(
-    JSON.stringify(
-      serializer.serialize({
-        pattern: 'posts.PostCreated.p-1',
-        data: envelope,
+): OutboxEnvelope =>
+  JSON.parse(
+    JSON.stringify({
+      id: identifier,
+      topic: 'posts.PostCreated.p-1',
+      key: 'posts/p-1',
+      createdAt: 1_789_000_000_000,
+      payload: encodeData({
+        postId: 'p-1',
+        occurredAt: new Date('2026-09-08T12:00:00.000Z'),
       }),
-    ),
-  ) as unknown;
-
-  return pipe.transform(deserializer.deserialize(wire).data);
-};
+      headers: {
+        [TRANSPORT_MESSAGE_TYPE]: messageType,
+        [TRANSPORT_TIMESTAMP]: '2026-09-08T12:00:00.000Z',
+        [TRANSPORT_ORIGIN]: origin,
+        [TRANSPORT_TAGS]: 'postId=p-1',
+        ...headers,
+      },
+    }),
+  ) as OutboxEnvelope;
 
 const moduleWith = async (
   overrides: Provider[] = [],
@@ -113,33 +95,28 @@ const moduleWith = async (
   const module = await Test.createTestingModule({
     imports: [
       CqrsModule.forRoot(),
-      DiscoveryModule,
       MikroOrmModule.forRoot(
         testDatabaseConfig({
-          entities: [...transportEntities],
+          entities: [...outboxEntities],
           allowGlobalContext: true,
         }),
       ),
+      TransportEventBusModule.forRoot({
+        identity: TransportIdentity.silent('posts-api'),
+        requestContext: CorrelatedRequestContext,
+        inbox: true,
+        providers: overrides,
+      }),
     ],
-    providers: [
-      ...transportEventBusProviders,
-      ...eventIngestionProviders,
-      {
-        provide: TransportIdentity,
-        useValue: TransportIdentity.silent('posts-api'),
-      },
-      { provide: RequestContextCodec, useClass: CorrelatedRequestContext },
-      { provide: MessageInbox, useClass: MikroOrmMessageInbox },
-      Received,
-      PostCreatedHandler,
-      UnitOfWorkCommands,
-      ...overrides,
-    ],
+    providers: [Received, PostCreatedHandler, UnitOfWorkCommands],
   }).compile();
   await module.init();
   await ensureTestSchema(module.get(MikroORM));
   return module;
 };
+
+const processed = (module: TestingModule) =>
+  module.get(MikroOrmOutboxStore).processedBy('posts-api');
 
 describe('EventIngestion', () => {
   let module: TestingModule;
@@ -190,33 +167,44 @@ describe('EventIngestion', () => {
     await settle();
 
     expect(received.events).toHaveLength(0);
-    await expect(module.get(MessageInbox).received()).resolves.toHaveLength(0);
+    await expect(processed(module)).resolves.toHaveLength(0);
   });
 
-  it('rejects a message whose reaction failed, and forgets it so the redelivery is acted on', async () => {
+  it('rolls the inbox row back with a reaction that failed, so the redelivery is acted on', async () => {
     received.refusals = 1;
 
     await expect(
       ingestion.ingest(arrivingFrom('tagging', 'evt-refused')),
     ).rejects.toThrow('the reaction refused');
-    await expect(module.get(MessageInbox).received()).resolves.toHaveLength(0);
+    await expect(processed(module)).resolves.toHaveLength(0);
 
     await ingestion.ingest(arrivingFrom('tagging', 'evt-refused'));
 
     expect(received.events).toHaveLength(1);
-    await expect(module.get(MessageInbox).received()).resolves.toHaveLength(1);
+    await expect(processed(module)).resolves.toHaveLength(1);
   });
 
-  it('remembers what it ingested, and from whom', async () => {
+  it('remembers what it ingested under its own name, and what it was and who sent it', async () => {
     await ingestion.ingest(arrivingFrom('tagging', 'evt-remembered'));
 
-    await expect(module.get(MessageInbox).received()).resolves.toEqual([
+    await expect(processed(module)).resolves.toEqual([
       expect.objectContaining({
-        identifier: 'evt-remembered',
+        messageId: 'evt-remembered',
         messageType: 'posts.PostCreated#1.0.0',
         origin: 'tagging',
       }),
     ]);
+  });
+
+  it('settles two deliveries of one message racing each other: one of them is acted on', async () => {
+    await Promise.all([
+      ingestion.ingest(arrivingFrom('tagging', 'evt-raced')),
+      ingestion.ingest(arrivingFrom('tagging', 'evt-raced')),
+    ]);
+    await settle();
+
+    expect(received.events).toHaveLength(1);
+    await expect(processed(module)).resolves.toHaveLength(1);
   });
 
   it('restores the request that crossed, so the handler runs in it', async () => {
@@ -249,13 +237,13 @@ describe('EventIngestion', () => {
     );
 
     await expect(ingestion.ingest(unknown)).resolves.toBeUndefined();
-    await expect(module.get(MessageInbox).received()).resolves.toHaveLength(1);
+    await expect(processed(module)).resolves.toHaveLength(1);
   });
 
-  it('refuses an event that did not come through @TransportEvent(): there is nothing to remember', async () => {
+  it('refuses a payload that is not an envelope: there is nothing to remember', async () => {
     await expect(
-      ingestion.ingest(new PostCreatedEvent('p-9', new Date())),
-    ).rejects.toThrow(/did not come through @TransportEvent\(\)/);
+      ingestion.ingest(new PostCreatedEvent('p-9', new Date()) as never),
+    ).rejects.toThrow(/not an OutboxEnvelope/);
   });
 
   describe('the event log', () => {

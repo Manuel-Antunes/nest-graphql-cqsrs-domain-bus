@@ -6,18 +6,15 @@ import { Tenant } from '@nestposts/database';
 import { closeTestDatabase, testDatabase } from '@nestposts/database/testing';
 import { EventType } from '@nestposts/platform/domain/shared/event-type';
 import type { Observable } from 'rxjs';
-import { EMPTY, firstValueFrom, map, take, timeout, toArray } from 'rxjs';
+import { firstValueFrom, map, take, timeout, toArray } from 'rxjs';
 
-import { EventEnvelopeFactory } from '../outbound/event-envelope.factory';
 import { MikroOrmEventLog } from '../persistence/event-log/event-log';
 import {
   eventLogEntities,
   LoggedEvent,
 } from '../persistence/event-log/event-log.entity';
-import { CorrelatedRequestContext } from '../request-context';
 import { EventTrace } from '../tracing';
 import { TransportEventBusService } from '../transport-event-bus.service';
-import { TransportIdentity } from '../transport-identity';
 import { EventSourcedEventBus } from './event-sourced-event-bus';
 
 @EventType({ namespace: 'feed', tags: ['postId'] })
@@ -55,15 +52,10 @@ class HeadWatchingEventLog extends MikroOrmEventLog {
 describe('the EventBus, event sourced', () => {
   let orm: MikroORM;
   let log: MikroOrmEventLog;
-  let _envelopes: EventEnvelopeFactory;
 
   beforeAll(async () => {
     orm = await testDatabase({ entities: [...eventLogEntities] });
     log = new MikroOrmEventLog(orm.em);
-    _envelopes = new EventEnvelopeFactory(
-      TransportIdentity.named('posts-api'),
-      new CorrelatedRequestContext(),
-    );
   });
 
   afterAll(() => closeTestDatabase(orm));
@@ -92,11 +84,7 @@ describe('the EventBus, event sourced', () => {
 
   const containerThatPublishes = () => {
     const eventBus = new EventBus({} as never, {} as never, {} as never);
-    const bus = new TransportEventBusService(
-      eventBus,
-      { forward: () => EMPTY } as never,
-      log,
-    );
+    const bus = new TransportEventBusService(eventBus, log);
     return {
       eventBus: { publish: (event: object) => bus.publish(event) },
       stop: () => undefined,

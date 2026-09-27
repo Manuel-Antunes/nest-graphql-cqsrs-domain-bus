@@ -1,10 +1,11 @@
 import { MikroORM } from '@mikro-orm/core';
 import type { ModuleMetadata } from '@nestjs/common';
-import { Injectable } from '@nestjs/common';
+import { Injectable, Module } from '@nestjs/common';
 import { AsyncContext, CqrsModule } from '@nestjs/cqrs';
-import type { ClientProxy } from '@nestjs/microservices';
+import { ClientProxyTransport, OutboxInbox, OutboxRelay } from '@nestjs/outbox';
 import type { TestingModule } from '@nestjs/testing';
 import { Test } from '@nestjs/testing';
+import { UnitOfWorkTransaction } from '@nestposts/cqsrs';
 import { DatabaseModule, inRequestContext } from '@nestposts/database';
 import {
   TestSchemaModule,
@@ -18,19 +19,16 @@ import { EventType } from '@nestposts/platform/domain/shared/event-type';
 import {
   TRANSPORT_EVENT_BUS_PUBLISHER,
   TRANSPORT_EVENT_BUS_SERVICE,
+  TRANSPORT_OUTBOX_DESTINATIONS,
 } from './constants';
-import { Publisher } from './decorators/publisher.decorator';
 import { EventIngestion } from './inbound/event-ingestion';
 import { IncomingRequest } from './inbound/incoming-request';
-import { OutboxRouting } from './outbound/outbox-routing';
+import { OutboxPackets } from './outbound/outbox-packets';
 import type { Ingestion } from './outbound/transport-metadata';
+import { EventOutbox } from './outbox/event-outbox';
 import { EventLog } from './persistence/event-log/event-log';
 import { EventSourcedRepository } from './persistence/event-log/event-sourced.repository';
-import {
-  MessageInbox,
-  MikroOrmMessageInbox,
-  NoMessageInbox,
-} from './persistence/message-inbox';
+import { MikroOrmOutboxStore } from './persistence/outbox/mikro-orm-outbox.store';
 import {
   CorrelatedRequestContext,
   RequestContextCodec,
@@ -63,11 +61,23 @@ class Thing extends AggregateRoot(BaseEntity) {
   }
 }
 
-@Injectable()
-@Publisher('things')
-class ThingsPublisher {
-  readonly client: ClientProxy = new RecordingClient();
-}
+class ThingsClient extends RecordingClient {}
+
+@Module({
+  providers: [{ provide: ThingsClient, useValue: new ThingsClient() }],
+  exports: [ThingsClient],
+})
+class ThingsClientModule {}
+
+const thingsOutbox = {
+  imports: [ThingsClientModule],
+  destinations: {
+    things: ClientProxyTransport(ThingsClient, {
+      toPacket: OutboxPackets.memory,
+    }),
+  },
+  useFactory: () => ({ relay: 'off' as const }),
+};
 
 @Injectable()
 class MyRequestCodec extends CorrelatedRequestContext {
@@ -98,10 +108,7 @@ describe('TransportEventBusModule', () => {
   describe('forRoot', () => {
     it('gives a publish-only service the bus, the publisher and a request codec, and no ingestion', async () => {
       const app = await bootstrap([
-        TransportEventBusModule.forRoot({
-          identity: 'things-api',
-          publishers: [ThingsPublisher],
-        }),
+        TransportEventBusModule.forRoot({ identity: 'things-api' }),
       ]);
 
       expect(app.get(TRANSPORT_EVENT_BUS_SERVICE)).toBeDefined();
@@ -112,17 +119,16 @@ describe('TransportEventBusModule', () => {
       expect(() => app.get(EventIngestion)).toThrow();
     });
 
-    it('registers the destinations it was given, so the routing table answers for them', async () => {
+    it('publishes the namespaces it was given destinations for, and nothing else', async () => {
       const app = await bootstrap([
+        ...persistence(),
         TransportEventBusModule.forRoot({
           identity: 'things-api',
-          publishers: [ThingsPublisher],
+          outbox: thingsOutbox,
         }),
       ]);
 
-      expect(app.get(OutboxRouting).describe()).toEqual([
-        'ThingsPublisher ← [things]',
-      ]);
+      expect(app.get(TRANSPORT_OUTBOX_DESTINATIONS)).toEqual(['things']);
     });
 
     it('takes the name as the identity, and an identity of its own when there is one', async () => {
@@ -173,13 +179,30 @@ describe('TransportEventBusModule', () => {
         ...persistence(),
         TransportEventBusModule.forRoot({
           identity: 'things-api',
-          inbox: NoMessageInbox,
+          inbox: true,
         }),
       ]);
 
       expect(app.get(EventIngestion)).toBeInstanceOf(EventIngestion);
-      expect(app.get(MessageInbox)).toBeInstanceOf(NoMessageInbox);
+      expect(app.get(OutboxInbox)).toBeInstanceOf(OutboxInbox);
       expect(app.get(IncomingRequest)).toBeInstanceOf(IncomingRequest);
+      expect(app.get(UnitOfWorkTransaction)).toBeDefined();
+      expect(() => app.get(EventOutbox)).toThrow();
+    });
+
+    it('keeps an outbox on request, with a relay that publishes through the destinations', async () => {
+      const app = await bootstrap([
+        ...persistence(),
+        TransportEventBusModule.forRoot({
+          identity: 'things-api',
+          outbox: thingsOutbox,
+        }),
+      ]);
+
+      expect(app.get(EventOutbox)).toBeInstanceOf(EventOutbox);
+      expect(app.get(OutboxRelay).running).toBe(false);
+      expect(app.get(MikroOrmOutboxStore).producer).toBe('things-api');
+      expect(() => app.get(EventIngestion)).toThrow();
     });
 
     it('wires the event log and a repository per aggregate', async () => {
@@ -187,7 +210,7 @@ describe('TransportEventBusModule', () => {
         ...persistence(),
         TransportEventBusModule.forRoot({
           identity: 'tagging',
-          inbox: MikroOrmMessageInbox,
+          inbox: true,
           eventStore: [Thing],
         }),
       ]);
@@ -203,18 +226,15 @@ describe('TransportEventBusModule', () => {
         ...persistence(),
         TransportEventBusModule.forRoot({
           identity: 'tagging',
-          inbox: MikroOrmMessageInbox,
+          inbox: true,
           eventStore: [Thing],
         }),
       ]);
       const em = app.get(MikroORM).em;
 
-      const remembered = await inRequestContext(em, async () => {
-        await app
-          .get(MessageInbox)
-          .register('evt-1', 'things.ThingHappened#1.0.0', 'elsewhere');
-        return app.get(MessageInbox).received();
-      });
+      const inbox = app.get(MikroOrmOutboxStore);
+      await inbox.recordInbox(undefined, 'tagging', 'evt-1', Date.now());
+      const remembered = await inbox.processedBy('tagging');
       const replayed = await inRequestContext(em, async () => {
         await app
           .get(EventLog)
@@ -258,7 +278,6 @@ describe('TransportEventBusModule', () => {
             calls += 1;
             return { identity: config.name, publishes: false };
           },
-          publishers: [ThingsPublisher],
         }),
       ]);
 
@@ -287,17 +306,15 @@ describe('TransportEventBusModule', () => {
         ...persistence(),
         TransportEventBusModule.forRootAsync({
           useFactory: () => 'tagging',
-          inbox: MikroOrmMessageInbox,
+          inbox: true,
+          outbox: thingsOutbox,
           eventStore: [Thing],
-          publishers: [ThingsPublisher],
         }),
       ]);
 
       expect(app.get(EventIngestion)).toBeInstanceOf(EventIngestion);
       expect(app.get(EventLog)).toBeDefined();
-      expect(app.get(OutboxRouting).describe()).toEqual([
-        'ThingsPublisher ← [things]',
-      ]);
+      expect(app.get(TRANSPORT_OUTBOX_DESTINATIONS)).toEqual(['things']);
     });
   });
 });

@@ -2,7 +2,10 @@ import { randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { AsyncContext } from '@nestjs/cqrs';
 
-import { isTraceContext, isTransportMetadata } from './outbound/event-envelope';
+import {
+  isTraceContext,
+  isTransportMetadata,
+} from './outbound/message-headers';
 import type { Ingestion } from './outbound/transport-metadata';
 
 /**

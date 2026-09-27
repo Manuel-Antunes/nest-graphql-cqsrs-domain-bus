@@ -12,6 +12,7 @@ import { SentryModule } from '@sentry/nestjs/setup';
 import type { Observable } from 'rxjs';
 import { catchError, from, mergeMap, throwError } from 'rxjs';
 
+import { DeadLetterReporting } from './dead-letter-reporting';
 import { reportError } from './error-reporting';
 
 export interface ErrorReportingModuleOptions {
@@ -97,8 +98,9 @@ export class ErrorReportingInterceptor implements NestInterceptor {
 }
 
 /**
- * **Errors, reported from inside Nest** — `SentryModule`, the Nest SDK's own root module, and
- * {@link ErrorReportingInterceptor} on every handler. Imported once, by the application's root
+ * **Errors, reported from inside Nest** — `SentryModule`, the Nest SDK's own root module,
+ * {@link ErrorReportingInterceptor} on every handler, and {@link DeadLetterReporting} for the messages
+ * an outbox gave up on. Imported once, by the application's root
  * module, beside `loggingModule`. The SDK itself is started by `startTelemetry`, before anything is
  * loaded; with no `SENTRY_DSN` every report is a no-op.
  */
@@ -112,6 +114,7 @@ export class ErrorReportingModule {
       providers: [
         { provide: ERROR_REPORTING_OPTIONS, useValue: options },
         { provide: APP_INTERCEPTOR, useClass: ErrorReportingInterceptor },
+        DeadLetterReporting,
       ],
     };
   }

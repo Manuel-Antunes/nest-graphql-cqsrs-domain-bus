@@ -1,6 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { EventPublisher } from '@nestjs/cqrs';
-import { UnitOfWork } from '@nestposts/cqsrs';
+import { UnitOfWork, UnitOfWorkTransaction } from '@nestposts/cqsrs';
 
 import type { Notification } from '../../domain/notification/notification';
 import type { OnDemandNotifiable } from '../../domain/notification/on-demand-notifiable';
@@ -17,7 +17,10 @@ import { OnDemandNotifications } from '../../domain/notification/on-demand-notif
  */
 @Injectable()
 export class PublishingOnDemandNotifications extends OnDemandNotifications {
-  constructor(private readonly publisher: EventPublisher) {
+  constructor(
+    private readonly publisher: EventPublisher,
+    @Optional() private readonly transaction?: UnitOfWorkTransaction,
+  ) {
     super();
   }
 
@@ -26,10 +29,14 @@ export class PublishingOnDemandNotifications extends OnDemandNotifications {
     notification: Notification,
     now: Date = new Date(),
   ): Promise<void> {
-    await UnitOfWork.run(async () => {
-      const addressed = this.publisher.mergeObjectContext(notifiable);
-      addressed.notify(notification, now);
-      addressed.commit();
-    });
+    await UnitOfWork.run(
+      async () => {
+        const addressed = this.publisher.mergeObjectContext(notifiable);
+        addressed.notify(notification, now);
+        addressed.commit();
+      },
+      undefined,
+      { transaction: this.transaction },
+    );
   }
 }

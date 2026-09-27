@@ -1,4 +1,4 @@
-import { EntityManager } from '@mikro-orm/core';
+import { EntityManager, TransactionPropagation } from '@mikro-orm/core';
 import { Injectable } from '@nestjs/common';
 import { inRequestContext } from '@nestposts/database';
 
@@ -29,6 +29,21 @@ export class MikroOrmNotificationDeliveryRepository extends NotificationDelivery
         onConflictFields: ['notificationId', 'channel'],
         onConflictAction: 'ignore',
       }),
+    );
+  }
+
+  async recordAfter(
+    delivery: NotificationDelivery,
+    send: () => Promise<void>,
+  ): Promise<void> {
+    await inRequestContext(this.em, () =>
+      this.em.transactional(
+        async () => {
+          await send();
+          await this.record(delivery);
+        },
+        { propagation: TransactionPropagation.REQUIRES_NEW },
+      ),
     );
   }
 }

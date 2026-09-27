@@ -12,7 +12,7 @@ entity that maps it (`defineEntity({ schema })`):
 | pin | schema | tables | migrations |
 |---|---|---|---|
 | `SYSTEM_SCHEMA` | `public` | Better Auth's (`auth_user`, `session`, `account`, the OAuth ones…) and the organizations' (`organization`, `member`, `invitation`, `team`…) | `src/migrations/system` |
-| `TRANSPORT_SCHEMA` | `transport` | the transport's inbox and event log | `src/migrations/system` |
+| `TRANSPORT_SCHEMA` | `transport` | the transport's outbox, dead letters, inbox and event log | `src/migrations/system` |
 | `TENANT_SCHEMA` (`*`) | `tenant_<name>` | posts, tags, users, authors, notifications, deliveries, devices | `src/migrations/tenant` |
 
 `tenant_root` is the root tenant — whoever names none. An organization is a tenant, `tenant_<slug>`:

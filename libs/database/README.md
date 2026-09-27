@@ -56,7 +56,7 @@ pins:
 | pin | lives in | |
 |---|---|---|
 | `SYSTEM_SCHEMA` (`'public'`) | `public` | Better Auth's and the organizations' tables |
-| `TRANSPORT_SCHEMA` (`@nestposts/transport-eventbus`) | `transport` | the inbox and the event log |
+| `TRANSPORT_SCHEMA` (`@nestposts/transport-eventbus`) | `transport` | `@nestposts/transport-eventbus`'s bookkeeping: the outbox and its dead letters, every consumer's inbox, the event log |
 | `TENANT_SCHEMA` (`'*'`) | `tenant_<name>` | everything else — MikroORM's wildcard: the schema of the entity manager a query runs on |
 
 It reads `MIKRO_ORM_DEBUG`, validates what it got through `DatabaseConfigSchema`, and sets
@@ -94,7 +94,8 @@ failed`, a port conflict wearing a credentials bug's clothes.
 **Native SQL has to say where the table is.** `tableIn(orm, 'posts')` qualifies a table with the
 configured schema, because a raw statement is resolved against the `search_path` and not against the
 connection's schema — which is a spec reading the column behind a mapping, and which is also why
-`MikroOrmMessageInbox` asks the metadata for its own table name.
+`MikroOrmOutboxStore` and `MikroOrmEventLog` (`@nestposts/transport-eventbus`) ask the metadata for
+their own table names.
 
 ## `DatabaseModule`: the entity list is not a list
 
@@ -130,6 +131,13 @@ request is already in the right entity manager by the time a guard reads the ses
 an aggregate — but a message off a broker never passes through HTTP at all, and
 `allowGlobalContext: false` refuses its first query. The interceptor **defers to a context that
 already exists**, which is what makes running both safe: one request is one entity manager, never two.
+
+A unit of work's transaction runs **inside** that context, not beside it: `MikroOrmUnitOfWorkTransaction`
+(`@nestposts/transport-eventbus`) is `inRequestContext` around `em.transactional`, whose fork keeps
+the schema of the entity manager it was forked from — the tenant's — and becomes what every injected
+entity manager resolves to while the unit runs. A command's writes, its event log append and its
+outbox rows are therefore one transaction, on the tenant's wildcard tables and the pinned `transport`
+ones alike.
 
 **A tenant is a schema: `tenant_<name>`**, and `tenant_root` for whoever names none
 (`Tenant.schemaOf`). `TenantEntityManagerService` is `tmp/organization`'s service, in this
@@ -180,8 +188,8 @@ TenancyModule.forRoot({ migrations, resolver: TransportTenantResolver })   // in
 A token rather than an abstract class because the answer is usually one expression, and a class to
 hold it would be ceremony. `HeaderTenantResolver` is the default and reads `x-tenant` off HTTP,
 GraphQL and the RPC context; its `read(context)` is static, so `@CurrentTenant()` can use the same
-rule with no injector to reach a resolver through. A message carries the tenant on the **envelope's
-metadata** instead, and decoding that belongs to `@nestposts/transport-eventbus` — which is why
+rule with no injector to reach a resolver through. A message carries the tenant in the **envelope's
+headers** instead, and decoding that belongs to `@nestposts/transport-eventbus` — which is why
 `TransportTenantResolver` lives there and this package knows nothing about envelopes.
 
 **The schema itself is created by a trigger on the organization row** — `libs/organizations`

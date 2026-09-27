@@ -9,8 +9,6 @@ import type {
 import { ClientProxy } from '@nestjs/microservices';
 import { topicMatches } from '@nestposts/microservices-aws/topic-pattern';
 
-import { MemoryEventEnvelopeDeserializer } from '../inbound/deserializers/memory-event-envelope.deserializer';
-
 export interface MemoryClientOptions {
   /**
    * The services this client publishes to. A live array or a thunk, because in a test the client is
@@ -31,8 +29,9 @@ export interface MemoryClientOptions {
  * ## What this class adds, and why it has to exist
  * Two things that package does not have, both of which a topic exchange does:
  *
- * - **a `ClientProxy`**, so the outbound half — the routing table, the addressing, the serializer — is
- *   exercised exactly as it is in production, instead of a spec calling `server.emit` by hand;
+ * - **a `ClientProxy`**, so the outbound half — the outbox's `ClientProxyTransport`, its packet, the
+ *   serializer — is exercised exactly as it is in production, instead of a spec calling
+ *   `server.emit` by hand;
  * - **pattern matching**. `MemoryServer` resolves a handler by the exact route, while a routing key is
  *   `posts.PostCreated.<postId>` and the binding is `posts.PostCreated.*`. Matching them is what a
  *   broker does, so it is done here, against the patterns the server says it has
@@ -62,8 +61,7 @@ export class MemoryClient extends ClientProxy {
       typeof options.servers === 'function'
         ? options.servers
         : () => options.servers as readonly MemoryServer[];
-    this.consumer =
-      options.deserializer ?? new MemoryEventEnvelopeDeserializer();
+    this.consumer = options.deserializer ?? PASS_THROUGH;
     this.initializeSerializer(options);
   }
 
@@ -118,3 +116,9 @@ export class MemoryClient extends ClientProxy {
     return undefined as T;
   }
 }
+
+/** What an identity-serialized packet already is: `{ pattern, data }`, handed over as it was sent. */
+const PASS_THROUGH: ConsumerDeserializer = {
+  deserialize: (value) =>
+    value as ReturnType<ConsumerDeserializer['deserialize']>,
+};

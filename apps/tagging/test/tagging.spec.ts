@@ -1,4 +1,5 @@
 import { MikroORM } from '@mikro-orm/core';
+import type { OutboxEnvelope } from '@nestjs/outbox';
 import { Test } from '@nestjs/testing';
 import { inRequestContext, TENANT_MIGRATIONS } from '@nestposts/database';
 import { migrate } from '@nestposts/migrator/main';
@@ -12,14 +13,12 @@ import {
   DEFAULT_TAG_NAME,
 } from '@nestposts/posts/domain/tag/tag.entity';
 import {
-  EventEnvelope,
+  EventIngestion,
   EventSourcedRepository,
-  envelopeFrom,
+  encodeData,
   MemoryClient,
-  MemoryEventEnvelopeSerializer,
-  MessageInbox,
+  MikroOrmOutboxStore,
   reconstruct,
-  TRANSPORT_IDENTIFIER,
   TRANSPORT_MESSAGE_TYPE,
   TRANSPORT_ORIGIN,
   TRANSPORT_TAGS,
@@ -42,16 +41,20 @@ describe('the tagging service', () => {
   let postsApi: MemoryClient;
   let outbound: RecordingClient;
   let posts: EventSourcedRepository<Post>;
-  let inbox: MessageInbox;
+  let inbox: MikroOrmOutboxStore;
 
   const authorId = UserId.generate();
 
   const preCreatedFrom = (
     postId: PostId,
     identifier = `evt-${postId.value}`,
-    metadata: Record<string, string> = {},
-  ) =>
-    new EventEnvelope(
+    headers: Record<string, string> = {},
+  ): OutboxEnvelope => ({
+    id: identifier,
+    topic: `posts.PostPreCreated.${postId.value}`,
+    key: `posts/${postId.value}`,
+    createdAt: Date.parse('2026-09-08T12:00:00.000Z'),
+    payload: encodeData(
       new PostPreCreatedEvent(
         postId.value,
         'Nest + GraphQL',
@@ -60,17 +63,17 @@ describe('the tagging service', () => {
         'manuel',
         new Date('2026-09-08T12:00:00.000Z'),
       ),
-      {
-        [TRANSPORT_MESSAGE_TYPE]: 'posts.PostPreCreated#1.0.0',
-        [TRANSPORT_IDENTIFIER]: identifier,
-        [TRANSPORT_TIMESTAMP]: '2026-09-08T12:00:00.000Z',
-        [TRANSPORT_ORIGIN]: 'posts-api',
-        [TRANSPORT_TAGS]: `postId=${postId.value}`,
-        ...metadata,
-      },
-    );
+    ),
+    headers: {
+      [TRANSPORT_MESSAGE_TYPE]: 'posts.PostPreCreated#1.0.0',
+      [TRANSPORT_TIMESTAMP]: '2026-09-08T12:00:00.000Z',
+      [TRANSPORT_ORIGIN]: 'posts-api',
+      [TRANSPORT_TAGS]: `postId=${postId.value}`,
+      ...headers,
+    },
+  });
 
-  const deliver = (postId: PostId, envelope: EventEnvelope<object>) =>
+  const deliver = (postId: PostId, envelope: OutboxEnvelope) =>
     lastValueFrom(
       postsApi.emit(`posts.PostPreCreated.${postId.value}`, envelope),
     );
@@ -83,7 +86,7 @@ describe('the tagging service', () => {
       pattern.startsWith('posts.PostCreated.'),
     );
 
-  const envelopeOf = (index = 0) => envelopeFrom(completions()[index].data);
+  const envelopeOf = (index = 0) => completions()[index].data as OutboxEnvelope;
 
   beforeAll(async () => {
     await migrate();
@@ -96,13 +99,10 @@ describe('the tagging service', () => {
         .compile(),
       { createSchema: false },
     );
-    postsApi = new MemoryClient({
-      servers: [tagging.server],
-      serializer: new MemoryEventEnvelopeSerializer(),
-    });
+    postsApi = new MemoryClient({ servers: [tagging.server] });
     outbound = tagging.app.get(PostEventsClient);
     posts = tagging.app.get(EventSourcedRepository);
-    inbox = tagging.app.get(MessageInbox);
+    inbox = tagging.app.get(MikroOrmOutboxStore);
   });
 
   afterAll(() => tagging.close());
@@ -143,16 +143,18 @@ describe('the tagging service', () => {
     expect(post?.tags.getIdentifiers().map(String)).toEqual([DEFAULT_TAG_ID]);
   });
 
-  it('remembers the message it received, and who sent it', async () => {
+  it('remembers the message it received under its own name, and who sent it', async () => {
     const postId = PostId.generate();
 
     await deliver(postId, preCreatedFrom(postId));
     await until(() => completions().length === 1);
 
-    await expect(inContext(() => inbox.received())).resolves.toEqual(
+    await expect(
+      inbox.processedBy(tagging.app.get(EventIngestion).consumer),
+    ).resolves.toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          identifier: `evt-${postId.value}`,
+          messageId: `evt-${postId.value}`,
           messageType: 'posts.PostPreCreated#1.0.0',
           origin: 'posts-api',
         }),
@@ -223,7 +225,7 @@ describe('the tagging service', () => {
     );
     await until(() => completions().length === 1);
 
-    expect(envelopeOf().metadata).toMatchObject({
+    expect(envelopeOf().headers).toMatchObject({
       [TRANSPORT_ORIGIN]: 'tagging',
       'cqrs-transport-correlation-id': 'c-1',
     });

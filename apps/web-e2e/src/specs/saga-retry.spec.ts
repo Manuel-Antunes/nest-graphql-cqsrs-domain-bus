@@ -57,6 +57,7 @@ test.describe
     }) => {
       await appendFaults.failAppendsOf(CREATED, 1_000);
       await authentication.signIn(accounts.author);
+      const remembered = await inbox.countOf('tagging', PRE_CREATED);
 
       const postId = await publishing.publishThroughTheApi('Never takes a tag');
 
@@ -72,12 +73,14 @@ test.describe
         'a delivery past the ceiling: the policy did not stop the transport',
       ).toBe(DELIVERIES_UNTIL_GIVING_UP);
       expect(await postRecords.find(postId)).toMatchObject({ version: 1 });
-      expect(await eventLog.count(postId, CREATED)).toBe(0);
-      const preCreated = await eventLog.eventOf(postId, PRE_CREATED);
       expect(
-        await inbox.rowsFor(preCreated.identifier),
+        await eventLog.streamOf(postId),
+        'the ingested event is rolled back with the decision that failed',
+      ).toEqual([]);
+      expect(
+        await inbox.countOf('tagging', PRE_CREATED),
         'a message that was never acted on is not remembered as done',
-      ).toBe(0);
+      ).toBe(remembered);
       givenUp = postId;
     });
 

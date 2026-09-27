@@ -1,10 +1,10 @@
-import type { ModuleMetadata, Provider, Type } from '@nestjs/common';
+import type { ModuleMetadata, Type } from '@nestjs/common';
 
+import type { TransportOutboxOptions } from './outbox/transport-outbox.options';
 import type {
   EventSourced,
   EventSourcedClass,
 } from './persistence/event-log/event-sourced.repository';
-import type { MessageInbox } from './persistence/message-inbox';
 import type { RequestContextCodec } from './request-context';
 import type { TransportIdentity } from './transport-identity';
 
@@ -36,18 +36,20 @@ export interface TransportEventBusModuleOptions
   readonly requestContext?: Type<RequestContextCodec>;
 
   /**
-   * The destinations: the `@Publisher` classes and whatever they hold their clients through. They are
-   * providers rather than options because a client is built by the application — that is where the
-   * broker's address lives.
+   * **The inbound half.** `true` turns receiving on: {@link EventIngestion} admits each message
+   * through `@nestjs/outbox`'s inbox, keyed by this service's name and the message's identifier, in
+   * the transaction of everything the message causes.
    */
-  readonly publishers?: Provider[];
+  readonly inbox?: boolean;
 
   /**
-   * The inbound half, and what it remembers. Passing an inbox is what turns receiving on:
-   * `MikroOrmMessageInbox` for a service with a database, `NoMessageInbox` for one that keeps no
-   * memory of what it received — and then the aggregate is the only guard left.
+   * **The outbound half.** What leaves the process is a message of `@nestjs/outbox`, written in the
+   * unit of work's own transaction — with the writes that raised it — and published by the outbox's
+   * relay through the destination its namespace names, once that transaction has committed. See
+   * {@link TransportOutboxOptions}. Without it nothing leaves: the bus publishes to this process
+   * only.
    */
-  readonly inbox?: Type<MessageInbox>;
+  readonly outbox?: TransportOutboxOptions;
 
   /**
    * The aggregates this service event-sources. Given, the {@link EventLog} is wired and each

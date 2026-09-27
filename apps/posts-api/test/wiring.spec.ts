@@ -6,7 +6,7 @@ import { Test } from '@nestjs/testing';
 import { NOTIFICATIONS_NAMESPACE } from '@nestposts/notifications/domain/notifications.namespace';
 import { registeredEventTypes } from '@nestposts/platform/domain/shared/event-type';
 import { POSTS_NAMESPACE } from '@nestposts/posts/domain/post/event/posts.namespace';
-import { OutboxRouting } from '@nestposts/transport-eventbus';
+import { TRANSPORT_OUTBOX_DESTINATIONS } from '@nestposts/transport-eventbus';
 
 import { AppModule } from '../src/app.module';
 
@@ -37,13 +37,17 @@ describe('the wiring that fails silently', () => {
   let module: TestingModule;
 
   beforeAll(async () => {
+    vi.stubEnv('POSTS_OUTBOX_RELAY', 'off');
     module = await Test.createTestingModule({
       imports: [AppModule],
     }).compile();
     await module.init();
   });
 
-  afterAll(() => module.close());
+  afterAll(async () => {
+    await module.close();
+    vi.unstubAllEnvs();
+  });
 
   it('registers every event handler and saga the application layer declares', async () => {
     const declared: string[] = [];
@@ -88,8 +92,9 @@ describe('the wiring that fails silently', () => {
   });
 
   it('publishes the posts and the notifications namespaces, and only them', () => {
-    expect(module.get(OutboxRouting).describe()).toEqual([
-      `PostEventsPublisher ← [${POSTS_NAMESPACE}, ${NOTIFICATIONS_NAMESPACE}]`,
+    expect(module.get(TRANSPORT_OUTBOX_DESTINATIONS)).toEqual([
+      POSTS_NAMESPACE,
+      NOTIFICATIONS_NAMESPACE,
     ]);
   });
 });

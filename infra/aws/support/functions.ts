@@ -10,8 +10,8 @@ import { createHash } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
-/** Node 22, which is what `require(esm)` needs — see the note on MikroORM in `CLAUDE.md`. */
-const RUNTIME = 'nodejs22.x';
+/** Node 24, the version CI tests and the images run — see the note on MikroORM in `CLAUDE.md`. */
+const RUNTIME = 'nodejs24.x';
 
 /**
  * **Installed as real files instead of bundled**, and the list is short on purpose.

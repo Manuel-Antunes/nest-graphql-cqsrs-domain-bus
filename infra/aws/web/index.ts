@@ -5,6 +5,7 @@ import { streaming } from '../compute';
 import {
   authSecret,
   gatewayUrl,
+  outboxSweepSecret,
   sharedEnvironment,
 } from '../compute/environment';
 import { router } from '../edge';
@@ -71,5 +72,21 @@ export const web = new sst.aws.Nextjs('Web', {
     GATEWAY_URL: gatewayUrl,
     WEB_TRANSPORT: 'aws',
     WEB_TOPIC_ARN: postEvents.arn,
+    WEB_OUTBOX_RELAY: 'drain',
+    WEB_OUTBOX_SWEEP_SECRET: outboxSweepSecret,
+  },
+});
+
+new sst.aws.Cron('WebOutboxSweep', {
+  schedule: 'rate(1 minute)',
+  function: {
+    handler: 'infra/lambda/web-outbox-sweep.handler',
+    runtime: 'nodejs24.x',
+    architecture: 'arm64',
+    timeout: '1 minute',
+    environment: {
+      WEB_OUTBOX_SWEEP_URL: $interpolate`${router.url}/api/outbox/sweep`,
+      WEB_OUTBOX_SWEEP_SECRET: outboxSweepSecret,
+    },
   },
 });

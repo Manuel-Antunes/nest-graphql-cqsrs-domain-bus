@@ -9,5 +9,6 @@
 export * from './boot';
 export * from './queue';
 export * from './runtime';
+export * from './scheduled';
 export * from './settle';
 export * from './streaming';

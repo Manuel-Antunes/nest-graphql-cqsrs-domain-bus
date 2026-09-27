@@ -1,6 +1,6 @@
+import type { OutboxEnvelope } from '@nestjs/outbox';
 import { Test } from '@nestjs/testing';
 import {
-  inRequestContext,
   MikroORM,
   ROOT_TENANT_SCHEMA,
   TENANT_MIGRATIONS,
@@ -16,11 +16,10 @@ import { NotificationRecord } from '@nestposts/notifications/domain/notification
 import { NotificationId } from '@nestposts/notifications/domain/notification/vo/notification-id';
 import { PostId } from '@nestposts/posts/domain/post/vo/post-id';
 import {
-  EventEnvelope,
+  EventIngestion,
+  encodeData,
   MemoryClient,
-  MemoryEventEnvelopeSerializer,
-  MessageInbox,
-  TRANSPORT_IDENTIFIER,
+  MikroOrmOutboxStore,
   TRANSPORT_MESSAGE_TYPE,
   TRANSPORT_ORIGIN,
   TRANSPORT_TAGS,
@@ -41,6 +40,21 @@ interface RenderedMail {
   icalEvent?: { method: string; content: string };
 }
 
+const IDENTIFIER = 'id';
+
+const envelopeOf = (
+  event: NotificationReceivedEvent,
+  { [IDENTIFIER]: id, ...headers }: Record<string, string>,
+): OutboxEnvelope & { readonly data: NotificationReceivedEvent } => ({
+  id,
+  topic: `notifications.NotificationReceived.${event.notificationId}`,
+  key: `notifications/${event.notificationId}`,
+  createdAt: event.occurredAt.getTime(),
+  headers,
+  payload: encodeData(event),
+  data: event,
+});
+
 describe('the notificator service', () => {
   let notificator: InProcessService;
   let postsApi: MemoryClient;
@@ -52,7 +66,7 @@ describe('the notificator service', () => {
     identifier = `evt-${notificationId}`,
   ) => {
     const postId = PostId.generate().value;
-    return new EventEnvelope(
+    return envelopeOf(
       new NotificationReceivedEvent(
         notificationId,
         'posts.PostCreated',
@@ -69,7 +83,7 @@ describe('the notificator service', () => {
       ),
       {
         [TRANSPORT_MESSAGE_TYPE]: 'notifications.NotificationReceived#1.0.0',
-        [TRANSPORT_IDENTIFIER]: identifier,
+        [IDENTIFIER]: identifier,
         [TRANSPORT_TIMESTAMP]: '2026-09-23T12:00:00.000Z',
         [TRANSPORT_ORIGIN]: 'posts-api',
         [TRANSPORT_TAGS]: `notificationId=${notificationId}`,
@@ -78,13 +92,8 @@ describe('the notificator service', () => {
     );
   };
 
-  const deliver = (envelope: EventEnvelope<NotificationReceivedEvent>) =>
-    lastValueFrom(
-      postsApi.emit(
-        `notifications.NotificationReceived.${envelope.data.notificationId}`,
-        envelope,
-      ),
-    );
+  const deliver = (envelope: OutboxEnvelope) =>
+    lastValueFrom(postsApi.emit(envelope.topic, envelope));
 
   const recordsOf = (notificationId: string) =>
     notificator.app
@@ -122,7 +131,6 @@ describe('the notificator service', () => {
     );
     postsApi = new MemoryClient({
       servers: [notificator.server],
-      serializer: new MemoryEventEnvelopeSerializer(),
     });
     mails = notificator.app.get<MailService, CapturingMailService>(MailService);
   });
@@ -163,7 +171,7 @@ describe('the notificator service', () => {
   it('emails a calendar invitation with its .ics, one revision later when the event moves', async () => {
     const notificationId = NotificationId.generate().value;
     const calendarEventId = CalendarEventId.generate().value;
-    const moved = new EventEnvelope(
+    const moved = envelopeOf(
       new NotificationReceivedEvent(
         notificationId,
         'events.CalendarEventRescheduled',
@@ -189,7 +197,7 @@ describe('the notificator service', () => {
       ),
       {
         [TRANSPORT_MESSAGE_TYPE]: 'notifications.NotificationReceived#1.0.0',
-        [TRANSPORT_IDENTIFIER]: `evt-${notificationId}`,
+        [IDENTIFIER]: `evt-${notificationId}`,
         [TRANSPORT_TIMESTAMP]: '2026-09-26T12:30:00.000Z',
         [TRANSPORT_ORIGIN]: 'posts-api',
         [TRANSPORT_TAGS]: `notificationId=${notificationId}`,
@@ -215,7 +223,7 @@ describe('the notificator service', () => {
     expect(ics).toMatch(/ATTENDEE;[^\r\n]*rui@example.com/);
   });
 
-  it('remembers the message it received, and who sent it', async () => {
+  it('remembers the message it received under its own name, and who sent it', async () => {
     const message = notificationFrom();
 
     await deliver(message);
@@ -224,13 +232,14 @@ describe('the notificator service', () => {
         (await deliveriesOf(message.data.notificationId)).length === 2,
     );
 
-    const inbox = notificator.app.get(MessageInbox);
     await expect(
-      inRequestContext(notificator.app.get(MikroORM), () => inbox.received()),
+      notificator.app
+        .get(MikroOrmOutboxStore)
+        .processedBy(notificator.app.get(EventIngestion).consumer),
     ).resolves.toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          identifier: `evt-${message.data.notificationId}`,
+          messageId: `evt-${message.data.notificationId}`,
           messageType: 'notifications.NotificationReceived#1.0.0',
           origin: 'posts-api',
         }),
@@ -271,7 +280,7 @@ describe('the notificator service', () => {
 
   it('mails an authentication email to an address, and keeps no record of it', async () => {
     const notificationId = NotificationId.generate().value;
-    const reset = new EventEnvelope(
+    const reset = envelopeOf(
       new NotificationReceivedEvent(
         notificationId,
         'auth.PasswordReset',
@@ -287,7 +296,7 @@ describe('the notificator service', () => {
       ),
       {
         [TRANSPORT_MESSAGE_TYPE]: 'notifications.NotificationReceived#1.0.0',
-        [TRANSPORT_IDENTIFIER]: `evt-${notificationId}`,
+        [IDENTIFIER]: `evt-${notificationId}`,
         [TRANSPORT_TIMESTAMP]: '2026-09-24T12:00:00.000Z',
         [TRANSPORT_ORIGIN]: 'web',
         [TRANSPORT_TAGS]: `notificationId=${notificationId}`,

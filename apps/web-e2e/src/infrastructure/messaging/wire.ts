@@ -91,24 +91,26 @@ class BrokerWire extends Wire {
   }
 
   /**
-   * The envelope as the wire carries it: the event exactly as the application wrote it in the body,
-   * and everything said *about* it in the AMQP headers.
+   * The message as the wire carries it: the outbox's envelope in the body, under the pattern Nest
+   * reads it back by, and its headers as AMQP headers too.
    *
-   * Building one by hand is what makes the redelivery test also a test of the wire format — a header
-   * this suite gets wrong is a header the ingestion will not find.
+   * Building one by hand is what makes the redelivery test also a test of the wire format — a field
+   * this suite gets wrong is a field the ingestion will not find.
    */
   private static republished(
     event: StoredEvent,
     routingKey: string,
     tags: string,
   ): unknown {
+    const envelope = TransportHeader.envelopeOfRedelivery(
+      event,
+      routingKey,
+      tags,
+    );
     return {
-      properties: { headers: TransportHeader.ofRedelivery(event, tags) },
+      properties: { headers: envelope.headers },
       routing_key: routingKey,
-      payload: JSON.stringify({
-        pattern: routingKey,
-        data: JSON.parse(event.payload),
-      }),
+      payload: JSON.stringify({ pattern: routingKey, data: envelope }),
       payload_encoding: 'string',
     };
   }
@@ -116,8 +118,10 @@ class BrokerWire extends Wire {
 
 interface InngestEvent {
   name: string;
-  data?: Record<string, unknown>;
-  user?: Record<string, string>;
+  data?: {
+    payload?: Record<string, unknown>;
+    headers?: Record<string, string>;
+  };
 }
 
 /**
@@ -135,9 +139,9 @@ class InngestWire extends Wire {
     const seen = new Map<string, PublishedMessage>();
     await Poll.until(async () => {
       for (const event of await this.events()) {
-        if (event.data?.postId === aggregateId) {
+        if (event.data?.payload?.postId === aggregateId) {
           const name = PublishedMessage.shortNameOf(event.name);
-          seen.set(name, new PublishedMessage(name, event.user ?? {}));
+          seen.set(name, new PublishedMessage(name, event.data.headers ?? {}));
         }
       }
       return seen.size >= 2 ? seen : undefined;
@@ -146,12 +150,14 @@ class InngestWire extends Wire {
   }
 
   /**
-   * The same event again, with the same `cqrs-transport-identifier` — which is what the inbox
-   * deduplicates on, and therefore what makes this the same claim the broker's republish makes.
+   * The same event again, under the same envelope id — which is what the inbox deduplicates on, and
+   * therefore what makes this the same claim the broker's republish makes. It goes without Inngest's
+   * own event id on purpose: with it, the dev server would drop the copy itself and the inbox would
+   * never be asked.
    */
   async redeliver(
     event: StoredEvent,
-    _routingKey: string,
+    routingKey: string,
     tags: string,
   ): Promise<boolean> {
     const response = await fetch(`${this.baseUrl}/e/dev`, {
@@ -159,8 +165,7 @@ class InngestWire extends Wire {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         name: event.message_type.split('#')[0],
-        data: JSON.parse(event.payload) as Record<string, unknown>,
-        user: TransportHeader.ofRedelivery(event, tags),
+        data: TransportHeader.envelopeOfRedelivery(event, routingKey, tags),
       }),
     });
     return response.ok;

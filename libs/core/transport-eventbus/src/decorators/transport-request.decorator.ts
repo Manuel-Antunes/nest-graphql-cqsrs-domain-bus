@@ -3,14 +3,14 @@ import { Payload } from '@nestjs/microservices';
 import { TransportRequestPipe } from '../inbound/transport-request.pipe';
 
 /**
- * **The request the message belongs to, as a parameter.** The other half of `@TransportEvent()`: one
- * gives the event, this one gives the `AsyncContext` it was published in — rebuilt from the envelope's
- * metadata by the application's {@link RequestContextCodec}.
+ * **The request the message belongs to, as a parameter.** The other half of `@Payload()`: one gives
+ * the `OutboxEnvelope`, this one gives the `AsyncContext` it was published in — rebuilt from the
+ * envelope's headers by the application's {@link RequestContextCodec}.
  *
  * ```ts
  * @EventPattern(EventAddress.everyEventOf(POSTS_NAMESPACE))
- * posts(@TransportEvent() event: DomainEvent, @TransportRequest() request?: AsyncContext): Promise<void> {
- *   return this.commandBus.execute(new CompletePost(event), request);   // the same request, across services
+ * posts(@Payload() envelope: OutboxEnvelope, @TransportRequest() request?: AsyncContext): Promise<void> {
+ *   return this.commandBus.execute(new CompletePost(reconstruct(envelope)), request);
  * }
  * ```
  *

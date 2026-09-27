@@ -1,4 +1,4 @@
-import { UnitOfWork } from './unit-of-work';
+import { UnitOfWork, UnitOfWorkTransaction } from './unit-of-work';
 
 describe('a unit of work', () => {
   const trace: string[] = [];
@@ -177,6 +177,131 @@ describe('a unit of work', () => {
         unit?.on('prepareCommit', again);
       }),
     ).rejects.toThrow(/prepare rounds/);
+  });
+
+  describe('in a transaction', () => {
+    class RecordingTransaction extends UnitOfWorkTransaction {
+      async run<T>(work: () => Promise<T>): Promise<T> {
+        trace.push('begin');
+        try {
+          const answer = await work();
+          trace.push('transaction committed');
+          return answer;
+        } catch (failure) {
+          trace.push('transaction rolled back');
+          throw failure;
+        }
+      }
+    }
+
+    const transaction = new RecordingTransaction();
+
+    it('prepares inside the transaction and tells the process only once it has committed', async () => {
+      await UnitOfWork.run(
+        async () => {
+          const unit = UnitOfWork.current();
+          unit?.on('commit', record('commit'));
+          unit?.on('prepareCommit', record('prepareCommit'));
+          unit?.on('afterCommit', record('afterCommit'));
+          trace.push('work');
+        },
+        undefined,
+        { transaction },
+      );
+
+      expect(trace).toEqual([
+        'begin',
+        'work',
+        'prepareCommit',
+        'transaction committed',
+        'commit',
+        'afterCommit',
+      ]);
+    });
+
+    it('waits for what it tracked before the transaction commits, so the reactions commit with it', async () => {
+      await UnitOfWork.run(
+        async () => {
+          void UnitOfWork.current()?.track(
+            new Promise<void>((resolve) =>
+              setTimeout(() => {
+                trace.push('reaction');
+                resolve();
+              }, 5),
+            ),
+          );
+        },
+        undefined,
+        { transaction },
+      );
+
+      expect(trace).toEqual(['begin', 'reaction', 'transaction committed']);
+    });
+
+    it('rolls the transaction back with the unit, and tells nobody', async () => {
+      await expect(
+        UnitOfWork.run(
+          async () => {
+            UnitOfWork.current()?.on('commit', record('commit'));
+            UnitOfWork.current()?.on('rollback', record('rollback'));
+            throw new Error('the handler refused');
+          },
+          undefined,
+          { transaction },
+        ),
+      ).rejects.toThrow('the handler refused');
+
+      expect(trace).toEqual(['begin', 'transaction rolled back', 'rollback']);
+    });
+
+    it('rolls back when a prepare listener fails, which is an event nobody could record', async () => {
+      await expect(
+        UnitOfWork.run(
+          async () => {
+            UnitOfWork.current()?.on('prepareCommit', () => {
+              throw new Error('the outbox refused');
+            });
+            UnitOfWork.current()?.on('commit', record('commit'));
+          },
+          undefined,
+          { transaction },
+        ),
+      ).rejects.toThrow('the outbox refused');
+
+      expect(trace).toEqual(['begin', 'transaction rolled back']);
+    });
+
+    it('runs joined work inside the transaction that is already open, never a second one', async () => {
+      await UnitOfWork.run(
+        async () => {
+          await UnitOfWork.run(
+            async () => {
+              trace.push('joined');
+            },
+            undefined,
+            { transaction },
+          );
+        },
+        undefined,
+        { transaction },
+      );
+
+      expect(trace).toEqual(['begin', 'joined', 'transaction committed']);
+      expect(UnitOfWork.current()).toBeUndefined();
+    });
+
+    it('says whether it has one', async () => {
+      await UnitOfWork.run(
+        async () => {
+          expect(UnitOfWork.current()?.transactional).toBe(true);
+        },
+        undefined,
+        { transaction },
+      );
+      await UnitOfWork.run(async () => {
+        expect(UnitOfWork.current()?.transactional).toBe(false);
+      });
+    });
   });
 
   it('is undefined outside one, which is how a publisher knows to send straight away', async () => {

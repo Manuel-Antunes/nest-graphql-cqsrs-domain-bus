@@ -23,35 +23,22 @@ import {
   ofType,
   Saga,
 } from '@nestjs/cqrs';
-import { EventPattern } from '@nestjs/microservices';
+import { EventPattern, Payload } from '@nestjs/microservices';
+import type { OutboxEnvelope } from '@nestjs/outbox';
 import { testDatabaseConfig } from '@nestposts/database/testing';
 import { EventType } from '@nestposts/platform/domain/shared/event-type';
 import type { Observable } from 'rxjs';
 import { map } from 'rxjs';
 
 import { TRANSPORT_EVENT_BUS_SERVICE } from '../constants';
-import { TransportEvent } from '../decorators/transport-event.decorator';
 import { MemoryClient } from '../in-memory/memory-client';
 import { EventAddress } from '../outbound/event-address';
-import { EventEnvelopeFactory } from '../outbound/event-envelope.factory';
-import { MemoryEventEnvelopeSerializer } from '../outbound/serializers/memory-event-envelope.serializer';
 import type { Ingestion } from '../outbound/transport-metadata';
-import {
-  MessageInbox,
-  MikroOrmMessageInbox,
-} from '../persistence/message-inbox';
-import { transportEntities } from '../persistence/message-inbox.entity';
+import { outboxEntities } from '../persistence/outbox/outbox.entities';
 import type { ContextAttributes } from '../request-context';
-import {
-  CorrelatedRequestContext,
-  correlationIdOf,
-  RequestContextCodec,
-} from '../request-context';
-import { startInProcessService } from '../testing';
-import {
-  eventIngestionProviders,
-  transportEventBusProviders,
-} from '../transport-event-bus.providers';
+import { CorrelatedRequestContext, correlationIdOf } from '../request-context';
+import { publishedEnvelope, startInProcessService } from '../testing';
+import { TransportEventBusModule } from '../transport-event-bus.module';
 import type { TransportEventBusService } from '../transport-event-bus.service';
 import { TransportIdentity } from '../transport-identity';
 import { EventIngestion } from './event-ingestion';
@@ -168,9 +155,7 @@ class NoteOnOrderPlaced {
 
 @EventsHandler(OrderPlacedEvent)
 class OrderPlacedHandler implements IEventHandler<OrderPlacedEvent> {
-  handle(): void {
-    // Declared so @nestjs/cqrs stamps its event id on the class.
-  }
+  handle(): void {}
 }
 
 @Controller()
@@ -179,15 +164,14 @@ class ShopEventsController {
   constructor(private readonly ingestion: EventIngestion) {}
 
   @EventPattern(EventAddress.everyEventOf(SHOP))
-  shop(@TransportEvent() event: OrderPlacedEvent): Promise<void> {
-    return this.ingestion.ingest(event);
+  shop(@Payload() envelope: OutboxEnvelope): Promise<void> {
+    return this.ingestion.ingest(envelope);
   }
 }
 
 describe('the request that crosses: what a guard, a saga and a command all see', () => {
   let consuming: Awaited<ReturnType<typeof startInProcessService>>;
   let publishing: MemoryClient;
-  let envelopes: EventEnvelopeFactory;
   let seen: Seen;
   let bus: TransportEventBusService;
 
@@ -198,16 +182,14 @@ describe('the request that crosses: what a guard, a saga and a command all see',
   };
 
   const publish = async (event: object, request?: AsyncContext) => {
-    if (request) {
-      request.attachTo(event);
-    }
-    const address = EventAddress.of(event);
+    const { pattern, envelope } = publishedEnvelope(event, {
+      producer: 'orders',
+      codec: new ShopRequestCodec(),
+      request,
+    });
     await new Promise<void>((resolve, reject) =>
       publishing
-        .emit(
-          `${address.qualifiedName}.${address.orderingKey}`,
-          envelopes.of(event, address),
-        )
+        .emit(pattern, envelope)
         .subscribe({ complete: () => resolve(), error: reject }),
     );
     await settle();
@@ -220,21 +202,18 @@ describe('the request that crosses: what a guard, a saga and a command all see',
         DiscoveryModule,
         MikroOrmModule.forRoot(
           testDatabaseConfig({
-            entities: [...transportEntities],
+            entities: [...outboxEntities],
             allowGlobalContext: true,
           }),
         ),
+        TransportEventBusModule.forRoot({
+          identity: TransportIdentity.named('shop'),
+          requestContext: ShopRequestCodec,
+          inbox: true,
+        }),
       ],
       controllers: [ShopEventsController],
       providers: [
-        ...transportEventBusProviders,
-        ...eventIngestionProviders,
-        {
-          provide: TransportIdentity,
-          useValue: TransportIdentity.named('shop'),
-        },
-        { provide: RequestContextCodec, useClass: ShopRequestCodec },
-        { provide: MessageInbox, useClass: MikroOrmMessageInbox },
         Seen,
         TenantGuard,
         NoteTheOrderHandler,
@@ -242,14 +221,7 @@ describe('the request that crosses: what a guard, a saga and a command all see',
         OrderPlacedHandler,
       ],
     });
-    envelopes = new EventEnvelopeFactory(
-      TransportIdentity.named('orders'),
-      new ShopRequestCodec(),
-    );
-    publishing = new MemoryClient({
-      servers: [consuming.server],
-      serializer: new MemoryEventEnvelopeSerializer(),
-    });
+    publishing = new MemoryClient({ servers: [consuming.server] });
     seen = consuming.app.get(Seen);
     bus = consuming.app.get(TRANSPORT_EVENT_BUS_SERVICE);
   });

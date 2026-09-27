@@ -27,6 +27,7 @@ async function bootstrap() {
     { bodyParser: false, bufferLogs: true },
   );
   app.useLogger(app.get(PinoLogger));
+  app.enableShutdownHooks();
 
   app.connectMicroservice<AsyncMicroserviceOptions>(
     {

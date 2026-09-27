@@ -27,9 +27,9 @@ export interface SnsClientProxyOptions {
   /**
    * **How a packet becomes a message.** It may answer an {@link AwsOutgoingMessage} — a body, the
    * attributes a subscription filters on, the FIFO ids — and anything else is sent as the body.
-   * `@nestposts/transport-eventbus`'s `AwsEventEnvelopeSerializer` is the one a service publishing
-   * domain events wants. Left out, this behaves like any plain `ClientProxy` — Nest's own
-   * `IdentitySerializer`, and the packet goes out as it came in, `{ pattern, data }`.
+   * Left out, this behaves like any plain `ClientProxy` — Nest's own `IdentitySerializer`, and the
+   * packet goes out as it came in, `{ pattern, data }`; what a subscription filters on then comes
+   * from an {@link SnsRecordBuilder} record, which is what an outbox's packet sends.
    */
   readonly serializer?: ProducerSerializer;
 }

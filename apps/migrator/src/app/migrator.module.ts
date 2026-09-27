@@ -8,7 +8,7 @@ import { OrganizationsInfrastructureModule } from '@nestposts/organizations/infr
 import { OrganizationEntities } from '@nestposts/organizations/infrastructure/persistence/organization-entities';
 import { PostsInfrastructureModule } from '@nestposts/posts/infrastructure/posts-infrastructure.module';
 import { eventLogEntities } from '@nestposts/transport-eventbus/persistence/event-log/event-log.entity';
-import { transportEntities } from '@nestposts/transport-eventbus/persistence/message-inbox.entity';
+import { outboxEntities } from '@nestposts/transport-eventbus/persistence/outbox/outbox.entities';
 import { UsersInfrastructureModule } from '@nestposts/users/infrastructure/users-infrastructure.module';
 
 import { appConfig } from '../config/app.config';
@@ -42,7 +42,7 @@ import { systemConnection } from './connections';
       entities: OrganizationEntities.withAuth(),
       imports: [OrganizationsInfrastructureModule],
     }),
-    DatabaseModule.forFeature([...transportEntities, ...eventLogEntities]),
+    DatabaseModule.forFeature([...outboxEntities, ...eventLogEntities]),
   ],
 })
 export class MigratorModule {}

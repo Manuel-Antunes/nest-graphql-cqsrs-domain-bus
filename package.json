@@ -70,6 +70,7 @@
     "@nestjs/event-emitter": "^12.0.1",
     "@nestjs/graphql": "^14.0.0",
     "@nestjs/microservices": "^12.1.0",
+    "@nestjs/outbox": "catalog:",
     "@nestjs/platform-fastify": "^12.1.0",
     "@nestjs/storage": "^0.0.1",
     "@opentelemetry/api": "^1.9.1",

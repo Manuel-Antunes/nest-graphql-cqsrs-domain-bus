@@ -11,8 +11,8 @@ inputs:
     default: "all"
     required: true
   node-version:
-    description: "Passed on to `setup`. See the rationale for the default 22 there."
-    default: "22"
+    description: "Passed on to `setup`. See the rationale for the default 24 there."
+    default: "24"
     required: false
   dockerhub-username:
     description: >

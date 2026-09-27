@@ -4,4 +4,5 @@ export { notificationsSubgraph, streaming } from './api';
 export { gateway } from './gateway';
 export { migrator, seeder } from './migrations';
 export { migrations, notificator, posts, tagging } from './platform';
+export { postsRelay, taggingRelay } from './relays';
 export { notificatorWorker, postsInbox, taggingWorker } from './workers';

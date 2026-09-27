@@ -1,9 +1,9 @@
 # The same system, on Lambda
 
-Seven functions of ours plus the Next server, one FIFO topic, three FIFO queues (and their
-dead-letter queues), one Postgres, one CloudFront router and one SES identity. The domain, application and presentation code is
-**unchanged**: what a handler here does is hand AWS's calling convention to the same container
-`main.ts` starts.
+Eleven functions of ours plus the Next server — three of them on a schedule —, one FIFO topic, three
+FIFO queues (and their dead-letter queues), one Postgres, one CloudFront router and one SES identity.
+The domain, application and presentation code is **unchanged**: what a handler here does is hand AWS's
+calling convention to the same container `main.ts` starts.
 
 ```
   CloudFront ──────► Gateway   apps/gateway/dist/lambda/http — the supergraph, composed from baked SDL
@@ -16,6 +16,7 @@ dead-letter queues), one Postgres, one CloudFront router and one SES identity. T
                     │ the posts subgraph, Better Auth, the read model     │
        │            └───────────────────────┬─────────────────────────────┘
        │                                    │ posts.PostPreCreated / Updated / Deleted / Restored
+       │                                    │ (its outbox, drained before the invocation answers)
        │                                    ▼
        │                      ╔═══════════════════════════════╗
        │                      ║  SNS FIFO   nestposts-events  ║  ← the topic exchange, translated
@@ -38,6 +39,10 @@ dead-letter queues), one Postgres, one CloudFront router and one SES identity. T
        │                                                                    └► Notificator ─► SES (Email)
        ▼
   /  ────────────► Web   apps/web, OpenNext, in the VPC (it holds its own Better Auth)
+                          └─ notifications.NotificationReceived ─► topic   (its own outbox, drained)
+
+  every minute ──► PostsApiRelay / TaggingRelay     OutboxHousekeeping.sweep(): what a drain left behind
+               ──► WebOutboxSweep ──► POST /api/outbox/sweep   the same, for the web's outbox
 ```
 
 ## How to read this if you know the RabbitMQ version
@@ -48,14 +53,15 @@ It is not a new design. It is `nestposts.events`, piece by piece:
 |---|---|---|
 | topic exchange `nestposts.events` | SNS FIFO topic | `messaging/topic.ts` |
 | a queue's binding | a subscription's **filter policy** | `messaging/routing.ts` |
-| routing key `posts.PostCreated.<id>` | the `routingKey` message attribute, and `pattern` in the body | `AwsEventEnvelopeSerializer` |
+| routing key `posts.PostCreated.<id>` | the `routingKey` message attribute, and `pattern` in the body | `OutboxPackets.aws` |
 | one queue per consuming service | one SQS FIFO queue per consuming service | `messaging/queues.ts` |
 | `@EventPattern(...)` on a controller | **the same `@EventPattern`** | unchanged |
-| `@Publisher(POSTS_NAMESPACE)` | **the same `@Publisher`** | unchanged |
+| `outbox.destinations`, keyed by namespace | **the same destinations**, around an `SnsClientProxy` | unchanged |
 
-Switching transports cost **one branch in each application's transport factories** (`InboundTransport`, the client its `@Publisher` holds), which is what
-`EventEnvelopeSerializer` and `@Publisher` existed to buy: the code says *what* goes out, the
-configuration says *where*.
+Switching transports cost **one branch in each application's transport factories** —
+`InboundTransport`, and the client its `PostEventsClient` builds, with the packet it is wrapped in
+(`OutboxPackets.for(app.transport)`) — which is what keeping the destination out of the event and the
+wire format in one `toPacket` bought: the code says *what* goes out, the configuration says *where*.
 
 The filter policies are not written here twice, either — `messaging/routing.ts` imports
 `SnsFilterPolicy` and `POSTS_NAMESPACE` from the workspace, so a namespace renamed in `@EventType`
@@ -69,7 +75,14 @@ for the same position.
 
 The `MessageGroupId` is the aggregate id — and it **already existed**: it is the last segment of the
 routing key, which ordered nothing on a plain topic exchange. Here it becomes what makes ordering
-exist. Different posts go in parallel; two events of the same post do not.
+exist. Different posts go in parallel; two events of the same post do not. The outbox keeps the same
+order on the way to the topic: its `key` is the same aggregate, and one key's messages are published
+one at a time, in the order their transactions committed.
+
+The `MessageDeduplicationId` is the envelope's id, the event's own identifier — so a relay that
+publishes one message twice (a drain that timed out after SNS took it, a lease that ran out under a
+publish) is deduplicated by AWS before the far side's inbox has to. That is why content-based
+deduplication stays off.
 
 On a standard topic this saga does not work worse. It breaks, intermittently and in proportion to
 load.
@@ -126,11 +139,14 @@ infra/aws/
   messaging/         topic.ts, queues.ts, routing.ts — the "exchange", translated
   storage/           the bucket posts keep their files in, served by the router under /files
   mail/              the SES identity the notificator sends email as (MAIL_SENDER, from .env)
-  compute/           the five functions
+  compute/           the functions
     platform.ts        where support/ finds the resources: network, links, environment, the build
-    build.ts, environment.ts, api.ts, workers.ts, migrations.ts
+    build.ts, environment.ts, api.ts, gateway.ts, workers.ts, migrations.ts
+    relays.ts          the outbox's scheduled sweeps, one per publishing service
   edge/              the CloudFront router: router.ts creates it, routes.ts points it
-  web/               the Next application, on the same origin
+  web/               the Next application, on the same origin, and the schedule that sweeps its outbox
+infra/lambda/
+  web-outbox-sweep.ts  that schedule's handler: one authenticated POST to the web
 ```
 
 The arrow always points the same way: **the definer does not know the instantiator**.
@@ -213,7 +229,7 @@ up. `SEED_AUTHOR_EMAIL`, `SEED_AUTHOR_PASSWORD` and their `SEED_READER_` twins c
 without touching code. They are ordinary credentials in a deployed database: for anything but a demo
 stage, set them.
 
-### The seven functions, from five builds
+### The functions, from five builds and one script
 
 | function | handler | what triggers it |
 |---|---|---|
@@ -223,7 +239,16 @@ stage, set them.
 | `PostsApiInbox` | `apps/posts-api/dist/lambda/sqs.handler` | the `PostsApiCompleted` queue |
 | `Tagging` | `apps/tagging/dist/lambda/sqs.handler` | the `TaggingPostEvents` queue |
 | `Notificator` | `apps/notificator/dist/lambda/sqs.handler` | the `NotificatorNotifications` queue |
+| `PostsApiRelay` | `apps/posts-api/dist/lambda/relay.handler` | `PostsApiRelaySchedule`, every minute |
+| `TaggingRelay` | `apps/tagging/dist/lambda/relay.handler` | `TaggingRelaySchedule`, every minute |
+| `WebOutboxSweep` | `infra/lambda/web-outbox-sweep.handler` | its own `sst.aws.Cron`, every minute |
 | `Migrate` | `apps/migrator/dist/lambda.handler` | the deploy, and `migrate.sh` |
+| `Seed` | `apps/migrator/dist/lambda.seedHandler` | the deploy, when the seeders change |
+
+`PostsApi`, `PostsApiInbox` and `PostsApiRelay` are the **same bundle**, one webpack build with three
+handler entries, sharing one `bootOnce`. Nothing in Node forces the split a Quarkus classpath would,
+and one bundle means the projection that runs in the queue function cannot drift from the read model
+the API serves.
 
 ### Email: an SES identity, linked to the one function that sends
 
@@ -238,15 +263,49 @@ SESv2 transport, configured in `apps/notificator/src/config/mail.config.ts`) and
 `MAIL_FROM` derived from the sender.
 
 While the account is in the **SES sandbox**, mail is delivered only to verified addresses. Anything
-else fails at SES, the channel throws, SQS redelivers, and after five deliveries the message lands in
-the dead-letter queue — with the `database` channel already delivered and recorded in the ledger, so
+else fails at SES, the channel throws, the ingestion's transaction rolls back — its inbox row with
+it — and SQS redelivers; after five deliveries the message lands in the dead-letter queue. The
+`database` channel is still delivered and recorded in the ledger by then, because a delivery commits
+in a transaction of its own (`NotificationDeliveryRepository.recordAfter`), not in the ingestion's, so
 nothing is stored twice when it is redriven.
 
 Push is not configured here: without `FIREBASE_CREDENTIALS` the `push` channel sends nothing.
 
-The first two are the **same bundle**, one webpack build with two handler entries, sharing one
-`bootOnce`. Nothing in Node forces the split a Quarkus classpath would, and one bundle means the
-projection that runs in the queue function cannot drift from the read model the API serves.
+## The outbox: every function drains, and a schedule sweeps
+
+A service does not send an event, it writes it — one outbox row, in the transaction of the command or
+the ingested message that raised it — and `@nestjs/outbox`'s relay publishes it afterwards
+(`libs/core/transport-eventbus/README.md`). In a container the relay is a loop. A function is frozen
+the moment it answers and can hold no loop, so every function that publishes runs with
+`POSTS_OUTBOX_RELAY=drain` / `TAGGING_OUTBOX_RELAY=drain` (`compute/environment.ts`), and the web with
+`WEB_OUTBOX_RELAY=drain`: after each unit of work commits, the function publishes what is due before it
+answers — the command's own promise covers the publish, the way it covered the emit before.
+
+A drain that fails — SNS unreachable, a function that times out mid-publish — does not fail the
+request: the rows are committed, and publishing them is the relay's to retry. Something has to come
+back for them, and that is the schedule:
+
+| schedule | calls | |
+|---|---|---|
+| `PostsApiRelaySchedule` → `PostsApiRelay` | `OutboxHousekeeping.sweep()` (`apps/posts-api/src/lambda/relay.ts`, a `scheduledHandler`) | drains what is due, prunes the inbox, reports the outbox's lag and dead letters |
+| `TaggingRelaySchedule` → `TaggingRelay` | the same, for tagging's rows | |
+| `WebOutboxSweep` | `POST /api/outbox/sweep` on the router | the web's container is inside OpenNext's function, so the schedule asks the web to sweep itself |
+
+Each relay is the service's own bundle and its own `producer`: the `transport` schema is one for every
+service, and a relay only ever publishes the rows its service wrote. The notificator publishes nothing
+and has no relay; its inbox rows are pruned by whichever sweep runs, because pruning is not scoped by
+consumer.
+
+**The web's sweep is authenticated by a secret nobody sets.** `outboxSweepSecret` in
+`compute/environment.ts` is a SHA-256 of `AuthSecret` under a label of its own, handed to the web as
+`WEB_OUTBOX_SWEEP_SECRET` and to the schedule as the bearer it sends. The route compares digests in
+constant time, answers `401` to anything else, and `404` when the variable is not set at all — which
+is `pnpm dev`, unless somebody sets it.
+
+A message the relay gives up on — twenty attempts, by default — is a **dead letter**, and is reported to
+GlitchTip by `DeadLetterReporting` in the trace of the request that raised it; the sweep's warning
+carries the counts. Requeueing one is `@nestjs/outbox`'s `OutboxDeadLetters`, once whatever refused it
+is fixed.
 
 ## Build and deploy
 
@@ -262,6 +321,8 @@ One secret, once per stage:
 ```bash
 npx sst secret set AuthSecret "$(openssl rand -base64 32)" --stage dev
 ```
+
+The web's outbox-sweep bearer is derived from it, so there is no second one to set.
 
 And the telemetry destination, which is **not** a secret but the `.env` at the root — `sst deploy`
 loads it by itself, and `.env.example` is the template:
@@ -369,31 +430,28 @@ Transfer-Encoding: chunked
 The keep-alive arrives immediately. That is the half `graphql-ws` could never have had: a WebSocket
 upgrade dies at the load balancer, before the function.
 
-**The source.** `SubscriptionBus` used to be fed by the local `EventBus`, which reaches subscribers
-of the container it runs in and nobody else — and here the container that closes the saga is the
-**queue** function while the one holding the stream open is the HTTP one. A subscriber would have
-seen what its own container published and never the `PostCreated` coming back from `apps/tagging`.
+**The source.** A `SubscriptionBus` stream is fed by the `EventBus`, which reaches subscribers of the
+container it runs in and nobody else — and here the container that closes the saga is the **queue**
+function while the one holding the stream open is the HTTP one. A subscriber on the plain bus would
+see what its own container published and never the `PostCreated` coming back from `apps/tagging`.
 
-So the source became a port (`SubscriptionSource` in `@nestposts/cqsrs`) with two implementations:
+So the bus itself is event sourced. `POSTS_SUBSCRIPTION_SOURCE=feed` — set on the API functions by
+`compute/environment.ts` — turns on `subscriptions: true` in posts-api's `TransportEventBusModule`,
+which binds the `EventBus` token to `EventSourcedEventBus`: its observable side is the one
+`transport.event_log` every container appends to, in the same transaction as the work that raised
+each event. A subscription reads that log forward from **the head at the moment it opened**. The
+cursor is in memory and dies with the process, which is what a subscription means: a subscriber is not
+owed what happened before it arrived.
 
-| | reads from | for |
-|---|---|---|
-| `LocalEventBusSource` | this process's `EventBus` | the default: one process, zero latency, nothing written |
-| `EventFeedSource` | `transport_event_feed`, polled | several processes, where a bus is one per process |
-
-`POSTS_SUBSCRIPTION_SOURCE=feed` — set on the API function by `compute/environment.ts` — is what
-picks the second. Every container appends what reaches its bus to the feed, and every container
-reads the feed forward from **the position it was at when the subscription opened**. The cursor is
-in memory and dies with the process, which is what a subscription means: a subscriber is not owed
-what happened before it arrived.
-
-What the feed deliberately does **not** do is publish onto the local bus. If it did, every
+What the log deliberately does **not** feed is the handlers and the sagas. If it did, every
 `@EventsHandler` and every saga in every container would fire again for one event — a projection
-written as many times as there are containers. Projections stay on the local bus, in the container
-that did the work; only subscriptions read from the feed.
+written as many times as there are containers. They read the process's own `subject$`, bound before
+the bus is repointed at the log; only what pipes the bus later — a `@SubscriptionHandler` — reads the
+log.
 
-`libs/core/transport-eventbus/src/subscriptions/event-feed.spec.ts` is that crossing as a test: one
-container publishes, another's subscriber receives, as the real class.
+`libs/core/transport-eventbus/src/subscriptions/event-sourced-event-bus.spec.ts` asserts all three
+readers, so a Nest upgrade that moves a saga's subscription out of registration fails a test rather
+than duplicating commands here.
 
 ## The stack graph
 
@@ -439,9 +497,10 @@ Two colours, both Pulumi's own. **`#AA6639`** is a parent edge, which is the com
 `support/functions.ts` — `PostsApi` over its `aws:lambda/function:Function`, its role and its log
 group. **`#246C60`** is a dependency, and that is the one worth reading: it is the order the engine
 computed, and the edge carries the property that created it (`secretId`, `secretString`). `Build` is
-the node to look for, because **every** function hangs off it — `Migrate`, `PostsApi`,
-`PostsApiInbox`, `Seed` and `Tagging`, which is `dependsOn: [build]` in `compute/platform.ts` and the
-whole reason that resource exists.
+the node to look for, because **every** function built from the applications hangs off it —
+`Gateway`, `Migrate`, `PostsApi`, `PostsApiInbox`, `PostsApiRelay`, `Seed`, `Tagging`, `TaggingRelay`
+and the notificator's two — which is `dependsOn: [build]` in `compute/platform.ts` and the whole
+reason that resource exists. `WebOutboxSweep` does not: SST bundles its one file itself.
 
 The SVG is rendered `rankdir=LR`: top to bottom, a stack this size comes out a strip twenty times
 wider than it is tall. The DOT is left exactly as Pulumi wrote it, to be re-rendered however you

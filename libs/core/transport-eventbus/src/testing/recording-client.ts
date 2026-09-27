@@ -5,8 +5,6 @@ import type {
 } from '@nestjs/microservices';
 import { ClientProxy } from '@nestjs/microservices';
 
-import { MemoryEventEnvelopeSerializer } from '../outbound/serializers/memory-event-envelope.serializer';
-
 /** One message as it left: the pattern it went out under, and what went with it. */
 export interface SentMessage {
   readonly pattern: string;
@@ -25,16 +23,13 @@ export class RecordingClient extends ClientProxy {
   readonly sent: SentMessage[] = [];
 
   /**
-   * Takes a serializer like any other client, because that is where the message is built: a spec that
-   * asserts what went on the wire has to go through the same one production does. The default is the
-   * in-process one, which keeps both halves of the envelope in the value — so `sent[0].data` is
-   * `{ data, metadata }`, the same pair a RabbitMQ message splits between its body and its headers.
+   * Takes a serializer like any other client. The default is Nest's identity, so `sent[0].data` is
+   * what the outbox's `ClientProxyTransport` emitted: the `OutboxEnvelope`, or the record its
+   * `toPacket` wrapped it in.
    */
   constructor(options: { serializer?: ProducerSerializer } = {}) {
     super();
-    this.initializeSerializer({
-      serializer: options.serializer ?? new MemoryEventEnvelopeSerializer(),
-    });
+    this.initializeSerializer(options);
   }
 
   async connect(): Promise<void> {

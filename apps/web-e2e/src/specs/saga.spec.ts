@@ -129,6 +129,16 @@ test.describe
           row.message_type.startsWith('notifications.NotificationReceived'),
         ),
       ).toBe(true);
+      expect(
+        [
+          ...ingestedByPosts.map((row) => row.consumer === 'posts-api'),
+          ...ingestedByTagging.map((row) => row.consumer === 'tagging'),
+          ...deliveredByNotificator.map(
+            (row) => row.consumer === 'notificator',
+          ),
+        ].every(Boolean),
+        'each row is in the inbox of the service that ingested it',
+      ).toBe(true);
     });
 
     test('reentregar a MESMA mensagem não produz uma segunda decisão', async ({

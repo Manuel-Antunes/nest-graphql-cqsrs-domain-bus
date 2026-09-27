@@ -4,12 +4,7 @@ import type { MicroserviceOptions } from '@nestjs/microservices';
 import { Transport } from '@nestjs/microservices';
 import { SqsStrategy } from '@nestposts/microservices-aws';
 import { InngestStrategy } from '@nestposts/microservices-inngest';
-import {
-  InngestEventEnvelopeDeserializer,
-  inngestTriggers,
-  RmqEventEnvelopeDeserializer,
-  SqsEventEnvelopeDeserializer,
-} from '@nestposts/transport-eventbus';
+import { inngestTriggers } from '@nestposts/transport-eventbus';
 import { Inngest } from 'inngest';
 
 import type { AppConfig } from '../../config/app.config';
@@ -43,7 +38,6 @@ export class InboundTransport {
         return {
           strategy: new InngestStrategy({
             inngest: inngestClient,
-            deserializer: new InngestEventEnvelopeDeserializer(),
             triggers: inngestTriggers,
             serveOrigin: inngest.serveOrigin,
             httpAdapter,
@@ -54,7 +48,6 @@ export class InboundTransport {
           strategy: new SqsStrategy({
             queueUrl: aws.inboundQueueUrl,
             clientConfig: aws.client,
-            deserializer: new SqsEventEnvelopeDeserializer(),
           }),
         };
       case 'memory':
@@ -70,7 +63,6 @@ export class InboundTransport {
             exchangeType: 'topic',
             wildcards: true,
             noAck: false,
-            deserializer: new RmqEventEnvelopeDeserializer(),
           },
         };
     }
@@ -80,7 +72,6 @@ export class InboundTransport {
     return {
       strategy: new SqsStrategy({
         clientConfig: aws.client,
-        deserializer: new SqsEventEnvelopeDeserializer(),
       }),
     };
   }

@@ -5,7 +5,7 @@ export const MAX_SESSIONS = 5;
 export interface InngestRecordOptions {
   /**
    * Extra entries for the event's `user` object — the slot Inngest gives whatever should travel
-   * beside the data, and where this transport puts the envelope's metadata. Headers, in other words.
+   * beside the data. Headers, in other words.
    */
   readonly user?: Record<string, string>;
   /**
@@ -57,11 +57,9 @@ export const isInngestRecord = <TData>(
  * `SnsRecordBuilder` and Nest's `RmqRecordBuilder`, and the same idea: the caller composes transport
  * options without the producer learning the transport.
  *
- * A domain event needs none of this. The forwarder emits an envelope and
- * {@link InngestEventEnvelopeSerializer} fills the name, the data, the `user` and the correlation
- * session from what the event already carries. What this is for is the send a service makes **on
- * purpose**: one that must not run twice, one that should not run yet, one that belongs to a session
- * of its own.
+ * It is what a caller composes when a send must say more than its name and data: one that must not
+ * run twice (an idempotency key — `@nestposts/transport-eventbus`'s outbox packet gives every message
+ * its id), one that should not run yet, one that belongs to a session of its own.
  *
  * ```ts
  * client.emit(pattern, new InngestRecordBuilder(payload)

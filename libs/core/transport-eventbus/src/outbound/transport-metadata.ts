@@ -1,11 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { EventTag } from '@nestposts/platform/domain/shared/event-type';
 
-import type {
-  EnvelopeMetadata,
-  EventEnvelope,
-  WireTag,
-} from './event-envelope';
+import type { MessageHeaders, WireTag } from './message-headers';
 
 /**
  * The marks this integration leaves on an event **instance** — what it is called on the wire, and
@@ -37,7 +33,7 @@ export interface Ingestion {
   readonly origin: string | undefined;
   readonly identifier: string;
   readonly messageType: string;
-  readonly metadata: EnvelopeMetadata;
+  readonly metadata: MessageHeaders;
   readonly tags: readonly WireTag[];
 }
 
@@ -67,20 +63,14 @@ export const identifierOf = (event: object): string => {
  * Marks a reconstructed event with where it came from — the answer to "am I the author of this?",
  * and what a projector reads to tell a replica of a local decision.
  */
-export const markIngested = (event: object, envelope: EventEnvelope): void => {
+export const markIngested = (event: object, message: Ingestion): void => {
   Object.defineProperty(event, INGESTION, {
-    value: {
-      origin: envelope.origin,
-      identifier: envelope.identifier,
-      messageType: envelope.messageType,
-      metadata: envelope.metadata,
-      tags: envelope.tags,
-    } satisfies Ingestion,
+    value: message,
     enumerable: false,
     configurable: true,
   });
   Object.defineProperty(event, IDENTIFIER, {
-    value: envelope.identifier,
+    value: message.identifier,
     enumerable: false,
     configurable: true,
   });

@@ -37,6 +37,7 @@ async function bootstrap() {
       { bufferLogs: true },
     );
     app.useLogger(app.get(PinoLogger));
+    app.enableShutdownHooks();
 
     app.connectMicroservice<AsyncMicroserviceOptions>(
       {
@@ -79,6 +80,7 @@ async function bootstrap() {
     },
   );
   app.useLogger(app.get(PinoLogger));
+  app.enableShutdownHooks();
 
   await app.listen();
   const config = app.get<AppConfig>(appConfig.KEY);
