@@ -56,7 +56,7 @@ pins:
 | pin | lives in | |
 |---|---|---|
 | `SYSTEM_SCHEMA` (`'public'`) | `public` | Better Auth's and the organizations' tables |
-| `TRANSPORT_SCHEMA` (`@nestposts/transport-eventbus`) | `transport` | `@nestposts/transport-eventbus`'s bookkeeping: the outbox and its dead letters, every consumer's inbox, the event log |
+| `TRANSPORT_SCHEMA` (`'transport'`) | `transport` | the messaging's bookkeeping: the outbox and its dead letters and every consumer's inbox (`@nestposts/outbox-mikro-orm`), the event log (`@nestposts/transport-eventbus`) |
 | `TENANT_SCHEMA` (`'*'`) | `tenant_<name>` | everything else — MikroORM's wildcard: the schema of the entity manager a query runs on |
 
 It reads `MIKRO_ORM_DEBUG`, validates what it got through `DatabaseConfigSchema`, and sets
@@ -94,7 +94,8 @@ failed`, a port conflict wearing a credentials bug's clothes.
 **Native SQL has to say where the table is.** `tableIn(orm, 'posts')` qualifies a table with the
 configured schema, because a raw statement is resolved against the `search_path` and not against the
 connection's schema — which is a spec reading the column behind a mapping, and which is also why
-`MikroOrmOutboxStore` and `MikroOrmEventLog` (`@nestposts/transport-eventbus`) ask the metadata for
+`MikroOrmOutboxStore` (`@nestposts/outbox-mikro-orm`) and `MikroOrmEventLog`
+(`@nestposts/transport-eventbus`) ask the metadata for
 their own table names.
 
 ## `DatabaseModule`: the entity list is not a list
@@ -133,7 +134,7 @@ an aggregate — but a message off a broker never passes through HTTP at all, an
 already exists**, which is what makes running both safe: one request is one entity manager, never two.
 
 A unit of work's transaction runs **inside** that context, not beside it: `MikroOrmUnitOfWorkTransaction`
-(`@nestposts/transport-eventbus`) is `inRequestContext` around `em.transactional`, whose fork keeps
+(`@nestposts/outbox-mikro-orm`) is `inRequestContext` around `em.transactional`, whose fork keeps
 the schema of the entity manager it was forked from — the tenant's — and becomes what every injected
 entity manager resolves to while the unit runs. A command's writes, its event log append and its
 outbox rows are therefore one transaction, on the tenant's wildcard tables and the pinned `transport`

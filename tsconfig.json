@@ -55,6 +55,9 @@
       "path": "./libs/core/microservices-inngest"
     },
     {
+      "path": "./libs/core/microservices-memory"
+    },
+    {
       "path": "./libs/asset"
     },
     {
@@ -86,6 +89,9 @@
     },
     {
       "path": "./apps/post-rememberer"
+    },
+    {
+      "path": "./libs/core/outbox-mikro-orm"
     }
   ]
 }

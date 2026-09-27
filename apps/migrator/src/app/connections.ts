@@ -6,10 +6,10 @@ import { postgresDatabase, SYSTEM_SCHEMA } from '@nestposts/database';
 import { eventsEntities } from '@nestposts/events/infrastructure/events-infrastructure.module';
 import { notificationsEntities } from '@nestposts/notifications/infrastructure/notifications-infrastructure.module';
 import { OrganizationEntities } from '@nestposts/organizations/infrastructure/persistence/organization-entities';
+import { outboxEntities } from '@nestposts/outbox-mikro-orm/outbox.entities';
 import { SoftDeleteSubscriber } from '@nestposts/platform/infrastructure/persistence/soft-delete/soft-delete.subscriber';
 import { postsEntities } from '@nestposts/posts/infrastructure/posts-infrastructure.module';
 import { eventLogEntities } from '@nestposts/transport-eventbus/persistence/event-log/event-log.entity';
-import { outboxEntities } from '@nestposts/transport-eventbus/persistence/outbox/outbox.entities';
 import { usersEntities } from '@nestposts/users/infrastructure/users-infrastructure.module';
 
 import type { PostgresConfig } from '../config/postgres.config';

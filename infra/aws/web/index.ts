@@ -6,6 +6,9 @@ import {
   authSecret,
   gatewayUrl,
   outboxSweepSecret,
+  polarAccessToken,
+  polarEnvironment,
+  polarWebhookSecret,
   sharedEnvironment,
 } from '../compute/environment';
 import { router } from '../edge';
@@ -74,8 +77,28 @@ export const web = new sst.aws.Nextjs('Web', {
     WEB_TOPIC_ARN: postEvents.arn,
     WEB_OUTBOX_RELAY: 'drain',
     WEB_OUTBOX_SWEEP_SECRET: outboxSweepSecret,
+    POLAR_ACCESS_TOKEN: polarAccessToken.value,
+    POLAR_ENVIRONMENT: polarEnvironment.value,
+    POLAR_WEBHOOK_SECRET: polarWebhookSecret.value,
   },
 });
+
+const webServer = $output(web.nodes.server).apply((server) => {
+  if (!server) {
+    throw new Error(
+      'The web has no server function, so billing has nowhere to be routed.',
+    );
+  }
+  return server.url.apply((url) => url.replace(/\/$/, ''));
+});
+
+for (const billingPath of [
+  '/api/auth/billing',
+  '/api/auth/checkout',
+  '/api/auth/polar',
+]) {
+  router.route(billingPath, webServer);
+}
 
 new sst.aws.Cron('WebOutboxSweep', {
   schedule: 'rate(1 minute)',

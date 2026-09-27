@@ -1,18 +1,20 @@
-import { EntityManager } from '@mikro-orm/core';
 import { Injectable, Logger, Optional } from '@nestjs/common';
 import type { AsyncContext } from '@nestjs/cqrs';
 import { EventBus } from '@nestjs/cqrs';
 import type { OutboxEnvelope } from '@nestjs/outbox';
 import { OutboxInbox } from '@nestjs/outbox';
-import { UnitOfWork, UnitOfWorkTransaction } from '@nestposts/cqsrs';
 
 import type { Ingestion } from '../outbound/transport-metadata';
 import { EventLog } from '../persistence/event-log/event-log';
-import { MikroOrmOutboxStore } from '../persistence/outbox/mikro-orm-outbox.store';
 import { RequestContextCodec } from '../request-context';
 import { ingesting } from '../tracing';
 import { TransportIdentity } from '../transport-identity';
+import {
+  UnitOfWork,
+  UnitOfWorkTransaction,
+} from '../unit-of-work/unit-of-work';
 import { envelopeOf, messageOf, reconstruct } from './event-reconstruction';
+import { InboxDescriptions } from './inbox-descriptions';
 
 /**
  * **The inbound half: an event that arrived becomes an event of this process, exactly once.**
@@ -39,7 +41,8 @@ import { envelopeOf, messageOf, reconstruct } from './event-reconstruction';
  * In order, and each covers what the others do not:
  * 1. **origin**: an event this service produced and got back is dropped. It cuts the resend loop;
  * 2. **inbox**: `@nestjs/outbox`'s {@link OutboxInbox} records `(this service, the message)` in the
- *    SAME transaction as everything the message causes. A redelivery finds the row and does nothing;
+ *    SAME transaction as everything the message causes — the unit of work's, through its handle. A
+ *    redelivery finds the row and does nothing;
  * 3. **the aggregate**: the handler on the other side decides against its own state. It is the last
  *    line of defence and the only one that survives an emptied inbox.
  *
@@ -60,9 +63,7 @@ export class EventIngestion {
   private readonly logger = new Logger(EventIngestion.name);
 
   constructor(
-    private readonly em: EntityManager,
     private readonly inbox: OutboxInbox,
-    private readonly store: MikroOrmOutboxStore,
     private readonly transaction: UnitOfWorkTransaction,
     private readonly context: RequestContextCodec,
     private readonly eventBus: EventBus,
@@ -73,6 +74,7 @@ export class EventIngestion {
      * `undefined` even when the log is bound, and nothing says so.
      */
     @Optional() private readonly log?: EventLog,
+    @Optional() private readonly descriptions?: InboxDescriptions,
   ) {}
 
   /** The name this service's inbox rows are kept under: its own, which never changes. */
@@ -142,16 +144,17 @@ export class EventIngestion {
     message: Ingestion,
     context?: AsyncContext,
   ): Promise<void> {
+    const transaction = UnitOfWork.current()?.transactionHandle;
     const outcome = await this.inbox.processInTransaction(
-      this.em,
+      transaction,
       this.consumer,
       message.identifier,
       async () => {
         this.logger.debug(
           `inbox ← ${message.messageType} (${message.identifier}) from '${message.origin ?? 'unknown'}'`,
         );
-        await this.store.describeInbox(
-          this.em,
+        await this.descriptions?.describeInbox(
+          transaction,
           this.consumer,
           message.identifier,
           message,

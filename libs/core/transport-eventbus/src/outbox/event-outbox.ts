@@ -1,15 +1,13 @@
-import { EntityManager } from '@mikro-orm/core';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Outbox, OutboxRelay } from '@nestjs/outbox';
-import type { UnitOfWorkTransaction } from '@nestposts/cqsrs';
 
 import {
   TRANSPORT_OUTBOX_DESTINATIONS,
   TRANSPORT_OUTBOX_SETTINGS,
 } from '../constants';
 import { EventMessages } from '../outbound/event-messages';
-import { MikroOrmUnitOfWorkTransaction } from '../persistence/mikro-orm-unit-of-work.transaction';
-import { MikroOrmOutboxStore } from '../persistence/outbox/mikro-orm-outbox.store';
+import { OutboxRoute } from '../outbound/outbox-route';
+import { UnitOfWorkTransaction } from '../unit-of-work/unit-of-work';
 import type { TransportOutboxSettings } from './transport-outbox.options';
 
 /**
@@ -17,10 +15,12 @@ import type { TransportOutboxSettings } from './transport-outbox.options';
  *
  * `TransportEventBusService` hands it the events a unit of work staged, in the unit's `prepareCommit`
  * phase and so inside its transaction: each one whose namespace has a destination becomes one
- * message of the outbox ({@link EventMessages}), written with `Outbox.add(tx, …)` and so committed
- * with the writes that raised it or rolled back with them. Nothing reaches a broker here — the relay
- * publishes the message through the destination's `ClientProxyTransport` once the transaction has
- * committed, and again until a broker takes it.
+ * message of the outbox ({@link EventMessages}), written with `Outbox.add(tx, …)` through the unit's
+ * own transaction handle, and so committed with the writes that raised it or rolled back with them.
+ * Nothing reaches a broker here — the relay publishes the message through the destination's
+ * `ClientProxyTransport` once the transaction has committed, and again until a broker takes it.
+ *
+ * The outbox is the application's `OutboxModule`, global; this only writes to it and tells its relay.
  */
 @Injectable()
 export class EventOutbox {
@@ -34,15 +34,15 @@ export class EventOutbox {
   private readonly destinations: ReadonlySet<string>;
 
   constructor(
-    private readonly em: EntityManager,
-    private readonly outbox: Outbox<EntityManager>,
+    private readonly outbox: Outbox,
     private readonly relay: OutboxRelay,
     private readonly messages: EventMessages,
+    transaction: UnitOfWorkTransaction,
     @Inject(TRANSPORT_OUTBOX_SETTINGS)
     private readonly settings: TransportOutboxSettings,
     @Inject(TRANSPORT_OUTBOX_DESTINATIONS) destinations: readonly string[],
   ) {
-    this.detached = MikroOrmUnitOfWorkTransaction.detached(em);
+    this.detached = transaction.detached();
     this.destinations = new Set(destinations);
   }
 
@@ -53,15 +53,40 @@ export class EventOutbox {
     );
   }
 
-  /** Writes the events a destination takes through the transaction the unit of work is in. */
-  async stage(events: readonly object[]): Promise<void> {
+  /**
+   * Whether the outbox delivers this event `local` — to this process's bus, through the relay, once
+   * its unit of work has committed — so the commit must not tell it too. Only with the outbox's
+   * route in the settings ({@link TransportOutboxSettings.route}).
+   */
+  deliversLocally(event: object): boolean {
+    const route = this.settings.route;
+    if (!route) {
+      return false;
+    }
+    const message = this.messages.of(event, this.destinations);
+    return (
+      message !== undefined &&
+      route({ headers: message.headers ?? {} }) === OutboxRoute.LOCAL
+    );
+  }
+
+  /** Whether this bus knows which events the outbox delivers `local` — see {@link deliversLocally}. */
+  get routesLocally(): boolean {
+    return this.settings.route !== undefined;
+  }
+
+  /**
+   * Writes the events a destination takes through `transaction` — the handle of the transaction the
+   * unit of work is in ({@link UnitOfWork.transactionHandle}).
+   */
+  async stage(events: readonly object[], transaction: unknown): Promise<void> {
     const messages = events.flatMap(
       (event) => this.messages.of(event, this.destinations) ?? [],
     );
     if (messages.length === 0) {
       return;
     }
-    await this.outbox.add(MikroOrmOutboxStore.transactionOf(this.em), messages);
+    await this.outbox.add(transaction, messages);
   }
 
   /**

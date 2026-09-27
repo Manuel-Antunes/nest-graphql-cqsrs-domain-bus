@@ -6,9 +6,9 @@ import { NotificationsInfrastructureModule } from '@nestposts/notifications/infr
 import { organizationAuthPluginProviders } from '@nestposts/organizations/infrastructure/better-auth/organization-better-auth.plugin';
 import { OrganizationsInfrastructureModule } from '@nestposts/organizations/infrastructure/organizations-infrastructure.module';
 import { OrganizationEntities } from '@nestposts/organizations/infrastructure/persistence/organization-entities';
+import { outboxEntities } from '@nestposts/outbox-mikro-orm/outbox.entities';
 import { PostsInfrastructureModule } from '@nestposts/posts/infrastructure/posts-infrastructure.module';
 import { eventLogEntities } from '@nestposts/transport-eventbus/persistence/event-log/event-log.entity';
-import { outboxEntities } from '@nestposts/transport-eventbus/persistence/outbox/outbox.entities';
 import { UsersInfrastructureModule } from '@nestposts/users/infrastructure/users-infrastructure.module';
 
 import { appConfig } from '../config/app.config';

@@ -1,4 +1,3 @@
-import { MemoryServer } from '@camcima/nestjs-memory-microservices';
 import { MikroORM } from '@mikro-orm/core';
 import type { INestMicroservice, ModuleMetadata } from '@nestjs/common';
 import type { MicroserviceOptions } from '@nestjs/microservices';
@@ -6,19 +5,23 @@ import type { TestingModule } from '@nestjs/testing';
 import { Test } from '@nestjs/testing';
 import type { AnyMikroORM } from '@nestposts/database/testing';
 import { dropTestSchema, ensureTestSchema } from '@nestposts/database/testing';
+import { TopicMemoryServer } from '@nestposts/microservices-memory';
 
-/** A microservice running in this process, and the server a {@link MemoryClient} delivers to. */
+/**
+ * A microservice running in this process, and the server a suite delivers to: `server.emit(routingKey,
+ * envelope)` reaches every controller bound to a pattern the key matches.
+ */
 export interface InProcessService {
   readonly app: INestMicroservice;
-  readonly server: MemoryServer;
+  readonly server: TopicMemoryServer;
   /** Closes the application and drops the schema it was given, if it had one. */
   readonly close: () => Promise<void>;
 }
 
 /**
- * **One service, started the way production starts it**, on
- * [`MemoryServer`](https://github.com/camcima/nestjs-memory-microservices) — so a spec exercises the
- * controllers, their guards, interceptors and filters, and not a method call.
+ * **One service, started the way production starts it**, on a `TopicMemoryServer`
+ * (`@nestposts/microservices-memory`) — so a spec exercises the controllers, their bindings, guards,
+ * interceptors and filters, and not a method call.
  *
  * ## Why not `createTestingMicroservice` from that package
  * Because it starts the application with `init()`, and in Nest 12 `NestMicroservice.init()` runs the
@@ -46,7 +49,7 @@ export const startInProcessService = async (
   source: ModuleMetadata | TestingModule,
   { createSchema = true }: InProcessServiceOptions = {},
 ): Promise<InProcessService> => {
-  const server = new MemoryServer();
+  const server = new TopicMemoryServer();
   const module = isCompiled(source)
     ? source
     : await Test.createTestingModule(source).compile();

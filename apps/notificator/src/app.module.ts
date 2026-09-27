@@ -4,6 +4,7 @@ import { YogaFederationDriver } from '@graphql-yoga/nestjs-federation';
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { GraphQLISODateTime, GraphQLModule } from '@nestjs/graphql';
+import { OutboxModule } from '@nestjs/outbox';
 import { authNotifications } from '@nestposts/auth/domain/auth/notification/auth-notifications';
 import { AuthInfrastructureModule } from '@nestposts/auth/infrastructure/auth-infrastructure.module';
 import { SubscriptionChangeNotification } from '@nestposts/billing/domain/billing/notification/subscription-change.notification';
@@ -24,6 +25,12 @@ import { organizationAuthPluginProviders } from '@nestposts/organizations/infras
 import { OrganizationsInfrastructureModule } from '@nestposts/organizations/infrastructure/organizations-infrastructure.module';
 import { OrganizationEntities } from '@nestposts/organizations/infrastructure/persistence/organization-entities';
 import { TenantMembershipModule } from '@nestposts/organizations/infrastructure/tenancy/tenant-membership.module';
+import {
+  MikroOrmOutboxModule,
+  MikroOrmOutboxStore,
+  MikroOrmUnitOfWorkTransaction,
+  OutboxHousekeepingModule,
+} from '@nestposts/outbox-mikro-orm';
 import { PostCreatedNotification } from '@nestposts/posts/domain/post/notification/post-created.notification';
 import { RetryPolicyModule } from '@nestposts/retry-policy/retry-policy.module';
 import {
@@ -115,11 +122,18 @@ import { InterfacesModule } from './interfaces/interfaces.module';
         defaultMaxRetries: app.maxRetries,
       }),
     }),
+    OutboxModule.forRoot({ relay: { enabled: false } }),
+    MikroOrmOutboxModule.forRootAsync({
+      inject: [appConfig.KEY],
+      useFactory: ({ name }: AppConfig) => ({ producer: name }),
+    }),
+    OutboxHousekeepingModule.forRoot({}),
     TransportEventBusModule.forRootAsync({
       inject: [appConfig.KEY],
       useFactory: ({ name }: AppConfig) =>
         TransportIdentity.named(name, { publishes: false }),
-      inbox: true,
+      transaction: MikroOrmUnitOfWorkTransaction,
+      inbox: { descriptions: MikroOrmOutboxStore },
     }),
     MailModule.forRootAsync({
       inject: [mailConfig.KEY],

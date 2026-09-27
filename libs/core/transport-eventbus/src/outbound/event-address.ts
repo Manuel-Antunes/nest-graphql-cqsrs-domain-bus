@@ -1,5 +1,6 @@
 import type { Type } from '@nestjs/common';
 import { Logger } from '@nestjs/common';
+import type { OutboxMessage } from '@nestjs/outbox';
 import {
   eventTagsOf,
   eventTypeOf,
@@ -8,18 +9,24 @@ import {
   requireEventTypeOf,
 } from '@nestposts/platform/domain/shared/event-type';
 
-import { TRANSPORT_EVENT_BUS_PATTERN } from '../constants';
-import type { WireTag } from './message-headers';
+import type { MessageHeaders, WireTag } from './message-headers';
+import {
+  decodeTags,
+  TRANSPORT_MESSAGE_TYPE,
+  TRANSPORT_TAGS,
+} from './message-headers';
 import { identifierOf, wireTagsOf } from './transport-metadata';
 
 /**
  * **Where this event goes, read from the event itself.** Not one field here comes from configuration.
  *
  * ## Why there is a value in the middle
- * Because "which event is this" is asked by three different things — the routing table (by
- * {@link namespace}), the wire (by {@link messageType}) and the broker (by {@link routingKey}) — and
- * reading the event once is what keeps them from disagreeing. A decision taken twice is how two
- * implementations come to answer differently about the same event.
+ * Because "which event is this" is asked by four different things — the outbox's route (by
+ * {@link namespace}), its topic (by {@link qualifiedName}), the wire (by {@link messageType}) and the
+ * broker (by {@link routingKey}) — and reading the event once is what keeps them from disagreeing. A
+ * decision taken twice is how two implementations come to answer differently about the same event.
+ * The relay, which publishes a message and not an event, reads the same address back off it
+ * ({@link ofMessage}).
  */
 export class EventAddress {
   private static readonly logger = new Logger(EventAddress.name);
@@ -40,11 +47,13 @@ export class EventAddress {
     /** `namespace.Name#version`, the way the envelope carries it. */
     readonly messageType: string,
     /**
-     * `namespace.Name` — what `@EventType` declares. Without the namespace in the value, a binding
-     * on `posts.*` does not match and the exchange drops the message without a line in the log.
+     * `namespace.Name` — what `@EventType` declares, and the outbox message's `topic`: what
+     * `@OnOutboxMessage()` is declared with, because the outbox's `local` transport matches a handler
+     * by its exact topic. Without the namespace in the value, a binding on `posts.*` does not match
+     * and the exchange drops the message without a line in the log.
      */
     readonly qualifiedName: string,
-    /** The namespace on its own: it is by this that the outbox picks the destination ({@link routeOf}). */
+    /** The namespace on its own: it is by this that the outbox picks the destination ({@link OutboxRoute}). */
     readonly namespace: string,
     readonly identifier: string,
     /** The identity of the instance — see {@link orderingKeyOf}. */
@@ -53,16 +62,10 @@ export class EventAddress {
   ) {}
 
   /**
-   * Reads the address off the event.
-   *
-   * ## An event with no `@EventType`
-   * Gets the identity upstream gives it: **its class name**, no namespace and no version. It has no
-   * namespace for a destination to take, and therefore stays in the process, which is the right
-   * default for the events most of a domain is made of.
-   */
-  /**
-   * **The pattern the event is emitted under** — RabbitMQ's routing key, and what
-   * {@link MemoryClient} matches a binding against.
+   * **The pattern a broker's binding is matched against** — RabbitMQ's routing key, SNS's
+   * `routingKey` attribute, and what a `TopicMemoryServer` matches its bindings against. It is not the
+   * outbox's topic, which names the event and not the instance ({@link qualifiedName}): each
+   * transport's packet reads it off the message it publishes ({@link OutboxPackets}).
    *
    * ## Three segments: `namespace.localName.orderingKey`
    * Because a topic exchange's routing key serves two things that pull against each other:
@@ -79,21 +82,23 @@ export class EventAddress {
    * says so. And there is no `switch` over event types, which is the point: a new event in the domain
    * goes out routed already, because the key is derived from metadata the event already carries.
    *
-   * ## An event with no `@EventType`
-   * Has no namespace, so there is no key to build: it answers upstream's single pattern — and never
-   * leaves, since no destination takes an event with no namespace.
-   *
    * ## A transport that addresses differently
    * Does it in its own `toPacket` ({@link OutboxPackets}), which receives the message and answers the
    * pattern the transporter sends under — Inngest's qualified name, a Kafka topic. That is the one
    * place that already knows the protocol, and it is why this is a property and not an abstraction.
    */
   get routingKey(): string {
-    return this.namespace
-      ? `${this.qualifiedName}.${this.orderingKey}`
-      : TRANSPORT_EVENT_BUS_PATTERN;
+    return `${this.qualifiedName}.${this.orderingKey}`;
   }
 
+  /**
+   * Reads the address off the event.
+   *
+   * ## An event with no `@EventType`
+   * Gets the identity upstream gives it: **its class name**, no namespace and no version. It has no
+   * namespace for a destination to take, and therefore stays in the process, which is the right
+   * default for the events most of a domain is made of.
+   */
   static of(event: object): EventAddress {
     const metadata = eventTypeOf(event);
     const tags = wireTagsOf(eventTagsOf(event));
@@ -103,6 +108,28 @@ export class EventAddress {
       metadata?.qualifiedName ?? event.constructor.name,
       metadata?.namespace ?? '',
       identifierOf(event),
+      EventAddress.orderingKeyOf(messageType, tags),
+      tags,
+    );
+  }
+
+  /**
+   * **The same address, read back off a message the outbox holds** — what a transport's packet has
+   * in hand, because the relay publishes a message and not an event. Everything it needs was written
+   * into the headers when the event was staged: the message type, and the tags the ordering key comes
+   * from. The topic is only the fallback for a message whose headers do not say its type.
+   */
+  static ofMessage(
+    message: Pick<OutboxMessage, 'id' | 'topic' | 'headers'>,
+  ): EventAddress {
+    const headers = message.headers as MessageHeaders;
+    const messageType = headers[TRANSPORT_MESSAGE_TYPE] ?? message.topic;
+    const tags = decodeTags(headers[TRANSPORT_TAGS]);
+    return new EventAddress(
+      messageType,
+      qualifiedNameIn(messageType),
+      namespaceIn(messageType),
+      message.id,
       EventAddress.orderingKeyOf(messageType, tags),
       tags,
     );
@@ -145,21 +172,6 @@ export class EventAddress {
     return typeof target === 'string'
       ? `${target}.${EventAddress.EVERY_SEGMENT}`
       : `${requireEventTypeOf(target).qualifiedName}.${EventAddress.ONE_SEGMENT}`;
-  }
-
-  static fromMessageType(
-    messageType: string,
-    identifier: string,
-    tags: readonly WireTag[],
-  ): EventAddress {
-    return new EventAddress(
-      messageType,
-      qualifiedNameIn(messageType),
-      namespaceIn(messageType),
-      identifier,
-      EventAddress.orderingKeyOf(messageType, tags),
-      tags,
-    );
   }
 
   /**

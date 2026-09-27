@@ -80,7 +80,7 @@ mutation createPost(input, @CurrentAuthor() author)                      [protoc
 | Vitest + `unplugin-swc` | testes (a receita do Nest para SWC; o Jest não faz `require()` de ESM no Node 22) |
 | Nx | 23.x — `@nx/js/typescript` (build e typecheck por `tsc --build`) e `@nx/vitest`; **nenhum bundler** |
 | `@nestjs/microservices` | 12.x — transporte RabbitMQ com `wildcards: true` (exchange `topic`, o pattern **é** a routing key) |
-| `@nestjs/outbox` | 0.0.1 — o outbox (o evento gravado na transação do command, publicado pelo relay depois do commit) e o inbox de quem consome, sobre um store MikroORM (`MikroOrmOutboxStore`) |
+| `@nestjs/outbox` | 0.0.1 — o outbox (o evento gravado na transação do command, publicado pelo relay depois do commit) e o inbox de quem consome, sobre um store MikroORM (`MikroOrmOutboxStore`, `@nestposts/outbox-mikro-orm`) |
 | RabbitMQ | 4.x (`docker-compose.yml`) — um exchange `topic`, uma fila por serviço, bindings declarados pelas aplicações |
 
 ## The shape of the monorepo
@@ -112,7 +112,8 @@ wrong: import everything, or redeclare the event on the other side.
 | `libs/posts` | the post and tag aggregates, their ORM mappings and repositories |
 | `libs/core/cqsrs` | CQSRS: the third CQRS message. Knows nothing about GraphQL |
 | `libs/core/validated-dto` | the Zod → DTO / value object mixins |
-| `libs/core/transport-eventbus` | the CQRS event bus across services. Knows nothing about this domain |
+| `libs/core/transport-eventbus` | the CQRS event bus across services, and the unit of work it commits in. Knows nothing about this domain, and uses the `@nestjs/cqrs` and `@nestjs/outbox` the application declares |
+| `libs/core/outbox-mikro-orm` | `@nestjs/outbox` on MikroORM: the store, its tables, the transaction a unit of work runs in, and the outbox's housekeeping. Knows nothing about the bus |
 | `apps/posts-api` | the GraphQL API. A **hybrid application**: HTTP (subscriptions over SSE) plus a microservice in the same process |
 | `apps/tagging` | one step of the saga. A **full microservice**: no HTTP port at all |
 | `apps/migrator` | the migrations and the seeders of both schemas. The only thing that writes DDL, and the only thing that seeds |
@@ -312,18 +313,34 @@ Five things the versions forced, each with a symptom worth knowing:
 ### The code says what goes out; the configuration says where
 
 A destination is `@nestjs/outbox`'s `ClientProxyTransport` around the application's client, keyed by
-the **namespace** whose events it carries:
+the **namespace** whose events it carries. The outbox is the application's — declared at its root,
+global — and the bus is told which namespaces it has a transport for:
 
 ```ts
+OutboxModule.forRootAsync({
+  imports: [PostEventsClientModule],                    // OutboxModule instantiates the transports
+  transports,                                           // { [POSTS_NAMESPACE]: ClientProxyTransport(PostEventsClient, { toPacket }) }
+  inject: [outboxConfig.KEY],
+  useFactory: ({ relay, retry }: OutboxConfig) => ({
+    route: OutboxRoute.over(transports),                // a namespace with no transport goes `local`
+    relay: { enabled: relay === 'poll' },
+    retry,
+  }),
+}),
+MikroOrmOutboxModule.forRootAsync({                     // its store and tables, on MikroORM
+  inject: [appConfig.KEY],
+  useFactory: ({ name }: AppConfig) => ({ producer: name }),
+}),
 TransportEventBusModule.forRootAsync({
   /* identity, inbox, … */
+  transaction: MikroOrmUnitOfWorkTransaction,
   outbox: {
-    imports: [PostEventsClientModule],                  // OutboxModule instantiates the transports
-    destinations: {
-      [POSTS_NAMESPACE]: ClientProxyTransport(PostEventsClient, { toPacket: OutboxPackets.for('rabbitmq') }),
-    },
+    destinations: [POSTS_NAMESPACE],
     inject: [outboxConfig.KEY],
-    useFactory: (outbox: OutboxConfig) => outbox,
+    useFactory: ({ relay }: OutboxConfig) => ({
+      relay,
+      route: OutboxRoute.over(transports),              // the same route: what goes `local` is not told at the commit
+    }),
   },
 })
 
@@ -333,7 +350,8 @@ export class PostCreatedEvent { /* … */ }
 
 **The event says what it is, and that is also where it goes.** The namespace in `@EventType` is
 already the event's identity on the wire — `posts.PostCreated#2.0.0` — and the outbox's `route` reads
-it back off each message (`routeOf`) to pick the destination under that key. An event that also named
+it back off each message (`OutboxRoute`) to pick the destination under that key, or the outbox's own
+`local` transport when there is none. An event that also named
 its destinations, or a class that listed which events it takes, would be the same fact written twice,
 in two places to keep in step, with a deployment detail sitting inside a domain event. It is also why
 `libs/posts` imports nothing from the transport: the domain events depend on `@nestposts/platform` and
@@ -358,8 +376,9 @@ sends `posts` and `notifications` through one client.
 
 ### Publishing is writing
 
-A command runs in a unit of work (`libs/core/cqsrs`, Axon's, in the shape Nest allows), and the unit
-now runs in a **transaction**: what the handler flushes, the event log append and the outbox rows
+A command runs in a unit of work (`libs/core/transport-eventbus`, Axon's, in the shape Nest allows),
+and the unit runs in a **transaction** the application names for its ORM
+(`MikroOrmUnitOfWorkTransaction`, `libs/core/outbox-mikro-orm`): what the handler flushes, the event log append and the outbox rows
 commit together, in the unit's prepare phase, and only then are the events told to this process and
 the relay woken. A handler that throws rolls it all back, and its events are discarded: nothing was
 sent, because nothing is ever sent from inside a command.
@@ -409,10 +428,10 @@ function, the destination's `toPacket` (`OutboxPackets`): an `RmqRecord` here, a
 
 On the receiving side the controller's parameter **is** the envelope — `@Payload() envelope:
 OutboxEnvelope`, `@nestjs/outbox`'s own consumer pattern — and `EventIngestion.ingest(envelope)`
-rebuilds the declared class from it, so a controller parses nothing. `@TransportRequest()` is the other
-half — the `AsyncContext` the message belongs to — for a controller that dispatches a command itself
-instead of handing the envelope to the ingestion, and `IncomingRequest.of(executionContext)` is that
-same request for a **guard**, which runs before any pipe. Whatever the publishing service put in its
+rebuilds the declared class from it, so a controller parses nothing. `IncomingRequest` is the other
+half — the `AsyncContext` the message belongs to: `from(envelope)` for a controller that dispatches a
+command itself instead of handing the envelope to the ingestion, and `of(executionContext)` for a
+**guard**, which runs before any pipe. Whatever the publishing service put in its
 context — a tenant, a session, a locale — is in the envelope's headers, so authorising a message is the
 same code as authorising a request.
 
@@ -428,16 +447,25 @@ one back.
 ### Four transports, and the applications cannot tell which
 
 The bus speaks through `@nestjs/microservices`, so a transport is a client and a server, plus the one
-function that turns an outbox message into that client's packet (`OutboxPackets`). There are four, and
-a controller, a handler and an event are identical on all of them:
+function that turns an outbox message into that client's packet (`OutboxPackets`). There are three
+brokers and the process itself, and a controller, a handler and an event are identical on all of them:
 
 | | RabbitMQ | AWS | Inngest | in process |
 |---|---|---|---|---|
-| the exchange | topic exchange | **SNS topic** (`SnsClientProxy`) | the Inngest app (`InngestClientProxy`) | `MemoryClient` |
-| the queue | a queue bound to `posts.#` | an **SQS queue** subscribed with a filter policy (`SqsStrategy`) | a function per binding (`InngestStrategy`) | `MemoryServer` |
-| the binding | the routing key pattern | `SnsFilterPolicy.everyEventOf(POSTS_NAMESPACE)` | the function's triggers (`inngestTriggers`) | the pattern, matched in process |
-| the packet | `RmqRecord`: the headers also as AMQP headers | `SnsRecord`: the routing facts as attributes, the aggregate as FIFO group, the envelope's id as deduplication id | `InngestRecord`: the qualified name, the envelope as `data`, `<name>:<id>` as the event id | the envelope |
+| the exchange | topic exchange | **SNS topic** (`SnsClientProxy`) | the Inngest app (`InngestClientProxy`) | none: the outbox has no transport, and its route answers `local` |
+| the queue | a queue bound to `posts.#` | an **SQS queue** subscribed with a filter policy (`SqsStrategy`) | a function per binding (`InngestStrategy`) | `@nestjs/outbox`'s `local` transport, and `LocalDelivery` telling this process's `EventBus` |
+| the binding | the routing key pattern | `SnsFilterPolicy.everyEventOf(POSTS_NAMESPACE)` | the function's triggers (`inngestTriggers`) | the topic — the qualified name — matched exactly; `LocalDelivery` takes every event the service publishes |
+| the packet | `RmqRecord`: the headers also as AMQP headers | `SnsRecord`: the routing facts as attributes, the aggregate as FIFO group, the envelope's id as deduplication id | `InngestRecord`: the qualified name, the envelope as `data`, `<name>:<id>` as the event id | the outbox message itself |
 | chosen with | `POSTS_TRANSPORT=rabbitmq` | `=aws` | `=inngest` (the default) | `=memory` |
+
+In process, the relay claims, delivers and marks published exactly as it does for a broker, and what
+receives the message is `LocalDelivery`, which tells it to this process's `EventBus`: an event with no
+broker reaches the handlers and the sagas **through the outbox**, after its unit of work has committed,
+retried when a handler fails, and not at the commit — the bus is given the outbox's route, so it knows
+which events not to tell there. That is also why the chain a mutation opens is one correlation id and
+not one `AsyncContext` object: each hop restores the request from the headers, as across a broker. A
+suite delivers what another service sends on `TopicMemoryServer.emit` (`@nestposts/microservices-memory`),
+the memory transport's server, which matches the routing key against every binding.
 
 Two things are different enough on AWS to be worth saying here. **A queue has no bindings**, so the
 selection happens twice: the subscription's *filter policy* decides what reaches the queue, and the
@@ -562,7 +590,7 @@ with.
 |---|---|---|
 | unit / slice | every project, beside the code | the rule, the handler, the mapping |
 | integration | `libs/core/transport-eventbus/src/**`, `apps/posts-api/test/persistence` | the message (a `Date` that survives the wire), each transport's packet, the outbox committing with the work and publishing after it, the outbox store against `@nestjs/outbox`'s own contract suites, the inbox rolling back with a failed reaction, the ORM mapping |
-| one hop, in process | `libs/core/transport-eventbus/src/in-memory/transport-loop.spec.ts` | two services over `MemoryServer` and `MemoryClient`, each able to reach the other: the real class arrives, the request is restored, one correlation id per request, a redelivery reaches nobody, the loop is cut |
+| one hop, in process | `libs/core/transport-eventbus/src/in-memory/transport-loop.spec.ts` | two services with no broker, each one's `local` carried to the other's `TopicMemoryServer`: the real class arrives, the request is restored, one correlation id per request, a redelivery reaches nobody, the loop is cut |
 | the whole system, in a browser | `pnpm test:web` (`apps/web-e2e`, **Playwright**) | **three processes over real RabbitMQ**, driven through Chromium: signing in and being refused, the three states of `/posts/new`, the polymorphic `me`, a post read by somebody who never signed in — and, in the same tests, what a browser cannot see: each service's durable state, both inboxes, idempotency through the broker's management API, the replica channel, **one correlation id for the whole saga**, and the `x-tenant` **of the browser** on the headers of both messages, each published by a different process |
 
 ```
@@ -835,8 +863,8 @@ pnpm test:all    # as suites unitárias, e depois os dois níveis de e2e
 And the suites that came with the monorepo and the transport:
 
 - `transport-event-bus.service.spec` — **upstream's integration suite, ported assertion for
-  assertion**, now over the outbox: what leaves and what does not, what `@ExcludeDef` costs, an event
-  with no `@EventType` staying at home, `publishAll`, the routing key and message type an event goes
+  assertion**, now over the outbox: what leaves and what does not, an event with no `@EventType`
+  staying at home, `publishAll`, the routing key and message type an event goes
   out under, a saga, a service injecting the bus, and an aggregate committed through the transport
   publisher. It is what proves the vendored base still behaves as it did on a stack where the event
   identity it relied on no longer exists, and where publishing became writing. The last one has a name
@@ -847,7 +875,7 @@ And the suites that came with the monorepo and the transport:
   own context back from the ingested event, a `Scope.REQUEST` command handler resolving under the same
   correlation id, a delivery whose tenant the guard refuses never reaching the ingestion, and the same
   chain for an event raised locally, with nothing on the wire.
-- `event-pattern.spec` — **one entry per namespace, through `@Payload()` and `@TransportRequest()`**:
+- `event-pattern.spec` — **one entry per namespace, through `@Payload()` and `IncomingRequest`**:
   `posts.#` bound once, the concrete class answered for whichever event arrived, an event of another
   namespace not reaching it, the request rebuilt by the application's codec and handed to the
   controller, the command it dispatches running in that same request, and a message published outside
@@ -962,7 +990,7 @@ Esse motivo já não existe: o filtro saiu do `withFilter` e virou `subscribeAsA
 
 ### A unidade de trabalho: o comando espera pelos eventos que disparou
 
-O `UnitOfWork` (`@nestposts/cqsrs`) é o do Axon, na forma que este framework permite, e corre numa
+O `UnitOfWork` (`@nestposts/transport-eventbus`) é o do Axon, na forma que este framework permite, e corre numa
 **transação** (`UnitOfWorkTransaction`, o `TransactionManager` do Axon como port, ligado ao
 `MikroOrmUnitOfWorkTransaction` pelo `TransportEventBusModule`). Enquanto o handler de um comando
 corre, cada `publish` fica **em fila**; quando ele devolve, ainda dentro da transação, os eventos em
@@ -1360,9 +1388,9 @@ their first query — that is `TenantInterceptor`, which defers to a context tha
 request is never two entity managers.
 
 **Reading the tenant is a port, because the answer depends on the transport.** A header for HTTP and
-GraphQL; the envelope's metadata for a message. The second is decoded through `IncomingRequest` and
-**not** `@TransportRequest()`, because an interceptor runs before the pipes — the same reason the
-library's own docs give a guard as the example.
+GraphQL; the envelope's metadata for a message. The second is decoded through `IncomingRequest`, from
+the `ExecutionContext`, because an interceptor runs before any pipe — the same reason the library's own
+docs give a guard as the example.
 
 **And the one that took a failing test to find:** making the generic context re-emit what it arrived
 with is what carries the tenant through a service that knows nothing about tenants — but re-emitting

@@ -55,7 +55,7 @@ export abstract class EventLog {
    * identifier the log already has is a no-op, not an error, so a redelivery and a republish cost
    * nothing.
    */
-  abstract append(events: readonly object[], streamId?: string): Promise<void>;
+  abstract append(events: readonly object[]): Promise<void>;
 
   /** One aggregate's history, in order, as instances of the real event classes. */
   abstract readStream(streamId: string): Promise<object[]>;
@@ -97,10 +97,10 @@ export class MikroOrmEventLog extends EventLog {
    * context specific actions is disallowed`. `inRequestContext` is a no-op when a context exists,
    * which is exactly the difference.
    */
-  append(events: readonly object[], streamId?: string): Promise<void> {
+  append(events: readonly object[]): Promise<void> {
     return this.at(async () => {
       for (const event of events) {
-        await this.appendOne(event, streamId ?? eventTagsOf(event)[0]?.value);
+        await this.appendOne(event, eventTagsOf(event)[0]?.value);
       }
     });
   }

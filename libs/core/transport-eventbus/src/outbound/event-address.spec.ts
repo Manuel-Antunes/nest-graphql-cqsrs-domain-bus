@@ -87,19 +87,4 @@ describe('EventAddress', () => {
       EventAddress.of(new PostCreatedEvent('p-1', new Date())).identifier,
     ).not.toBe(identifierOf(event));
   });
-
-  it('rebuilds an address from a message type, for what arrives from the wire', () => {
-    const address = EventAddress.fromMessageType(
-      'posts.PostCreated#1.0.0',
-      'evt-1',
-      [{ key: 'postId', value: 'p-7' }],
-    );
-
-    expect(address).toMatchObject({
-      namespace: 'posts',
-      qualifiedName: 'posts.PostCreated',
-      orderingKey: 'p-7',
-      identifier: 'evt-1',
-    });
-  });
 });

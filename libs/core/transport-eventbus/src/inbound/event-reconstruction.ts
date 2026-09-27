@@ -14,7 +14,7 @@ import {
   TRANSPORT_TAGS,
 } from '../outbound/message-headers';
 import type { Ingestion } from '../outbound/transport-metadata';
-import { markIngested } from '../outbound/transport-metadata';
+import { markIdentified, markIngested } from '../outbound/transport-metadata';
 
 const logger = new Logger('EventReconstruction');
 
@@ -92,13 +92,34 @@ export const rebuild = (
   message: Ingestion,
   fields: Record<string, unknown>,
 ): object => {
-  const declared =
-    eventTypeFor(message.messageType) ?? byLocalName(message.messageType);
+  const event = instantiate(message.messageType, fields);
+  markIngested(event, message);
+  return event;
+};
+
+/**
+ * **An envelope this service published, back as the event it raised** — the real class, under the
+ * identifier it was published with, and **not** marked as ingested: it is this service's own
+ * decision, read back from its own outbox by the `local` transport ({@link LocalDelivery}). A saga
+ * that acts on local decisions only, or a projection that only replays another service's, asks
+ * `isIngested` and must get the answer it would have got at the commit.
+ */
+export const restore = (envelope: OutboxEnvelope): object => {
+  const message = messageOf(envelope);
+  const event = instantiate(message.messageType, decodeData(envelope.payload));
+  markIdentified(event, message.identifier);
+  return event;
+};
+
+const instantiate = (
+  messageType: string,
+  fields: Record<string, unknown>,
+): object => {
+  const declared = eventTypeFor(messageType) ?? byLocalName(messageType);
   const event = declared
     ? (Object.create(declared.eventClass.prototype) as object)
-    : anonymous(message.messageType);
+    : anonymous(messageType);
   Object.assign(event, fields);
-  markIngested(event, message);
   return event;
 };
 

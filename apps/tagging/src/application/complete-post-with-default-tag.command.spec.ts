@@ -90,7 +90,7 @@ describe('CompletePostWithDefaultTagCommand.Handler', () => {
   afterEach(() => module.close());
 
   it('completes the post its stream describes, with the tag the domain decides', async () => {
-    await inContext(() => log.append([preCreated()], postId.value));
+    await inContext(() => log.append([preCreated()]));
 
     await complete();
 
@@ -101,7 +101,7 @@ describe('CompletePostWithDefaultTagCommand.Handler', () => {
   });
 
   it('publishes the decision as a fact of the Post aggregate', async () => {
-    await inContext(() => log.append([preCreated()], postId.value));
+    await inContext(() => log.append([preCreated()]));
 
     await complete();
 
@@ -115,7 +115,7 @@ describe('CompletePostWithDefaultTagCommand.Handler', () => {
   });
 
   it('appends its decision to the stream, so the next delivery reads it back', async () => {
-    await inContext(() => log.append([preCreated()], postId.value));
+    await inContext(() => log.append([preCreated()]));
 
     await complete();
 
@@ -127,9 +127,7 @@ describe('CompletePostWithDefaultTagCommand.Handler', () => {
   });
 
   it('drops a decision the stream already carries: the aggregate is the last guard', async () => {
-    await inContext(() =>
-      log.append([preCreated(), alreadyComplete()], postId.value),
-    );
+    await inContext(() => log.append([preCreated(), alreadyComplete()]));
 
     await expect(complete()).resolves.toBeUndefined();
 

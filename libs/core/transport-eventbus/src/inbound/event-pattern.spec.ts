@@ -12,11 +12,8 @@ import { EventPattern, Payload } from '@nestjs/microservices';
 import type { OutboxEnvelope } from '@nestjs/outbox';
 import { EventType } from '@nestposts/platform/domain/shared/event-type';
 
-import { TransportRequest } from '../decorators/transport-request.decorator';
-import { MemoryClient } from '../in-memory/memory-client';
 import { EventAddress } from '../outbound/event-address';
 import { EventMessages } from '../outbound/event-messages';
-import { OutboxPackets } from '../outbound/outbox-packets';
 import {
   CorrelatedRequestContext,
   RequestContextCodec,
@@ -26,7 +23,6 @@ import { startInProcessService } from '../testing';
 import { TransportIdentity } from '../transport-identity';
 import { reconstruct } from './event-reconstruction';
 import { IncomingRequest } from './incoming-request';
-import { TransportRequestPipe } from './transport-request.pipe';
 
 const SHOP = 'shop';
 
@@ -93,21 +89,19 @@ class ShopEventsController {
   constructor(
     private readonly arrivals: Arrivals,
     private readonly commandBus: CommandBus,
+    private readonly incoming: IncomingRequest,
   ) {}
 
-  @EventPattern<string>(EventAddress.everyEventOf(SHOP))
-  shop(
-    @Payload() envelope: OutboxEnvelope,
-    @TransportRequest() request?: AsyncContext,
-  ): Promise<void> {
+  @EventPattern(EventAddress.everyEventOf(SHOP))
+  shop(@Payload() envelope: OutboxEnvelope): Promise<void> {
+    const request = this.incoming.from(envelope);
     this.arrivals.arrivals.push(new Arrival(reconstruct(envelope), request));
     return this.commandBus.execute(new NoteTheOrder('o-1'), request);
   }
 }
 
-describe('one entry per namespace, through @Payload() and @TransportRequest()', () => {
+describe('one entry per namespace, through @Payload() and the IncomingRequest', () => {
   let consuming: Awaited<ReturnType<typeof startInProcessService>>;
-  let publishing: MemoryClient;
   let messages: EventMessages;
   let arrivals: Arrivals;
 
@@ -127,30 +121,11 @@ describe('one entry per namespace, through @Payload() and @TransportRequest()', 
       createdAt: Date.now(),
       payload: staged.payload,
     };
-    const { pattern, data } = OutboxPackets.memory(
-      {
-        ...envelope,
-        availableAt: envelope.createdAt,
-        attempts: 0,
-        lastError: null,
-      },
+    return consuming.server.emit(
+      EventAddress.ofMessage(envelope).routingKey,
       envelope,
     );
-    return lastValue(publishing.emit(pattern, data));
   };
-
-  const lastValue = (stream: {
-    subscribe: (observer: {
-      complete: () => void;
-      error: (failure: unknown) => void;
-    }) => void;
-  }) =>
-    new Promise<void>((resolve, reject) =>
-      stream.subscribe({
-        complete: () => resolve(),
-        error: (failure) => reject(failure),
-      }),
-    );
 
   beforeAll(async () => {
     consuming = await startInProcessService({
@@ -158,7 +133,6 @@ describe('one entry per namespace, through @Payload() and @TransportRequest()', 
       controllers: [ShopEventsController],
       providers: [
         IncomingRequest,
-        TransportRequestPipe,
         { provide: RequestContextCodec, useClass: CorrelatedRequestContext },
         Arrivals,
         NoteTheOrderHandler,
@@ -168,7 +142,6 @@ describe('one entry per namespace, through @Payload() and @TransportRequest()', 
       TransportIdentity.named('shop'),
       new CorrelatedRequestContext(),
     );
-    publishing = new MemoryClient({ servers: [consuming.server] });
     arrivals = consuming.app.get(Arrivals);
   });
 
@@ -180,7 +153,7 @@ describe('one entry per namespace, through @Payload() and @TransportRequest()', 
   });
 
   it('binds the namespace, and nothing else', () => {
-    expect(publishing.bindings()).toEqual(['shop.#']);
+    expect(consuming.server.bindings()).toEqual(['shop.#']);
   });
 
   it('answers with the concrete class, whichever event of the namespace arrived', async () => {
@@ -203,16 +176,14 @@ describe('one entry per namespace, through @Payload() and @TransportRequest()', 
   it('does not carry an event of another namespace into this entry', async () => {
     const invoice = new InvoiceIssuedEvent('i-1', new Date());
     const address = EventAddress.of(invoice);
-    await lastValue(
-      publishing.emit(address.routingKey, {
-        id: address.identifier,
-        topic: address.routingKey,
-        key: null,
-        headers: {},
-        createdAt: Date.now(),
-        payload: {},
-      }),
-    );
+    await consuming.server.emit(address.routingKey, {
+      id: address.identifier,
+      topic: address.qualifiedName,
+      key: null,
+      headers: {},
+      createdAt: Date.now(),
+      payload: {},
+    });
 
     expect(arrivals.arrivals).toHaveLength(0);
   });

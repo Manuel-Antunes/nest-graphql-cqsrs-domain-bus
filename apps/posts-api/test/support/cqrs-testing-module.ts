@@ -24,7 +24,7 @@ export async function createCqrsTestingModule(
         aggregatePublisher: TRANSPORT_EVENT_BUS_PUBLISHER,
       }),
       ...persistenceTesting(),
-      transportTesting(),
+      ...transportTesting(),
       PostsInfrastructureModule,
       UsersInfrastructureModule,
       ...imports,

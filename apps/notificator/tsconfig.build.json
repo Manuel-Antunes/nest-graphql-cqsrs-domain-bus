@@ -32,6 +32,9 @@
       "path": "../../libs/platform/tsconfig.lib.json"
     },
     {
+      "path": "../../libs/core/outbox-mikro-orm/tsconfig.lib.json"
+    },
+    {
       "path": "../../libs/organizations/tsconfig.lib.json"
     },
     {
@@ -39,6 +42,9 @@
     },
     {
       "path": "../../libs/notifications/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/core/microservices-memory/tsconfig.lib.json"
     },
     {
       "path": "../../libs/core/microservices-inngest/tsconfig.lib.json"

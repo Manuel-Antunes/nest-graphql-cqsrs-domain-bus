@@ -5,6 +5,7 @@ import { YogaFederationDriver } from '@graphql-yoga/nestjs-federation';
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { GraphQLISODateTime, GraphQLModule } from '@nestjs/graphql';
+import { OutboxModule } from '@nestjs/outbox';
 import { StorageModule } from '@nestjs/storage';
 import { AttachmentModule } from '@nestposts/asset/infrastructure/attachment.module';
 import { AuthInfrastructureModule } from '@nestposts/auth/infrastructure/auth-infrastructure.module';
@@ -19,6 +20,12 @@ import { organizationAuthPluginProviders } from '@nestposts/organizations/infras
 import { OrganizationsInfrastructureModule } from '@nestposts/organizations/infrastructure/organizations-infrastructure.module';
 import { OrganizationEntities } from '@nestposts/organizations/infrastructure/persistence/organization-entities';
 import { TenantMembershipModule } from '@nestposts/organizations/infrastructure/tenancy/tenant-membership.module';
+import {
+  MikroOrmOutboxModule,
+  MikroOrmOutboxStore,
+  MikroOrmUnitOfWorkTransaction,
+  OutboxHousekeepingModule,
+} from '@nestposts/outbox-mikro-orm';
 import {
   EventTrace,
   IncomingRequest,
@@ -116,16 +123,43 @@ import { validatedDtoClasses } from './interfaces/mapper/validated-dto.strategy'
     }),
     StorageModule.forRootAsync({ useClass: BucketDisks }),
     AttachmentModule.forRoot({}),
+    OutboxModule.forRootAsync({
+      imports: [PostEventsClientModule],
+      transports: PostEventsClient.destinations(appConfig()),
+      inject: [appConfig.KEY, outboxConfig.KEY],
+      useFactory: (
+        app: AppConfig,
+        { relay, pollInterval, retry }: OutboxConfig,
+      ) => ({
+        route: PostEventsClient.route(app),
+        relay: { enabled: relay === 'poll', pollInterval },
+        retry,
+      }),
+    }),
+    MikroOrmOutboxModule.forRootAsync({
+      inject: [appConfig.KEY],
+      useFactory: ({ name }: AppConfig) => ({ producer: name }),
+    }),
+    OutboxHousekeepingModule.forRootAsync({
+      inject: [outboxConfig.KEY],
+      useFactory: ({ relay, inboxRetention }: OutboxConfig) => ({
+        interval: relay === 'poll' ? '1h' : false,
+        inboxRetention,
+      }),
+    }),
     TransportEventBusModule.forRootAsync({
       inject: [appConfig.KEY],
       useFactory: ({ name, publishes }: AppConfig) =>
         TransportIdentity.named(name, { publishes }),
-      inbox: true,
+      transaction: MikroOrmUnitOfWorkTransaction,
+      inbox: { descriptions: MikroOrmOutboxStore },
       outbox: {
-        imports: [PostEventsClientModule],
-        destinations: PostEventsClient.destinations(appConfig()),
-        inject: [outboxConfig.KEY],
-        useFactory: (outbox: OutboxConfig) => outbox,
+        destinations: PostEventsClient.namespaces,
+        inject: [appConfig.KEY, outboxConfig.KEY],
+        useFactory: (app: AppConfig, { relay }: OutboxConfig) => ({
+          relay,
+          route: PostEventsClient.route(app),
+        }),
       },
       requestContext: PostRequestContextCodec,
       subscriptions: appConfig().subscriptionsFromFeed,

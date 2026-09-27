@@ -10,11 +10,12 @@ import {
 } from '@nestjs/cqrs';
 import type { TestingModule } from '@nestjs/testing';
 import { Test } from '@nestjs/testing';
+import { CqsrsModule } from '@nestposts/cqsrs';
 import type { Observable } from 'rxjs';
 import { map } from 'rxjs';
 
-import { CqsrsModule } from './cqsrs.module';
 import { UnitOfWork } from './unit-of-work';
+import { UnitOfWorkCommands } from './unit-of-work-commands';
 
 class Start {}
 
@@ -90,6 +91,7 @@ describe('a unit of work waits for what the publish set off', () => {
     module = await Test.createTestingModule({
       imports: [CqsrsModule.forRoot()],
       providers: [
+        UnitOfWorkCommands,
         StartHandler,
         FinishHandler,
         RefuseHandler,

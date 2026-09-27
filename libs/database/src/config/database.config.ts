@@ -16,6 +16,17 @@ export const SYSTEM_SCHEMA = 'public';
  */
 export const TENANT_SCHEMA = '*';
 
+/**
+ * The schema the messaging's own tables live in: the outbox, its dead letters, the inbox and the
+ * event log.
+ *
+ * They are bookkeeping, not a tenant's data — one outbox for every message this system owes a broker,
+ * one inbox for every message it receives, one log for every event it keeps — so they are pinned
+ * here, created with the system migrations, and never wait on a tenant's schema to exist. What a row
+ * still says about tenancy, the log says in a column: the tenant it was written in.
+ */
+export const TRANSPORT_SCHEMA = 'transport';
+
 export const DatabaseConfigSchema = z.object({
   clientUrl: z.string().min(1),
   schema: z.string().min(1),

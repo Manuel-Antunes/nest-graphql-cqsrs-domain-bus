@@ -21,6 +21,10 @@ import { BASE_NODE_OPTIONS } from '../support';
  */
 export const authSecret = new sst.Secret('AuthSecret');
 
+export const polarAccessToken = new sst.Secret('PolarAccessToken', '');
+export const polarEnvironment = new sst.Secret('PolarEnvironment', 'sandbox');
+export const polarWebhookSecret = new sst.Secret('PolarWebhookSecret', '');
+
 export const outboxSweepSecret = $util.secret(
   authSecret.value.apply((secret) =>
     createHash('sha256').update(`outbox-sweep\u0000${secret}`).digest('hex'),

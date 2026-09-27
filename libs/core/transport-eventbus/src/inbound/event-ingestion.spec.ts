@@ -5,14 +5,20 @@ import { Injectable } from '@nestjs/common';
 import type { IEventHandler } from '@nestjs/cqrs';
 import { AsyncContext, CqrsModule, EventsHandler } from '@nestjs/cqrs';
 import type { OutboxEnvelope } from '@nestjs/outbox';
+import { OutboxModule } from '@nestjs/outbox';
 import type { TestingModule } from '@nestjs/testing';
 import { Test } from '@nestjs/testing';
-import { UnitOfWorkCommands } from '@nestposts/cqsrs';
 import {
   dropTestSchema,
   ensureTestSchema,
   testDatabaseConfig,
 } from '@nestposts/database/testing';
+import {
+  MikroOrmOutboxModule,
+  MikroOrmOutboxStore,
+  MikroOrmUnitOfWorkTransaction,
+  outboxEntities,
+} from '@nestposts/outbox-mikro-orm';
 import { EventType } from '@nestposts/platform/domain/shared/event-type';
 
 import {
@@ -23,8 +29,6 @@ import {
   TRANSPORT_TIMESTAMP,
 } from '../outbound/message-headers';
 import { EventLog } from '../persistence/event-log/event-log';
-import { MikroOrmOutboxStore } from '../persistence/outbox/mikro-orm-outbox.store';
-import { outboxEntities } from '../persistence/outbox/outbox.entities';
 import {
   CORRELATION_ID,
   CorrelatedRequestContext,
@@ -101,14 +105,17 @@ const moduleWith = async (
           allowGlobalContext: true,
         }),
       ),
+      OutboxModule.forRoot({ relay: { enabled: false } }),
+      MikroOrmOutboxModule.forRoot({ producer: 'posts-api' }),
       TransportEventBusModule.forRoot({
         identity: TransportIdentity.silent('posts-api'),
         requestContext: CorrelatedRequestContext,
-        inbox: true,
+        transaction: MikroOrmUnitOfWorkTransaction,
+        inbox: { descriptions: MikroOrmOutboxStore },
         providers: overrides,
       }),
     ],
-    providers: [Received, PostCreatedHandler, UnitOfWorkCommands],
+    providers: [Received, PostCreatedHandler],
   }).compile();
   await module.init();
   await ensureTestSchema(module.get(MikroORM));

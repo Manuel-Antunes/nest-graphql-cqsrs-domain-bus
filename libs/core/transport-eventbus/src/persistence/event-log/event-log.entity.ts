@@ -1,6 +1,5 @@
 import { defineEntity, p } from '@mikro-orm/core';
-
-import { TRANSPORT_SCHEMA } from '../transport-schema';
+import { TRANSPORT_SCHEMA } from '@nestposts/database';
 
 /**
  * **One row per event this service knows, in one order, filed under the aggregate it is about.**

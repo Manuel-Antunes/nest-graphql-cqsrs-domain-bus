@@ -6,7 +6,8 @@ import { ClientProxyTransport } from '@nestjs/outbox';
 import { SnsClientProxy } from '@nestposts/microservices-aws';
 import { InngestClientProxy } from '@nestposts/microservices-inngest';
 import { POSTS_NAMESPACE } from '@nestposts/posts/domain/post/event/posts.namespace';
-import { MemoryClient, OutboxPackets } from '@nestposts/transport-eventbus';
+import type { OutboxRouteFunction } from '@nestposts/transport-eventbus';
+import { OutboxPackets, OutboxRoute } from '@nestposts/transport-eventbus';
 import { Inngest } from 'inngest';
 
 import type { AppConfig } from '../../config/app.config';
@@ -29,7 +30,7 @@ export class PostEventsClient {
     aws: AwsConfig,
     rabbitmq: RabbitmqConfig,
     inngestClient: Inngest.Any,
-  ): ClientProxy {
+  ): ClientProxy | null {
     switch (app.transport) {
       case 'inngest':
         return new InngestClientProxy({ inngest: inngestClient });
@@ -39,7 +40,7 @@ export class PostEventsClient {
           clientConfig: aws.client,
         });
       case 'memory':
-        return new MemoryClient({ servers: [] });
+        return null;
       default:
         return ClientProxyFactory.create({
           transport: Transport.RMQ,
@@ -54,11 +55,21 @@ export class PostEventsClient {
     }
   }
 
+  static readonly namespaces = [POSTS_NAMESPACE];
+
   static destinations(app: AppConfig): Record<string, Type<OutboxTransport>> {
-    return {
-      [POSTS_NAMESPACE]: ClientProxyTransport(PostEventsClient, {
-        toPacket: OutboxPackets.for(app.transport),
-      }),
-    };
+    if (app.transport === 'memory') {
+      return {};
+    }
+    const transport = ClientProxyTransport(PostEventsClient, {
+      toPacket: OutboxPackets.for(app.transport),
+    });
+    return Object.fromEntries(
+      PostEventsClient.namespaces.map((namespace) => [namespace, transport]),
+    );
+  }
+
+  static route(app: AppConfig): OutboxRouteFunction {
+    return OutboxRoute.over(PostEventsClient.destinations(app));
   }
 }

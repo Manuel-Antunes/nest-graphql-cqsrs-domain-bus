@@ -11,8 +11,9 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
-// The SDK is a dependency of libs/asset, not of the repository root, so it is resolved from there.
-const require = createRequire(join(root, 'libs/asset/package.json'));
+// The SDK is a dependency of apps/posts-api — the process that writes to the bucket — and not of the
+// repository root, so it is resolved from there.
+const require = createRequire(join(root, 'apps/posts-api/package.json'));
 const { HeadObjectCommand, NotFound, S3Client } = require('@aws-sdk/client-s3');
 
 const [bucket, key] = process.argv.slice(2);

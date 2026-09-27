@@ -8,7 +8,6 @@ import type {
 import { ConfigurableCqsrsModule } from './cqsrs.module-definition';
 import { SubscriptionExplorerService } from './services/subscription-explorer.service';
 import { SubscriptionBus } from './subscription-bus';
-import { UnitOfWorkCommands } from './unit-of-work-commands';
 
 /**
  * **C**ommand, **Q**uery and **S**ubscription **R**esponsibility **S**egregation: Nest's `CqrsModule`
@@ -47,7 +46,7 @@ import { UnitOfWorkCommands } from './unit-of-work-commands';
  * `SubscriptionBus` without the CQRS buses.
  */
 @Module({
-  providers: [SubscriptionBus, SubscriptionExplorerService, UnitOfWorkCommands],
+  providers: [SubscriptionBus, SubscriptionExplorerService],
   exports: [SubscriptionBus],
 })
 export class CqsrsModule
