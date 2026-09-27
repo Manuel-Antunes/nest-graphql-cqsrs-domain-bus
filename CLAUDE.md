@@ -1393,8 +1393,11 @@ DTOs count.
 - **`fieldResolverEnhancers: ['interceptors']` in `GraphQLModule` is not optional.** Without it the
   `@ResolveField` methods return the raw aggregate, and the symptom is a
   `Cannot return null for non-nullable field ...` that points nowhere useful.
-- **MikroORM 7 and AutoMapper 9 are ESM-only**; the applications run as CommonJS through Node 22's
-  `require(esm)`. Jest cannot do that — hence **Vitest + `unplugin-swc`** (Vite's esbuild does not emit
+- **MikroORM 7 and AutoMapper 9 are ESM-only**; the applications run as CommonJS through Node's
+  `require(esm)` — Node 24 everywhere: CI, the images and the Lambdas. CI ran 22 until the npm
+  `undici` that Testcontainers loads replaced the global dispatcher under Node 22's own `fetch`, which
+  then refused the `content-length` `@nestjs/storage` sends (`invalid content-length header`, every
+  `PutObject` in a spec). Jest cannot do `require(esm)` — hence **Vitest + `unplugin-swc`** (Vite's esbuild does not emit
   `emitDecoratorMetadata`, which Nest's DI needs). The ORM decorators (`@CreateRequestContext`,
   `@Transactional`) come from `@mikro-orm/decorators/legacy`.
 - **Each Nest application is a webpack bundle, set up the way Nx sets up a Nest app** — and its two

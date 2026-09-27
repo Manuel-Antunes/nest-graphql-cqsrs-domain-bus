@@ -117,7 +117,8 @@
         "cache": true,
         "dependsOn": [
           "codegen",
-          "^build"
+          "^build",
+          "^typecheck"
         ],
         "inputs": [
           "production",
@@ -156,7 +157,8 @@
         "cache": true,
         "dependsOn": [
           "codegen",
-          "^build"
+          "^build",
+          "^typecheck"
         ],
         "options": {
           "cwd": "{projectRoot}",

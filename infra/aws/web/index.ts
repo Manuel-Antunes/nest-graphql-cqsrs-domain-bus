@@ -81,7 +81,7 @@ new sst.aws.Cron('WebOutboxSweep', {
   schedule: 'rate(1 minute)',
   function: {
     handler: 'infra/lambda/web-outbox-sweep.handler',
-    runtime: 'nodejs22.x',
+    runtime: 'nodejs24.x',
     architecture: 'arm64',
     timeout: '1 minute',
     environment: {

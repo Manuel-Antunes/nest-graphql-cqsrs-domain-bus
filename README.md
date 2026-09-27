@@ -69,7 +69,7 @@ mutation createPost(input, @CurrentAuthor() author)                      [protoc
 
 | Peça | Versão |
 |---|---|
-| Node | 22 (`require(esm)` nativo — o MikroORM 7 é ESM-only) |
+| Node | 24 — CI, imagens e Lambdas (`require(esm)` nativo — o MikroORM 7 é ESM-only) |
 | TypeScript | 6 (o 7 ainda não expõe a API programática que o Nest CLI usa) |
 | NestJS (`@nestjs/core`, `platform-fastify`) | 12.x — Fastify porque é o que o `@fastify/aws-lambda` devolve como **stream** |
 | `@nestjs/cqrs` | 12.x — `Command<T>`/`Query<T>` tipados, `WithAggregateRoot`, `@Saga`, `ofType` |

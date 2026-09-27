@@ -70,8 +70,8 @@ export const sharedEnvironment = {
   /**
    * **What lets a CommonJS bundle load an ESM-only package**, which is the shape everything here has:
    * the applications are compiled to CJS by `tsc`, and MikroORM, better-auth and AutoMapper ship ESM
-   * only. Locally that works because Node 22.12+ does `require(esm)` on its own; the `nodejs22.x`
-   * Lambda runtime measured here does not, and the failure is
+   * only. Locally that works because Node 22.12+ does `require(esm)` on its own; the `nodejs22.x` and
+   * `nodejs24.x` Lambda runtimes measured here do not, and the failure is
    * `ERR_REQUIRE_ESM: require() of ES Module @mikro-orm/postgresql/index.js`, from a function that
    * bundled and deployed successfully.
    *
