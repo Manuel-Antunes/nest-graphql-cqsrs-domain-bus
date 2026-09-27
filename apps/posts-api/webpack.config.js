@@ -5,6 +5,7 @@ module.exports = nestApplication({
   entryPoints: [
     { entryName: 'lambda/http', entryPath: './src/lambda/http.ts' },
     { entryName: 'lambda/sqs', entryPath: './src/lambda/sqs.ts' },
+    { entryName: 'lambda/relay', entryPath: './src/lambda/relay.ts' },
   ],
   assets: [{ input: './src/graphql', glob: '**/*.graphql', output: 'graphql' }],
   tenantMigrations: true,

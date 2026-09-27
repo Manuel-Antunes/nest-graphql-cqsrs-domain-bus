@@ -37,11 +37,10 @@ export const isSqsRecord = <TData>(value: unknown): value is SqsRecord<TData> =>
  * **SQS's own options, attached to one message** — the counterpart of Nest's `RmqRecordBuilder`, and
  * the same idea: the caller composes transport options without the producer learning the transport.
  *
- * A domain event needs none of this. The forwarder emits an envelope and {@link SqsClientProxy}
- * derives the FIFO group from the event's aggregate and the deduplication id from its identifier,
- * which is what per-aggregate ordering on a FIFO queue actually wants. What this is for is the other
- * kind of message a service sends on purpose: a delayed sentinel, a retry nudge, anything whose
- * timing is the point.
+ * Without one, {@link SqsClientProxy} derives the FIFO group from the pattern's last segment — the
+ * aggregate, in a routing key — which is what per-aggregate ordering on a FIFO queue wants. What this
+ * is for is the message a service sends on purpose and wants more said about: a delayed sentinel, a
+ * retry nudge, anything whose timing is the point.
  *
  * ```ts
  * client.emit(pattern, new SqsRecordBuilder(payload).setDelaySeconds(40).build());

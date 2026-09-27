@@ -28,7 +28,6 @@ import { PostCreatedNotification } from '@nestposts/posts/domain/post/notificati
 import { RetryPolicyModule } from '@nestposts/retry-policy/retry-policy.module';
 import {
   IncomingRequest,
-  MikroOrmMessageInbox,
   TRANSPORT_EVENT_BUS_PUBLISHER,
   TransportEventBusModule,
   TransportIdentity,
@@ -120,7 +119,7 @@ import { InterfacesModule } from './interfaces/interfaces.module';
       inject: [appConfig.KEY],
       useFactory: ({ name }: AppConfig) =>
         TransportIdentity.named(name, { publishes: false }),
-      inbox: MikroOrmMessageInbox,
+      inbox: true,
     }),
     MailModule.forRootAsync({
       inject: [mailConfig.KEY],

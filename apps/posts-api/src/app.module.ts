@@ -22,29 +22,28 @@ import { TenantMembershipModule } from '@nestposts/organizations/infrastructure/
 import {
   EventTrace,
   IncomingRequest,
-  MikroOrmMessageInbox,
   TRANSPORT_EVENT_BUS_PUBLISHER,
   TransportEventBusModule,
   TransportIdentity,
   TransportTenantResolver,
 } from '@nestposts/transport-eventbus';
-import { Inngest } from 'inngest';
 
 import { PostRequestContextCodec } from './application/shared/post-request-context.codec';
 import type { AppConfig } from './config/app.config';
 import { appConfig } from './config/app.config';
 import { authConfig } from './config/auth.config';
 import { awsConfig } from './config/aws.config';
-import type { InngestConfig } from './config/inngest.config';
 import { inngestConfig } from './config/inngest.config';
+import type { OutboxConfig } from './config/outbox.config';
+import { outboxConfig } from './config/outbox.config';
 import type { PostgresConfig } from './config/postgres.config';
 import { postgresConfig } from './config/postgres.config';
 import { rabbitmqConfig } from './config/rabbitmq.config';
 import { storageConfig } from './config/storage.config';
-import { PostEventsPublisher } from './infrastructure/outbox/post-events.publisher';
 import { MikroOrmConfiguration } from './infrastructure/persistence/mikro-orm.config';
 import { BucketDisks } from './infrastructure/storage/bucket-disks';
 import { PostEventsClient } from './infrastructure/transport/post-events.client';
+import { PostEventsClientModule } from './infrastructure/transport/post-events-client.module';
 import { subscriptionDeadline } from './interfaces/graphql/subscription-deadline.plugin';
 import { InterfacesModule } from './interfaces/interfaces.module';
 import { MapperErrorHandler } from './interfaces/mapper/mapper-error.handler';
@@ -61,6 +60,7 @@ import { validatedDtoClasses } from './interfaces/mapper/validated-dto.strategy'
         authConfig,
         awsConfig,
         inngestConfig,
+        outboxConfig,
         postgresConfig,
         rabbitmqConfig,
         storageConfig,
@@ -120,25 +120,18 @@ import { validatedDtoClasses } from './interfaces/mapper/validated-dto.strategy'
       inject: [appConfig.KEY],
       useFactory: ({ name, publishes }: AppConfig) =>
         TransportIdentity.named(name, { publishes }),
-      inbox: MikroOrmMessageInbox,
+      inbox: true,
+      outbox: {
+        imports: [PostEventsClientModule],
+        destinations: PostEventsClient.destinations(appConfig()),
+        inject: [outboxConfig.KEY],
+        useFactory: (outbox: OutboxConfig) => outbox,
+      },
       requestContext: PostRequestContextCodec,
       subscriptions: appConfig().subscriptionsFromFeed,
     }),
+    PostEventsClientModule,
     InterfacesModule,
-  ],
-  providers: [
-    PostEventsPublisher,
-    {
-      provide: Inngest,
-      inject: [appConfig.KEY, inngestConfig.KEY],
-      useFactory: (app: AppConfig, { client }: InngestConfig) =>
-        new Inngest({ id: app.name, ...client }),
-    },
-    {
-      provide: PostEventsClient,
-      inject: PostEventsClient.inject,
-      useFactory: PostEventsClient.create,
-    },
   ],
 })
 export class AppModule {}

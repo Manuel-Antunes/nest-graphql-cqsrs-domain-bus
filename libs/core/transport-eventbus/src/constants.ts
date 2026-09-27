@@ -6,13 +6,10 @@
  * The message pattern an event goes out under when the transport has no topic semantics of its own.
  *
  * Upstream sends **everything** under this one pattern: one queue, every event, and the type inside
- * the payload. That still works here — it is what {@link EventAddress.routingKey} answers for an event
- * with no `@EventType`, which is the only identity such an event has — and the environment variable is
- * upstream's too, so a deployment can rename the pattern without touching code.
- *
- * On RabbitMQ with `wildcards: true` the pattern **is** the routing key, and an event that declares
- * one gets `namespace.Name.aggregateTag` instead, so a consumer can bind to `posts.PostCreated.*`
- * rather than to everything.
+ * the payload. Here it is only what {@link EventAddress.routingKey} answers for an event with no
+ * `@EventType` — which has no namespace, and so no destination, and never leaves the process. Every
+ * event that does leave goes out under `namespace.Name.aggregateTag`, so a consumer can bind to
+ * `posts.PostCreated.*` rather than to everything.
  */
 export const TRANSPORT_EVENT_BUS_PATTERN =
   process.env.TRANSPORT_EVENT_BUS_PATTERN ?? 'TRANSPORT_EVENT_BUS_PATTERN';
@@ -29,3 +26,11 @@ export const TRANSPORT_EVENT_BUS_PUBLISHER = Symbol(
 export const EXCLUDE_DEF_METADATA = Symbol.for(
   'nestposts.transport-eventbus.exclude-def',
 );
+
+/** The namespaces this service publishes: the keys of the outbox's `destinations`. */
+export const TRANSPORT_OUTBOX_DESTINATIONS = Symbol(
+  'TransportOutboxDestinations',
+);
+
+/** The application's `TransportOutboxSettings`, resolved. */
+export const TRANSPORT_OUTBOX_SETTINGS = Symbol('TransportOutboxSettings');

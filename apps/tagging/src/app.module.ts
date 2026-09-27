@@ -9,14 +9,12 @@ import { postsEntities } from '@nestposts/posts/infrastructure/posts-infrastruct
 import { RetryPolicyModule } from '@nestposts/retry-policy/retry-policy.module';
 import {
   IncomingRequest,
-  MikroOrmMessageInbox,
   TRANSPORT_EVENT_BUS_PUBLISHER,
   TransportEventBusModule,
   TransportIdentity,
   TransportTenantResolver,
 } from '@nestposts/transport-eventbus';
 import { usersEntities } from '@nestposts/users/infrastructure/users-infrastructure.module';
-import { Inngest } from 'inngest';
 
 import { CompleteOnPostPreCreated } from './application/complete-on-post-pre-created.saga';
 import { CompletePostWithDefaultTagCommand } from './application/complete-post-with-default-tag.command';
@@ -24,15 +22,16 @@ import type { AppConfig } from './config/app.config';
 import { appConfig } from './config/app.config';
 import type { AwsConfig } from './config/aws.config';
 import { awsConfig } from './config/aws.config';
-import type { InngestConfig } from './config/inngest.config';
 import { inngestConfig } from './config/inngest.config';
+import type { OutboxConfig } from './config/outbox.config';
+import { outboxConfig } from './config/outbox.config';
 import type { PostgresConfig } from './config/postgres.config';
 import { postgresConfig } from './config/postgres.config';
 import { rabbitmqConfig } from './config/rabbitmq.config';
-import { PostEventsPublisher } from './infrastructure/outbox/post-events.publisher';
 import { MikroOrmConfiguration } from './infrastructure/persistence/mikro-orm.config';
 import { ExceptionProducers } from './infrastructure/transport/exception-producers';
 import { PostEventsClient } from './infrastructure/transport/post-events.client';
+import { PostEventsClientModule } from './infrastructure/transport/post-events-client.module';
 import { PostEventsController } from './interfaces/messaging/post-events.controller';
 
 @Module({
@@ -45,6 +44,7 @@ import { PostEventsController } from './interfaces/messaging/post-events.control
         appConfig,
         awsConfig,
         inngestConfig,
+        outboxConfig,
         postgresConfig,
         rabbitmqConfig,
       ],
@@ -80,26 +80,21 @@ import { PostEventsController } from './interfaces/messaging/post-events.control
       inject: [appConfig.KEY],
       useFactory: ({ name, publishes }: AppConfig) =>
         TransportIdentity.named(name, { publishes }),
-      inbox: MikroOrmMessageInbox,
+      inbox: true,
+      outbox: {
+        imports: [PostEventsClientModule],
+        destinations: PostEventsClient.destinations(appConfig()),
+        inject: [outboxConfig.KEY],
+        useFactory: (outbox: OutboxConfig) => outbox,
+      },
       eventStore: [Post],
     }),
+    PostEventsClientModule,
   ],
   controllers: [PostEventsController],
   providers: [
     CompleteOnPostPreCreated,
     CompletePostWithDefaultTagCommand.Handler,
-    PostEventsPublisher,
-    {
-      provide: Inngest,
-      inject: [appConfig.KEY, inngestConfig.KEY],
-      useFactory: (app: AppConfig, { client }: InngestConfig) =>
-        new Inngest({ id: app.name, ...client }),
-    },
-    {
-      provide: PostEventsClient,
-      inject: PostEventsClient.inject,
-      useFactory: PostEventsClient.create,
-    },
   ],
 })
 export class AppModule {}

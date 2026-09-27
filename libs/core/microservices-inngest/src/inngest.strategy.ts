@@ -31,8 +31,8 @@ export interface InngestStrategyOptions {
   /**
    * **How an Inngest event becomes a packet.** It is handed the event and `{ channel }`, the pattern
    * the function was bound for. Left out, Nest's own `IncomingRequestDeserializer` applies and a
-   * handler's `@Payload()` is the event's `data`. `@nestposts/transport-eventbus`'s
-   * `InngestEventEnvelopeDeserializer` is the one a service receiving domain events wants.
+   * handler's `@Payload()` is the event's `data` — which is where an outbox's `OutboxEnvelope`
+   * travels, so a service receiving domain events needs no deserializer of its own.
    */
   readonly deserializer?: ConsumerDeserializer;
   /**

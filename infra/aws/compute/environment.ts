@@ -1,5 +1,7 @@
 /// <reference path="../../../.sst/platform/config.d.ts" />
 
+import { createHash } from 'node:crypto';
+
 import { errorReporting } from '../../sentry';
 import { postgresUrl } from '../data';
 import { router } from '../edge/router';
@@ -18,6 +20,12 @@ import { BASE_NODE_OPTIONS } from '../support';
  * cookie signed by the web application resolve in the API. `sst secret set AuthSecret <value>`.
  */
 export const authSecret = new sst.Secret('AuthSecret');
+
+export const outboxSweepSecret = $util.secret(
+  authSecret.value.apply((secret) =>
+    createHash('sha256').update(`outbox-sweep\u0000${secret}`).digest('hex'),
+  ),
+);
 
 /**
  * **A variable the deploy cannot do without**, read from the `.env` at the root of the repository —
@@ -95,6 +103,7 @@ export const postsEnvironment = {
   OTEL_SERVICE_NAME: 'posts-api',
   ...errorReporting('posts-api'),
   POSTS_TRANSPORT: 'aws',
+  POSTS_OUTBOX_RELAY: 'drain',
   POSTS_TOPIC_ARN: postEvents.arn,
   POSTS_COMPLETED_QUEUE_URL: completed.url,
   /**
@@ -130,6 +139,7 @@ export const taggingEnvironment = {
   OTEL_SERVICE_NAME: 'tagging',
   ...errorReporting('tagging'),
   TAGGING_TRANSPORT: 'aws',
+  TAGGING_OUTBOX_RELAY: 'drain',
   TAGGING_TOPIC_ARN: postEvents.arn,
   TAGGING_QUEUE_URL: taggingEvents.url,
 };

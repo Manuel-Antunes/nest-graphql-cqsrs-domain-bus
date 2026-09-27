@@ -2,6 +2,7 @@ import { Poll } from '../../support/poll';
 import type { Database } from './database';
 
 export interface IngestedMessage {
+  consumer: string;
   message_type: string;
   origin: string | null;
 }
@@ -9,10 +10,10 @@ export interface IngestedMessage {
 export class MessageInbox {
   constructor(private readonly database: Database) {}
 
-  /** One row per message this service ingested, with the service that produced it. */
+  /** One row per message a service ingested: which service, what it was and who produced it. */
   all(): Promise<IngestedMessage[]> {
     return this.database.query<IngestedMessage>(
-      'select message_type, origin from transport_message_inbox order by received_at, identifier',
+      'select consumer, message_type, origin from outbox_inbox order by processed_at, message_id',
     );
   }
 
@@ -29,14 +30,22 @@ export class MessageInbox {
 
   rowsFor(identifier: string): Promise<number> {
     return this.database.count(
-      'select count(*) as total from transport_message_inbox where identifier = ?',
+      'select count(*) as total from outbox_inbox where message_id = ?',
       identifier,
+    );
+  }
+
+  countOf(consumer: string, messageType: string): Promise<number> {
+    return this.database.count(
+      'select count(*) as total from outbox_inbox where consumer = ? and message_type like ?',
+      consumer,
+      `${messageType}%`,
     );
   }
 
   countFrom(origin: string): Promise<number> {
     return this.database.count(
-      'select count(*) as total from transport_message_inbox where origin = ?',
+      'select count(*) as total from outbox_inbox where origin = ?',
       origin,
     );
   }

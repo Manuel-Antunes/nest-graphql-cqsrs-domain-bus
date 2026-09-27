@@ -9,7 +9,7 @@ import { OrganizationEntities } from '@nestposts/organizations/infrastructure/pe
 import { SoftDeleteSubscriber } from '@nestposts/platform/infrastructure/persistence/soft-delete/soft-delete.subscriber';
 import { postsEntities } from '@nestposts/posts/infrastructure/posts-infrastructure.module';
 import { eventLogEntities } from '@nestposts/transport-eventbus/persistence/event-log/event-log.entity';
-import { transportEntities } from '@nestposts/transport-eventbus/persistence/message-inbox.entity';
+import { outboxEntities } from '@nestposts/transport-eventbus/persistence/outbox/outbox.entities';
 import { usersEntities } from '@nestposts/users/infrastructure/users-infrastructure.module';
 
 import type { PostgresConfig } from '../config/postgres.config';
@@ -37,7 +37,7 @@ export const migratorTables = (): DatabaseEntities => [
   ...usersEntities,
   ...eventsEntities,
   ...notificationsEntities,
-  ...transportEntities,
+  ...outboxEntities,
   ...eventLogEntities,
 ];
 

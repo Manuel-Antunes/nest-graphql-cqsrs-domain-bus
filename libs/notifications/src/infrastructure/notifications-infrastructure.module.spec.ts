@@ -196,6 +196,58 @@ describe('NotificationDeliveryRepository', () => {
   });
 });
 
+describe('a delivery recorded after it was sent', () => {
+  const at = new Date('2026-09-23T12:00:00Z');
+
+  it('commits on its own, whatever the transaction around it does', async () => {
+    const id = NotificationId.generate();
+
+    await inRequestContext(orm.em, () =>
+      orm.em
+        .transactional(async () => {
+          await deliveries.recordAfter(
+            NotificationDelivery.of(id, 'email', at),
+            async () => undefined,
+          );
+          throw new Error('the ingestion around it failed');
+        })
+        .catch(() => undefined),
+    );
+
+    await expect(deliveries.deliveredChannels(id)).resolves.toEqual(
+      new Set(['email']),
+    );
+  });
+
+  it('commits what the channel wrote with the record, and neither when the channel fails', async () => {
+    const delivered = recordFor('2026-09-23T12:00:00Z');
+    const refused = recordFor('2026-09-23T12:00:01Z');
+
+    await deliveries.recordAfter(
+      NotificationDelivery.of(delivered.id, 'database', at),
+      () => records.save(delivered),
+    );
+    await expect(
+      deliveries.recordAfter(
+        NotificationDelivery.of(refused.id, 'database', at),
+        async () => {
+          await records.save(refused);
+          throw new Error('the channel refused');
+        },
+      ),
+    ).rejects.toThrow('the channel refused');
+
+    await expect(deliveries.deliveredChannels(delivered.id)).resolves.toEqual(
+      new Set(['database']),
+    );
+    await expect(records.findById(delivered.id)).resolves.not.toBeNull();
+    await expect(deliveries.deliveredChannels(refused.id)).resolves.toEqual(
+      new Set(),
+    );
+    await expect(records.findById(refused.id)).resolves.toBeNull();
+  });
+});
+
 describe('DeviceRepository', () => {
   it('finds a device by token and every device of a notifiable', async () => {
     const now = new Date('2026-09-23T12:00:00Z');

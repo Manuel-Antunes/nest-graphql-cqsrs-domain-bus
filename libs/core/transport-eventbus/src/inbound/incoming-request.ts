@@ -5,7 +5,7 @@ import type { Context } from '@opentelemetry/api';
 
 import { RequestContextCodec } from '../request-context';
 import { traceContextOf } from '../tracing';
-import { envelopeFrom } from './event-reconstruction';
+import { envelopeOf, messageOf } from './event-reconstruction';
 
 /**
  * **The request a delivery belongs to, for whoever is not a handler's parameter.**
@@ -30,16 +30,16 @@ import { envelopeFrom } from './event-reconstruction';
  * ## Why this matters more than it looks
  * Because it is what makes the framework's own machinery work on a message: everything the publishing
  * service put in the context — authentication, a tenant id, a feature flag, a locale — is on the
- * envelope's metadata, and from here a **shared guard** reads it the way it reads an HTTP request.
+ * envelope's headers, and from here a **shared guard** reads it the way it reads an HTTP request.
  * Without it, a service that consumes messages has to write a parallel authorisation path for them.
  */
 @Injectable()
 export class IncomingRequest {
   constructor(private readonly codec: RequestContextCodec) {}
 
-  /** From the payload as the transport handed it over — an {@link EventEnvelope}, or what it was read from. */
+  /** From the payload as the transport handed it over: the `OutboxEnvelope`. */
   from(message: unknown): AsyncContext | undefined {
-    return this.codec.decode(envelopeFrom(message));
+    return this.codec.decode(messageOf(envelopeOf(message)));
   }
 
   /** From what a guard, an interceptor or a filter is looking at. */
@@ -59,7 +59,7 @@ export class IncomingRequest {
     }
     try {
       return traceContextOf(
-        envelopeFrom(context.switchToRpc().getData()).metadata,
+        envelopeOf(context.switchToRpc().getData()).headers,
       );
     } catch {
       return undefined;

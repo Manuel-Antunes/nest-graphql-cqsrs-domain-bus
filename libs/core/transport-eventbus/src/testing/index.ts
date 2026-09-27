@@ -11,4 +11,5 @@
  * application runs on it with `POSTS_TRANSPORT=memory`, and it depends on nothing but Nest.
  */
 export * from './in-process-service';
+export * from './published-envelope';
 export * from './recording-client';

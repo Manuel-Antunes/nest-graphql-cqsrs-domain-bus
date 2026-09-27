@@ -9,7 +9,7 @@ import {
 } from '@nestposts/platform/domain/shared/event-type';
 
 import { TRANSPORT_EVENT_BUS_PATTERN } from '../constants';
-import type { WireTag } from './event-envelope';
+import type { WireTag } from './message-headers';
 import { identifierOf, wireTagsOf } from './transport-metadata';
 
 /**
@@ -44,7 +44,7 @@ export class EventAddress {
      * on `posts.*` does not match and the exchange drops the message without a line in the log.
      */
     readonly qualifiedName: string,
-    /** The namespace on its own: it is by this that {@link OutboxRouting} picks the outbox. */
+    /** The namespace on its own: it is by this that the outbox picks the destination ({@link routeOf}). */
     readonly namespace: string,
     readonly identifier: string,
     /** The identity of the instance — see {@link orderingKeyOf}. */
@@ -56,16 +56,9 @@ export class EventAddress {
    * Reads the address off the event.
    *
    * ## An event with no `@EventType`
-   * Gets the identity upstream gives it: **its class name**, no namespace and no version. That is not
-   * a degraded mode, it is upstream's mode — `{ payload, eventName }` carries exactly that — and
-   * keeping it is what lets an application that declares nothing but an `EVERY_NAMESPACE` destination
-   * publish and receive as it always did.
-   *
-   * What it does not get is a routing key of its own: with no namespace there is nothing to build one
-   * from, so {@link routingKey} answers the single pattern — which is the pattern upstream's consumers
-   * bind to anyway. An internal event — no `@EventType` — has no namespace for a destination to take
-   * either, and therefore stays in the process, which is the right default for the events most of a
-   * domain is made of.
+   * Gets the identity upstream gives it: **its class name**, no namespace and no version. It has no
+   * namespace for a destination to take, and therefore stays in the process, which is the right
+   * default for the events most of a domain is made of.
    */
   /**
    * **The pattern the event is emitted under** — RabbitMQ's routing key, and what
@@ -87,13 +80,13 @@ export class EventAddress {
    * goes out routed already, because the key is derived from metadata the event already carries.
    *
    * ## An event with no `@EventType`
-   * Has no namespace, so there is no key to build: it goes out under upstream's single pattern, which
-   * is the identity such an event has always had.
+   * Has no namespace, so there is no key to build: it answers upstream's single pattern — and never
+   * leaves, since no destination takes an event with no namespace.
    *
    * ## A transport that addresses differently
-   * Does it in its own {@link EventEnvelopeSerializer}, which receives the packet and returns what the
-   * transporter sends — a Kafka topic, a NATS subject. That is the one place that already knows the
-   * protocol, and it is why this is a property and not an abstraction.
+   * Does it in its own `toPacket` ({@link OutboxPackets}), which receives the message and answers the
+   * pattern the transporter sends under — Inngest's qualified name, a Kafka topic. That is the one
+   * place that already knows the protocol, and it is why this is a property and not an abstraction.
    */
   get routingKey(): string {
     return this.namespace

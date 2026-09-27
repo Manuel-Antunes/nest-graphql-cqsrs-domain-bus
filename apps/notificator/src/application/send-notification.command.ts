@@ -65,9 +65,9 @@ export namespace SendNotificationCommand {
           );
           continue;
         }
-        await this.channels.named(name).deliver(notification, recipient);
-        await this.deliveries.record(
+        await this.deliveries.recordAfter(
           NotificationDelivery.of(record.id, name, new Date()),
+          () => this.channels.named(name).deliver(notification, recipient),
         );
         this.logger.log(
           `${record.type} ${record.id} delivered to ${recipient.notifiableType} ${recipient.notifiableId} through "${name}"`,

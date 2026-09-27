@@ -2,153 +2,114 @@
 
 This library is a vendored and adapted copy of
 [**nestjs-transport-eventbus**](https://github.com/sergey-telpuk/nestjs-transport-eventbus) v1.0.24
-by Sergey Telpuk, MIT licensed (see `LICENSE`), with an integration layer built on top of it.
+by Sergey Telpuk, MIT licensed (see `LICENSE`), with an integration layer built on top of it — and,
+since `@nestjs/outbox` was published, with that package doing the publishing and the remembering
+that upstream's destinations and this repository's inbox used to do.
 
-## What came from upstream, unchanged in shape
+## What came from upstream, and is still here
 
-The whole integration point, which is the reason this library is built on it rather than beside it:
+The integration point, which is the reason this library is built on it rather than beside it:
 
 | piece | what it does |
 |---|---|
-| `TransportEventBusService implements IEventBus` | **the** idea: a drop-in replacement for the CQRS `EventBus`. Everything that already publishes — a handler, a saga, an aggregate's `commit()` — publishes through the transport without a line of its code changing |
-| `TransportEventBusPublisher extends EventPublisher` | so `mergeObjectContext(aggregate)` binds the aggregate to the transport bus |
-| `@Publisher(...)` | a class holding a `ClientProxy` is a destination — **the only selection rule there is** |
+| `TransportEventBusService implements IEventBus` | **the** idea: a drop-in replacement for the CQRS `EventBus`. Everything that already publishes — a handler, a saga, an aggregate's `commit()` — publishes through it without a line of its code changing |
+| `TransportEventBusPublisher extends EventPublisher` | so `mergeObjectContext(aggregate)` binds the aggregate to that bus |
 | `@ExcludeDef()` | an event that does **not** run locally, only remotely |
-| `@TransportEvent()` | the receiving side's parameter decorator: the message becomes an event again |
-| `TRANSPORT_EVENT_BUS_SERVICE` / `_PUBLISHER` / `_PATTERN` | the injection tokens and the default message pattern |
+| `TRANSPORT_EVENT_BUS_SERVICE` / `_PUBLISHER` / `_PATTERN` | the injection tokens, and the pattern an event with no namespace would be addressed under — such an event no longer leaves the process, see below |
 
-Its integration test suite is ported as `src/transport-event-bus.service.spec.ts`, assertion for
-assertion, and it is what proves the base still behaves the same on this stack.
+Its integration test suite is ported as `src/transport-event-bus.service.spec.ts`: what runs locally,
+what leaves, what `@ExcludeDef` costs, `publishAll`, a saga, a service injecting the bus, an aggregate
+committed through the publisher — now over the outbox.
+
+## What upstream had and is gone
+
+- **`@Publisher(...)` and `ITransportPublisherEventBus`** — a class holding a `ClientProxy` as a
+  destination. The destinations are `@nestjs/outbox`'s transports now: one `ClientProxyTransport` per
+  namespace a service publishes (`destinations` in `TransportEventBusModule`'s options), and the
+  outbox's `route` reads the namespace off each message. The event's `@EventType` is the only place
+  that says where it goes; there is no second declaration to keep in step with it.
+- **`EVERY_NAMESPACE`, upstream's "one bus, everything" mode, and its `{ eventName, payload }` wire
+  shape.** An event with no `@EventType` has no namespace, so no destination takes it and it stays in
+  the process; nothing here reads upstream's shape any more.
+- **`@TransportEvent()`**, upstream's receiving parameter decorator, which became a pipe here and is now
+  gone too: a controller takes the `OutboxEnvelope` with Nest's own `@Payload()` — `@nestjs/outbox`'s
+  consumer pattern — and hands it to `EventIngestion`, which rebuilds the event.
 
 ## What the new versions forced
 
-1. **`@TransportEvent()` has to rebuild the real event class.** Upstream builds an anonymous class and
-   forges its `name`, because `@nestjs/cqrs` 7 matched a handler by the event's class *name*. Version
-   12 does not: `@EventsHandler(SomeEvent)` stamps `{ id: randomUUID() }` on the event class itself and
+1. **The event has to be rebuilt as its real class.** Upstream builds an anonymous class and forges its
+   `name`, because `@nestjs/cqrs` 7 matched a handler by the event's class *name*. Version 12 does not:
+   `@EventsHandler(SomeEvent)` stamps `{ id: randomUUID() }` on the event class itself and
    `filterEventWithId` compares that id, read off the instance's constructor. A forged class carries no
    such id, so **no handler, no saga and no subscription would match, and the event would be dropped in
-   silence**. Reconstruction therefore goes through a registry of declared event types
-   (`@EventType` in `@nestposts/platform`), which is also what gives the wire a name that is stable
-   across processes — the random id cannot be one.
-2. **`emit`, not `send`.** Upstream awaits a reply for an event (`client.send`). Over RabbitMQ that
-   needs a reply queue and turns a fire-and-forget event into a request; `emit` is the transporter's
-   event path.
-3. **`@ExcludeDef` writes metadata instead of returning a subclass.** Upstream's decorators (it did the
-   same for `@TransportType`) replace the class with a subclass carrying extra readonly fields. Here the
-   domain events also carry `@AutoMap()` properties, and AutoMapper reads `design:type` metadata off the
-   class it was told about — a substituted class is a class the mapper does not know.
-   `Reflect.defineMetadata` on the class has the same effect for us with none of that risk.
-4. **Nothing here imports `CqrsModule`.** Upstream's module does, and on version 7 that gave one
-   shared instance. In 12, `CqrsModule.forRoot()` is a *dynamic, global* module of the same class, and
-   a dynamic module is not the static class: importing the static one alongside these providers yields
-   a second `EventBus`, whose handlers nobody registered. Every local handler, saga and subscription
-   would stop being called, silently. The bus is taken from wherever the application put CQRS.
-5. **The inbox is opt-in.** The outbound half needs no database — upstream has none — so
-   `MessageInbox` is a port, and `EventIngestion` arrives in its own providers array
-   (`eventIngestionProviders`) for the services that receive.
-6. **The bus signatures follow `IEventBus` of version 12**, which takes a dispatcher context and an
-   `AsyncContext`. Keeping them is what lets a request-scoped handler keep working: this application's
-   command handlers are `Scope.REQUEST` and stamp their events through
-   `publisher.mergeObjectContext(aggregate, request)`.
+   silence**. Reconstruction therefore goes through a registry of declared event types (`@EventType` in
+   `@nestposts/platform`), which is also what gives the wire a name that is stable across processes.
+2. **`@ExcludeDef` writes metadata instead of returning a subclass.** Upstream's decorators replace the
+   class with a subclass carrying extra readonly fields. Here the domain events also carry `@AutoMap()`
+   properties, and AutoMapper reads `design:type` metadata off the class it was told about — a
+   substituted class is a class the mapper does not know.
+3. **Nothing here imports `CqrsModule`.** In `@nestjs/cqrs` 12, `CqrsModule.forRoot()` is a *dynamic,
+   global* module of the same class, and importing the static one alongside these providers yields a
+   second `EventBus` whose handlers nobody registered. The bus is taken from wherever the application
+   put CQRS.
+4. **The bus signatures follow `IEventBus` of version 12**, which takes a dispatcher context and an
+   `AsyncContext` — what lets this application's `Scope.REQUEST` command handlers stamp their events
+   through `publisher.mergeObjectContext(aggregate, request)`.
 
-## What this repository changed in its shape
+## What `@nestjs/outbox` does here
 
-7. **`forRoot` is there, and so are the providers under it.** Upstream's module function is the only way
-   to wire it; here it is the **opinionated** way — `TransportEventBusModule.forRoot({ identity, inbox,
-   eventStore, publishers })` composes three exported provider arrays
-   (`transportEventBusProviders`, `eventIngestionProviders`, `eventStoreProviders`) and binds the four
-   ports the library asks for (`TransportIdentity`, `RequestContextCodec`, `IngestionSink`,
-   `MessageInbox`). A service that wants another shape spreads the arrays itself, which is what the
-   library's own specs do; `forRootAsync` resolves the identity at runtime. The options are values and
-   classes, never a substitute for a binding: what a test replaces, it replaces by binding.
-8. **The wire format lives in the transporter's own extension points, one pair per transport.**
-   Upstream's bus builds the message; here the forwarder emits an `EventEnvelope` — `data`, the event,
-   and `metadata`, a flat map of strings — and each transport's `EventEnvelopeSerializer` /
-   `EventEnvelopeDeserializer` decides where the two halves go. On RabbitMQ that is the body and the
-   AMQP headers, built with the transporter's own `RmqRecordBuilder`; in process, both in the value.
-   Declaring them in the client's and the server's options is where `@nestjs/microservices` already
-   asks "what actually goes on the wire", and it is what keeps the body **the event** instead of a
-   base64 payload inside a wrapper.
-8b. **`@TransportEvent()` is a pipe.** Upstream's parameter decorator reconstructed the event by
-   itself; here the transport's deserializer produces the envelope and `TransportEventPipe` rebuilds
-   the class from it, through Nest's own payload pipeline — so a controller's parameter is the typed
-   domain event, extra pipes compose with it (`@TransportEvent(new ValidationPipe())`), and nothing in
-   the controller parses anything. `@TransportRequest()`, which upstream has no equivalent of, is the
-   same idea for the request the message belongs to: a pipe that is a provider, because decoding it is
-   the application's `RequestContextCodec`'s job.
-9. **`@TransportType` is gone: the event's namespace is the selection.** Upstream's decorator made each
-   event name the transports it may leave through, and `@Publisher(id)` matched that id. But an event
-   already declares `@EventType({ namespace })`, because that is its identity on the wire
-   (`posts.PostCreated#2.0.0`) — so naming destinations as well was the same fact written twice, in two
-   places to keep in step, and it put a deployment detail inside a domain event: `libs/posts` had to
-   import this library to say it. Now a destination declares the namespaces it takes
-   (`@Publisher('posts')`, `@Publisher(['posts','tags'])`, or `@Publisher(EVERY_NAMESPACE)` for
-   upstream's "one bus, everything" mode), the event declares only what it **is**, and `libs/posts`
-   depends on nothing but the platform. What an event still says about publishing is `@ExcludeDef()`,
-   which is about this process and not about a destination.
-10. **The in-process transport is mostly not ours.**
-    [`MemoryServer`](https://github.com/camcima/nestjs-memory-microservices) is the receiving half, so
-    a spec goes through the controllers Nest wrapped; `MemoryClient` adds the two things a topic
-    exchange has and that package does not — a `ClientProxy` and pattern matching.
+- **Publishing is writing.** `TransportEventBusService` stages what an aggregate commits in the unit of
+  work (`@nestposts/cqsrs`), which now runs in a transaction (`UnitOfWorkTransaction`, bound to
+  `MikroOrmUnitOfWorkTransaction`); in its prepare phase `EventOutbox` turns each event whose namespace
+  has a destination into one outbox message and writes it with `Outbox.add(tx, …)` — so the event
+  commits with the writes that raised it, or neither does. The relay publishes it afterwards, retries
+  it with backoff, and dead-letters it when it cannot. There is no direct emit any more.
+- **The wire is the `OutboxEnvelope`** — `id`, `topic`, `key`, `headers`, `createdAt`, `payload` — in
+  Nest's own `{ pattern, data }` packet, and each transport's placement is `ClientProxyTransport`'s
+  `toPacket` (`OutboxPackets`): an `RmqRecord` with the headers as AMQP headers, an `SnsRecord` with
+  the routing facts as message attributes and the aggregate as FIFO group, an `InngestRecord` with the
+  message id as idempotency key. The per-transport `EventEnvelopeSerializer`/`Deserializer` pairs this
+  repository had written are gone: the transports' default serializers and deserializers carry it.
+- **The inbox is `@nestjs/outbox`'s `OutboxInbox`**, keyed by `(consumer, message)` — the consuming
+  service's name and the envelope's id — so two services ingesting the same event each keep their own
+  memory of it, which the table keyed by the message alone could not.
+- **`MikroOrmOutboxStore`** implements both of the package's storage contracts on MikroORM and
+  PostgreSQL, in native SQL (advisory locks per key, `FOR UPDATE SKIP LOCKED` claims, writes fenced by
+  the lease owner), scoped by the producing service because one `transport` schema serves every
+  service; it passes the package's contract suites with their concurrency cases.
 
-## What this repository added on top
+## What this repository adds on top
 
-Everything under `outbound/`, `inbound/` and `persistence/`, none of which upstream has:
+Everything under `outbound/`, `inbound/`, `outbox/` and `persistence/`, none of which upstream has:
 
-- an **envelope** of two halves — the event as the application wrote it, and a flat map carrying a
-  stable message type, an identifier, a timestamp, the origin, the event's tags and the request —
-  instead of `{ payload, eventName }`;
-- **routing by namespace** (`OutboxRouting`): which destination takes which event, so a service can have
-  more than one, on more than one protocol, with the events naming none of them;
+- **headers of what an event is** (`message-headers.ts`, `EventMessages`): a stable message type, a
+  timestamp, the origin, the event's tags, the request and the trace — captured when the event is
+  staged, because the relay publishes later, in no request at all;
 - **an address the event answers for itself** (`EventAddress`): the message type, the tags, and a topic
-  routing key of `namespace.Name.aggregateTag`, so a consumer binds to the slice it wants. There was a
-  per-transport addressing abstraction here, and it was removed once the wire format moved into the
-  transporters' serializers and the destination into the `@Publisher`: what was left of it was a class
-  per transport whose only job was to return a string the event already knew;
-- an **inbox** table: one row per received message, in the same transaction as the work it caused,
-  which is what makes an at-least-once delivery safe to receive;
-- an **event store** (`persistence/event-store`): the stream of an aggregate, the sink that appends
-  every ingested event to it, and a generic `EventSourcedRepository` that replays it. It is here and not
-  in an application because a service that decides about an aggregate it has no table for needs exactly
-  this, always in the same shape — the Axon side gets it from its framework's event store, and a
-  service that had to write it would be writing the framework once per service;
-- an **origin mark** on every message, which is what keeps "everything published locally is forwarded"
-  and "everything received is published locally" from feeding each other forever;
-- **its tables declared where they are needed**: `inbox` and `eventStore` bring the inbox's schema and
-  the streams' through `DatabaseModule.forFeature`, so neither is a list an application keeps in step by
-  hand;
+  routing key of `namespace.Name.aggregateTag`, so a consumer binds to the slice it wants
+  (`EventAddress.everyEventOf`), and the ordering key a message is published under;
+- **one transaction per ingested message**: `EventIngestion` records the message in the inbox,
+  appends it to the event log and publishes it on the local bus inside one unit of work, whose
+  reactions — a projection, a saga's command — join it, and whose own events go to the outbox in the
+  same transaction. A reaction that fails rolls the inbox row back with everything else, so the
+  transport's redelivery is acted on; this replaced a "forget the inbox row after the fact" that a
+  crash in the middle could skip;
+- an **event log** (`persistence/event-log`): the stream of an aggregate, a generic
+  `EventSourcedRepository` that replays it, and the log-backed `EventBus` subscriptions read across
+  processes;
+- an **origin mark** on every message, which is what keeps "everything published locally leaves" and
+  "everything received is published locally" from feeding each other forever;
 - **request-context propagation** across the hop (`RequestContextCodec`), and `@TransportRequest()`,
   which hands that request to a controller so a command dispatched there runs in it;
-- **a binding for a whole namespace** (`EventAddress.everyEventOf`): one `@EventPattern`, every event of the
-  namespace, each answered as the class it is — which is what a service that keeps another's stream
-  needs, and what a list of per-type bindings silently gets wrong as the other side grows;
+- **the relay's place in a process** (`OutboxRelayMode`): polling in a long-lived process, drained
+  before a unit of work answers in a function, and off in an API-only instance — with
+  `OutboxHousekeeping` for what the package leaves to the application: pruning the inbox, reporting the
+  outbox's lag and its dead letters, and a `sweep()` a schedule runs;
+- **a trace across the hop** (`tracing.ts`): the trace an event was published in is stamped on it and
+  written into its headers, and a consumer span wraps the whole ingestion;
 - the **doubles** that make all of the above testable with nothing running: `MemoryClient`,
-  `startInProcessService` and `RecordingClient`.
-- **a transport of its own on AWS** (`aws/`), which upstream has none of: `SnsClientProxy` and
-  `SqsClientProxy` on the way out, `SqsStrategy` on the way in, and the pair of serializers between
-  them. Three things had to be decided there that RabbitMQ decides for you — the metadata travels in
-  the body because SNS allows ten message attributes and an envelope with a tenant and a trace needs
-  more; the subscription's **filter policy** is the binding, built from the same namespace or event
-  class `@EventPattern` takes (`SnsFilterPolicy`); and the routing key is matched against the
-  handlers' patterns **in the strategy**, because a queue has no bindings and nothing has matched
-  anything by the time a record arrives;
-- **two ways to drive that strategy** — a long-polling receive loop for a process, and
-  `processSqsEvent` for a Lambda, which reports `batchItemFailures` rather than throwing on the first
-  failure (throwing redrives the records that succeeded; returning deletes the ones that did not);
-- **the AWS and Inngest transports moved out**, to `@nestposts/microservices-aws` and
-  `@nestposts/microservices-inngest`: the client proxies, the strategies, their contexts and record
-  builders, `processSqsEvent` and `topicMatches`. None of it came from upstream, and none of it needed
-  an envelope — a proxy takes whatever its serializer answers and a strategy defaults to Nest's own
-  deserializer — so it is usable by a service that never heard of this library, and by
-  `@nestposts/retry-policy`, which reads the receive count off `SqsContext` and the attempt off
-  `InngestContext`. The envelope's wire on those transports stayed here, and so did the one piece
-  that needs `@EventType`: `inngestTriggers`, now handed to the strategy as its `triggers`;
-- **a failed reaction is a failed ingestion**: `EventIngestion` opens its unit of work with
-  `failOnTrackedFailure`, so a saga's command that throws rejects the message instead of being logged
-  and forgotten, and it forgets the inbox row it had written, so the transport's redelivery is acted
-  on rather than dropped as a duplicate. The event log's append is idempotent by identifier, which is
-  what makes the second ingestion of the same message safe;
-- **a trace on the envelope** (`tracing.ts`): W3C trace context injected where the metadata is built,
-  a consumer span around the whole ingestion, and both trace keys excluded from what a service in the
-  middle of a chain re-emits — for the same reason the origin mark is. It is `@opentelemetry/api`
-  alone, so it costs a function call until an application starts an SDK.
+  `startInProcessService`, `RecordingClient` and `publishedEnvelope`;
+- **the AWS and Inngest transports**, in `@nestposts/microservices-aws` and
+  `@nestposts/microservices-inngest`: client proxies, strategies, contexts and record builders, which
+  know nothing of this library. What stays here is what needs `@EventType`: the SNS filter policy built
+  from a binding (`SnsFilterPolicy`) and `inngestTriggers`.

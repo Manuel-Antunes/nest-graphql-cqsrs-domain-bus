@@ -3,10 +3,9 @@ import { AsyncContext } from '@nestjs/cqrs';
 import { ROOT_TENANT, TENANT_HEADER } from '@nestposts/database';
 
 import {
-  TRANSPORT_IDENTIFIER,
   TRANSPORT_MESSAGE_TYPE,
   TRANSPORT_ORIGIN,
-} from '../outbound/event-envelope';
+} from '../outbound/message-headers';
 import {
   CORRELATION_ID,
   CorrelatedRequestContext,
@@ -16,10 +15,13 @@ import { IncomingRequest } from './incoming-request';
 import { TransportTenantResolver } from './transport-tenant.resolver';
 
 const envelope = (metadata: Record<string, string>) => ({
-  data: { postId: 'p-1' },
-  metadata: {
+  id: 'message-1',
+  topic: 'posts.PostPreCreated.p-1',
+  key: 'posts/p-1',
+  createdAt: 1_790_000_000_000,
+  payload: { postId: 'p-1' },
+  headers: {
     [TRANSPORT_MESSAGE_TYPE]: 'posts.PostPreCreated#1.0.0',
-    [TRANSPORT_IDENTIFIER]: 'message-1',
     [TRANSPORT_ORIGIN]: 'posts-api',
     [CORRELATION_ID]: 'c-1',
     ...metadata,

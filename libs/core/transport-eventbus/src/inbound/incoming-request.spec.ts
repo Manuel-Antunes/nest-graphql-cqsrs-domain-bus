@@ -3,10 +3,9 @@ import { context, propagation, trace } from '@opentelemetry/api';
 import { node } from '@opentelemetry/sdk-node';
 
 import {
-  TRANSPORT_IDENTIFIER,
   TRANSPORT_MESSAGE_TYPE,
   TRANSPORT_ORIGIN,
-} from '../outbound/event-envelope';
+} from '../outbound/message-headers';
 import { IncomingRequest } from './incoming-request';
 
 const TRACE = '4bf92f3577b34da6a3ce929d0e0e4736';
@@ -21,10 +20,13 @@ const delivering = (data: unknown, type = 'rpc'): ExecutionContext =>
   }) as unknown as ExecutionContext;
 
 const envelope = (metadata: Record<string, string>) => ({
-  data: { postId: 'p-1' },
-  metadata: {
+  id: 'message-1',
+  topic: 'posts.PostPreCreated.p-1',
+  key: 'posts/p-1',
+  createdAt: 1_790_000_000_000,
+  payload: { postId: 'p-1' },
+  headers: {
     [TRANSPORT_MESSAGE_TYPE]: 'posts.PostPreCreated#1.0.0',
-    [TRANSPORT_IDENTIFIER]: 'message-1',
     [TRANSPORT_ORIGIN]: 'posts-api',
     ...metadata,
   },

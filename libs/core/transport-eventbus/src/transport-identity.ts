@@ -3,7 +3,7 @@ import { Injectable } from '@nestjs/common';
 /**
  * **Who this service is on the wire, and whether it speaks.**
  *
- * The name is **not** how a message finds its destination — the `@Publisher`'s client is. It is the
+ * The name is **not** how a message finds its destination — its namespace's outbox transport is. It is the
  * mark of authorship every message carries, and the inbound half's answer to "did *I* send this?":
  * a service that binds a namespace it also publishes to receives its own events, and without the mark
  * it ingests them — writing them to its own state again and deciding a second time about a decision it

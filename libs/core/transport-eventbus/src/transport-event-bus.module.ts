@@ -1,23 +1,31 @@
+import { EntityManager } from '@mikro-orm/core';
 import type { DynamicModule, Provider } from '@nestjs/common';
 import { Module } from '@nestjs/common';
-import { DiscoveryModule } from '@nestjs/core';
+import type { OutboxModuleOptions } from '@nestjs/outbox';
+import { OutboxModule, OutboxStorage } from '@nestjs/outbox';
+import { UnitOfWorkTransaction } from '@nestposts/cqsrs';
 import { DatabaseModule } from '@nestposts/database';
 
 import {
   TRANSPORT_EVENT_BUS_PUBLISHER,
   TRANSPORT_EVENT_BUS_SERVICE,
+  TRANSPORT_OUTBOX_DESTINATIONS,
+  TRANSPORT_OUTBOX_SETTINGS,
 } from './constants';
 import { EventIngestion } from './inbound/event-ingestion';
 import { IncomingRequest } from './inbound/incoming-request';
 import { TransportRequestPipe } from './inbound/transport-request.pipe';
-import { EventEnvelopeFactory } from './outbound/event-envelope.factory';
-import { OutboxRouting } from './outbound/outbox-routing';
+import { EventMessages, routeOf } from './outbound/event-messages';
+import { EventOutbox } from './outbox/event-outbox';
+import { OutboxHousekeeping } from './outbox/outbox-housekeeping';
+import type { TransportOutboxSettings } from './outbox/transport-outbox.options';
 import { EventLog } from './persistence/event-log/event-log';
 import { eventLogEntities } from './persistence/event-log/event-log.entity';
 import { eventLogProviders } from './persistence/event-log/event-log.providers';
 import { EventSourcedRepository } from './persistence/event-log/event-sourced.repository';
-import { MessageInbox } from './persistence/message-inbox';
-import { transportEntities } from './persistence/message-inbox.entity';
+import { MikroOrmUnitOfWorkTransaction } from './persistence/mikro-orm-unit-of-work.transaction';
+import { MikroOrmOutboxStore } from './persistence/outbox/mikro-orm-outbox.store';
+import { outboxEntities } from './persistence/outbox/outbox.entities';
 import {
   CorrelatedRequestContext,
   RequestContextCodec,
@@ -44,13 +52,19 @@ import { TransportIdentity } from './transport-identity';
  *     CqsrsModule.forRoot({ aggregatePublisher: TRANSPORT_EVENT_BUS_PUBLISHER }),
  *     DatabaseModule.forRoot(mikroOrmConfig()),
  *     TransportEventBusModule.forRoot({
- *       identity: taggingIdentity(),
- *       inbox: MikroOrmMessageInbox,
+ *       identity: 'tagging',
+ *       inbox: true,
+ *       outbox: {
+ *         imports: [PostEventsClientModule],
+ *         destinations: {
+ *           [POSTS_NAMESPACE]: ClientProxyTransport(PostEventsClient, {
+ *             toPacket: OutboxPackets.for('rabbitmq'),
+ *           }),
+ *         },
+ *         inject: [outboxConfig.KEY],
+ *         useFactory: (outbox: OutboxConfig) => outbox,
+ *       },
  *       eventStore: [Post],
- *       publishers: [
- *         PostEventsPublisher,
- *         { provide: POST_EVENTS_CLIENT, useFactory: postEventsClient },
- *       ],
  *     }),
  *   ],
  * })
@@ -58,26 +72,24 @@ import { TransportIdentity } from './transport-identity';
  * ```
  *
  * ## What it decides for the application, and what it leaves to it
- * It decides the **shape**: which providers exist, in which order, with which defaults — the request
- * codec that carries correlation, the sink that keeps nothing, the ingestion that only exists for a
- * service that receives. What it leaves to the application is what only the application knows: who it
- * is, where its destinations point, and what it makes durable.
+ * It decides the **shape**: which providers exist, with which defaults — the request codec that
+ * carries correlation, the ingestion that only exists for a service that receives, and
+ * `@nestjs/outbox` with its MikroORM store for a service that keeps an inbox or an outbox. What it
+ * leaves to the application is what only the application knows: who it is, which namespaces it
+ * publishes and through which client, and what it makes durable.
  *
- * The three provider arrays it composes — {@link transportEventBusProviders},
- * {@link eventIngestionProviders} and {@link eventStoreProviders} — are still exported, and a service
- * that wants to compose them by hand still can. This is the opinionated way, not the only one, and the
- * library's own specs use both.
+ * ## The inbox and the outbox are `@nestjs/outbox`'s
+ * Either one imports `OutboxModule`, registers {@link MikroOrmOutboxStore} as both its stores, maps
+ * its three tables and binds {@link UnitOfWorkTransaction}, so every unit of work — a command, an
+ * ingested message — runs in a transaction. The outbox's `transports` are the application's
+ * `destinations`, one `ClientProxyTransport` per namespace, and its `route` reads the namespace off
+ * each message ({@link routeOf}): the event's `@EventType` is the only declaration of where it goes.
  *
  * ## Why it is global
  * Because what it provides is injected from everywhere in an application: a command handler asks for
  * `TRANSPORT_EVENT_BUS_PUBLISHER`, a controller for `EventIngestion`, a guard for
  * {@link IncomingRequest}. And because `CqsrsModule.forRoot({ aggregatePublisher: … })` resolves that
  * token from a global module — see `libs/core/cqsrs`.
- *
- * ## The two refusals
- * A `sink` together with an `eventStore` (both bind the same port, and the second would silently win),
- * and a `publishes` flag beside an identity that already carries one. Both throw where they are
- * written, which is the one place the mistake is visible.
  */
 @Module({})
 export class TransportEventBusModule {
@@ -86,8 +98,8 @@ export class TransportEventBusModule {
       module: TransportEventBusModule,
       global: true,
       imports: [
-        DiscoveryModule,
         ...tables(options),
+        ...reliability(options),
         ...(options.imports ?? []),
       ],
       providers: [
@@ -109,8 +121,8 @@ export class TransportEventBusModule {
       module: TransportEventBusModule,
       global: true,
       imports: [
-        DiscoveryModule,
         ...tables(options),
+        ...reliability(options),
         ...(options.imports ?? []),
       ],
       providers: [
@@ -130,17 +142,96 @@ export class TransportEventBusModule {
 type Composed = Omit<TransportEventBusModuleOptions, 'identity' | 'publishes'>;
 
 /**
- * The tables this library needs, declared where they are needed: the inbox for a service that receives,
- * the streams for one that event-sources. A publish-only service gets neither, and needs no database at
- * all.
+ * The tables this library needs, declared where they are needed: the inbox and the outbox for a
+ * service that keeps either, the streams for one that event-sources. A publish-only service with no
+ * outbox gets none, and needs no database at all.
  */
 const tables = (options: Composed): DynamicModule[] =>
-  options.inbox || logged(options)
+  durable(options) || logged(options)
     ? [
         DatabaseModule.forFeature([
-          ...(options.inbox ? transportEntities : []),
+          ...(durable(options) ? outboxEntities : []),
           ...(logged(options) ? eventLogEntities : []),
         ]),
+      ]
+    : [];
+
+/** Whether this service keeps an inbox or an outbox — and so `@nestjs/outbox` and its store. */
+const durable = (options: Composed): boolean =>
+  Boolean(options.inbox) || Boolean(options.outbox);
+
+/**
+ * `@nestjs/outbox`, configured from the application's {@link TransportOutboxSettings}: the
+ * destinations are its transports and the event's namespace is its route; the relay polls only in
+ * `poll` mode and only when there is somewhere to publish.
+ */
+const reliability = (options: Composed): DynamicModule[] =>
+  durable(options)
+    ? [
+        OutboxModule.forRootAsync({
+          imports: options.outbox?.imports ?? [],
+          transports: { ...destinationsOf(options) },
+          inject: [TRANSPORT_OUTBOX_SETTINGS],
+          useFactory: (settings: TransportOutboxSettings) =>
+            outboxModuleOptions(
+              settings,
+              Object.keys(destinationsOf(options)).length > 0,
+            ),
+        }),
+      ]
+    : [];
+
+const destinationsOf = (options: Composed) =>
+  options.outbox?.destinations ?? {};
+
+const outboxModuleOptions = (
+  settings: TransportOutboxSettings,
+  relays: boolean,
+): OutboxModuleOptions => ({
+  ...(relays ? { route: routeOf } : {}),
+  relay: {
+    enabled: relays && (settings.relay ?? 'poll') === 'poll',
+    pollInterval: settings.pollInterval,
+    batchSize: settings.batchSize,
+    lease: settings.lease,
+    publishTimeout: settings.publishTimeout,
+    concurrency: settings.concurrency,
+  },
+  retry: settings.retry,
+});
+
+const settingsOf = (options: Composed): Provider =>
+  options.outbox?.useFactory
+    ? {
+        provide: TRANSPORT_OUTBOX_SETTINGS,
+        inject: options.outbox.inject ?? [],
+        useFactory: options.outbox.useFactory,
+      }
+    : { provide: TRANSPORT_OUTBOX_SETTINGS, useValue: {} };
+
+const reliabilityProviders = (options: Composed): Provider[] =>
+  durable(options)
+    ? [
+        settingsOf(options),
+        {
+          provide: TRANSPORT_OUTBOX_DESTINATIONS,
+          useValue: Object.keys(destinationsOf(options)),
+        },
+        {
+          provide: MikroOrmOutboxStore,
+          inject: [EntityManager, TransportIdentity, OutboxStorage],
+          useFactory: (
+            em: EntityManager,
+            identity: TransportIdentity,
+            storage: OutboxStorage,
+          ) => new MikroOrmOutboxStore(em, identity.applicationName, storage),
+        },
+        {
+          provide: UnitOfWorkTransaction,
+          useClass: MikroOrmUnitOfWorkTransaction,
+        },
+        ...(options.outbox ? [EventMessages, EventOutbox] : []),
+        OutboxHousekeeping,
       ]
     : [];
 
@@ -148,42 +239,40 @@ const tables = (options: Composed): DynamicModule[] =>
 const logged = (options: Composed): boolean =>
   Boolean(options.eventStore) || Boolean(options.subscriptions);
 
-const mechanism = (options: Composed): Provider[] => {
-  refuseAmbiguity(options);
-
-  return [
-    ...transportEventBusProviders,
-    {
-      provide: RequestContextCodec,
-      useClass: options.requestContext ?? CorrelatedRequestContext,
-    },
-    ...(logged(options) ? eventLogProviders : []),
-    ...(options.eventStore ?? []).map((aggregate) =>
-      EventSourcedRepository.of(aggregate),
-    ),
-    ...(options.inbox
-      ? [
-          ...eventIngestionProviders,
-          { provide: MessageInbox, useClass: options.inbox },
-        ]
-      : []),
-    ...(options.subscriptions ? [EventSourcedEventBus] : []),
-    ...(options.publishers ?? []),
-    ...(options.providers ?? []),
-  ];
-};
+const mechanism = (options: Composed): Provider[] => [
+  ...transportEventBusProviders,
+  {
+    provide: RequestContextCodec,
+    useClass: options.requestContext ?? CorrelatedRequestContext,
+  },
+  ...(logged(options) ? eventLogProviders : []),
+  ...(options.eventStore ?? []).map((aggregate) =>
+    EventSourcedRepository.of(aggregate),
+  ),
+  ...reliabilityProviders(options),
+  ...(options.inbox ? eventIngestionProviders : []),
+  ...(options.subscriptions ? [EventSourcedEventBus] : []),
+  ...(options.providers ?? []),
+];
 
 const exported = (
   options: Composed,
 ): NonNullable<TransportEventBusModuleOptions['exports']> => [
   TRANSPORT_EVENT_BUS_SERVICE,
   TRANSPORT_EVENT_BUS_PUBLISHER,
-  EventEnvelopeFactory,
-  OutboxRouting,
   IncomingRequest,
   TransportRequestPipe,
   RequestContextCodec,
-  ...(options.inbox ? [EventIngestion, MessageInbox] : []),
+  ...(options.inbox ? [EventIngestion] : []),
+  ...(durable(options)
+    ? [
+        MikroOrmOutboxStore,
+        UnitOfWorkTransaction,
+        OutboxHousekeeping,
+        TRANSPORT_OUTBOX_SETTINGS,
+      ]
+    : []),
+  ...(options.outbox ? [EventMessages, EventOutbox] : []),
   ...(logged(options) ? [EventLog] : []),
   ...(options.eventStore ? [EventSourcedRepository] : []),
   ...(options.subscriptions ? [EventSourcedEventBus] : []),
@@ -203,5 +292,3 @@ const identityFrom = (
   typeof answer === 'string' || answer instanceof TransportIdentity
     ? identityOf(answer)
     : identityOf(answer.identity, answer.publishes);
-
-const refuseAmbiguity = (_options: Composed): void => {};

@@ -5,7 +5,6 @@ import {
   testDatabaseConfig,
 } from '@nestposts/database/testing';
 import {
-  MikroOrmMessageInbox,
   TransportEventBusModule,
   TransportIdentity,
 } from '@nestposts/transport-eventbus';
@@ -29,6 +28,6 @@ export const persistenceTesting = (): DynamicModule[] => [
 export const transportTesting = (): DynamicModule =>
   TransportEventBusModule.forRoot({
     identity: TransportIdentity.silent('posts-api-spec'),
-    inbox: MikroOrmMessageInbox,
+    inbox: true,
     requestContext: PostRequestContextCodec,
   });

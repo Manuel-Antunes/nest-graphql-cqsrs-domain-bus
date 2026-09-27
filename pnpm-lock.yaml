@@ -27,6 +27,15 @@ catalogs:
     '@nestjs-modules/mailer':
       specifier: 2.3.7
       version: 2.3.7
+    '@nestjs/locks':
+      specifier: 0.0.1
+      version: 0.0.1
+    '@nestjs/outbox':
+      specifier: 0.0.1
+      version: 0.0.1
+    '@nestjs/schedule':
+      specifier: 12.0.2
+      version: 12.0.2
     '@nx/js':
       specifier: 23.2.1
       version: 23.2.1
@@ -283,6 +292,9 @@ importers:
       '@nestjs/microservices':
         specifier: ^12.1.0
         version: 12.1.0(@grpc/grpc-js@1.14.5)(@nestjs/common@12.1.0(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@12.1.0)(amqp-connection-manager@5.0.0(amqplib@2.0.1))(amqplib@2.0.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)
+      '@nestjs/outbox':
+        specifier: 'catalog:'
+        version: 0.0.1(@nestjs/common@12.1.0(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@12.1.0)(reflect-metadata@0.2.2)(rxjs@7.8.2)
       '@nestjs/platform-fastify':
         specifier: ^12.1.0
         version: 12.1.0(@nestjs/common@12.1.0(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@12.1.0)
@@ -637,7 +649,7 @@ importers:
         version: 9.0.5
       ical-generator:
         specifier: 'catalog:'
-        version: 11.1.1(@types/node@26.5.0)
+        version: 11.1.1(@types/luxon@3.7.5)(@types/node@26.5.0)(luxon@3.7.2)
       nodemailer:
         specifier: 'catalog:'
         version: 8.0.11
@@ -656,6 +668,85 @@ importers:
       zod:
         specifier: 'catalog:'
         version: 4.5.4
+    devDependencies:
+      '@camcima/nestjs-memory-microservices':
+        specifier: ^0.3.0
+        version: 0.3.0(@nestjs/common@12.1.0(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@12.1.0)(@nestjs/microservices@12.1.0)(reflect-metadata@0.2.2)(rxjs@7.8.2)
+      '@nestposts/migrator':
+        specifier: workspace:*
+        version: link:../migrator
+
+  apps/post-rememberer:
+    dependencies:
+      '@nestjs-modules/mailer':
+        specifier: 'catalog:'
+        version: 2.3.7(@nestjs/common@12.1.0(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@12.1.0)(@nestjs/event-emitter@12.0.1(@nestjs/common@12.1.0(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@12.1.0))(chokidar@5.0.0)(nodemailer@8.0.11)(svgo@4.1.0)(terser@5.51.2)(typescript@6.0.3)
+      '@nestjs/locks':
+        specifier: 'catalog:'
+        version: 0.0.1(@nestjs/common@12.1.0(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@12.1.0)(reflect-metadata@0.2.2)(rxjs@7.8.2)
+      '@nestjs/schedule':
+        specifier: 'catalog:'
+        version: 12.0.2(@nestjs/common@12.1.0(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@12.1.0)
+      '@nestposts/cqsrs':
+        specifier: workspace:*
+        version: link:../../libs/core/cqsrs
+      '@nestposts/database':
+        specifier: workspace:*
+        version: link:../../libs/database
+      '@nestposts/lambda':
+        specifier: workspace:*
+        version: link:../../libs/core/lambda
+      '@nestposts/microservices-aws':
+        specifier: workspace:*
+        version: link:../../libs/core/microservices-aws
+      '@nestposts/microservices-inngest':
+        specifier: workspace:*
+        version: link:../../libs/core/microservices-inngest
+      '@nestposts/observability':
+        specifier: workspace:*
+        version: link:../../libs/core/observability
+      '@nestposts/platform':
+        specifier: workspace:*
+        version: link:../../libs/platform
+      '@nestposts/posts':
+        specifier: workspace:*
+        version: link:../../libs/posts
+      '@nestposts/retry-policy':
+        specifier: workspace:*
+        version: link:../../libs/core/retry-policy
+      '@nestposts/transport-eventbus':
+        specifier: workspace:*
+        version: link:../../libs/core/transport-eventbus
+      '@nestposts/users':
+        specifier: workspace:*
+        version: link:../../libs/users
+      file-type:
+        specifier: 'catalog:'
+        version: 22.1.1
+      firebase-admin:
+        specifier: 'catalog:'
+        version: 13.10.0
+      html-to-text:
+        specifier: 'catalog:'
+        version: 9.0.5
+      ical-generator:
+        specifier: 'catalog:'
+        version: 11.1.1(@types/luxon@3.7.5)(@types/node@26.5.0)(luxon@3.7.2)
+      mime-types:
+        specifier: 'catalog:'
+        version: 3.0.2
+      nodemailer:
+        specifier: 'catalog:'
+        version: 8.0.11
+      react:
+        specifier: 'catalog:'
+        version: 19.2.8
+      react-dom:
+        specifier: 'catalog:'
+        version: 19.2.8(react@19.2.8)
+      react-email:
+        specifier: 'catalog:'
+        version: 6.11.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
     devDependencies:
       '@camcima/nestjs-memory-microservices':
         specifier: ^0.3.0
@@ -737,7 +828,7 @@ importers:
         version: 9.0.5
       ical-generator:
         specifier: 'catalog:'
-        version: 11.1.1(@types/node@26.5.0)
+        version: 11.1.1(@types/luxon@3.7.5)(@types/node@26.5.0)(luxon@3.7.2)
       mime-types:
         specifier: 'catalog:'
         version: 3.0.2
@@ -819,7 +910,7 @@ importers:
         version: 9.0.5
       ical-generator:
         specifier: 'catalog:'
-        version: 11.1.1(@types/node@26.5.0)
+        version: 11.1.1(@types/luxon@3.7.5)(@types/node@26.5.0)(luxon@3.7.2)
       mime-types:
         specifier: 'catalog:'
         version: 3.0.2
@@ -1206,7 +1297,7 @@ importers:
         version: 9.0.5
       ical-generator:
         specifier: 'catalog:'
-        version: 11.1.1(@types/node@26.5.0)
+        version: 11.1.1(@types/luxon@3.7.5)(@types/node@26.5.0)(luxon@3.7.2)
       nodemailer:
         specifier: 'catalog:'
         version: 8.0.11
@@ -1299,7 +1390,7 @@ importers:
         version: link:../core/validated-dto
       ical-generator:
         specifier: 'catalog:'
-        version: 11.1.1(@types/node@26.5.0)
+        version: 11.1.1(@types/luxon@3.7.5)(@types/node@26.5.0)(luxon@3.7.2)
       react:
         specifier: 'catalog:'
         version: 19.2.8
@@ -4959,6 +5050,15 @@ packages:
       ts-morph:
         optional: true
 
+  '@nestjs/locks@0.0.1':
+    resolution: {integrity: sha512-ZEu7WfIkxaNoa55FwaNdhS4gsuJsscWuEZpsxk820N50nY12Xa1FP72GKgUlCuUrAKRrMC436oWZQ6yjVWvMGA==}
+    engines: {node: '>=20.19.0'}
+    peerDependencies:
+      '@nestjs/common': ^11.0.0 || ^12.0.0
+      '@nestjs/core': ^11.0.0 || ^12.0.0
+      reflect-metadata: ^0.1.13 || ^0.2.0
+      rxjs: ^7.1.0
+
   '@nestjs/mapped-types@12.0.0':
     resolution: {integrity: sha512-aX7lxZcqXldtnSr0bgT2ZPQvpTpIwBMW1GMX29o4s3q02vmq6JoTYuPW0GwYXa8BiFMRX7WbGZVDA703pNqOMQ==}
     engines: {node: '>=20.19.0'}
@@ -5009,6 +5109,15 @@ packages:
       mqtt:
         optional: true
 
+  '@nestjs/outbox@0.0.1':
+    resolution: {integrity: sha512-tDJtLKBka1URrhi8PtIIti4gKIOGmOkOW41gc5I39BeupnJgJbcmTLfciid1zYwMoMJaVDkhTF6m2XFMRZZuzw==}
+    engines: {node: '>=20.19.0'}
+    peerDependencies:
+      '@nestjs/common': ^11.0.0 || ^12.0.0
+      '@nestjs/core': ^11.0.0 || ^12.0.0
+      reflect-metadata: ^0.1.13 || ^0.2.0
+      rxjs: ^7.1.0
+
   '@nestjs/platform-express@12.0.1':
     resolution: {integrity: sha512-nF8bRgROptMyixYBfiJUAsjj2o9k13zxAjUKYaqHTPk8mTSd+gk7hXz6NykXNrfHWmMEYC9RttQlMUdMHNTbuA==}
     peerDependencies:
@@ -5030,6 +5139,13 @@ packages:
         optional: true
       '@fastify/view':
         optional: true
+
+  '@nestjs/schedule@12.0.2':
+    resolution: {integrity: sha512-5iAvJEtk0njbfTrG4JQr+SXw8ZrqgDM1wJH9nUs6tVLCX5pWGd1LJ0a8b089UT1FDeDWaThRRfSLixFz9zztcA==}
+    engines: {node: '>=20.19.0'}
+    peerDependencies:
+      '@nestjs/common': ^11.0.0 || ^12.0.0
+      '@nestjs/core': ^11.0.0 || ^12.0.0
 
   '@nestjs/schematics@11.1.0':
     resolution: {integrity: sha512-lVxGZ46tcdItFMoXr6vyKWlnOsm1SZm/GUqAEDvy2RL4Q4O+3bkziAhrO7Y8JLssFUUvNFEGqAizI52WAxhjDw==}
@@ -8041,6 +8157,9 @@ packages:
   '@types/long@4.0.2':
     resolution: {integrity: sha512-MqTGEo5bj5t157U6fA/BiDynNkn0YknVdh48CMPkTSpFTVmvao5UQmm7uEF6xBEo7qIMAlY/JSleYaE6VOdpaA==}
 
+  '@types/luxon@3.7.5':
+    resolution: {integrity: sha512-jJ41Q4z6ZVO260MNDdHfW7+7a5iMiX8Mr6ZJHcmgrvhZha6dz5704o/lF2kKl6URjH6ivEL97w9xS/MgpJEphg==}
+
   '@types/memcached@2.2.10':
     resolution: {integrity: sha512-AM9smvZN55Gzs2wRrqeMHVP7KE8KWgCJO/XL5yCly2xF6EKa4YlbpK+cLSAH4NG/Ah64HrlegmGqW8kYws7Vxg==}
 
@@ -9409,6 +9528,10 @@ packages:
   crc32-stream@6.0.0:
     resolution: {integrity: sha512-piICUB6ei4IlTv1+653yq5+KoqfBYmj9bw6LqXoOneTMDXk5nM1qt12mFW1caG3LlJXEKW1Bp0WggEmIfQB34g==}
     engines: {node: '>= 14'}
+
+  cron@4.4.0:
+    resolution: {integrity: sha512-fkdfq+b+AHI4cKdhZlppHveI/mgz2qpiYxcm+t5E5TsxX7QrLS1VE0+7GENEk9z0EeGPcpSciGv6ez24duWhwQ==}
+    engines: {node: '>=18.x'}
 
   cross-fetch@4.1.0:
     resolution: {integrity: sha512-uKm5PU+MHTootlWEY+mZ4vvXoCn4fLQxT9dSc1sXVMSFkINTJVN8cAQROpwcKm8bJ/c7rgZVIBWzH5T78sNZZw==}
@@ -11843,6 +11966,10 @@ packages:
     resolution: {integrity: sha512-7r1/yUuflQDSt4f1bpn5ZAocyIxcTyVyBBChSVtBKn5M+392cPmI5YJMWOJKk/HUWGm5wg83chlAZtCcGbEZtw==}
     peerDependencies:
       react: ^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0
+
+  luxon@3.7.2:
+    resolution: {integrity: sha512-vtEhXh/gNjI9Yg1u4jX/0YVPMvxzHuGgCm6tC5kZyb08yjGWGnqAjGJvcXbqQR2P3MyMEFnRbpcdFS6PBcLqew==}
+    engines: {node: '>=12'}
 
   lz-string@1.5.0:
     resolution: {integrity: sha512-h5bgJWpxJNswbU7qCrV0tIKQCaS3blPDrqKWx+QxzuzL1zGUzij9XCWLrSLsJPu5t+eWA/ycetzYAO5IOMcWAQ==}
@@ -19651,6 +19778,13 @@ snapshots:
       - crossws
       - utf-8-validate
 
+  '@nestjs/locks@0.0.1(@nestjs/common@12.1.0(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@12.1.0)(reflect-metadata@0.2.2)(rxjs@7.8.2)':
+    dependencies:
+      '@nestjs/common': 12.1.0(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)
+      '@nestjs/core': 12.1.0(@nestjs/common@12.1.0(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/microservices@12.1.0)(@nestjs/platform-express@12.0.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)
+      reflect-metadata: 0.2.2
+      rxjs: 7.8.2
+
   '@nestjs/mapped-types@12.0.0(@nestjs/common@12.1.0(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)':
     dependencies:
       '@nestjs/common': 12.1.0(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)
@@ -19671,6 +19805,13 @@ snapshots:
       '@grpc/grpc-js': 1.14.5
       amqp-connection-manager: 5.0.0(amqplib@2.0.1)
       amqplib: 2.0.1
+
+  '@nestjs/outbox@0.0.1(@nestjs/common@12.1.0(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@12.1.0)(reflect-metadata@0.2.2)(rxjs@7.8.2)':
+    dependencies:
+      '@nestjs/common': 12.1.0(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)
+      '@nestjs/core': 12.1.0(@nestjs/common@12.1.0(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/microservices@12.1.0)(@nestjs/platform-express@12.0.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)
+      reflect-metadata: 0.2.2
+      rxjs: 7.8.2
 
   '@nestjs/platform-express@12.0.1(@nestjs/common@12.1.0(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@12.1.0)':
     dependencies:
@@ -19698,6 +19839,12 @@ snapshots:
       light-my-request: 6.6.0
       path-to-regexp: 8.4.2
       tslib: 2.8.1
+
+  '@nestjs/schedule@12.0.2(@nestjs/common@12.1.0(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@12.1.0)':
+    dependencies:
+      '@nestjs/common': 12.1.0(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)
+      '@nestjs/core': 12.1.0(@nestjs/common@12.1.0(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/microservices@12.1.0)(@nestjs/platform-express@12.0.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)
+      cron: 4.4.0
 
   '@nestjs/schematics@11.1.0(chokidar@5.0.0)(prettier@3.9.8)(typescript@6.0.3)':
     dependencies:
@@ -23095,6 +23242,8 @@ snapshots:
 
   '@types/long@4.0.2': {}
 
+  '@types/luxon@3.7.5': {}
+
   '@types/memcached@2.2.10':
     dependencies:
       '@types/node': 26.5.0
@@ -24585,6 +24734,11 @@ snapshots:
     dependencies:
       crc-32: 1.2.2
       readable-stream: 4.7.0
+
+  cron@4.4.0:
+    dependencies:
+      '@types/luxon': 3.7.5
+      luxon: 3.7.2
 
   cross-fetch@4.1.0:
     dependencies:
@@ -26214,9 +26368,11 @@ snapshots:
 
   human-signals@8.0.1: {}
 
-  ical-generator@11.1.1(@types/node@26.5.0):
+  ical-generator@11.1.1(@types/luxon@3.7.5)(@types/node@26.5.0)(luxon@3.7.2):
     optionalDependencies:
+      '@types/luxon': 3.7.5
       '@types/node': 26.5.0
+      luxon: 3.7.2
 
   iconv-lite@0.4.24:
     dependencies:
@@ -27337,6 +27493,8 @@ snapshots:
   lucide-react@0.545.0(react@19.2.8):
     dependencies:
       react: 19.2.8
+
+  luxon@3.7.2: {}
 
   lz-string@1.5.0: {}
 

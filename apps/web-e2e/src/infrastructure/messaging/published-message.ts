@@ -5,7 +5,7 @@ export class PublishedMessage {
   constructor(
     /** The event's own name, without the aggregate: `PostCreated`. */
     readonly name: string,
-    /** What travelled beside the data — AMQP headers on a broker, the event's `user` on Inngest. */
+    /** What travelled beside the payload — the envelope's headers, which a broker also carries as AMQP headers. */
     readonly headers: Record<string, string>,
   ) {}
 

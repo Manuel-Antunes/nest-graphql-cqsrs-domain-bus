@@ -21,7 +21,6 @@ import {
   TransportEventBusModule,
   TransportIdentity,
 } from '@nestposts/transport-eventbus';
-import { Inngest } from 'inngest';
 
 import { SubscriptionAuthorship } from './billing/subscription-authorship';
 import { SubscriptionEmails } from './billing/subscription-emails';
@@ -30,14 +29,15 @@ import { appConfig } from './config/app.config';
 import { authConfig } from './config/auth.config';
 import { awsConfig } from './config/aws.config';
 import { billingConfig } from './config/billing.config';
-import type { InngestConfig } from './config/inngest.config';
 import { inngestConfig } from './config/inngest.config';
+import type { OutboxConfig } from './config/outbox.config';
+import { outboxConfig } from './config/outbox.config';
 import type { PostgresConfig } from './config/postgres.config';
 import { postgresConfig } from './config/postgres.config';
 import { rabbitmqConfig } from './config/rabbitmq.config';
 import { NextCookiesBetterAuthPluginProvider } from './next-cookies.plugin';
-import { NotificationsPublisher } from './notifications.publisher';
 import { WebEventsClient } from './web-events.client';
+import { WebEventsClientModule } from './web-events-client.module';
 
 const billing = billingConfig().polar;
 
@@ -74,6 +74,7 @@ const billing = billingConfig().polar;
         awsConfig,
         billingConfig,
         inngestConfig,
+        outboxConfig,
         postgresConfig,
         rabbitmqConfig,
       ],
@@ -92,6 +93,12 @@ const billing = billingConfig().polar;
       inject: [appConfig.KEY],
       useFactory: ({ name, publishes }: AppConfig) =>
         TransportIdentity.named(name, { publishes }),
+      outbox: {
+        imports: [WebEventsClientModule],
+        destinations: WebEventsClient.destinations(appConfig()),
+        inject: [outboxConfig.KEY],
+        useFactory: (outbox: OutboxConfig) => outbox,
+      },
     }),
     BetterAuthModule.forRoot({
       plugins: [
@@ -110,20 +117,6 @@ const billing = billingConfig().polar;
       notifications: PublishingOnDemandNotifications,
     }),
     OrganizationsInfrastructureModule,
-  ],
-  providers: [
-    NotificationsPublisher,
-    {
-      provide: Inngest,
-      inject: [appConfig.KEY, inngestConfig.KEY],
-      useFactory: (app: AppConfig, { client }: InngestConfig) =>
-        new Inngest({ id: app.name, ...client }),
-    },
-    {
-      provide: WebEventsClient,
-      inject: WebEventsClient.inject,
-      useFactory: WebEventsClient.create,
-    },
   ],
 })
 export class WebAppModule {}

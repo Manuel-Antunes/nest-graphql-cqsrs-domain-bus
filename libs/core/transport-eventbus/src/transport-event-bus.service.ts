@@ -1,5 +1,5 @@
 import type { OnModuleDestroy } from '@nestjs/common';
-import { Injectable, Logger, Optional } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import type { InstanceWrapper } from '@nestjs/core/injector/instance-wrapper';
 import type {
   IEvent,
@@ -9,27 +9,25 @@ import type {
 } from '@nestjs/cqrs';
 import { AsyncContext, EventBus } from '@nestjs/cqrs';
 import { UnitOfWork } from '@nestposts/cqsrs';
-import { lastValueFrom, merge } from 'rxjs';
 
 import { isExcludedLocally } from './decorators/exclude-def.decorator';
-import { EventForwarder } from './outbound/event-forwarder';
+import { EventOutbox } from './outbox/event-outbox';
 import { EventLog } from './persistence/event-log/event-log';
 import { EventTrace } from './tracing';
 
 /**
- * **The integration point: an `IEventBus` that publishes locally and through the transports.**
+ * **The integration point: an `IEventBus` that publishes locally and through the outbox.**
  *
  * This is upstream's idea, and the reason this library is built on it rather than beside it. Nothing
  * that publishes has to know: a command handler, a saga, an aggregate's `commit()` — they all go
- * through the bus they already used, and the events that named a destination leave the process as
- * well.
+ * through the bus they already used, and the events whose namespace has a destination leave the
+ * process as well.
  *
  * ## Why this, and not a subscription to the `EventBus`
  * Subscribing to the bus and forwarding whatever went by was the other option, and it is worse in
  * three ways that matter here:
- * - **it cannot be awaited.** `EventBus` hands an event to its subscribers and returns; a subscriber
- *   that publishes to a broker has nowhere to report failure, and no caller can wait for delivery.
- *   Being the bus means `publish` hands back the promise of the whole thing;
+ * - **it cannot be staged.** `EventBus` hands an event to its subscribers and returns; a subscriber
+ *   has no unit of work to write the outbox in, and would record what the command had not committed;
  * - **it cannot opt out.** `@ExcludeDef()` — an event that goes out and does *not* run locally — is
  *   not expressible from a subscriber, because by the time it sees the event the local handlers have
  *   already had it;
@@ -38,22 +36,26 @@ import { EventTrace } from './tracing';
  *
  * ## The request context crosses here
  * `publish(event, asyncContext)` attaches the context exactly as `EventBus` does, which is what makes
- * `AsyncContext.of(event)` answer downstream — and the serializer then writes what that context stands
- * for onto the envelope. Together with `AsyncContext.merge(request, command)` in a saga and
- * `mergeObjectContext(aggregate, request)` in a command handler, one request stays one request across
- * services.
+ * `AsyncContext.of(event)` answer downstream — and {@link EventMessages} writes what that context
+ * stands for into the message's headers. Together with `AsyncContext.merge(request, command)` in a
+ * saga and `mergeObjectContext(aggregate, request)` in a command handler, one request stays one request
+ * across services.
  *
- * ## What it is *not*
- * A queue. If the transport is down, `publish` rejects; whoever called it decides.
+ * ## Written down, never sent from here
+ * What leaves is a message of `@nestjs/outbox`, written in the unit of work's own transaction
+ * ({@link EventOutbox}) and published by the outbox's relay once that transaction has committed —
+ * again and again until a broker takes it. This bus never talks to a broker: a service without an
+ * outbox publishes to this process only.
  */
 @Injectable()
 export class TransportEventBusService implements IEventBus, OnModuleDestroy {
-  private readonly logger = new Logger(TransportEventBusService.name);
+  /** The units whose commit already hands the outbox to the relay. */
+  private readonly relayed = new WeakSet<UnitOfWork>();
 
   constructor(
     private readonly eventBus: EventBus,
-    private readonly forwarder: EventForwarder,
     @Optional() private readonly log?: EventLog,
+    @Optional() private readonly outbox?: EventOutbox,
   ) {}
 
   get publisher(): IEventPublisher {
@@ -107,11 +109,30 @@ export class TransportEventBusService implements IEventBus, OnModuleDestroy {
 
     const unit = UnitOfWork.current();
     if (unit?.staging) {
-      unit.on('prepareCommit', () => this.record(staged));
-      unit.on('commit', () =>
-        this.dispatch(staged, dispatcherContext, context),
-      );
+      this.stageIn(unit, staged, dispatcherContext, context);
       return Promise.resolve();
+    }
+
+    /**
+     * **With an outbox, an event that leaves is always published by a unit of work.** Its row has to
+     * be written in a transaction, and the only honest one for a publish that no unit opened is its
+     * own: recorded, committed, and only then told to this process — the same three steps a command
+     * takes. Its OWN, and not a savepoint of whatever transaction the caller is in: nobody awaits an
+     * `aggregate.commit()`, and a savepoint that outlived its transaction would fail to release. An
+     * event that stays here keeps the synchronous path below.
+     */
+    if (this.outbox?.leaves(staged)) {
+      const outbox = this.outbox;
+      return UnitOfWork.run(
+        async () => {
+          const opened = UnitOfWork.current();
+          if (opened) {
+            this.stageIn(opened, staged, dispatcherContext, context);
+          }
+        },
+        context,
+        { transaction: outbox.detached },
+      );
     }
 
     /**
@@ -133,57 +154,61 @@ export class TransportEventBusService implements IEventBus, OnModuleDestroy {
   }
 
   /**
-   * **What publishing actually is**, once there is nothing left to decide: the event goes out and it
-   * reaches this process. Called straight away when no unit of work is open — a message arriving on a
-   * queue, a projection reacting — and at the unit's `commit` phase when one is.
+   * The three moments of a staged publish, on the unit that staged it: recorded while the unit's
+   * transaction is open, told to this process once it has committed, and — with an outbox — handed
+   * to the relay after that, once per unit however many publishes it staged.
+   */
+  private stageIn<TEvent extends IEvent>(
+    unit: UnitOfWork,
+    staged: TEvent[],
+    dispatcherContext: unknown,
+    context?: AsyncContext,
+  ): void {
+    unit.on('prepareCommit', () => this.record(staged));
+    unit.on('commit', () => this.dispatch(staged, dispatcherContext, context));
+    if (this.outbox && !this.relayed.has(unit)) {
+      this.relayed.add(unit);
+      const outbox = this.outbox;
+      unit.on('afterCommit', () => outbox.committed());
+    }
+  }
+
+  /**
+   * **What publishing is, once the event is recorded**: the event reaches this process. Called
+   * straight away when no unit of work is open — a message arriving on a queue, a projection
+   * reacting — and at the unit's `commit` phase when one is: what leaves already left, as a message
+   * of the outbox, in the prepare phase.
    */
   private dispatch<TEvent extends IEvent>(
     events: TEvent[],
     dispatcherContext: unknown,
     context?: AsyncContext,
   ): Promise<void> {
-    const outbound = events.map((event) =>
-      this.forwarder.forward(event as object),
-    );
-
     for (const event of events) {
       if (!isExcludedLocally(event as object)) {
         this.locally(event, dispatcherContext, context);
       }
     }
-
-    return lastValueFrom(merge(...outbound), { defaultValue: undefined }).catch(
-      (failure: Error) => {
-        /*
-         * The log IS the change, and it exists for a measured reason: a rejection here reaches whoever
-         * called `publish`, and the one caller that cannot do anything with it is `aggregate.commit()`,
-         * which nobody awaits. Without this line the only sign would be an unhandled rejection with no
-         * event in it.
-         */
-        this.logger.error(
-          `${events.map((event) => (event as object).constructor.name).join(', ')} was not ` +
-            `published to the transport: ${failure.message}`,
-          failure.stack,
-        );
-        throw failure;
-      },
-    );
+    return Promise.resolve();
   }
 
   /**
    * What this process publishes, written where every container can read it — which is what makes a
-   * subscription on one container see what another decided. Appending an identifier the log already
-   * has is a no-op, so an event that `EventIngestion` already appended inside its transaction costs
-   * one statement here and nothing else.
+   * subscription on one container see what another decided — and, with an outbox, what it owes the
+   * transports. Appending an identifier the log already has is a no-op, so an event that
+   * `EventIngestion` already appended inside its transaction costs one statement here and nothing
+   * else.
    *
-   * It runs at the unit of work's **prepare** phase, before anything is told: a failure here fails
-   * the command, which is the point. An event nobody could record is not a fact.
+   * It runs at the unit of work's **prepare** phase, inside its transaction and before anything is
+   * told: a failure here fails the command, which is the point. An event nobody could record is not a
+   * fact.
    */
   private async record<TEvent extends IEvent>(events: TEvent[]): Promise<void> {
-    if (!this.log || events.length === 0) {
+    if (events.length === 0) {
       return;
     }
-    await this.log.append(events as object[]);
+    await this.log?.append(events as object[]);
+    await this.outbox?.stage(events as object[]);
   }
 
   private attach(event: object, context?: AsyncContext): void {

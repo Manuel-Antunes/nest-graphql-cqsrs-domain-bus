@@ -26,10 +26,9 @@ export interface InngestClientProxyOptions {
   /** The Inngest client this destination sends through — one per application, built by the caller. */
   readonly inngest: Inngest.Any;
   /**
-   * **How a packet becomes an event** — see {@link InngestOutgoingEvent}.
-   * `@nestposts/transport-eventbus`'s `InngestEventEnvelopeSerializer` is the one a service publishing
-   * domain events wants; left out, this behaves like any plain `ClientProxy` — Nest's own
-   * `IdentitySerializer`.
+   * **How a packet becomes an event** — see {@link InngestOutgoingEvent}. Left out, this behaves like
+   * any plain `ClientProxy` — Nest's own `IdentitySerializer`: the pattern is the name and the data is
+   * the data, which is how `@nestjs/outbox`'s `ClientProxyTransport` sends an `OutboxEnvelope`.
    */
   readonly serializer?: ProducerSerializer;
 }
@@ -63,11 +62,10 @@ const outgoingEventOf = (
  * | the exchange | the topic | the Inngest app — one place every event is sent to |
  * | a binding | a subscription's filter policy | a function's **triggers**, resolved at boot |
  * | the routing key | the routing key attribute | the event **name**, which carries no aggregate |
- * | the AMQP headers | the message attributes | the event's `user` |
+ * | the AMQP headers | the message attributes | the event's `user` — or the data, when it is an envelope that carries its own headers |
  *
- * What a caller can add per send is {@link InngestRecordBuilder}: more `user` entries, more envelope
- * metadata, more sessions, an idempotency key, a timestamp. Everything else the envelope already
- * knows.
+ * What a caller can add per send is {@link InngestRecordBuilder}: `user` entries, metadata, sessions,
+ * an idempotency key, a timestamp.
  */
 export class InngestClientProxy extends ClientProxy {
   private readonly logger = new Logger(InngestClientProxy.name);

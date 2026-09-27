@@ -83,6 +83,9 @@
     },
     {
       "path": "./libs/events"
+    },
+    {
+      "path": "./apps/post-rememberer"
     }
   ]
 }

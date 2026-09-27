@@ -1,11 +1,8 @@
 import { Controller } from '@nestjs/common';
-import { EventPattern } from '@nestjs/microservices';
+import { EventPattern, Payload } from '@nestjs/microservices';
+import type { OutboxEnvelope } from '@nestjs/outbox';
 import { PostCreatedEvent } from '@nestposts/posts/domain/post/event/post-created.event';
-import {
-  EventAddress,
-  EventIngestion,
-  TransportEvent,
-} from '@nestposts/transport-eventbus';
+import { EventAddress, EventIngestion } from '@nestposts/transport-eventbus';
 import { AllowAnonymous } from '@thallesp/nestjs-better-auth';
 
 /**
@@ -29,7 +26,7 @@ export class PostCompletionController {
   constructor(private readonly ingestion: EventIngestion) {}
 
   @EventPattern(POST_COMPLETED_PATTERN)
-  postCompleted(@TransportEvent() event: PostCreatedEvent): Promise<void> {
-    return this.ingestion.ingest(event);
+  postCompleted(@Payload() envelope: OutboxEnvelope): Promise<void> {
+    return this.ingestion.ingest(envelope);
   }
 }

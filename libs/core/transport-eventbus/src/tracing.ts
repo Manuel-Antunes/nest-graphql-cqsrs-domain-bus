@@ -8,14 +8,14 @@ import {
   trace,
 } from '@opentelemetry/api';
 
-import type { EnvelopeMetadata } from './outbound/event-envelope';
+import type { MessageHeaders } from './outbound/message-headers';
 import type { Ingestion } from './outbound/transport-metadata';
 import { CORRELATION_ID } from './request-context';
 
 const TRACER = '@nestposts/transport-eventbus';
 
 /**
- * **The current trace, written onto the envelope** — `traceparent`, and `tracestate` and `baggage`
+ * **The current trace, written into a message's headers** — `traceparent`, and `tracestate` and `baggage`
  * when there are any.
  *
  * It is `@opentelemetry/api` and not an SDK: with nothing registered the propagator is a no-op, the
@@ -31,7 +31,7 @@ export const injectTraceContext = (
 };
 
 /** The trace an arriving message belongs to, or the current one when it carries none. */
-export const traceContextOf = (metadata: EnvelopeMetadata) =>
+export const traceContextOf = (metadata: MessageHeaders) =>
   propagation.extract(activeContext.active(), metadata);
 
 /** A trace context written as W3C headers: `traceparent`, and `tracestate`/`baggage` when present. */

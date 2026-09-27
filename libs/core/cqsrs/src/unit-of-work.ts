@@ -16,6 +16,22 @@ export type UnitOfWorkPhase =
 
 export type UnitOfWorkListener = (unit: UnitOfWork) => Promise<void> | void;
 
+/**
+ * **Where a unit of work's writes commit together** — Axon's `TransactionManager`, as a port.
+ *
+ * A unit started with one runs its work, everything it tracked and its `prepareCommit` phase inside
+ * {@link run}, so what the handlers saved and what the prepare phase records (the event log, the
+ * outbox) are one transaction: both happen or neither does. `commit`, `afterCommit` and `cleanup`
+ * run once it has committed, which is what keeps the rest of the process from hearing about writes
+ * that are still invisible to everybody else.
+ *
+ * The library knows no database; an application binds the implementation of the ORM it uses.
+ */
+export abstract class UnitOfWorkTransaction {
+  /** Runs `work` in a transaction that commits when it resolves and rolls back when it throws. */
+  abstract run<T>(work: () => Promise<T>): Promise<T>;
+}
+
 /** How a unit of work that is **started** — not joined — treats the work it tracked. */
 export interface UnitOfWorkOptions {
   /**
@@ -26,6 +42,12 @@ export interface UnitOfWorkOptions {
    * redelivered when it fails, so a saga's command that threw becomes a retry instead of a log line.
    */
   readonly failOnTrackedFailure?: boolean;
+
+  /**
+   * The transaction the unit's work and its `prepareCommit` phase run in — see
+   * {@link UnitOfWorkTransaction}. Without one, every write commits on its own, as it happens.
+   */
+  readonly transaction?: UnitOfWorkTransaction;
 }
 
 const storage = new AsyncLocalStorage<UnitOfWork>();
@@ -44,11 +66,13 @@ const storage = new AsyncLocalStorage<UnitOfWork>();
  *
  * ```
  * commandBus.execute(command)
- *   └─ started        the handler runs; every publish is STAGED, nothing is sent
- *   └─ prepareCommit  the staged events are appended to the event log        ← awaited
- *   └─ commit         they reach the local bus and the transports            ← awaited
- *   └─ afterCommit    whatever wanted to know it all worked
- *   └─ cleanup        always
+ *   ┌ transaction (when the unit has a UnitOfWorkTransaction)
+ *   │ started        the handler runs; every publish is STAGED, nothing is sent
+ *   │ prepareCommit  the staged events are appended to the event log and the outbox ← awaited
+ *   └ commit of the transaction: the handler's writes and the events, together
+ *     commit         they reach the local bus                                        ← awaited
+ *     afterCommit    whatever wanted to know it all worked — the outbox's relay
+ *     cleanup        always
  * ```
  *
  * `execute` resolves after `afterCommit`, so a caller that awaits the command has awaited the events.
@@ -101,7 +125,7 @@ export class UnitOfWork {
    * once, with everything, which is what keeps one request one unit. Joining also {@link track}s the
    * work, so the unit waits for it. One that has started committing is not joined, and neither is one
    * that belongs to a different request — see {@link covers}. `options` apply to a unit this call
-   * starts; a joined one keeps its own.
+   * starts; a joined one keeps its own, its transaction included.
    */
   static async run<T>(
     work: () => Promise<T>,
@@ -116,8 +140,12 @@ export class UnitOfWork {
     const unit = new UnitOfWork(request, options);
     return storage.run(unit, async () => {
       try {
-        const result = await work();
-        await unit.commit();
+        const result = await unit.transactionally(async () => {
+          const answer = await work();
+          await unit.prepare();
+          return answer;
+        });
+        await unit.complete();
         return result;
       } catch (failure) {
         await unit.rollback();
@@ -202,7 +230,21 @@ export class UnitOfWork {
     return work;
   }
 
+  /** Whether this unit writes inside a {@link UnitOfWorkTransaction} of its own. */
+  get transactional(): boolean {
+    return this.options.transaction !== undefined;
+  }
+
   async commit(): Promise<void> {
+    await this.prepare();
+    await this.complete();
+  }
+
+  /**
+   * What must be durable: everything tracked, finished, then every `prepareCommit` listener — inside
+   * the transaction, when the unit has one.
+   */
+  private async prepare(): Promise<void> {
     await this.settle();
 
     for (
@@ -219,12 +261,21 @@ export class UnitOfWork {
       this.current = 'prepareCommit';
       await this.drain('prepareCommit');
     }
+  }
 
+  /** What is told once the work is durable: after the transaction, when the unit has one. */
+  private async complete(): Promise<void> {
     this.current = 'commit';
     await this.drain('commit');
     this.current = 'afterCommit';
     await this.drain('afterCommit');
     await this.close();
+  }
+
+  private transactionally<T>(work: () => Promise<T>): Promise<T> {
+    return this.options.transaction
+      ? this.options.transaction.run(work)
+      : work();
   }
 
   async rollback(): Promise<void> {

@@ -48,10 +48,12 @@ describe('migrating the system, then every tenant', () => {
     expect(tables).not.toContain('event_log');
   });
 
-  it('keeps the transport’s bookkeeping — the inbox and the event log — in a schema of its own, with the system', async () => {
+  it('keeps the transport’s bookkeeping — the event log, the outbox and the inbox — in a schema of its own, with the system', async () => {
     expect(await tablesOf('transport')).toEqual([
       'event_log',
-      'transport_message_inbox',
+      'outbox_dead_letters',
+      'outbox_inbox',
+      'outbox_messages',
     ]);
   });
 

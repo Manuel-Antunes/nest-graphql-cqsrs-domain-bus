@@ -36,8 +36,8 @@ export interface SqsStrategyOptions {
    * **How a record's body becomes a packet.** It is handed the parsed body and `{ attributes, record }`,
    * and answers `{ pattern, data }`. Left out, Nest's own `IncomingRequestDeserializer` applies, which
    * reads back exactly what {@link SqsClientProxy} and {@link SnsClientProxy} send without a
-   * serializer. `@nestposts/transport-eventbus`'s `SqsEventEnvelopeDeserializer` is the one a service
-   * receiving domain events wants.
+   * serializer — an outbox's `OutboxEnvelope` included, so a service receiving domain events needs no
+   * deserializer of its own.
    */
   readonly deserializer?: ConsumerDeserializer;
   /**
