@@ -1,13 +1,30 @@
 #!/usr/bin/env bash
-# What the DEPLOYED stack answers, asserted — the same seven steps `e2e-original.sh` asserts against
-# the Quarkus stack, so the two can be read side by side.
+# What the DEPLOYED stack answers, asserted — `apps/web-e2e`'s claims, made from a shell against a
+# stage, with the steps `e2e-original.sh` asserts against the Quarkus stack still in their place.
 #
 # It used to stop after the three anonymous steps, and the reason it can go further now is the
 # seeder: `TestUsersSeeder` creates the author through Better Auth itself, so there is a credential
 # on the deployed stack to sign in with. Where the original asks Cognito for an ID token, this asks
 # `/api/auth/sign-in/email` for a cookie — the rest of the flow is the same assertions.
 #
+# What it walks: the composed schema, the anonymous and the refused paths, the saga across SNS and
+# SQS, the two subscriptions over SSE through the gateway, the screens the browser opens, a file from
+# a presigned upload to the CDN, the author's notification, one operation across two subgraphs, an
+# organization's tenant — and then, when it can read Better Stack, the same run as telemetry: every
+# service reporting, the post's whole life as one trace, and the logs inside it.
+#
 #   ./infra/scripts/e2e.sh dev
+#
+# Better Stack is read through its SQL endpoint, with the connection Better Stack shows under
+# "Connect remotely" — from the environment, or from the `.env` at the root when it has them:
+#
+#   BETTER_STACK_QUERY_URL        https://<region>-connect.betterstackdata.com
+#   BETTER_STACK_QUERY_USERNAME
+#   BETTER_STACK_QUERY_PASSWORD
+#   BETTER_STACK_COLLECTION       the source's collection, `t123456_name` (its tables are <it>_spans, _logs)
+#
+# A failure the later steps do not depend on — an email, a trace — is recorded and the run goes on;
+# the list is printed at the end, and any of them fails the run.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 
@@ -21,8 +38,22 @@ TARGET="${API:-${STREAM:-}}"
 
 AUTHOR_EMAIL="${SEED_AUTHOR_EMAIL:-manuel@example.com}"
 AUTHOR_PASSWORD="${SEED_AUTHOR_PASSWORD:-segredo123}"
-JAR="$(mktemp -t nestposts-e2e-cookies)"
-trap 'rm -f "$JAR"' EXIT
+RUN_STARTED="$(date -u '+%Y-%m-%d %H:%M:%S')"
+
+# Everything the run leaves behind, removed however it ends: temporary files, the subscriptions
+# still streaming, and the organization when a step failed before deleting it.
+TEMPS=()
+SSE_PIDS=()
+ORGANIZATION_ID=''
+cleanup() {
+  [ -z "$ORGANIZATION_ID" ] ||
+    auth organization/delete "$(jq -nc --arg id "$ORGANIZATION_ID" '{organizationId:$id}')" >/dev/null 2>&1 || true
+  for pid in ${SSE_PIDS[@]+"${SSE_PIDS[@]}"}; do kill "$pid" 2>/dev/null || true; done
+  rm -f ${TEMPS[@]+"${TEMPS[@]}"}
+}
+trap cleanup EXIT
+
+JAR="$(mktemp -t nestposts-e2e-cookies)"; TEMPS+=("$JAR")
 
 echo "    api = $TARGET"
 echo "    as  = $AUTHOR_EMAIL"
@@ -58,7 +89,47 @@ subgraph() {
   curl -sS -X POST "${STREAM%/}/graphql" -H 'content-type: application/json' -d "$body"
 }
 
+# A subscription through the gateway, over SSE, the way the browser opens one: POST /graphql with
+# `accept: text/event-stream`. It streams into `$1` in the background while the run goes on, and it
+# is given up after 150s — the posts subgraph ends a subscription after SUBSCRIPTION_MAX_SECONDS
+# (120) anyway. It returns once the stream is open, which is what keeps an event raised right after
+# from being missed.
+subscribe() {
+  local out="$1" vars="${3:-}" body deadline
+  [ -n "$vars" ] || vars='{}'
+  body="$(jq -nc --arg q "$2" --argjson v "$vars" '{query:$q,variables:$v}')"
+  curl -sS -N --max-time 150 -X POST "$TARGET/graphql" -H 'content-type: application/json' \
+    -H 'accept: text/event-stream' -d "$body" > "$out" 2>&1 &
+  SSE_PIDS+=($!)
+  deadline=$((SECONDS + 20))
+  until [ -s "$out" ] || [ $SECONDS -ge $deadline ]; do sleep 1; done
+  [ -s "$out" ] || fail "the subscription did not open in 20s: $2"
+}
+
+# The first event in the stream `$1` that the jq expression `$2` selects, waiting `$3` seconds for it.
+event_in() {
+  local deadline=$((SECONDS + ${3:-30})) found
+  while [ $SECONDS -lt $deadline ]; do
+    found=$(sed -n 's/^data: //p' "$1" 2>/dev/null | jq -c "select($2)" 2>/dev/null | head -1)
+    if [ -n "$found" ]; then
+      echo "$found"
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
+
+# The trace id an event was delivered in: the `traceparent` the gateway puts in its extensions.
+trace_of() { echo "$1" | jq -r '.extensions.traceparent // empty' | cut -d- -f2; }
+
 fail() { echo "FAILED: $*" >&2; exit 1; }
+
+PROBLEMS=()
+problem() {
+  echo "    PROBLEM: $*" >&2
+  PROBLEMS+=("$*")
+}
 
 echo
 echo "==> 1. the gateway serves the composed schema, and the posts subgraph declares itself"
@@ -95,7 +166,9 @@ grep -q 'session_token' "$JAR" || fail "signed in but no session cookie was stor
 echo "    OK: signed in as $(echo "$SIGNED_IN" | jq -r '.user.email') (the seeded author)"
 
 echo
-echo "==> 5. createPost: born at version 1, with NO tag"
+echo "==> 5. createPost: born at version 1, with NO tag — with onPostCreated already listening"
+CREATED_EVENTS="$(mktemp -t nestposts-on-post-created)"; TEMPS+=("$CREATED_EVENTS")
+subscribe "$CREATED_EVENTS" 'subscription { onPostCreated { id version tags { edges { node { name } } } } }'
 CREATED=$(gql 'mutation($i:CreatePostInput!){ createPost(input:$i){ id version tags{ edges{ node{ name } } } } }' \
   "$(jq -nc --arg t "post from AWS $(date +%s)" '{i:{title:$t,content:"the saga across SNS and SQS"}}')" \
   signed)
@@ -129,13 +202,34 @@ while [ $SECONDS -lt $DEADLINE ]; do
 done
 [ "$V" = "2" ] || fail "the saga did not close in 180s (last version seen: $V)"
 
+SAGA_TRACE=''
+if COMPLETED=$(event_in "$CREATED_EVENTS" \
+  ".data.onPostCreated.id == \"$POST_ID\"" 30); then
+  echo "$COMPLETED" | jq -e '.data.onPostCreated.version == 2 and ([.data.onPostCreated.tags.edges[].node.name] == ["Untagged"])' >/dev/null \
+    || problem "onPostCreated delivered the post before it was complete: $COMPLETED"
+  SAGA_TRACE=$(trace_of "$COMPLETED")
+  echo "    OK: onPostCreated delivered the COMPLETE post over SSE, through the gateway (trace $SAGA_TRACE)"
+else
+  problem "onPostCreated never delivered $POST_ID over SSE: $(head -c 400 "$CREATED_EVENTS")"
+fi
+
 echo
-echo "==> 7. an update crosses too (posts.PostUpdated -> the replica queue)"
+echo "==> 7. an update crosses too (posts.PostUpdated -> the replica queue) — and onPostUpdated hears it"
+UPDATED_EVENTS="$(mktemp -t nestposts-on-post-updated)"; TEMPS+=("$UPDATED_EVENTS")
+subscribe "$UPDATED_EVENTS" 'subscription($id:ID){ onPostUpdated(postId:$id){ id title version } }' \
+  "$(jq -nc --arg id "$POST_ID" '{id:$id}')"
+NEW_TITLE="title changed on AWS $(date +%s)"
 UPD=$(gql 'mutation($i:UpdatePostInput!){ updatePost(input:$i){ version } }' \
-  "$(jq -nc --arg id "$POST_ID" '{i:{id:$id,title:"title changed on AWS"}}')" signed)
+  "$(jq -nc --arg id "$POST_ID" --arg t "$NEW_TITLE" '{i:{id:$id,title:$t}}')" signed)
 V3=$(echo "$UPD" | jq -r '.data.updatePost.version // empty')
 [ -n "$V3" ] || fail "updatePost failed: $UPD"
 echo "    OK: version=$V3"
+if HEARD=$(event_in "$UPDATED_EVENTS" \
+  ".data.onPostUpdated.id == \"$POST_ID\" and .data.onPostUpdated.title == \"$NEW_TITLE\"" 30); then
+  echo "    OK: onPostUpdated delivered version $(echo "$HEARD" | jq -r .data.onPostUpdated.version) over SSE"
+else
+  problem "onPostUpdated never delivered the new title of $POST_ID: $(head -c 400 "$UPDATED_EVENTS")"
+fi
 
 echo
 echo "==> 8. the post is reachable by its federation key alone"
@@ -146,10 +240,56 @@ echo "$BY_KEY" | jq -e --arg id "$POST_ID" '.data._entities[0].id == $id' >/dev/
 echo "    OK: _entities resolved it, with no session — which is what a router would do"
 
 echo
-echo "==> 9. a file: uploaded to a presigned URL, attached, served by the CDN, replaced, deleted"
+echo "==> 9. the screens: what the browser opens, rendered by the web behind the same router"
+PAGE="$(mktemp -t nestposts-page)"; TEMPS+=("$PAGE")
+
+# The status of GET `$1`, its body in $PAGE; "signed" as `$2` sends the author's cookie.
+page() {
+  if [ "${2:-}" = signed ]; then
+    curl -sS -o "$PAGE" -w '%{http_code}' -b "$JAR" "$TARGET$1"
+  else
+    curl -sS -o "$PAGE" -w '%{http_code}' "$TARGET$1"
+  fi
+}
+
+for path in / /feed /live /saga /federation /events /auth/sign-in /auth/sign-up; do
+  status=$(page "$path")
+  [ "$status" = "200" ] || problem "GET $path answered $status to a visitor"
+done
+echo "    OK: the public screens answer a visitor"
+
+status=$(page "/posts/$POST_ID")
+[ "$status" = "200" ] && grep -qF "$NEW_TITLE" "$PAGE" \
+  || problem "/posts/$POST_ID ($status) does not render the post's current title"
+echo "    OK: /posts/$POST_ID renders what the API holds, to somebody who never signed in"
+
+page /posts/new >/dev/null
+grep -q '<form' "$PAGE" && problem "/posts/new offers the form to a visitor"
+[ "$(page /posts/new signed)" = "200" ] && grep -q '<form' "$PAGE" \
+  || problem "/posts/new offers no form to the author"
+echo "    OK: /posts/new asks a visitor to sign in, and hands the author the form"
+
+for path in /settings/account /organization/settings /admin/users; do
+  anonymous=$(page "$path")
+  signed=$(page "$path" signed)
+  [ "$anonymous" = "307" ] || problem "GET $path answered $anonymous to a visitor, not a redirect to sign in"
+  [ "$signed" = "200" ] || problem "GET $path answered $signed to the author"
+done
+echo "    OK: the account screens send a visitor to sign in, and open for the author"
+
+[ "$(page /me signed)" = "200" ] && grep -qF "$AUTHOR_EMAIL" "$PAGE" \
+  || problem "/me does not show the author who is signed in"
+THROUGH_WEB=$(curl -sS -X POST "$TARGET/api/graphql" -H 'content-type: application/json' \
+  -H "origin: $TARGET" -b "$JAR" -d '{"query":"{ me { email } unreadNotificationCount }"}')
+echo "$THROUGH_WEB" | jq -e --arg e "$AUTHOR_EMAIL" '.data.me.email == $e and (.data.unreadNotificationCount | type) == "number"' >/dev/null \
+  || problem "the web's /api/graphql, the browser's own door to the gateway, did not answer as the author: $THROUGH_WEB"
+echo "    OK: /me and the web's /api/graphql answer as the author"
+
+echo
+echo "==> 10. a file: uploaded to a presigned URL, attached, served by the CDN, replaced, deleted"
 : "${BUCKET:?the stack has no bucket output — is infra/aws/storage deployed?}"
-RED="$(mktemp -t nestposts-red)"; BLUE="$(mktemp -t nestposts-blue)"
-trap 'rm -f "$JAR" "$RED" "$BLUE"' EXIT
+RED="$(mktemp -t nestposts-red)"; TEMPS+=("$RED")
+BLUE="$(mktemp -t nestposts-blue)"; TEMPS+=("$BLUE")
 printf 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGO4o6EBAAMQAS0ujiXaAAAAAElFTkSuQmCC' | base64 -d > "$RED"
 printf 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGPQCLgDAAH4AVXSujU3AAAAAElFTkSuQmCC' | base64 -d > "$BLUE"
 
@@ -184,7 +324,7 @@ FIRST_URL=$(echo "$WITH_FILE" | jq -r '.data.createPost.asset.url // empty')
 [ -n "$FILE_POST" ] || fail "createPost with a file failed: $WITH_FILE"
 [[ "$FIRST" =~ ^assets/[0-9a-f-]{36}\.png$ ]] || fail "the file was not moved under assets/: '$FIRST'"
 [[ "$FIRST_URL" == "$TARGET/files/$FIRST" ]] || fail "the file is not served by the router: '$FIRST_URL'"
-GOT="$(mktemp -t nestposts-got)"
+GOT="$(mktemp -t nestposts-got)"; TEMPS+=("$GOT")
 [ "$(served "$GOT" "$FIRST_URL")" = "200" ] || fail "the CDN did not serve $FIRST_URL"
 cmp -s "$GOT" "$RED" || fail "the CDN served other bytes than the ones uploaded"
 stored "$FIRST" || fail "$FIRST is not in s3://$BUCKET"
@@ -211,11 +351,10 @@ echo "$DELETED" | jq -e '.data.deletePost == true' >/dev/null || fail "deletePos
 GONE=$(gql 'query($id:ID!){ post(id:$id){ id } }' "$(jq -nc --arg id "$FILE_POST" '{id:$id}')")
 echo "$GONE" | jq -e '.data.post == null' >/dev/null || fail "the deleted post is still served: $GONE"
 ! stored "$SECOND" || fail "the deleted post's file $SECOND is still in the bucket"
-rm -f "$GOT"
 echo "    OK: the post is gone, and so is its file"
 
 echo
-echo "==> 10. the author is told: posts-api -> SNS -> SQS -> notificator -> the database, and SES"
+echo "==> 11. the author is told: posts-api -> SNS -> SQS -> notificator -> the database, and SES"
 DEADLINE=$((SECONDS + 180))
 NOTIFICATION_ID=''
 while [ $SECONDS -lt $DEADLINE ]; do
@@ -229,9 +368,11 @@ done
 [ -n "$NOTIFICATION_ID" ] || fail "no posts.PostCreated notification for $POST_ID in 180s: $MINE"
 echo "    OK: notification=$NOTIFICATION_ID stored by the database channel, read back by its author"
 : "${NOTIFICATOR_LOGS:?no log group for the notificator — is it deployed?}"
-EMAILED=$(node infra/scripts/notification-delivered.mjs "$NOTIFICATOR_LOGS" "$NOTIFICATION_ID" email 180) \
-  || fail "the notificator never reported the email of $NOTIFICATION_ID as delivered"
-echo "    OK: $EMAILED"
+if EMAILED=$(node infra/scripts/notification-delivered.mjs "$NOTIFICATOR_LOGS" "$NOTIFICATION_ID" email 180); then
+  echo "    OK: $EMAILED"
+else
+  problem "the notificator never reported the email of $NOTIFICATION_ID as delivered — look for MessageRejected in its log"
+fi
 READ=$(gql 'mutation($id:ID!){ markNotificationAsRead(id:$id){ read } }' \
   "$(jq -nc --arg id "$NOTIFICATION_ID" '{id:$id}')" signed)
 echo "$READ" | jq -e '.data.markNotificationAsRead.read == true' >/dev/null \
@@ -239,7 +380,7 @@ echo "$READ" | jq -e '.data.markNotificationAsRead.read == true' >/dev/null \
 echo "    OK: marked as read"
 
 echo
-echo "==> 11. one operation, two subgraphs: the author from posts, what they were told from the notificator"
+echo "==> 12. one operation, two subgraphs: the author from posts, what they were told from the notificator"
 ME=$(gql '{ me { email unreadNotificationCount } unreadNotificationCount }' '' signed)
 echo "$ME" | jq -e --arg e "$AUTHOR_EMAIL" \
   '.data.me.email == $e and .data.me.unreadNotificationCount == .data.unreadNotificationCount' >/dev/null \
@@ -247,15 +388,11 @@ echo "$ME" | jq -e --arg e "$AUTHOR_EMAIL" \
 echo "    OK: $(echo "$ME" | jq -c .data)"
 
 echo
-echo "==> 12. an organization is a tenant: its schema, its saga, its notifications — and nobody else's"
+echo "==> 13. an organization is a tenant: its schema, its saga, its notifications — and nobody else's"
 SLUG="e2e-$(date +%s)"
 ORGANIZATION=$(auth organization/create "$(jq -nc --arg s "$SLUG" '{name:("E2E " + $s),slug:$s}')")
 ORGANIZATION_ID=$(echo "$ORGANIZATION" | jq -r '.id // empty')
 [ -n "$ORGANIZATION_ID" ] || fail "organization/create failed: $ORGANIZATION"
-cleanup_organization() {
-  auth organization/delete "$(jq -nc --arg id "$ORGANIZATION_ID" '{organizationId:$id}')" >/dev/null || true
-}
-trap 'cleanup_organization; rm -f "$JAR" "$RED" "$BLUE"' EXIT
 echo "    organization=$SLUG — its schema made by the trigger and migrated by the plugin's hook"
 
 TENANT="$SLUG"
@@ -304,22 +441,124 @@ TENANT=''
 DELETED_ORGANIZATION=$(auth organization/delete "$(jq -nc --arg id "$ORGANIZATION_ID" '{organizationId:$id}')")
 echo "$DELETED_ORGANIZATION" | jq -e '(type != "object") or (has("code") | not)' >/dev/null \
   || fail "organization/delete failed: $DELETED_ORGANIZATION"
-trap 'rm -f "$JAR" "$RED" "$BLUE"' EXIT
+ORGANIZATION_ID=''
 echo "    OK: the organization is deleted, and its schema with it"
 
+# One value of the root `.env`, for the Better Stack connection when the environment has none.
+from_env_file() { [ -f .env ] && sed -n "s/^$1=//p" .env | tail -1 | sed "s/^['\"]//; s/['\"]\$//" || true; }
+BETTER_STACK_QUERY_URL="${BETTER_STACK_QUERY_URL:-$(from_env_file BETTER_STACK_QUERY_URL)}"
+BETTER_STACK_QUERY_USERNAME="${BETTER_STACK_QUERY_USERNAME:-$(from_env_file BETTER_STACK_QUERY_USERNAME)}"
+BETTER_STACK_QUERY_PASSWORD="${BETTER_STACK_QUERY_PASSWORD:-$(from_env_file BETTER_STACK_QUERY_PASSWORD)}"
+BETTER_STACK_COLLECTION="${BETTER_STACK_COLLECTION:-$(from_env_file BETTER_STACK_COLLECTION)}"
+
+echo
+echo "==> 14. the same run, as telemetry: Better Stack"
+if [ -z "$BETTER_STACK_QUERY_URL" ] || [ -z "$BETTER_STACK_QUERY_USERNAME" ] \
+  || [ -z "$BETTER_STACK_QUERY_PASSWORD" ] || [ -z "$BETTER_STACK_COLLECTION" ]; then
+  echo "    skipped: no BETTER_STACK_QUERY_* connection in the environment or in .env"
+else
+  SPANS="remote(${BETTER_STACK_COLLECTION}_spans)"
+  LOGS="remote(${BETTER_STACK_COLLECTION}_logs)"
+  SERVICE="JSONExtractString(raw,'resource','attributes','service.name')"
+  TRACE="JSONExtractString(raw,'span','trace_id')"
+  SINCE="dt >= parseDateTime64BestEffort('$RUN_STARTED')"
+
+  # A query's rows, tab-separated; Better Stack answers an error as a JSON object, which fails the step.
+  betterstack() {
+    local answer
+    answer=$(curl -sS -u "$BETTER_STACK_QUERY_USERNAME:$BETTER_STACK_QUERY_PASSWORD" \
+      -H 'content-type: text/plain' -X POST "${BETTER_STACK_QUERY_URL%/}?output_format_pretty_row_numbers=0" \
+      --data-binary "$1 FORMAT TSV")
+    case "$answer" in '{"exception"'*) fail "Better Stack refused the query: $answer" ;; esac
+    echo "$answer"
+  }
+
+  # The services a set of spans came from, sorted and comma-separated.
+  services_where() { betterstack "SELECT arrayStringConcat(arraySort(groupUniqArray($SERVICE)), ',') FROM $SPANS WHERE $1"; }
+
+  # Waits up to `$3` seconds for the services of `$1` to include every one of `$2`; prints what it saw.
+  services_include() {
+    local deadline=$((SECONDS + $3)) seen='' missing
+    while :; do
+      seen=$(services_where "$1")
+      missing=''
+      for wanted in $(echo "$2" | tr ',' ' '); do
+        case ",$seen," in *",$wanted,"*) ;; *) missing="$missing $wanted" ;; esac
+      done
+      [ -z "$missing" ] && { echo "$seen"; return 0; }
+      [ $SECONDS -ge $deadline ] && { echo "$seen"; return 1; }
+      sleep 10
+    done
+  }
+
+  EVERY_SERVICE='gateway,posts-api,tagging,notificator,web'
+  if SEEN=$(services_include "$SINCE" "$EVERY_SERVICE" 180); then
+    echo "    OK: spans since the run started from every service: $SEEN"
+  else
+    problem "not every service reported spans during the run — expected $EVERY_SERVICE, saw ${SEEN:-none}"
+  fi
+
+  if [ -z "$SAGA_TRACE" ]; then
+    problem "no trace to follow: onPostCreated did not deliver the post, and its traceparent with it"
+  else
+    SAGA_SERVICES='posts-api,tagging,notificator,gateway'
+    if SEEN=$(services_include "$TRACE = '$SAGA_TRACE'" "$SAGA_SERVICES" 180); then
+      echo "    OK: the post's life is one trace, $SAGA_TRACE: $SEEN"
+      echo "        createPost -> SNS/SQS -> tagging -> SNS/SQS -> posts-api -> the notificator, and the gateway's SSE delivery"
+    else
+      problem "trace $SAGA_TRACE does not cover the post's whole life — expected $SAGA_SERVICES, saw ${SEEN:-none}"
+    fi
+
+    CALLED=$(betterstack "SELECT count() FROM $SPANS WHERE $TRACE = '$SAGA_TRACE' AND $SERVICE = 'gateway' AND JSONExtractString(raw,'span','name') = 'subgraph posts'")
+    [ "${CALLED:-0}" -gt 0 ] \
+      || problem "the gateway's call to the posts subgraph is not in the trace createPost started — the HTTP hop gateway -> posts-api does not carry the trace"
+    [ "${CALLED:-0}" -gt 0 ] && echo "    OK: the gateway's call to the posts subgraph is in the same trace"
+
+    LOGGED=$(betterstack "SELECT arrayStringConcat(arraySort(groupUniqArray($SERVICE)), ',') FROM $LOGS WHERE $TRACE = '$SAGA_TRACE'")
+    if [ -n "$LOGGED" ]; then
+      echo "    OK: logs inside that trace, from: $LOGGED"
+    else
+      problem "no log line carries trace $SAGA_TRACE"
+    fi
+  fi
+
+  WEB_TRACES=$(betterstack "SELECT DISTINCT $TRACE FROM $SPANS WHERE $SINCE AND $SERVICE = 'web' AND JSONExtractString(raw,'span','name') LIKE '%/posts/[id]%' LIMIT 20")
+  if [ -z "$WEB_TRACES" ]; then
+    problem "the web reported no span for the /posts/[id] it rendered"
+  else
+    LIST=$(echo "$WEB_TRACES" | sed "s/.*/'&'/" | paste -sd, -)
+    REACHED=$(betterstack "SELECT count() FROM $SPANS WHERE $TRACE IN ($LIST) AND $SERVICE = 'gateway'")
+    if [ "${REACHED:-0}" -gt 0 ]; then
+      echo "    OK: a page's server-side query reaches the gateway inside the page's own trace"
+    else
+      problem "the web's page traces hold no gateway span — the HTTP hop web -> gateway does not carry the trace"
+    fi
+  fi
+fi
+
+echo
+echo "==> queues"
 if aws --version >/dev/null 2>&1; then
-  echo
-  echo "==> queues"
   for url in $(aws sqs list-queues --query 'QueueUrls[]' --output text 2>/dev/null); do
     depth=$(aws sqs get-queue-attributes --queue-url "$url" \
               --attribute-names ApproximateNumberOfMessages ApproximateNumberOfMessagesNotVisible \
               --query 'join(`/`, values(Attributes))' --output text 2>/dev/null || echo '?')
     printf '    %-62s %s\n' "${url##*/}" "$depth"
   done
+else
+  echo "    skipped: no aws CLI that runs here"
 fi
 
 echo
+if [ ${#PROBLEMS[@]} -gt 0 ]; then
+  echo "================================================================"
+  echo "  THE FLOW RAN TO THE END ON AWS, WITH ${#PROBLEMS[@]} PROBLEM(S). post=$POST_ID"
+  echo "================================================================"
+  for p in "${PROBLEMS[@]}"; do echo "  - $p"; done
+  exit 1
+fi
 echo "================================================================"
-echo "  THE SAGA CLOSED ON AWS — IN THE ROOT TENANT AND IN AN ORGANIZATION'S —, A FILE WENT THE WHOLE"
-echo "  WAY, AND THE AUTHOR WAS TOLD. post=$POST_ID"
+echo "  THE SAGA CLOSED ON AWS — IN THE ROOT TENANT AND IN AN ORGANIZATION'S —, THE SUBSCRIPTIONS"
+echo "  STREAMED, THE SCREENS RENDERED, A FILE WENT THE WHOLE WAY, THE AUTHOR WAS TOLD, AND THE"
+echo "  WHOLE RUN IS ONE STORY IN BETTER STACK. post=$POST_ID"
 echo "================================================================"

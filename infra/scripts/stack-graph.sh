@@ -15,7 +15,7 @@
 # which is why `--force` and `--disable-integrity-checking` are safe to pass: they keep a state that
 # has been hand-edited (`sst state edit`) from turning a picture into an error.
 #
-#   ./infra/scripts/stack-graph.sh dev                      # .sst/graph/dev.dot, and .svg
+#   ./infra/scripts/stack-graph.sh dev                      # .sst/graph/dev.dot, .svg, .drawio, .html
 #   ./infra/scripts/stack-graph.sh dev --short-node-name    # names instead of whole URNs
 #   ./infra/scripts/stack-graph.sh dev --ignore-parent-edges --dependency-edge-color '#246C60'
 #
@@ -144,6 +144,14 @@ echo "==> $DOT"
 if command -v dot >/dev/null; then
   dot -Grankdir=LR -T"$FORMAT" "$DOT" -o "$OUT_DIR/$STAGE.$FORMAT"
   echo "==> $OUT_DIR/$STAGE.$FORMAT"
+
+  # The architecture diagram (stack-diagram/) is drawn from a graph of its own. It reads each
+  # resource's type off its whole URN and its owner off the parent edges — exactly what
+  # `--short-node-name` and `--ignore-parent-edges` take away — so it gets Pulumi's defaults,
+  # whatever the flags above asked of the DOT.
+  quietly pulumi --cwd "$WORK" stack graph "$WORK/diagram.dot" \
+    --disable-integrity-checking --non-interactive
+  node infra/scripts/stack-diagram/main.mjs "$WORK/diagram.dot" "$OUT_DIR/$STAGE"
 else
   echo "    graphviz is not installed, so only the DOT was written — brew install graphviz"
 fi

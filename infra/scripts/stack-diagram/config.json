@@ -1,0 +1,28 @@
+{
+  "aliases": {
+    "acm": "certificate manager",
+    "alb": "elastic load balancing",
+    "ec2": "vpc",
+    "ecr": "elastic container registry",
+    "ecs": "elastic container service",
+    "efs": "elastic file system",
+    "eip": "elastic ip",
+    "eks": "elastic kubernetes service",
+    "elb": "elastic load balancing",
+    "iam": "identity access management",
+    "kms": "key management",
+    "lb": "elastic load balancing",
+    "servicediscovery": "cloud map",
+    "ses": "simple email",
+    "sfn": "step functions",
+    "ssm": "systems manager"
+  },
+  "types": {},
+  "hidden": [],
+  "hiddenProperties": [
+    "inlinePolicies",
+    "subnetIds",
+    "vpcConfig",
+    "vpcSubnetIds"
+  ]
+}
