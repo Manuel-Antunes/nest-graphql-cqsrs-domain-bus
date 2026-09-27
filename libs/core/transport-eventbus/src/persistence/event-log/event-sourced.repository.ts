@@ -7,20 +7,17 @@ export type StreamIdentity = string | { readonly value: string };
 
 /** What this repository needs an aggregate to be — which is what `AggregateRoot` already makes it. */
 export interface EventSourced {
-  readonly id: { readonly value: string };
   loadFromHistory(history: never[]): void;
-  getUncommittedEvents(): readonly object[];
 }
 
 /** The aggregate's class: `new Post()` is the empty one a replay fills. */
 export type EventSourcedClass<T extends EventSourced> = new () => T;
 
 /**
- * **An aggregate, loaded from its stream and saved as the events it raised.** The event-sourced
- * repository, once, for any aggregate.
+ * **An aggregate, loaded from its stream.** The event-sourced repository, once, for any aggregate.
  *
  * ```ts
- * providers: [...eventStoreProviders, EventSourcedRepository.of(Post)]
+ * TransportEventBusModule.forRoot({ …, eventStore: [Post] })
  * ```
  *
  * ```ts
@@ -28,9 +25,16 @@ export type EventSourcedClass<T extends EventSourced> = new () => T;
  *
  * const post = await this.posts.load(command.postId);          // replayed from the stream
  * this.publisher.mergeObjectContext(post, this.request).complete([tag], new Date());
- * await this.posts.save(post);                                  // its decision, appended
- * post.commit();                                                // and published
+ * post.commit();                                                // appended, and published
  * ```
+ *
+ * ## Why there is no `save`
+ * Because committing the aggregate already is one. `commit()` publishes through the transport bus,
+ * and the bus appends every event it publishes to the {@link EventLog} in the unit of work's prepare
+ * phase — inside the command's transaction, filed under the aggregate its `@EventType({ tags })`
+ * names. A `save` beside it would be a second write path for the same rows, which is what Axon's
+ * `EventSourcingRepository` does not have either: the events an aggregate applies reach the store
+ * through the unit of work.
  *
  * ## Why a replay and not a row
  * Because the service that owns the table is the other one. This one has the events — the ones it
@@ -38,11 +42,11 @@ export type EventSourcedClass<T extends EventSourced> = new () => T;
  * `isComplete()`, the version, the tags. That is what lets a decision be refused by the aggregate
  * itself, which is the guard that survives an emptied inbox.
  *
- * ## Why it is generic, and what that costs
- * Nothing about "load the stream, replay it, append what was raised" is about a Post: the aggregate
- * declares its own `on<Event>` handlers, and they are the same ones its own service replays with. The
- * type parameter is the whole configuration, which is why a service that event-sources writes
- * **no** repository of its own.
+ * ## Why it is generic
+ * Nothing about "load the stream and replay it" is about a Post: the aggregate declares its own
+ * `on<Event>` handlers, and they are the same ones its own service replays with. The type parameter
+ * is the whole configuration, which is why a service that event-sources writes **no** repository of
+ * its own.
  */
 export class EventSourcedRepository<T extends EventSourced> {
   /**
@@ -75,17 +79,6 @@ export class EventSourcedRepository<T extends EventSourced> {
     const aggregate = new this.aggregate();
     aggregate.loadFromHistory(history as never[]);
     return aggregate;
-  }
-
-  /**
-   * Appends what the aggregate has raised and not yet committed — the same events `commit()` is about
-   * to publish, which is what keeps the stream and the wire saying the same thing.
-   */
-  save(aggregate: T): Promise<void> {
-    return this.log.append(
-      aggregate.getUncommittedEvents(),
-      aggregate.id.value,
-    );
   }
 }
 

@@ -16,6 +16,7 @@
     "@nestposts/database": "workspace:*",
     "@nestposts/mail": "workspace:*",
     "@nestposts/platform": "workspace:*",
+    "@nestposts/transport-eventbus": "workspace:*",
     "@nestposts/validated-dto": "workspace:*",
     "firebase-admin": "catalog:",
     "zod": "catalog:"

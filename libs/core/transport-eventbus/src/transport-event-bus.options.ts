@@ -1,5 +1,6 @@
-import type { ModuleMetadata, Type } from '@nestjs/common';
+import type { InjectionToken, ModuleMetadata, Type } from '@nestjs/common';
 
+import type { InboxDescriptions } from './inbound/inbox-descriptions';
 import type { TransportOutboxOptions } from './outbox/transport-outbox.options';
 import type {
   EventSourced,
@@ -7,9 +8,19 @@ import type {
 } from './persistence/event-log/event-sourced.repository';
 import type { RequestContextCodec } from './request-context';
 import type { TransportIdentity } from './transport-identity';
+import type { UnitOfWorkTransaction } from './unit-of-work/unit-of-work';
 
 /** Who this service is on the wire: a name, or an identity it built itself. */
 export type DeclaredIdentity = TransportIdentity | string;
+
+/** The inbound half, when it says more than "on". */
+export interface TransportInboxOptions {
+  /**
+   * Where each admitted message's type and origin are noted, beside the inbox's record — see
+   * {@link InboxDescriptions}. A provider some module already exports: `MikroOrmOutboxStore`.
+   */
+  readonly descriptions?: InjectionToken<InboxDescriptions>;
+}
 
 /**
  * **What a service says about its transport**, and nothing it can work out for itself.
@@ -36,18 +47,27 @@ export interface TransportEventBusModuleOptions
   readonly requestContext?: Type<RequestContextCodec>;
 
   /**
+   * **The transaction every unit of work runs in** — every command, every ingested message, every
+   * publish nobody staged — in the ORM the application uses: `MikroOrmUnitOfWorkTransaction`. It is
+   * also what the outbox and the inbox write through. Without one each write commits on its own,
+   * which a service with neither an inbox nor an outbox can afford and one with either cannot.
+   */
+  readonly transaction?: Type<UnitOfWorkTransaction>;
+
+  /**
    * **The inbound half.** `true` turns receiving on: {@link EventIngestion} admits each message
    * through `@nestjs/outbox`'s inbox, keyed by this service's name and the message's identifier, in
-   * the transaction of everything the message causes.
+   * the transaction of everything the message causes. It needs the application's `OutboxModule` and
+   * a {@link transaction}.
    */
-  readonly inbox?: boolean;
+  readonly inbox?: boolean | TransportInboxOptions;
 
   /**
    * **The outbound half.** What leaves the process is a message of `@nestjs/outbox`, written in the
    * unit of work's own transaction — with the writes that raised it — and published by the outbox's
    * relay through the destination its namespace names, once that transaction has committed. See
-   * {@link TransportOutboxOptions}. Without it nothing leaves: the bus publishes to this process
-   * only.
+   * {@link TransportOutboxOptions}; the outbox itself is the application's `OutboxModule`. Without it
+   * nothing leaves: the bus publishes to this process only.
    */
   readonly outbox?: TransportOutboxOptions;
 

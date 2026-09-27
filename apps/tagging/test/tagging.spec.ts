@@ -4,6 +4,7 @@ import { Test } from '@nestjs/testing';
 import { inRequestContext, TENANT_MIGRATIONS } from '@nestposts/database';
 import { migrate } from '@nestposts/migrator/main';
 import { tenantMigrations } from '@nestposts/migrator/migrations/tenant/index';
+import { MikroOrmOutboxStore } from '@nestposts/outbox-mikro-orm';
 import { PostCreatedEvent } from '@nestposts/posts/domain/post/event/post-created.event';
 import { PostPreCreatedEvent } from '@nestposts/posts/domain/post/event/post-pre-created.event';
 import { Post } from '@nestposts/posts/domain/post/post.entity';
@@ -17,7 +18,6 @@ import {
   EventSourcedRepository,
   encodeData,
   MemoryClient,
-  MikroOrmOutboxStore,
   reconstruct,
   TRANSPORT_MESSAGE_TYPE,
   TRANSPORT_ORIGIN,

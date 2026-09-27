@@ -1,9 +1,15 @@
 import { type DynamicModule } from '@nestjs/common';
+import { OutboxModule } from '@nestjs/outbox';
 import { DatabaseModule } from '@nestposts/database';
 import {
   TestSchemaModule,
   testDatabaseConfig,
 } from '@nestposts/database/testing';
+import {
+  MikroOrmOutboxModule,
+  MikroOrmOutboxStore,
+  MikroOrmUnitOfWorkTransaction,
+} from '@nestposts/outbox-mikro-orm';
 import {
   TransportEventBusModule,
   TransportIdentity,
@@ -25,9 +31,13 @@ export const persistenceTesting = (): DynamicModule[] => [
 ];
 
 /** The transport as a spec wants it: everything this application binds, publishing nowhere. */
-export const transportTesting = (): DynamicModule =>
+export const transportTesting = (): DynamicModule[] => [
+  OutboxModule.forRoot({ relay: { enabled: false } }),
+  MikroOrmOutboxModule.forRoot({ producer: 'posts-api-spec' }),
   TransportEventBusModule.forRoot({
     identity: TransportIdentity.silent('posts-api-spec'),
-    inbox: true,
+    transaction: MikroOrmUnitOfWorkTransaction,
+    inbox: { descriptions: MikroOrmOutboxStore },
     requestContext: PostRequestContextCodec,
-  });
+  }),
+];

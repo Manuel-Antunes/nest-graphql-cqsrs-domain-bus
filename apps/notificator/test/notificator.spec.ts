@@ -14,12 +14,12 @@ import { NotificationDelivery } from '@nestposts/notifications/domain/delivery/n
 import { NotificationReceivedEvent } from '@nestposts/notifications/domain/notification/event/notification-received.event';
 import { NotificationRecord } from '@nestposts/notifications/domain/notification/notification-record.entity';
 import { NotificationId } from '@nestposts/notifications/domain/notification/vo/notification-id';
+import { MikroOrmOutboxStore } from '@nestposts/outbox-mikro-orm';
 import { PostId } from '@nestposts/posts/domain/post/vo/post-id';
 import {
   EventIngestion,
   encodeData,
   MemoryClient,
-  MikroOrmOutboxStore,
   TRANSPORT_MESSAGE_TYPE,
   TRANSPORT_ORIGIN,
   TRANSPORT_TAGS,

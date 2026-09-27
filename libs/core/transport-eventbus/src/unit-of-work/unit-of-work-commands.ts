@@ -1,6 +1,5 @@
 import type { OnApplicationBootstrap, Type } from '@nestjs/common';
-import { Injectable, Logger } from '@nestjs/common';
-import { ModuleRef } from '@nestjs/core';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { ModulesContainer } from '@nestjs/core/injector/modules-container';
 import { CommandBus } from '@nestjs/cqrs';
 
@@ -47,34 +46,22 @@ export class UnitOfWorkCommands implements OnApplicationBootstrap {
   private readonly logger = new Logger(UnitOfWorkCommands.name);
 
   constructor(
-    private readonly moduleRef: ModuleRef,
+    private readonly commandBus: CommandBus,
     private readonly modulesContainer: ModulesContainer,
+    /**
+     * The application's {@link UnitOfWorkTransaction} — `TransportEventBusModule`'s `transaction`
+     * option. A service with none still runs every command in a unit, without a transaction.
+     */
+    @Optional() private readonly transaction?: UnitOfWorkTransaction,
   ) {}
 
   onApplicationBootstrap(): void {
-    const transaction = this.transaction();
-    this.aroundCommands(
-      this.moduleRef.get(CommandBus, { strict: false }),
-      transaction,
-    );
+    this.aroundCommands(this.commandBus, this.transaction);
     const handlers = this.aroundHandlers();
     this.logger.log(
-      `every command runs in a unit of work${transaction ? ' and its transaction' : ''}; ` +
+      `every command runs in a unit of work${this.transaction ? ' and its transaction' : ''}; ` +
         `${handlers} event handler(s) register their work on it`,
     );
-  }
-
-  /**
-   * The application's {@link UnitOfWorkTransaction}, when it binds one. Resolved here rather than
-   * injected because it is bound by whichever global module knows the database, and a service with
-   * none still runs every command in a unit — without a transaction.
-   */
-  private transaction(): UnitOfWorkTransaction | undefined {
-    try {
-      return this.moduleRef.get(UnitOfWorkTransaction, { strict: false });
-    } catch {
-      return undefined;
-    }
   }
 
   private aroundCommands(

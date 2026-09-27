@@ -61,11 +61,14 @@ export class WebEventsClient {
     }
   }
 
+  static readonly namespaces = [NOTIFICATIONS_NAMESPACE];
+
   static destinations(app: AppConfig): Record<string, Type<OutboxTransport>> {
-    return {
-      [NOTIFICATIONS_NAMESPACE]: ClientProxyTransport(WebEventsClient, {
-        toPacket: OutboxPackets.for(app.transport),
-      }),
-    };
+    const transport = ClientProxyTransport(WebEventsClient, {
+      toPacket: OutboxPackets.for(app.transport),
+    });
+    return Object.fromEntries(
+      WebEventsClient.namespaces.map((namespace) => [namespace, transport]),
+    );
   }
 }

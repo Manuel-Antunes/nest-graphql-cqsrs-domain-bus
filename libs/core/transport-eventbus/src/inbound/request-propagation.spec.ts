@@ -25,21 +25,25 @@ import {
 } from '@nestjs/cqrs';
 import { EventPattern, Payload } from '@nestjs/microservices';
 import type { OutboxEnvelope } from '@nestjs/outbox';
+import { OutboxModule } from '@nestjs/outbox';
 import { testDatabaseConfig } from '@nestposts/database/testing';
+import {
+  MikroOrmOutboxModule,
+  MikroOrmUnitOfWorkTransaction,
+  outboxEntities,
+} from '@nestposts/outbox-mikro-orm';
 import { EventType } from '@nestposts/platform/domain/shared/event-type';
 import type { Observable } from 'rxjs';
 import { map } from 'rxjs';
 
-import { TRANSPORT_EVENT_BUS_SERVICE } from '../constants';
 import { MemoryClient } from '../in-memory/memory-client';
 import { EventAddress } from '../outbound/event-address';
 import type { Ingestion } from '../outbound/transport-metadata';
-import { outboxEntities } from '../persistence/outbox/outbox.entities';
 import type { ContextAttributes } from '../request-context';
 import { CorrelatedRequestContext, correlationIdOf } from '../request-context';
 import { publishedEnvelope, startInProcessService } from '../testing';
 import { TransportEventBusModule } from '../transport-event-bus.module';
-import type { TransportEventBusService } from '../transport-event-bus.service';
+import { TransportEventBusService } from '../transport-event-bus.service';
 import { TransportIdentity } from '../transport-identity';
 import { EventIngestion } from './event-ingestion';
 import { IncomingRequest } from './incoming-request';
@@ -206,9 +210,12 @@ describe('the request that crosses: what a guard, a saga and a command all see',
             allowGlobalContext: true,
           }),
         ),
+        OutboxModule.forRoot({ relay: { enabled: false } }),
+        MikroOrmOutboxModule.forRoot({ producer: 'shop' }),
         TransportEventBusModule.forRoot({
           identity: TransportIdentity.named('shop'),
           requestContext: ShopRequestCodec,
+          transaction: MikroOrmUnitOfWorkTransaction,
           inbox: true,
         }),
       ],
@@ -223,7 +230,7 @@ describe('the request that crosses: what a guard, a saga and a command all see',
     });
     publishing = new MemoryClient({ servers: [consuming.server] });
     seen = consuming.app.get(Seen);
-    bus = consuming.app.get(TRANSPORT_EVENT_BUS_SERVICE);
+    bus = consuming.app.get(TransportEventBusService);
   });
 
   afterAll(() => consuming.close());
@@ -301,16 +308,17 @@ describe('the request that crosses: what a guard, a saga and a command all see',
       const event = new OrderPlacedEvent('o-6', new Date());
 
       await bus.publish(event, request);
-      await settle();
 
+      await expect
+        .poll(() => seen.commanded, { timeout: 2_000, interval: 10 })
+        .toEqual([
+          {
+            tenantId: 'acme',
+            userId: 'u-6',
+            correlationId: correlationIdOf(request),
+          },
+        ]);
       expect(seen.handled[0]).toBe(request);
-      expect(seen.commanded).toEqual([
-        {
-          tenantId: 'acme',
-          userId: 'u-6',
-          correlationId: correlationIdOf(request),
-        },
-      ]);
       expect(seen.guarded).toEqual([]);
     });
   });

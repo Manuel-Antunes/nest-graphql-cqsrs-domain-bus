@@ -42,7 +42,7 @@ The only exceptions:
    `libs/ui/**` so that refreshing one is a copy and not a merge. Its TypeScript carries no comments
    — they were stripped on arrival, as every registry file is — and its CSS keeps its own.
 3. **The in-house libraries** — `libs/core/cqsrs`, `libs/database`, `libs/core/validated-dto`,
-   `libs/core/transport-eventbus`, `libs/core/microservices-aws`,
+   `libs/core/transport-eventbus`, `libs/core/outbox-mikro-orm`, `libs/core/microservices-aws`,
    `libs/core/microservices-inngest`, `libs/core/mail`, `libs/core/federation-gateway`,
    `libs/core/observability`, `libs/notifications`, `libs/asset`, `libs/auth` and
    `libs/organizations` — may
@@ -345,7 +345,14 @@ libs/core/mail           class-based email (Mail, Message, MailService) over @ne
                          configured with the mailer's own options; offers a React Email template
                          resolver and a plain-text plugin, and any other adapter still works. README
 libs/core/transport-eventbus  the CQRS event bus over Nest's microservice transports (see below),
-                         RabbitMQ / SNS+SQS / Inngest / in-process — the envelope's wire on each
+                         RabbitMQ / SNS+SQS / Inngest / in-process — the envelope's wire on each —
+                         and the unit of work every command and every ingested message runs in.
+                         It USES @nestjs/cqrs and @nestjs/outbox, which the application declares
+libs/core/outbox-mikro-orm  @nestjs/outbox on MikroORM: MikroOrmOutboxModule (the store for the
+                         messages, dead letters and inbox, and their three tables),
+                         MikroOrmUnitOfWorkTransaction (the transaction a unit of work runs in, and
+                         whose handle the store writes through) and OutboxHousekeepingModule. It
+                         knows nothing of the bus. README
 libs/core/microservices-aws  SNS and SQS as a plain Nest transport: the client proxies, SqsStrategy,
                          SqsContext, processSqsEvent. No CQRS, no envelope, no @EventType — and no
                          environment: the application hands every client a clientConfig
@@ -536,45 +543,62 @@ account of what came from where; read the second before changing the library's s
   which `@nestjs/cqrs` 12 requires, because it matches handlers by an id it stamps on the event class,
   not by its name. An event with no `@EventType` has no namespace, and never leaves the process.
 - **Publishing is writing, and the unit of work is a transaction.** Every unit of work (a command, an
-  ingested message, an on-demand notification) runs in a `UnitOfWorkTransaction`
-  (`MikroOrmUnitOfWorkTransaction`): the handlers' writes, then — in the `prepareCommit` phase —
+  ingested message, an on-demand notification) runs in a `UnitOfWorkTransaction` — the port lives in
+  this library (`unit-of-work/`, moved here from `libs/core/cqsrs`), and the application names its
+  implementation, `transaction: MikroOrmUnitOfWorkTransaction`: the handlers' writes, then — in the
+  `prepareCommit` phase —
   the event log and the **outbox**: `EventOutbox` turns each event whose namespace has a destination
   into one `@nestjs/outbox` message (`EventMessages`: id = the event's identifier, topic = the routing
   key, key = `namespace/aggregate`, payload = the event's fields, headers = type, origin, tags, request,
-  trace — captured now) and writes it with `Outbox.add(tx, …)`. The transaction commits; only then is
+  trace — captured now) and writes it with `Outbox.add(tx, …)`, `tx` being the unit's own
+  `transactionHandle` (what `UnitOfWorkTransaction.run` handed it). The transaction commits; only then is
   the event told to this process (`commit`), and the relay published (`afterCommit`). There is **no
   direct emit**: a service without an `outbox` publishes to its own process only. A publish no unit
   staged (an unawaited `aggregate.commit()` outside a command) runs in a unit of its own, on a
-  **detached** (`REQUIRES_NEW`) transaction — as a savepoint of the caller's transaction it would
+  **detached** transaction (`UnitOfWorkTransaction.detached()`, `REQUIRES_NEW` on MikroORM) — as a
+  savepoint of the caller's transaction it would
   release after that transaction committed (measured: `RELEASE SAVEPOINT can only be used in
   transaction blocks`, from `UserProvisioning` publishing inside `UserRepository.exclusively`).
 - **The namespace is the routing, and the event declares nothing else.** A destination is
   `@nestjs/outbox`'s own `ClientProxyTransport(Client, { toPacket: OutboxPackets.for(transport) })`,
-  keyed by the namespace it carries in `outbox.destinations`, and the outbox's `route` (`routeOf`)
-  reads the namespace off each message. There is no `@Publisher` and no `@TransportType`: either would
+  keyed by the namespace it carries in the root `OutboxModule`'s `transports`, and the outbox's
+  `route` (`routeOf`) reads the namespace off each message. The bus is told the same namespaces as
+  `outbox.destinations`, from the one list each client declares (`PostEventsClient.namespaces`, which
+  its `destinations()` maps). There is no `@Publisher` and no `@TransportType`: either would
   be the same fact twice and a deployment detail inside a domain event — which is also why
   `libs/posts` imports **nothing** from this library. Each application's client lives in a module of
   its own (`PostEventsClientModule`, `WebEventsClientModule`) exporting the client and the `Inngest`
   instance, imported by the outbox (whose `OutboxModule` instantiates `ClientProxyTransport`) and by
   `AppModule` (whose inbound transport injects the same `Inngest`).
-- **`TransportEventBusModule.forRoot(...)` starts it**, in each application's `AppModule`: `identity`,
-  `inbox: true` (which turns receiving on), `outbox: { imports, destinations, inject, useFactory }`,
-  `eventStore: [Post]`, `subscriptions`, `requestContext`. Either `inbox` or `outbox` imports
-  `OutboxModule`, registers `MikroOrmOutboxStore` for both of its storage contracts, maps the three
-  tables (`transport.outbox_messages`, `outbox_dead_letters`, `outbox_inbox`) and binds the
-  `UnitOfWorkTransaction`. It is global, and `forRootAsync` is the same with the identity resolved at
-  runtime.
+- **The outbox is the application's, declared at its root; the bus only uses it.** Each `AppModule`
+  lists, in this order, `OutboxModule.forRootAsync({ imports: [PostEventsClientModule], transports,
+  useFactory: → { route: routeOf, relay: { enabled }, retry } })` (`@nestjs/outbox`, global),
+  `MikroOrmOutboxModule.forRootAsync(→ { producer })` (the store, registered with `OutboxStorage`,
+  and the three tables `transport.outbox_messages`, `outbox_dead_letters`, `outbox_inbox`),
+  `OutboxHousekeepingModule` and then `TransportEventBusModule.forRootAsync(...)`: `identity`,
+  `transaction: MikroOrmUnitOfWorkTransaction`, `inbox: { descriptions: MikroOrmOutboxStore }` (which
+  turns receiving on, and notes each message's type and origin beside its inbox row),
+  `outbox: { destinations, inject, useFactory: → { relay } }`, `eventStore: [Post]`,
+  `subscriptions`, `requestContext`. The bus injects `Outbox`, `OutboxRelay` and `OutboxInbox`
+  from the global `OutboxModule` — a bare `imports: [OutboxModule]` would be a second, unconfigured
+  instance — and an `inbox` or an `outbox` without the root `OutboxModule` fails the boot naming
+  what it could not resolve. It is global, and `forRootAsync` is the same with the identity resolved
+  at runtime. It also provides `UnitOfWorkCommands`, which puts every command in a unit of work.
 - **The relay's mode is the process's** (`<APP>_OUTBOX_RELAY`, `outbox.config.ts` in each app):
   `poll` — the relay polls in this process and a commit wakes it (`notify()`); `drain` — no loop, and
   a unit publishes what is due before it answers (every Lambda, and the web by default: a function is
   frozen between invocations, and the web's container lives inside Next); `off` — an API-only
-  instance. `OutboxHousekeeping` does what the package leaves to the application: prunes the inbox
-  (`<APP>_INBOX_RETENTION_DAYS`), warns on lag and dead letters, and `sweep()`s for a schedule —
+  instance. The same mode is told twice, and the root says both: `relay.enabled: relay === 'poll'` to
+  the `OutboxModule`, `relay` to the bus. `OutboxHousekeeping` (`OutboxHousekeepingModule`,
+  `libs/core/outbox-mikro-orm`) does what the package leaves to the application: prunes the inbox
+  (`<APP>_INBOX_RETENTION_DAYS`) on a timer only a `poll` process keeps (`interval: false`
+  otherwise), warns on lag and dead letters, and `sweep()`s for a schedule —
   `PostsApiRelay`/`TaggingRelay` every minute on AWS, and `POST /api/outbox/sweep` for the web.
   `DeadLetterReporting` (`libs/core/observability`) reports a dead letter to GlitchTip from the
   `nestjs:outbox:dead-lettered` diagnostics channel. Every Nest `main.ts` calls
   `app.enableShutdownHooks()`, so a deploy drains the relay instead of leaving messages leased.
-- **`MikroOrmOutboxStore` is scoped by producer.** One `transport` schema serves every service, and a
+- **`MikroOrmOutboxStore` (`libs/core/outbox-mikro-orm`) is scoped by producer.** One `transport`
+  schema serves every service, and a
   relay may only publish what its own service produced — through its own destinations — so every
   message and dead letter carries the service's name; the inbox is keyed by `(consumer, message)`,
   the consumer being the ingesting service's name. It is native SQL (advisory locks per key,
@@ -618,8 +642,9 @@ account of what came from where; read the second before changing the library's s
   again (`tagging.spec` covers exactly that).
 - **A controller takes the envelope with `@Payload()`** — `@nestjs/outbox`'s consumer pattern — and
   hands it to `EventIngestion.ingest(envelope)`, which rebuilds the real class and marks it as
-  ingested; `@TransportRequest()` is the `AsyncContext` the message belongs to, for a controller that
-  dispatches a command itself. A payload that is not an `OutboxEnvelope` is refused by name.
+  ingested; `IncomingRequest.from(envelope)` is the `AsyncContext` the message belongs to, for a
+  controller that dispatches a command itself. A payload that is not an `OutboxEnvelope` is refused by
+  name.
 - **A binding is `EventAddress.everyEventOf(...)`**: a namespace (`posts.#`, one entry for every event of it — the
   message type resolves the concrete class) or one event class (`posts.PostCreated.*`). `apps/tagging`
   binds the namespace because it keeps the Post's whole stream; `apps/posts-api` binds the one type it
@@ -646,9 +671,9 @@ account of what came from where; read the second before changing the library's s
   too. A codec of its own overrides **`contextFor`**, never `decode`: `decode` is what writes the
   arriving correlation id onto the rebuilt context, and replacing it starts a new trace at every hop,
   silently.
-- **A guard reads the request with `IncomingRequest.of(executionContext)`**, because a pipe (and so
-  `@TransportRequest()`) runs after the guards. That is what lets a shared guard authorise a message by
-  the tenant or the session the publishing service put in its context.
+- **A guard reads the request with `IncomingRequest.of(executionContext)`**, because a pipe runs after
+  the guards. That is what lets a shared guard authorise a message by the tenant or the session the
+  publishing service put in its context.
 - **What the ingestion's transaction covers — everything.** One message is one unit of work in one
   transaction: the inbox row (`OutboxInbox.processInTransaction`), the `EventLog` append, the local
   publish, every reaction the unit tracks (a projection, a saga's command) and the outbox rows those
@@ -832,7 +857,7 @@ are three kinds:
 | pin | where | what |
 |---|---|---|
 | `SYSTEM_SCHEMA` (`public`) | `public` | Better Auth's tables and the organizations' — `libs/auth`, `libs/organizations` |
-| `TRANSPORT_SCHEMA` | `transport` | the transport's bookkeeping: the inbox and the event log (`libs/core/transport-eventbus`) |
+| `TRANSPORT_SCHEMA` (`libs/database`) | `transport` | the messaging's bookkeeping: the outbox and the inbox (`libs/core/outbox-mikro-orm`) and the event log (`libs/core/transport-eventbus`) |
 | `TENANT_SCHEMA` (`*`, MikroORM's wildcard) | `tenant_<name>` | everything else: posts, tags, users, notifications, devices |
 
 A wildcard table exists once per tenant, and which copy a query reaches is the schema of the entity
@@ -906,8 +931,8 @@ x-tenant: acme  ──▶  @CurrentTenant()  ──▶  new PostRequest(postId, 
   instance or an injectable class — a class being registered by `TenancyModule` itself, so its
   dependencies resolve from inside and nothing is provided from outside. `HeaderTenantResolver` is the
   default; `TransportTenantResolver` (`libs/core/transport-eventbus`) answers for a message,
-  decoding the envelope through `IncomingRequest` — **not** `@TransportRequest()`, because an
-  interceptor runs before the pipes, the same reason a guard cannot use it either. It falls back to
+  decoding the envelope through `IncomingRequest` from the `ExecutionContext`, because an interceptor
+  runs before any pipe, the same reason a guard does. It falls back to
   the header resolver, because `apps/posts-api` is a hybrid and one resolver has to be right for both.
 - **`TransportRequestContext.toAttributes()` re-emits what arrived**, which is what makes a service in
   the middle of a chain carry the tenant onward without knowing tenants exist. It excludes everything
@@ -1027,7 +1052,7 @@ useFactory: MikroOrmConfiguration.connection })` (`libs/database/src/database.mo
 connection, and every table
 reaches it through `DatabaseModule.forFeature(...)` in the module that **owns** it:
 `PostsInfrastructureModule`, `UsersInfrastructureModule`, `BetterAuthModule` (the Better Auth tables, composed
-with whatever a contributed plugin adds) and `TransportEventBusModule` (the inbox, the streams). An application's `mikro-orm.config.ts` therefore
+with whatever a contributed plugin adds), `MikroOrmOutboxModule` (the outbox and the inbox) and `TransportEventBusModule` (the event log). An application's `mikro-orm.config.ts` therefore
 holds the connection and nothing else — and `apps/tagging`, which needs the Post's *mapping* but not its
 repositories, imports `DatabaseModule.forFeature([...postsEntities, ...usersEntities])` and nothing more.
 
@@ -1298,8 +1323,9 @@ error at all**: the system works, the trace is just wrong or absent, and only on
 There is no fake repository: handler specs boot the real `CqsrsModule` and a **schema of their own**
 on the shared Postgres, through `createCqrsTestingModule([...])` (`apps/posts-api/test/support/cqrs-testing-module.ts`),
 registering **only the handler under test** — an accidental dependency between handlers breaks the
-test. That module also spreads `transportEventBusProviders` with `TransportIdentity.silent(...)`,
-because the handlers commit through the transport publisher and a suite publishes nowhere. The database proves what was saved; `RecordingEvents`
+test. That module also imports `transportTesting()` — the root's `OutboxModule` with no relay, the
+MikroORM store and `TransportEventBusModule` with `TransportIdentity.silent(...)` — because the
+handlers commit through the transport publisher and a suite publishes nowhere. The database proves what was saved; `RecordingEvents`
 (attached to the `EventBus`) proves what was published. Because handlers are request-scoped, tests
 dispatch through the `CommandBus` with a `PostRequest`.
 
@@ -1540,7 +1566,8 @@ DTOs count.
   modules through a runner of its own. **The only place this is provable is a deployed stage**, by
   reading the collector's destination.
 - **A command runs in a unit of work, and that is why there is nothing to drain.** `UnitOfWork`
-  (`@nestposts/cqsrs`) is Axon's, in the shape this framework can have one. While a command handler
+  (`@nestposts/transport-eventbus`, `unit-of-work/`) is Axon's, in the shape this framework can have
+  one. While a command handler
   runs, every `publish` is **staged**; when it returns, the staged events are appended to the
   `EventLog` (`prepareCommit`) and then published and forwarded (`commit`). It also **waits for what
   the publish set off**: `@nestjs/cqrs` drops whatever a handler or a saga returns, so

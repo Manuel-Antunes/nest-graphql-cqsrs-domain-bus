@@ -563,6 +563,9 @@ importers:
       '@nestposts/organizations':
         specifier: workspace:*
         version: link:../../libs/organizations
+      '@nestposts/outbox-mikro-orm':
+        specifier: workspace:*
+        version: link:../../libs/core/outbox-mikro-orm
       '@nestposts/platform':
         specifier: workspace:*
         version: link:../../libs/platform
@@ -620,6 +623,9 @@ importers:
       '@nestposts/organizations':
         specifier: workspace:*
         version: link:../../libs/organizations
+      '@nestposts/outbox-mikro-orm':
+        specifier: workspace:*
+        version: link:../../libs/core/outbox-mikro-orm
       '@nestposts/platform':
         specifier: workspace:*
         version: link:../../libs/platform
@@ -705,6 +711,9 @@ importers:
       '@nestposts/observability':
         specifier: workspace:*
         version: link:../../libs/core/observability
+      '@nestposts/outbox-mikro-orm':
+        specifier: workspace:*
+        version: link:../../libs/core/outbox-mikro-orm
       '@nestposts/platform':
         specifier: workspace:*
         version: link:../../libs/platform
@@ -793,6 +802,9 @@ importers:
       '@nestposts/organizations':
         specifier: workspace:*
         version: link:../../libs/organizations
+      '@nestposts/outbox-mikro-orm':
+        specifier: workspace:*
+        version: link:../../libs/core/outbox-mikro-orm
       '@nestposts/platform':
         specifier: workspace:*
         version: link:../../libs/platform
@@ -884,6 +896,9 @@ importers:
       '@nestposts/observability':
         specifier: workspace:*
         version: link:../../libs/core/observability
+      '@nestposts/outbox-mikro-orm':
+        specifier: workspace:*
+        version: link:../../libs/core/outbox-mikro-orm
       '@nestposts/platform':
         specifier: workspace:*
         version: link:../../libs/platform
@@ -999,6 +1014,9 @@ importers:
       '@nestposts/organizations':
         specifier: workspace:*
         version: link:../../libs/organizations
+      '@nestposts/outbox-mikro-orm':
+        specifier: workspace:*
+        version: link:../../libs/core/outbox-mikro-orm
       '@nestposts/tanstack-query-graphql':
         specifier: workspace:*
         version: link:../../libs/tanstack-query-graphql
@@ -1330,6 +1348,12 @@ importers:
 
   libs/core/observability: {}
 
+  libs/core/outbox-mikro-orm:
+    dependencies:
+      '@nestposts/database':
+        specifier: workspace:*
+        version: link:../../database
+
   libs/core/retry-policy:
     dependencies:
       '@nestposts/microservices-aws':
@@ -1341,9 +1365,6 @@ importers:
 
   libs/core/transport-eventbus:
     dependencies:
-      '@nestposts/cqsrs':
-        specifier: workspace:*
-        version: link:../cqsrs
       '@nestposts/database':
         specifier: workspace:*
         version: link:../../database
@@ -1356,6 +1377,13 @@ importers:
       '@nestposts/platform':
         specifier: workspace:*
         version: link:../../platform
+    devDependencies:
+      '@nestposts/cqsrs':
+        specifier: workspace:*
+        version: link:../cqsrs
+      '@nestposts/outbox-mikro-orm':
+        specifier: workspace:*
+        version: link:../outbox-mikro-orm
 
   libs/core/validated-dto: {}
 
@@ -1416,6 +1444,9 @@ importers:
       '@nestposts/platform':
         specifier: workspace:*
         version: link:../platform
+      '@nestposts/transport-eventbus':
+        specifier: workspace:*
+        version: link:../core/transport-eventbus
       '@nestposts/validated-dto':
         specifier: workspace:*
         version: link:../core/validated-dto

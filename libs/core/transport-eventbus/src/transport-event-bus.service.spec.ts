@@ -10,7 +10,7 @@ import {
   Saga,
 } from '@nestjs/cqrs';
 import type { OutboxEnvelope } from '@nestjs/outbox';
-import { ClientProxyTransport } from '@nestjs/outbox';
+import { ClientProxyTransport, OutboxModule } from '@nestjs/outbox';
 import type { TestingModule } from '@nestjs/testing';
 import { Test } from '@nestjs/testing';
 import { CqsrsModule } from '@nestposts/cqsrs';
@@ -19,15 +19,16 @@ import {
   TestSchemaModule,
   testDatabaseConfig,
 } from '@nestposts/database/testing';
+import {
+  MikroOrmOutboxModule,
+  MikroOrmUnitOfWorkTransaction,
+} from '@nestposts/outbox-mikro-orm';
 import { EventType } from '@nestposts/platform/domain/shared/event-type';
 import type { Observable } from 'rxjs';
 import { map } from 'rxjs';
 
-import {
-  TRANSPORT_EVENT_BUS_PUBLISHER,
-  TRANSPORT_EVENT_BUS_SERVICE,
-} from './constants';
-import { ExcludeDef } from './decorators/exclude-def.decorator';
+import { TRANSPORT_EVENT_BUS_PUBLISHER } from './constants';
+import { routeOf } from './outbound/event-messages';
 import {
   TRANSPORT_MESSAGE_TYPE,
   TRANSPORT_ORIGIN,
@@ -35,7 +36,7 @@ import {
 import { OutboxPackets } from './outbound/outbox-packets';
 import { RecordingClient } from './testing/recording-client';
 import { TransportEventBusModule } from './transport-event-bus.module';
-import type { TransportEventBusService } from './transport-event-bus.service';
+import { TransportEventBusService } from './transport-event-bus.service';
 
 @Injectable()
 class Storage {
@@ -62,20 +63,8 @@ class DefaultEvent {
   constructor(readonly message: string) {}
 }
 
-@EventType({ namespace: NOBODY_PUBLISHES })
-@ExcludeDef()
-class ExcludeDefEvent {
-  constructor(readonly message: string) {}
-}
-
 @EventType({ namespace: SHOP })
 class RabbitWithDefEvent {
-  constructor(readonly message: string) {}
-}
-
-@EventType({ namespace: SHOP })
-@ExcludeDef()
-class RabbitEvent {
   constructor(readonly message: string) {}
 }
 
@@ -102,30 +91,12 @@ class DefaultEventHandler implements IEventHandler<DefaultEvent> {
   }
 }
 
-@EventsHandler(ExcludeDefEvent)
-class ExcludeDefEventHandler implements IEventHandler<ExcludeDefEvent> {
-  constructor(private readonly storage: Storage) {}
-
-  handle(event: ExcludeDefEvent): void {
-    this.storage.upsert('ExcludeDefEvent', event.message);
-  }
-}
-
 @EventsHandler(RabbitWithDefEvent)
 class RabbitWithDefEventHandler implements IEventHandler<RabbitWithDefEvent> {
   constructor(private readonly storage: Storage) {}
 
   handle(event: RabbitWithDefEvent): void {
     this.storage.upsert('RabbitWithDefEvent', event.message);
-  }
-}
-
-@EventsHandler(RabbitEvent)
-class RabbitEventHandler implements IEventHandler<RabbitEvent> {
-  constructor(private readonly storage: Storage) {}
-
-  handle(event: RabbitEvent): void {
-    this.storage.upsert('RabbitEvent', event.message);
   }
 }
 
@@ -200,10 +171,7 @@ class TryAggregateRootCommandHandler
 
 @Injectable()
 class TestEventService {
-  constructor(
-    @Inject(TRANSPORT_EVENT_BUS_SERVICE)
-    private readonly eventBus: TransportEventBusService,
-  ) {}
+  constructor(private readonly eventBus: TransportEventBusService) {}
 
   publishEvent(event: object): Promise<void> {
     return this.eventBus.publish(event);
@@ -236,15 +204,22 @@ describe('the transport event bus (the vendored base)', () => {
           testDatabaseConfig({ allowGlobalContext: true }),
         ),
         TestSchemaModule.forRoot(),
+        OutboxModule.forRoot({
+          imports: [RabbitModule],
+          transports: {
+            [SHOP]: ClientProxyTransport(Rabbit, {
+              toPacket: OutboxPackets.memory,
+            }),
+          },
+          route: routeOf,
+          relay: { enabled: false },
+        }),
+        MikroOrmOutboxModule.forRoot({ producer: 'the-suite' }),
         TransportEventBusModule.forRoot({
           identity: 'the-suite',
+          transaction: MikroOrmUnitOfWorkTransaction,
           outbox: {
-            imports: [RabbitModule],
-            destinations: {
-              [SHOP]: ClientProxyTransport(Rabbit, {
-                toPacket: OutboxPackets.memory,
-              }),
-            },
+            destinations: [SHOP],
             useFactory: () => ({ relay: 'drain' }),
           },
         }),
@@ -253,9 +228,7 @@ describe('the transport event bus (the vendored base)', () => {
         Storage,
         TestEventService,
         DefaultEventHandler,
-        ExcludeDefEventHandler,
         RabbitWithDefEventHandler,
-        RabbitEventHandler,
         InternalEventHandler,
         TryAggregateRootEventHandler,
         TrySagaCommandHandler,
@@ -265,7 +238,7 @@ describe('the transport event bus (the vendored base)', () => {
     }).compile();
     await module.init();
 
-    eventBus = module.get(TRANSPORT_EVENT_BUS_SERVICE);
+    eventBus = module.get(TransportEventBusService);
     storage = module.get(Storage);
     commandBus = module.get(CommandBus);
     rabbit = module.get(Rabbit);
@@ -288,24 +261,10 @@ describe('the transport event bus (the vendored base)', () => {
       expect(sentMessages()).toHaveLength(0);
     });
 
-    it('does not call the ExcludeDefEvent handler', async () => {
-      await eventBus.publish(new ExcludeDefEvent('ExcludeDefEvent'));
-
-      expect(storage.get('ExcludeDefEvent')).toBe(false);
-      expect(sentMessages()).toHaveLength(0);
-    });
-
     it('sends RabbitWithDefEvent AND calls its handler', async () => {
       await eventBus.publish(new RabbitWithDefEvent('RabbitWithDefEvent'));
 
       expect(storage.get('RabbitWithDefEvent')).toBe('RabbitWithDefEvent');
-      expect(rabbit.sent).toHaveLength(1);
-    });
-
-    it('sends RabbitEvent and does NOT call its handler: @ExcludeDef is the local opt-out', async () => {
-      await eventBus.publish(new RabbitEvent('RabbitEvent'));
-
-      expect(storage.get('RabbitEvent')).toBe(false);
       expect(rabbit.sent).toHaveLength(1);
     });
 

@@ -54,11 +54,14 @@ export class PostEventsClient {
     }
   }
 
+  static readonly namespaces = [POSTS_NAMESPACE];
+
   static destinations(app: AppConfig): Record<string, Type<OutboxTransport>> {
-    return {
-      [POSTS_NAMESPACE]: ClientProxyTransport(PostEventsClient, {
-        toPacket: OutboxPackets.for(app.transport),
-      }),
-    };
+    const transport = ClientProxyTransport(PostEventsClient, {
+      toPacket: OutboxPackets.for(app.transport),
+    });
+    return Object.fromEntries(
+      PostEventsClient.namespaces.map((namespace) => [namespace, transport]),
+    );
   }
 }

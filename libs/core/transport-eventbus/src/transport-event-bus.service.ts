@@ -8,12 +8,11 @@ import type {
   IEventPublisher,
 } from '@nestjs/cqrs';
 import { AsyncContext, EventBus } from '@nestjs/cqrs';
-import { UnitOfWork } from '@nestposts/cqsrs';
 
-import { isExcludedLocally } from './decorators/exclude-def.decorator';
 import { EventOutbox } from './outbox/event-outbox';
 import { EventLog } from './persistence/event-log/event-log';
 import { EventTrace } from './tracing';
+import { UnitOfWork } from './unit-of-work/unit-of-work';
 
 /**
  * **The integration point: an `IEventBus` that publishes locally and through the outbox.**
@@ -25,12 +24,9 @@ import { EventTrace } from './tracing';
  *
  * ## Why this, and not a subscription to the `EventBus`
  * Subscribing to the bus and forwarding whatever went by was the other option, and it is worse in
- * three ways that matter here:
+ * two ways that matter here:
  * - **it cannot be staged.** `EventBus` hands an event to its subscribers and returns; a subscriber
  *   has no unit of work to write the outbox in, and would record what the command had not committed;
- * - **it cannot opt out.** `@ExcludeDef()` — an event that goes out and does *not* run locally — is
- *   not expressible from a subscriber, because by the time it sees the event the local handlers have
- *   already had it;
  * - **it doubles the request context.** The real bus attaches the `AsyncContext` to the event as part
  *   of publishing; a subscriber sees the result and has to guess.
  *
@@ -164,7 +160,9 @@ export class TransportEventBusService implements IEventBus, OnModuleDestroy {
     dispatcherContext: unknown,
     context?: AsyncContext,
   ): void {
-    unit.on('prepareCommit', () => this.record(staged));
+    unit.on('prepareCommit', (prepared) =>
+      this.record(staged, prepared.transactionHandle),
+    );
     unit.on('commit', () => this.dispatch(staged, dispatcherContext, context));
     if (this.outbox && !this.relayed.has(unit)) {
       this.relayed.add(unit);
@@ -185,9 +183,7 @@ export class TransportEventBusService implements IEventBus, OnModuleDestroy {
     context?: AsyncContext,
   ): Promise<void> {
     for (const event of events) {
-      if (!isExcludedLocally(event as object)) {
-        this.locally(event, dispatcherContext, context);
-      }
+      this.locally(event, dispatcherContext, context);
     }
     return Promise.resolve();
   }
@@ -195,20 +191,22 @@ export class TransportEventBusService implements IEventBus, OnModuleDestroy {
   /**
    * What this process publishes, written where every container can read it — which is what makes a
    * subscription on one container see what another decided — and, with an outbox, what it owes the
-   * transports. Appending an identifier the log already has is a no-op, so an event that
-   * `EventIngestion` already appended inside its transaction costs one statement here and nothing
-   * else.
+   * transports. Appending an identifier the log already has is a no-op, so the same instance
+   * published twice is recorded once.
    *
    * It runs at the unit of work's **prepare** phase, inside its transaction and before anything is
    * told: a failure here fails the command, which is the point. An event nobody could record is not a
-   * fact.
+   * fact. `transaction` is that transaction's handle, which the outbox writes through.
    */
-  private async record<TEvent extends IEvent>(events: TEvent[]): Promise<void> {
+  private async record<TEvent extends IEvent>(
+    events: TEvent[],
+    transaction?: unknown,
+  ): Promise<void> {
     if (events.length === 0) {
       return;
     }
     await this.log?.append(events as object[]);
-    await this.outbox?.stage(events as object[]);
+    await this.outbox?.stage(events as object[], transaction);
   }
 
   private attach(event: object, context?: AsyncContext): void {

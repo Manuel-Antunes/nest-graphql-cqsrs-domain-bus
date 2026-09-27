@@ -5,20 +5,24 @@ import type { IEventHandler } from '@nestjs/cqrs';
 import { AsyncContext, CqrsModule, EventsHandler } from '@nestjs/cqrs';
 import { EventPattern, Payload } from '@nestjs/microservices';
 import type { OutboxEnvelope } from '@nestjs/outbox';
-import { ClientProxyTransport } from '@nestjs/outbox';
+import { ClientProxyTransport, OutboxModule } from '@nestjs/outbox';
 import { ROOT_TENANT, TENANT_HEADER, Tenant } from '@nestposts/database';
 import { testDatabaseConfig } from '@nestposts/database/testing';
+import {
+  MikroOrmOutboxModule,
+  MikroOrmOutboxStore,
+  MikroOrmUnitOfWorkTransaction,
+  outboxEntities,
+} from '@nestposts/outbox-mikro-orm';
 import { EventType } from '@nestposts/platform/domain/shared/event-type';
 
-import { TRANSPORT_EVENT_BUS_SERVICE } from '../constants';
 import { EventIngestion } from '../inbound/event-ingestion';
 import { messageOf, reconstruct } from '../inbound/event-reconstruction';
+import { routeOf } from '../outbound/event-messages';
 import { TRANSPORT_ORIGIN } from '../outbound/message-headers';
 import { OutboxPackets } from '../outbound/outbox-packets';
 import type { Ingestion } from '../outbound/transport-metadata';
 import { identifierOf } from '../outbound/transport-metadata';
-import { MikroOrmOutboxStore } from '../persistence/outbox/mikro-orm-outbox.store';
-import { outboxEntities } from '../persistence/outbox/outbox.entities';
 import {
   CorrelatedRequestContext,
   TransportRequestContext,
@@ -26,7 +30,7 @@ import {
 import type { InProcessService } from '../testing';
 import { startInProcessService } from '../testing';
 import { TransportEventBusModule } from '../transport-event-bus.module';
-import type { TransportEventBusService } from '../transport-event-bus.service';
+import { TransportEventBusService } from '../transport-event-bus.service';
 import { TransportIdentity } from '../transport-identity';
 import { MemoryClient } from './memory-client';
 
@@ -168,18 +172,22 @@ describe('one hop between two services, over the in-process transport', () => {
             allowGlobalContext: true,
           }),
         ),
+        OutboxModule.forRoot({
+          imports: [PublishingClientModule],
+          transports: {
+            [POSTS]: ClientProxyTransport(PublishingClient, {
+              toPacket: OutboxPackets.memory,
+            }),
+          },
+          route: routeOf,
+          relay: { enabled: false },
+        }),
+        MikroOrmOutboxModule.forRoot({ producer: 'publishing-service' }),
         TransportEventBusModule.forRoot({
           identity: TransportIdentity.named('publishing-service'),
           requestContext: CorrelatedRequestContext,
-          outbox: {
-            imports: [PublishingClientModule],
-            destinations: {
-              [POSTS]: ClientProxyTransport(PublishingClient, {
-                toPacket: OutboxPackets.memory,
-              }),
-            },
-            useFactory: draining,
-          },
+          transaction: MikroOrmUnitOfWorkTransaction,
+          outbox: { destinations: [POSTS], useFactory: draining },
         }),
       ],
       controllers: [ArrivalsController],
@@ -196,19 +204,23 @@ describe('one hop between two services, over the in-process transport', () => {
             allowGlobalContext: true,
           }),
         ),
+        OutboxModule.forRoot({
+          imports: [ConsumingClientModule],
+          transports: {
+            [POSTS]: ClientProxyTransport(ConsumingClient, {
+              toPacket: OutboxPackets.memory,
+            }),
+          },
+          route: routeOf,
+          relay: { enabled: false },
+        }),
+        MikroOrmOutboxModule.forRoot({ producer: 'consuming-service' }),
         TransportEventBusModule.forRoot({
           identity: TransportIdentity.named('consuming-service'),
           requestContext: CorrelatedRequestContext,
-          inbox: true,
-          outbox: {
-            imports: [ConsumingClientModule],
-            destinations: {
-              [POSTS]: ClientProxyTransport(ConsumingClient, {
-                toPacket: OutboxPackets.memory,
-              }),
-            },
-            useFactory: draining,
-          },
+          transaction: MikroOrmUnitOfWorkTransaction,
+          inbox: { descriptions: MikroOrmOutboxStore },
+          outbox: { destinations: [POSTS], useFactory: draining },
         }),
       ],
       controllers: [PostEventsController],
@@ -216,8 +228,8 @@ describe('one hop between two services, over the in-process transport', () => {
     });
     wire.toConsuming.push(consuming.server);
 
-    publishingBus = publishing.app.get(TRANSPORT_EVENT_BUS_SERVICE);
-    consumingBus = consuming.app.get(TRANSPORT_EVENT_BUS_SERVICE);
+    publishingBus = publishing.app.get(TransportEventBusService);
+    consumingBus = consuming.app.get(TransportEventBusService);
     arrivals = publishing.app.get(Arrivals);
     received = consuming.app.get(Received);
     inbox = consuming.app.get(MikroOrmOutboxStore);

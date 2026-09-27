@@ -17,6 +17,7 @@
     "@nestposts/notifications": "workspace:*",
     "@nestposts/observability": "workspace:*",
     "@nestposts/organizations": "workspace:*",
+    "@nestposts/outbox-mikro-orm": "workspace:*",
     "@nestposts/platform": "workspace:*",
     "@nestposts/posts": "workspace:*",
     "@nestposts/retry-policy": "workspace:*",

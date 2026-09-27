@@ -48,7 +48,6 @@ export namespace CompletePostWithDefaultTagCommand {
       this.publisher
         .mergeObjectContext(post, this.request)
         .complete([defaultTag], new Date());
-      await this.posts.save(post);
       post.commit();
     }
   }

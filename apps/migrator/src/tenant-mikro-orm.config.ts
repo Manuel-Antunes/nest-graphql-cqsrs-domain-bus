@@ -4,8 +4,8 @@ import {
   ROOT_TENANT_SCHEMA,
   SYSTEM_SCHEMA,
   TENANT_SCHEMA,
+  TRANSPORT_SCHEMA,
 } from '@nestposts/database';
-import { TRANSPORT_SCHEMA } from '@nestposts/transport-eventbus/persistence/transport-schema';
 
 import { bootstrap, liveSchemas } from './app/bootstrap';
 import { migrationFiles } from './app/connections';

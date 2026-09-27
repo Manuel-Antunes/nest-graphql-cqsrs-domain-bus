@@ -2,6 +2,7 @@ import 'server-only';
 
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { OutboxModule } from '@nestjs/outbox';
 import { BetterAuthModule } from '@nestposts/auth/infrastructure/better-auth/better-auth.module';
 import { BillingInfrastructureModule } from '@nestposts/billing/infrastructure/billing-infrastructure.module';
 import { CqsrsModule } from '@nestposts/cqsrs';
@@ -17,6 +18,12 @@ import { organizationAuthPluginProviders } from '@nestposts/organizations/infras
 import { OrganizationsInfrastructureModule } from '@nestposts/organizations/infrastructure/organizations-infrastructure.module';
 import { OrganizationEntities } from '@nestposts/organizations/infrastructure/persistence/organization-entities';
 import {
+  MikroOrmOutboxModule,
+  MikroOrmUnitOfWorkTransaction,
+  OutboxHousekeepingModule,
+} from '@nestposts/outbox-mikro-orm';
+import {
+  routeOf,
   TRANSPORT_EVENT_BUS_PUBLISHER,
   TransportEventBusModule,
   TransportIdentity,
@@ -89,15 +96,35 @@ const billing = billingConfig().polar;
       http: false,
       migrations: { migrationsList: tenantMigrations },
     }),
+    OutboxModule.forRootAsync({
+      imports: [WebEventsClientModule],
+      transports: WebEventsClient.destinations(appConfig()),
+      inject: [outboxConfig.KEY],
+      useFactory: ({ relay, retry }: OutboxConfig) => ({
+        route: routeOf,
+        relay: { enabled: relay === 'poll' },
+        retry,
+      }),
+    }),
+    MikroOrmOutboxModule.forRootAsync({
+      inject: [appConfig.KEY],
+      useFactory: ({ name }: AppConfig) => ({ producer: name }),
+    }),
+    OutboxHousekeepingModule.forRootAsync({
+      inject: [outboxConfig.KEY],
+      useFactory: ({ relay }: OutboxConfig) => ({
+        interval: relay === 'poll' ? '1h' : false,
+      }),
+    }),
     TransportEventBusModule.forRootAsync({
       inject: [appConfig.KEY],
       useFactory: ({ name, publishes }: AppConfig) =>
         TransportIdentity.named(name, { publishes }),
+      transaction: MikroOrmUnitOfWorkTransaction,
       outbox: {
-        imports: [WebEventsClientModule],
-        destinations: WebEventsClient.destinations(appConfig()),
+        destinations: WebEventsClient.namespaces,
         inject: [outboxConfig.KEY],
-        useFactory: (outbox: OutboxConfig) => outbox,
+        useFactory: ({ relay }: OutboxConfig) => ({ relay }),
       },
     }),
     BetterAuthModule.forRoot({

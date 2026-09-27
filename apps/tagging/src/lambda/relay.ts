@@ -1,7 +1,7 @@
 import '../telemetry';
 
 import { scheduledHandler } from '@nestposts/lambda';
-import { OutboxHousekeeping } from '@nestposts/transport-eventbus';
+import { OutboxHousekeeping } from '@nestposts/outbox-mikro-orm';
 
 import { booted } from './server';
 

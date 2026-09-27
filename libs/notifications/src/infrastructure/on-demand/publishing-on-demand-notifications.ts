@@ -1,6 +1,9 @@
 import { Injectable, Optional } from '@nestjs/common';
 import { EventPublisher } from '@nestjs/cqrs';
-import { UnitOfWork, UnitOfWorkTransaction } from '@nestposts/cqsrs';
+import {
+  UnitOfWork,
+  UnitOfWorkTransaction,
+} from '@nestposts/transport-eventbus/unit-of-work/unit-of-work';
 
 import type { Notification } from '../../domain/notification/notification';
 import type { OnDemandNotifiable } from '../../domain/notification/on-demand-notifiable';

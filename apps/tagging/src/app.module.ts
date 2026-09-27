@@ -1,14 +1,22 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { OutboxModule } from '@nestjs/outbox';
 import { CqsrsModule } from '@nestposts/cqsrs';
 import { DatabaseModule, TenancyModule } from '@nestposts/database';
 import { loggingModuleAsync } from '@nestposts/observability';
 import { ErrorReportingModule } from '@nestposts/observability/error-reporting.module';
+import {
+  MikroOrmOutboxModule,
+  MikroOrmOutboxStore,
+  MikroOrmUnitOfWorkTransaction,
+  OutboxHousekeepingModule,
+} from '@nestposts/outbox-mikro-orm';
 import { Post } from '@nestposts/posts/domain/post/post.entity';
 import { postsEntities } from '@nestposts/posts/infrastructure/posts-infrastructure.module';
 import { RetryPolicyModule } from '@nestposts/retry-policy/retry-policy.module';
 import {
   IncomingRequest,
+  routeOf,
   TRANSPORT_EVENT_BUS_PUBLISHER,
   TransportEventBusModule,
   TransportIdentity,
@@ -76,16 +84,37 @@ import { PostEventsController } from './interfaces/messaging/post-events.control
         defaultMaxRetries: app.maxRetries,
       }),
     }),
+    OutboxModule.forRootAsync({
+      imports: [PostEventsClientModule],
+      transports: PostEventsClient.destinations(appConfig()),
+      inject: [outboxConfig.KEY],
+      useFactory: ({ relay, pollInterval, retry }: OutboxConfig) => ({
+        route: routeOf,
+        relay: { enabled: relay === 'poll', pollInterval },
+        retry,
+      }),
+    }),
+    MikroOrmOutboxModule.forRootAsync({
+      inject: [appConfig.KEY],
+      useFactory: ({ name }: AppConfig) => ({ producer: name }),
+    }),
+    OutboxHousekeepingModule.forRootAsync({
+      inject: [outboxConfig.KEY],
+      useFactory: ({ relay, inboxRetention }: OutboxConfig) => ({
+        interval: relay === 'poll' ? '1h' : false,
+        inboxRetention,
+      }),
+    }),
     TransportEventBusModule.forRootAsync({
       inject: [appConfig.KEY],
       useFactory: ({ name, publishes }: AppConfig) =>
         TransportIdentity.named(name, { publishes }),
-      inbox: true,
+      transaction: MikroOrmUnitOfWorkTransaction,
+      inbox: { descriptions: MikroOrmOutboxStore },
       outbox: {
-        imports: [PostEventsClientModule],
-        destinations: PostEventsClient.destinations(appConfig()),
+        destinations: PostEventsClient.namespaces,
         inject: [outboxConfig.KEY],
-        useFactory: (outbox: OutboxConfig) => outbox,
+        useFactory: ({ relay }: OutboxConfig) => ({ relay }),
       },
       eventStore: [Post],
     }),

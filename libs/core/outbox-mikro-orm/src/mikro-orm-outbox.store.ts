@@ -80,6 +80,12 @@ interface Tables {
  * ## Why the tables are read off the metadata
  * A native statement is not resolved against the schema the entity is mapped to, and a spec maps
  * every table onto a schema of its own: the metadata says where each table is.
+ *
+ * ## How it is registered
+ * `MikroOrmOutboxModule` builds it and it registers itself with the application's `OutboxStorage`,
+ * for both contracts. A transaction handle is the `EntityManager` of an open transaction — the fork
+ * `MikroOrmUnitOfWorkTransaction` hands a unit of work, or the global one while that transaction is
+ * its context.
  */
 export class MikroOrmOutboxStore
   implements OutboxStore<EntityManager>, OutboxInboxStore<EntityManager>

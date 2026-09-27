@@ -180,17 +180,21 @@ describe('a unit of work', () => {
   });
 
   describe('in a transaction', () => {
-    class RecordingTransaction extends UnitOfWorkTransaction {
-      async run<T>(work: () => Promise<T>): Promise<T> {
+    class RecordingTransaction extends UnitOfWorkTransaction<string> {
+      async run<T>(work: (transaction: string) => Promise<T>): Promise<T> {
         trace.push('begin');
         try {
-          const answer = await work();
+          const answer = await work('the-transaction');
           trace.push('transaction committed');
           return answer;
         } catch (failure) {
           trace.push('transaction rolled back');
           throw failure;
         }
+      }
+
+      detached(): UnitOfWorkTransaction<string> {
+        return this;
       }
     }
 
@@ -300,6 +304,31 @@ describe('a unit of work', () => {
       );
       await UnitOfWork.run(async () => {
         expect(UnitOfWork.current()?.transactional).toBe(false);
+      });
+    });
+
+    it('hands its listeners the handle of the open transaction, and nothing once it has committed', async () => {
+      const handles: Record<string, unknown> = {};
+
+      await UnitOfWork.run(
+        async () => {
+          const unit = UnitOfWork.current();
+          handles.work = unit?.transactionHandle;
+          unit?.on('prepareCommit', (prepared) => {
+            handles.prepareCommit = prepared.transactionHandle;
+          });
+          unit?.on('commit', (committed) => {
+            handles.commit = committed.transactionHandle;
+          });
+        },
+        undefined,
+        { transaction },
+      );
+
+      expect(handles).toEqual({
+        work: 'the-transaction',
+        prepareCommit: 'the-transaction',
+        commit: undefined,
       });
     });
   });

@@ -12,7 +12,6 @@ import { EventPattern, Payload } from '@nestjs/microservices';
 import type { OutboxEnvelope } from '@nestjs/outbox';
 import { EventType } from '@nestposts/platform/domain/shared/event-type';
 
-import { TransportRequest } from '../decorators/transport-request.decorator';
 import { MemoryClient } from '../in-memory/memory-client';
 import { EventAddress } from '../outbound/event-address';
 import { EventMessages } from '../outbound/event-messages';
@@ -26,7 +25,6 @@ import { startInProcessService } from '../testing';
 import { TransportIdentity } from '../transport-identity';
 import { reconstruct } from './event-reconstruction';
 import { IncomingRequest } from './incoming-request';
-import { TransportRequestPipe } from './transport-request.pipe';
 
 const SHOP = 'shop';
 
@@ -93,19 +91,18 @@ class ShopEventsController {
   constructor(
     private readonly arrivals: Arrivals,
     private readonly commandBus: CommandBus,
+    private readonly incoming: IncomingRequest,
   ) {}
 
-  @EventPattern<string>(EventAddress.everyEventOf(SHOP))
-  shop(
-    @Payload() envelope: OutboxEnvelope,
-    @TransportRequest() request?: AsyncContext,
-  ): Promise<void> {
+  @EventPattern(EventAddress.everyEventOf(SHOP))
+  shop(@Payload() envelope: OutboxEnvelope): Promise<void> {
+    const request = this.incoming.from(envelope);
     this.arrivals.arrivals.push(new Arrival(reconstruct(envelope), request));
     return this.commandBus.execute(new NoteTheOrder('o-1'), request);
   }
 }
 
-describe('one entry per namespace, through @Payload() and @TransportRequest()', () => {
+describe('one entry per namespace, through @Payload() and the IncomingRequest', () => {
   let consuming: Awaited<ReturnType<typeof startInProcessService>>;
   let publishing: MemoryClient;
   let messages: EventMessages;
@@ -158,7 +155,6 @@ describe('one entry per namespace, through @Payload() and @TransportRequest()', 
       controllers: [ShopEventsController],
       providers: [
         IncomingRequest,
-        TransportRequestPipe,
         { provide: RequestContextCodec, useClass: CorrelatedRequestContext },
         Arrivals,
         NoteTheOrderHandler,

@@ -25,11 +25,28 @@ export type UnitOfWorkListener = (unit: UnitOfWork) => Promise<void> | void;
  * run once it has committed, which is what keeps the rest of the process from hearing about writes
  * that are still invisible to everybody else.
  *
- * The library knows no database; an application binds the implementation of the ORM it uses.
+ * This library knows no database: the application names the implementation of the ORM it uses,
+ * `TransportEventBusModule.forRoot({ transaction: MikroOrmUnitOfWorkTransaction })`, and every
+ * command, every ingested message and every publish nobody staged runs in it.
+ *
+ * `Tx` is that ORM's transaction **handle** — MikroORM's transactional `EntityManager`, Drizzle's
+ * `tx` — and the unit keeps it while the transaction is open ({@link UnitOfWork.transactionHandle}),
+ * so whoever writes inside the unit without owning its transaction (the outbox, the inbox) writes
+ * through the same one. It is `@nestjs/outbox`'s `Tx`.
  */
-export abstract class UnitOfWorkTransaction {
-  /** Runs `work` in a transaction that commits when it resolves and rolls back when it throws. */
-  abstract run<T>(work: () => Promise<T>): Promise<T>;
+export abstract class UnitOfWorkTransaction<Tx = unknown> {
+  /**
+   * Runs `work` in a transaction that commits when it resolves and rolls back when it throws, and
+   * hands it the transaction's handle. A transaction already open is joined.
+   */
+  abstract run<T>(work: (transaction: Tx) => Promise<T>): Promise<T>;
+
+  /**
+   * The same, in a transaction of its **own** even when one is open. It is for work that nobody
+   * awaits inside the caller's transaction — an unawaited `aggregate.commit()` — which as part of
+   * that transaction would still be running after it had committed.
+   */
+  abstract detached(): UnitOfWorkTransaction<Tx>;
 }
 
 /** How a unit of work that is **started** — not joined — treats the work it tracked. */
@@ -98,6 +115,8 @@ export class UnitOfWork {
   private readonly pending = new Set<Promise<unknown>>();
 
   private readonly failures: unknown[] = [];
+
+  private handle: unknown;
 
   private constructor(
     readonly request?: object,
@@ -235,6 +254,16 @@ export class UnitOfWork {
     return this.options.transaction !== undefined;
   }
 
+  /**
+   * The handle of the transaction this unit's work and its `prepareCommit` phase run in — what
+   * {@link UnitOfWorkTransaction.run} handed over — while that transaction is open, and `undefined`
+   * before, after, and for a unit without one. Writing through it is what puts a write in the unit's
+   * transaction without owning it.
+   */
+  get transactionHandle(): unknown {
+    return this.handle;
+  }
+
   async commit(): Promise<void> {
     await this.prepare();
     await this.complete();
@@ -273,9 +302,18 @@ export class UnitOfWork {
   }
 
   private transactionally<T>(work: () => Promise<T>): Promise<T> {
-    return this.options.transaction
-      ? this.options.transaction.run(work)
-      : work();
+    const { transaction } = this.options;
+    if (!transaction) {
+      return work();
+    }
+    return transaction.run(async (handle) => {
+      this.handle = handle;
+      try {
+        return await work();
+      } finally {
+        this.handle = undefined;
+      }
+    });
   }
 
   async rollback(): Promise<void> {

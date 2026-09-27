@@ -46,6 +46,9 @@
       "path": "../../libs/tanstack-query-graphql"
     },
     {
+      "path": "../../libs/core/outbox-mikro-orm"
+    },
+    {
       "path": "../../libs/organizations"
     },
     {

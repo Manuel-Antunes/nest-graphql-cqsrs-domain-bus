@@ -13,6 +13,9 @@
       "path": "../core/validated-dto/tsconfig.lib.json"
     },
     {
+      "path": "../core/transport-eventbus/tsconfig.lib.json"
+    },
+    {
       "path": "../platform/tsconfig.lib.json"
     },
     {

@@ -1,5 +1,5 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
-import { OutboxHousekeeping } from '@nestposts/transport-eventbus';
+import { OutboxHousekeeping } from '@nestposts/outbox-mikro-orm';
 
 import { env } from '@/env.mjs';
 import { Nest } from '@/nest/container';

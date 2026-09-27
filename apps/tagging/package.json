@@ -10,6 +10,7 @@
     "@nestposts/microservices-aws": "workspace:*",
     "@nestposts/microservices-inngest": "workspace:*",
     "@nestposts/observability": "workspace:*",
+    "@nestposts/outbox-mikro-orm": "workspace:*",
     "@nestposts/platform": "workspace:*",
     "@nestposts/posts": "workspace:*",
     "@nestposts/retry-policy": "workspace:*",

@@ -175,7 +175,15 @@ silently when it is changed**, so that it cannot be forgotten by whoever adds th
 same cookie against the same row. On two domains that needs a cookie domain, a SameSite policy and a
 CORS list that all agree. Behind one router it needs nothing: `/graphql` goes to the gateway,
 `/api/auth` to the API function, everything else to the Next server, and the browser stays where it
-logged in. The subgraphs keep their own Function URLs, which the gateway calls — and which anything
+logged in.
+
+**Except billing, which goes back to the Next server** — `/api/auth/billing`, `/api/auth/checkout`
+and `/api/auth/polar` are routed to its function URL in `web/index.ts` (the router picks the longest
+prefix, so they win over `/api/auth`). The billing plugins are contributed only to the web's Better
+Auth instance, where the listeners that grant `author` live; the API's instance has none of those
+endpoints, and with the one `/api/auth` route the plans page loaded and every call it made answered
+`404` — the webhook included. Locally nothing routes: the web serves the whole of `/api/auth` itself,
+which is why only a deployed stage could show it. The subgraphs keep their own Function URLs, which the gateway calls — and which anything
 that can reach them can call too; the gateway is the place for a policy about who may.
 
 ### Files: one bucket, served by the same router
@@ -323,6 +331,24 @@ npx sst secret set AuthSecret "$(openssl rand -base64 32)" --stage dev
 ```
 
 The web's outbox-sweep bearer is derived from it, so there is no second one to set.
+
+Billing is three more, all **optional**, and a stage that sets none of them deploys with billing
+off — each is an `sst.Secret` with a placeholder, so a missing one is a value and not a failed deploy:
+
+```bash
+npx sst secret set PolarAccessToken <token> --stage dev        # '' by default: billing off
+npx sst secret set PolarEnvironment production --stage prod    # 'sandbox' by default
+npx sst secret set PolarWebhookSecret whsec_… --stage dev      # '' by default: no webhooks
+```
+
+- **The server is Polar's sandbox unless a stage says otherwise.** The root `.env` holds a
+  PRODUCTION token, and a stage that inherited it would sell for real from a throwaway deploy — so
+  the token is a secret per stage and never read from the `.env`, and `production` has to be set by
+  hand where it is meant.
+- **The webhook secret belongs to an endpoint registered in Polar at
+  `<router>/api/auth/polar/webhooks`** — Polar generates it when the endpoint is created. Without it
+  checkout and the portal still work and nothing reacts to a subscription: no `author` role, no email.
+- They reach `apps/web` only: it is the one process holding the billing plugins.
 
 And the telemetry destination, which is **not** a secret but the `.env` at the root — `sst deploy`
 loads it by itself, and `.env.example` is the template:

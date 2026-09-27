@@ -11,7 +11,11 @@ import {
 } from '@nestjs/cqrs';
 import type { ReadPacket } from '@nestjs/microservices';
 import type { OutboxEnvelope } from '@nestjs/outbox';
-import { ClientProxyTransport, OutboxRelay } from '@nestjs/outbox';
+import {
+  ClientProxyTransport,
+  OutboxModule,
+  OutboxRelay,
+} from '@nestjs/outbox';
 import type { TestingModule } from '@nestjs/testing';
 import { Test } from '@nestjs/testing';
 import { CqsrsModule } from '@nestposts/cqsrs';
@@ -20,9 +24,14 @@ import {
   TestSchemaModule,
   testDatabaseConfig,
 } from '@nestposts/database/testing';
+import {
+  MikroOrmOutboxModule,
+  MikroOrmUnitOfWorkTransaction,
+} from '@nestposts/outbox-mikro-orm';
 import { EventType } from '@nestposts/platform/domain/shared/event-type';
 
 import { TRANSPORT_EVENT_BUS_PUBLISHER } from '../constants';
+import { routeOf } from '../outbound/event-messages';
 import { OutboxPackets } from '../outbound/outbox-packets';
 import { identifierOf } from '../outbound/transport-metadata';
 import { RecordingClient } from '../testing/recording-client';
@@ -136,20 +145,24 @@ describe('the outbox, as the transport bus writes it', () => {
           }),
         ),
         TestSchemaModule.forRoot(),
+        OutboxModule.forRoot({
+          imports: [BrokerModule],
+          transports: {
+            things: ClientProxyTransport(Broker, {
+              toPacket: OutboxPackets.memory,
+            }),
+          },
+          route: routeOf,
+          relay: { enabled: relay === 'poll', pollInterval: '1s' },
+          retry: { attempts: 3, backoff: { delay: 1, jitter: 'none' } },
+        }),
+        MikroOrmOutboxModule.forRoot({ producer: 'things-api' }),
         TransportEventBusModule.forRoot({
           identity: 'things-api',
+          transaction: MikroOrmUnitOfWorkTransaction,
           outbox: {
-            imports: [BrokerModule],
-            destinations: {
-              things: ClientProxyTransport(Broker, {
-                toPacket: OutboxPackets.memory,
-              }),
-            },
-            useFactory: () => ({
-              relay,
-              pollInterval: '1s',
-              retry: { attempts: 3, backoff: { delay: 1, jitter: 'none' } },
-            }),
+            destinations: ['things'],
+            useFactory: () => ({ relay }),
           },
         }),
       ],

@@ -1,6 +1,5 @@
 import type { ConfigType } from '@nestjs/config';
 import { registerAs } from '@nestjs/config';
-import type { TransportOutboxSettings } from '@nestposts/transport-eventbus';
 import { z } from 'zod';
 
 const OutboxEnvSchema = z.object({
@@ -21,7 +20,7 @@ export const outboxConfig = registerAs('outbox', () => {
     pollInterval: parsed.POSTS_OUTBOX_POLL_INTERVAL_MS,
     retry: { attempts: parsed.POSTS_OUTBOX_RETRY_ATTEMPTS },
     inboxRetention: `${parsed.POSTS_INBOX_RETENTION_DAYS}d` as const,
-  } satisfies TransportOutboxSettings;
+  };
 });
 
 export type OutboxConfig = ConfigType<typeof outboxConfig>;

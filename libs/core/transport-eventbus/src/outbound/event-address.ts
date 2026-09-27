@@ -3,12 +3,9 @@ import { Logger } from '@nestjs/common';
 import {
   eventTagsOf,
   eventTypeOf,
-  namespaceIn,
-  qualifiedNameIn,
   requireEventTypeOf,
 } from '@nestposts/platform/domain/shared/event-type';
 
-import { TRANSPORT_EVENT_BUS_PATTERN } from '../constants';
 import type { WireTag } from './message-headers';
 import { identifierOf, wireTagsOf } from './transport-metadata';
 
@@ -53,14 +50,6 @@ export class EventAddress {
   ) {}
 
   /**
-   * Reads the address off the event.
-   *
-   * ## An event with no `@EventType`
-   * Gets the identity upstream gives it: **its class name**, no namespace and no version. It has no
-   * namespace for a destination to take, and therefore stays in the process, which is the right
-   * default for the events most of a domain is made of.
-   */
-  /**
    * **The pattern the event is emitted under** — RabbitMQ's routing key, and what
    * {@link MemoryClient} matches a binding against.
    *
@@ -79,21 +68,23 @@ export class EventAddress {
    * says so. And there is no `switch` over event types, which is the point: a new event in the domain
    * goes out routed already, because the key is derived from metadata the event already carries.
    *
-   * ## An event with no `@EventType`
-   * Has no namespace, so there is no key to build: it answers upstream's single pattern — and never
-   * leaves, since no destination takes an event with no namespace.
-   *
    * ## A transport that addresses differently
    * Does it in its own `toPacket` ({@link OutboxPackets}), which receives the message and answers the
    * pattern the transporter sends under — Inngest's qualified name, a Kafka topic. That is the one
    * place that already knows the protocol, and it is why this is a property and not an abstraction.
    */
   get routingKey(): string {
-    return this.namespace
-      ? `${this.qualifiedName}.${this.orderingKey}`
-      : TRANSPORT_EVENT_BUS_PATTERN;
+    return `${this.qualifiedName}.${this.orderingKey}`;
   }
 
+  /**
+   * Reads the address off the event.
+   *
+   * ## An event with no `@EventType`
+   * Gets the identity upstream gives it: **its class name**, no namespace and no version. It has no
+   * namespace for a destination to take, and therefore stays in the process, which is the right
+   * default for the events most of a domain is made of.
+   */
   static of(event: object): EventAddress {
     const metadata = eventTypeOf(event);
     const tags = wireTagsOf(eventTagsOf(event));
@@ -145,21 +136,6 @@ export class EventAddress {
     return typeof target === 'string'
       ? `${target}.${EventAddress.EVERY_SEGMENT}`
       : `${requireEventTypeOf(target).qualifiedName}.${EventAddress.ONE_SEGMENT}`;
-  }
-
-  static fromMessageType(
-    messageType: string,
-    identifier: string,
-    tags: readonly WireTag[],
-  ): EventAddress {
-    return new EventAddress(
-      messageType,
-      qualifiedNameIn(messageType),
-      namespaceIn(messageType),
-      identifier,
-      EventAddress.orderingKeyOf(messageType, tags),
-      tags,
-    );
   }
 
   /**

@@ -1,9 +1,16 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { OutboxModule } from '@nestjs/outbox';
 import { CqsrsModule } from '@nestposts/cqsrs';
 import { DatabaseModule, TenancyModule } from '@nestposts/database';
 import { loggingModuleAsync } from '@nestposts/observability';
 import { ErrorReportingModule } from '@nestposts/observability/error-reporting.module';
+import {
+  MikroOrmOutboxModule,
+  MikroOrmOutboxStore,
+  MikroOrmUnitOfWorkTransaction,
+  OutboxHousekeepingModule,
+} from '@nestposts/outbox-mikro-orm';
 import { Post } from '@nestposts/posts/domain/post/post.entity';
 import { postsEntities } from '@nestposts/posts/infrastructure/posts-infrastructure.module';
 import { RetryPolicyModule } from '@nestposts/retry-policy/retry-policy.module';
@@ -70,11 +77,18 @@ import { ExceptionProducers } from './infrastructure/transport/exception-produce
         defaultMaxRetries: app.maxRetries,
       }),
     }),
+    OutboxModule.forRoot({ relay: { enabled: false } }),
+    MikroOrmOutboxModule.forRootAsync({
+      inject: [appConfig.KEY],
+      useFactory: ({ name }: AppConfig) => ({ producer: name }),
+    }),
+    OutboxHousekeepingModule.forRoot({}),
     TransportEventBusModule.forRootAsync({
       inject: [appConfig.KEY],
       useFactory: ({ name, publishes }: AppConfig) =>
         TransportIdentity.named(name, { publishes }),
-      inbox: true,
+      transaction: MikroOrmUnitOfWorkTransaction,
+      inbox: { descriptions: MikroOrmOutboxStore },
       eventStore: [Post],
     }),
   ],
