@@ -686,7 +686,12 @@ gives it under the **`apps` profile**, so `docker compose --profile apps up` run
   typechecks against `@nestposts/*`, which resolve through their **`dist`** — so on a machine that
   had never run `pnpm build`, `nx build @nestposts/web` failed with
   `Cannot find module '@nestposts/auth/domain/auth/auth.service'`. It passed locally only because
-  some earlier run had left the `dist` behind.
+  some earlier run had left the `dist` behind. **It depends on `^typecheck` too**, for the same
+  reason one step further: `apps/web/tsconfig.json` references `libs/ui` and
+  `libs/tanstack-query-graphql`, SOURCE packages with no `build`, and a referenced composite project
+  is read through its declarations — so without their `typecheck` the build fails with `TS6305:
+  Output file 'libs/ui/dist/…d.ts' has not been built`. The `web` CI job never saw it, because it
+  runs every `typecheck` first; the `test-e2e` job, which builds the web alone, failed on it for days.
 
 ### The choreographed saga: a post is born in two phases
 

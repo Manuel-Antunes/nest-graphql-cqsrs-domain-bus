@@ -37,13 +37,17 @@ describe('the wiring that fails silently', () => {
   let module: TestingModule;
 
   beforeAll(async () => {
+    vi.stubEnv('POSTS_OUTBOX_RELAY', 'off');
     module = await Test.createTestingModule({
       imports: [AppModule],
     }).compile();
     await module.init();
   });
 
-  afterAll(() => module.close());
+  afterAll(async () => {
+    await module.close();
+    vi.unstubAllEnvs();
+  });
 
   it('registers every event handler and saga the application layer declares', async () => {
     const declared: string[] = [];
