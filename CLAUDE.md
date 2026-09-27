@@ -43,7 +43,8 @@ The only exceptions:
    — they were stripped on arrival, as every registry file is — and its CSS keeps its own.
 3. **The in-house libraries** — `libs/core/cqsrs`, `libs/database`, `libs/core/validated-dto`,
    `libs/core/transport-eventbus`, `libs/core/outbox-mikro-orm`, `libs/core/microservices-aws`,
-   `libs/core/microservices-inngest`, `libs/core/mail`, `libs/core/federation-gateway`,
+   `libs/core/microservices-inngest`, `libs/core/microservices-memory`, `libs/core/mail`,
+   `libs/core/federation-gateway`,
    `libs/core/observability`, `libs/notifications`, `libs/asset`, `libs/auth` and
    `libs/organizations` — may
    carry **JSDoc**, and only JSDoc
@@ -358,6 +359,10 @@ libs/core/microservices-aws  SNS and SQS as a plain Nest transport: the client p
                          environment: the application hands every client a clientConfig
 libs/core/microservices-inngest  Inngest as a plain Nest transport: InngestClientProxy, InngestStrategy,
                          InngestContext. Same rule; the application builds the Inngest client
+libs/core/microservices-memory  the process as a plain Nest transport: TopicMemoryServer, @camcima's
+                         MemoryServer matching a routing key against every binding (`*`, `#`) and
+                         delivering a JSON copy. No client: an app with no broker routes its outbox
+                         `local`, and a suite delivers on `server.emit`. It has a README
 libs/core/retry-policy   @RetryPolicy for an @EventPattern handler, and one ExceptionProducer per
                          transport (SQS, Inngest, RabbitMQ with its dead-letter topology) — see its
                          README
@@ -562,7 +567,7 @@ account of what came from where; read the second before changing the library's s
 - **The namespace is the routing, and the event declares nothing else.** A destination is
   `@nestjs/outbox`'s own `ClientProxyTransport(Client, { toPacket: OutboxPackets.for(transport) })`,
   keyed by the namespace it carries in the root `OutboxModule`'s `transports`, and the outbox's
-  `route` (`routeOf`) reads the namespace off each message. The bus is told the same namespaces as
+  `route` (`OutboxRoute.over(transports)`) reads the namespace off each message. The bus is told the same namespaces as
   `outbox.destinations`, from the one list each client declares (`PostEventsClient.namespaces`, which
   its `destinations()` maps). There is no `@Publisher` and no `@TransportType`: either would
   be the same fact twice and a deployment detail inside a domain event — which is also why
@@ -572,7 +577,7 @@ account of what came from where; read the second before changing the library's s
   `AppModule` (whose inbound transport injects the same `Inngest`).
 - **The outbox is the application's, declared at its root; the bus only uses it.** Each `AppModule`
   lists, in this order, `OutboxModule.forRootAsync({ imports: [PostEventsClientModule], transports,
-  useFactory: → { route: routeOf, relay: { enabled }, retry } })` (`@nestjs/outbox`, global),
+  useFactory: → { route: OutboxRoute.over(transports), relay: { enabled }, retry } })` (`@nestjs/outbox`, global),
   `MikroOrmOutboxModule.forRootAsync(→ { producer })` (the store, registered with `OutboxStorage`,
   and the three tables `transport.outbox_messages`, `outbox_dead_letters`, `outbox_inbox`),
   `OutboxHousekeepingModule` and then `TransportEventBusModule.forRootAsync(...)`: `identity`,
@@ -613,9 +618,30 @@ account of what came from where; read the second before changing the library's s
   and the strategies their default deserializers: there is no envelope serializer or deserializer any
   more, and nothing in `libs/core/microservices-aws` or `-inngest` knows an envelope exists.
 - **Four transports, one wire.** RabbitMQ, AWS (`SnsClientProxy` out, `SqsStrategy` in — the topic is
-  the exchange, a subscription's **filter policy** is the binding), Inngest and the in-process pair.
+  the exchange, a subscription's **filter policy** is the binding), Inngest and the process itself.
   `SqsStrategy` runs either as a polling loop (`queueUrl`) or driven by a Lambda (`processSqsEvent`,
   which reports `batchItemFailures`); the controllers, the handlers and the events are the same on all.
+- **With no broker, the outbox delivers `local` — and that is how the event reaches the bus.**
+  `<APP>_TRANSPORT=memory` registers **no** transport (`destinations()` answers `{}`, the client is
+  `null`), and `OutboxRoute` sends a namespace the outbox has no transport for to `@nestjs/outbox`'s
+  own `local` transport — claimed, delivered and marked published like any message. `local` runs the
+  `@OnOutboxMessage()` handlers by **exact** topic, which is why the topic is the qualified name;
+  `TransportEventBusModule` declares one for every event of `outbox.destinations` (`LocalDelivery`),
+  which restores the event — its class, its identifier, **no** ingestion mark: it is this service's
+  own decision, and `TaggingStandIn` and `ProjectPostCompletion` read `isIngested` — and publishes it
+  on the `EventBus`, in a unit of work of its own, in the tenant the message names (it opens it: the
+  relay runs outside any request and any enhancer), with the inbox row under the service's name. So
+  the handlers and the sagas of an event with no broker run **through the outbox, after the commit**,
+  and not at the commit: the bus is given the **same** route (`outbox.useFactory → route`,
+  `PostEventsClient.route(app)` in both places) and `TransportEventBusService` skips at the commit
+  what `EventOutbox.deliversLocally`. Without that route the commit tells everything and
+  `LocalDelivery` only acknowledges, with a warning. Two consequences: in `poll` a command answers
+  before those handlers run, as it would across a broker; and the request is restored from the headers
+  at each hop — one correlation id, not one `AsyncContext` object, which is what posts-api's e2e
+  asserts. An application's own `@OnOutboxMessage(qualifiedName, { consumer })` runs beside it, outside
+  Nest's enhancers. It replaced a `MemoryClient({ servers: [] })`, which published to nobody, and the
+  client is gone: the memory transport is `TopicMemoryServer` (`libs/core/microservices-memory`), and
+  a suite delivers on `server.emit(routingKey, envelope)`.
 - **Inngest is the local default** (`libs/core/transport-eventbus/src/inngest`), and it inverts
   who calls whom: a broker delivers, Inngest **invokes**. The client proxy sends an event, the
   strategy turns every `@EventPattern` into a function and serves it over the host application's
@@ -650,8 +676,10 @@ account of what came from where; read the second before changing the library's s
   binds the namespace because it keeps the Post's whole stream; `apps/posts-api` binds the one type it
   waits for.
 - **The routing key is the event's own** (`EventAddress.routingKey`): `namespace.Name.aggregateTag`,
-  which is what lets a consumer bind to `posts.PostCreated.*`. It is the outbox message's `topic`, the
-  pattern every transport but Inngest emits under.
+  which is what lets a consumer bind to `posts.PostCreated.*`. It is **not** the outbox message's
+  `topic` — that is the qualified name, `posts.PostCreated`, what `@OnOutboxMessage()` matches — but
+  the pattern RabbitMQ and SNS are sent, which their packet reads back off the message's headers
+  (`EventAddress.ofMessage`), so a row staged before the topic changed still routes the same.
 - **Three guards keep one delivery one thing**: the origin mark on the message (an event this service
   produced and got back is dropped, which is what cuts the publish/ingest loop), the inbox row written
   in the same transaction as the work, and the aggregate's own state — the last one being the only one
@@ -1349,7 +1377,7 @@ Four levels, and each answers something the others cannot:
 |---|---|---|
 | unit / slice | every project, beside the code | the rule, the handler, the mapping |
 | integration | `libs/core/transport-eventbus/src/**`, `libs/auth/src/infrastructure/persistence`, `apps/posts-api/test/persistence` | the envelope, the routing table's refusals, the inbox, the event store and its replay, the ORM mapping — and that Better Auth writes and reads through the entities `libs/auth` maps by hand |
-| one hop, in process | `libs/core/transport-eventbus/src/in-memory/transport-loop.spec.ts` | two services over `MemoryServer` + `MemoryClient`, each able to reach the other: the real class arrives, the request is restored, a redelivery is deduplicated, the loop is cut |
+| one hop, in process | `libs/core/transport-eventbus/src/in-memory/transport-loop.spec.ts` | two services with no broker, each one's `local` carried by the spec to the other's `TopicMemoryServer`: the real class arrives, the request is restored, a redelivery is deduplicated, the loop is cut |
 | the whole system, in a browser | `pnpm test:web` (`apps/web-e2e`, **Playwright**) | **the packaged services over Inngest AND over real RabbitMQ**, driven through Chromium: signing in, being refused, the three states of `/posts/new`, the polymorphic `me`, a post read by someone who never signed in — and then what the browser cannot see, in the same test: each service's durable state, both inboxes, idempotency through the broker's management API, the replica channel, one correlation id across two processes, and the `x-tenant` **of the browser** on the headers of both events. Every email flow is walked through its inbox — sign-up verification, reset, magic link, email code, two factor by email, email change, account deletion, an organization invitation accepted by the invitee — plus the admin screens and an OAuth authorization code grant with PKCE through the consent screen. With a Polar SANDBOX token in `.env.test`, billing too: checkout (free, and paid with a test card) and the customer portal in Polar's own pages, and every webhook delivered back to the web through a tunnel (ngrok, else a Cloudflare quick tunnel) to an endpoint the run registers — the author role and the emails each one causes, a forged one refused, a redelivered one harmless |
 
 **`test-e2e` is the target name for every level of e2e there is**, in `apps/posts-api` and in

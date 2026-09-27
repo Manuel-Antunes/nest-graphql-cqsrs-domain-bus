@@ -12,6 +12,7 @@ import { InboxDescriptions } from './inbound/inbox-descriptions';
 import { IncomingRequest } from './inbound/incoming-request';
 import { EventMessages } from './outbound/event-messages';
 import { EventOutbox } from './outbox/event-outbox';
+import { LocalDelivery } from './outbox/local-delivery';
 import type { TransportOutboxOptions } from './outbox/transport-outbox.options';
 import { EventLog, MikroOrmEventLog } from './persistence/event-log/event-log';
 import { eventLogEntities } from './persistence/event-log/event-log.entity';
@@ -43,14 +44,18 @@ type Composed = Omit<TransportEventBusModuleOptions, 'identity' | 'publishes'>;
  * to. So is the transaction its units of work run in, which the application names for its ORM.
  *
  * ```ts
+ * const transports = {
+ *   [POSTS_NAMESPACE]: ClientProxyTransport(PostEventsClient, { toPacket: OutboxPackets.for('rabbitmq') }),
+ * };
+ *
  * @Module({
  *   imports: [
  *     CqsrsModule.forRoot({ aggregatePublisher: TRANSPORT_EVENT_BUS_PUBLISHER }),
  *     DatabaseModule.forRoot(mikroOrmConfig()),
  *     OutboxModule.forRoot({
  *       imports: [PostEventsClientModule],
- *       transports: { [POSTS_NAMESPACE]: ClientProxyTransport(PostEventsClient, { toPacket: OutboxPackets.for('rabbitmq') }) },
- *       route: routeOf,
+ *       transports,
+ *       route: OutboxRoute.over(transports),
  *     }),
  *     MikroOrmOutboxModule.forRoot({ producer: 'tagging' }),
  *     TransportEventBusModule.forRoot({
@@ -68,7 +73,9 @@ type Composed = Omit<TransportEventBusModuleOptions, 'identity' | 'publishes'>;
  * ## What it decides for the application, and what it leaves to it
  * It decides the **shape**: which providers exist, with which defaults — the request codec that
  * carries correlation, the unit of work around every command, the ingestion that only exists for a
- * service that receives, the outbox writer that only exists for one that publishes. What it leaves to
+ * service that receives, the outbox writer that only exists for one that publishes, and the
+ * `@OnOutboxMessage()` handler that processes what the outbox routes `local` ({@link LocalDelivery}).
+ * What it leaves to
  * the application is what only the application knows: who it is, which namespaces it publishes, the
  * outbox those go through and the database everything is written to.
  *
@@ -173,13 +180,15 @@ export class TransportEventBusModule {
 
   /**
    * {@link EventOutbox} and the messages it writes, over the application's `Outbox`: the namespaces
-   * that leave, and how this process relays them.
+   * that leave, how this process relays them, and what receives them when the outbox has no
+   * transport for their namespace.
    */
   private static outbound({ outbox }: Composed): Provider[] {
     return outbox
       ? [
           EventMessages,
           EventOutbox,
+          LocalDelivery.of(outbox.destinations),
           {
             provide: TRANSPORT_OUTBOX_DESTINATIONS,
             useValue: [...outbox.destinations],

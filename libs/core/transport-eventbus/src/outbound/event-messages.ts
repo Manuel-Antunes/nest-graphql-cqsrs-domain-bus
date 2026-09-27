@@ -1,7 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { AsyncContext } from '@nestjs/cqrs';
-import type { NewOutboxMessage, OutboxMessage } from '@nestjs/outbox';
-import { namespaceIn } from '@nestposts/platform/domain/shared/event-type';
+import type { NewOutboxMessage } from '@nestjs/outbox';
 
 import { RequestContextCodec } from '../request-context';
 import { EventTrace, injectTraceContext } from '../tracing';
@@ -23,14 +22,15 @@ import { isIngested } from './transport-metadata';
  *
  * The event says where it goes and nothing else does. `@EventType({ namespace })` is its identity on
  * the wire, and the namespace is also its destination: the outbox has one transport per namespace a
- * service publishes (`destinations` in `TransportEventBusModule`'s options), and {@link routeOf} reads
- * the namespace back off the message to pick it. There is no second declaration — no class naming
- * which events go where — to keep in step with the first.
+ * service publishes (`destinations` in `TransportEventBusModule`'s options), and {@link OutboxRoute}
+ * reads the namespace back off the message to pick it — or `local`, when the outbox has no transport
+ * for it. There is no second declaration — no class naming which events go where — to keep in step
+ * with the first.
  *
  * | | |
  * |---|---|
  * | `id` | the event's identifier — what every consumer's inbox deduplicates by |
- * | `topic` | the routing key, `namespace.Name.aggregate`, which a consumer binds to |
+ * | `topic` | the qualified name, `namespace.Name`: what happened, which is what `@OnOutboxMessage()` matches exactly. The broker's routing key adds the aggregate, in the transport's packet ({@link OutboxPackets}) |
  * | `key` | the aggregate, within the namespace: one aggregate's events are published one at a time, in commit order |
  * | `payload` | the event's fields, encoded once for JSON — a `Date` comes back a `Date` |
  * | `headers` | what is said about it: its type, who produced it, its tags, the request it belongs to and the trace it was raised in, captured now — the relay publishes later, in no request at all |
@@ -60,7 +60,7 @@ export class EventMessages {
     }
     return {
       id: address.identifier,
-      topic: address.routingKey,
+      topic: address.qualifiedName,
       key:
         address.orderingKey === EventAddress.NO_AGGREGATE
           ? null
@@ -89,12 +89,3 @@ export class EventMessages {
     };
   }
 }
-
-/**
- * **The outbox's `route`: a message goes through the transport named after its namespace** — read off
- * the message type the event declared, so the decision is the event's own.
- */
-export const routeOf = (message: OutboxMessage): string =>
-  namespaceIn(
-    (message.headers as MessageHeaders)[TRANSPORT_MESSAGE_TYPE] ?? '',
-  );

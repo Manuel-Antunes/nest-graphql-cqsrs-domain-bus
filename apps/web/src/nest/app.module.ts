@@ -23,7 +23,6 @@ import {
   OutboxHousekeepingModule,
 } from '@nestposts/outbox-mikro-orm';
 import {
-  routeOf,
   TRANSPORT_EVENT_BUS_PUBLISHER,
   TransportEventBusModule,
   TransportIdentity,
@@ -99,9 +98,9 @@ const billing = billingConfig().polar;
     OutboxModule.forRootAsync({
       imports: [WebEventsClientModule],
       transports: WebEventsClient.destinations(appConfig()),
-      inject: [outboxConfig.KEY],
-      useFactory: ({ relay, retry }: OutboxConfig) => ({
-        route: routeOf,
+      inject: [appConfig.KEY, outboxConfig.KEY],
+      useFactory: (app: AppConfig, { relay, retry }: OutboxConfig) => ({
+        route: WebEventsClient.route(app),
         relay: { enabled: relay === 'poll' },
         retry,
       }),
@@ -123,8 +122,11 @@ const billing = billingConfig().polar;
       transaction: MikroOrmUnitOfWorkTransaction,
       outbox: {
         destinations: WebEventsClient.namespaces,
-        inject: [outboxConfig.KEY],
-        useFactory: ({ relay }: OutboxConfig) => ({ relay }),
+        inject: [appConfig.KEY, outboxConfig.KEY],
+        useFactory: (app: AppConfig, { relay }: OutboxConfig) => ({
+          relay,
+          route: WebEventsClient.route(app),
+        }),
       },
     }),
     BetterAuthModule.forRoot({

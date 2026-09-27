@@ -22,16 +22,19 @@ export class TransportHeader {
 
   static envelopeOfRedelivery(
     event: StoredEvent,
-    routingKey: string,
     tags: string,
   ): Record<string, unknown> {
     return {
       id: event.identifier,
-      topic: routingKey,
+      topic: TransportHeader.qualifiedNameOf(event.message_type),
       key: null,
       headers: TransportHeader.ofRedelivery(event, tags),
       createdAt: Date.now(),
       payload: JSON.parse(event.payload),
     };
+  }
+
+  static qualifiedNameOf(messageType: string): string {
+    return messageType.split('#')[0];
   }
 }

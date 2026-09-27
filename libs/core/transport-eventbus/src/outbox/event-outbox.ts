@@ -6,6 +6,7 @@ import {
   TRANSPORT_OUTBOX_SETTINGS,
 } from '../constants';
 import { EventMessages } from '../outbound/event-messages';
+import { OutboxRoute } from '../outbound/outbox-route';
 import { UnitOfWorkTransaction } from '../unit-of-work/unit-of-work';
 import type { TransportOutboxSettings } from './transport-outbox.options';
 
@@ -50,6 +51,28 @@ export class EventOutbox {
     return events.some(
       (event) => this.messages.of(event, this.destinations) !== undefined,
     );
+  }
+
+  /**
+   * Whether the outbox delivers this event `local` — to this process's bus, through the relay, once
+   * its unit of work has committed — so the commit must not tell it too. Only with the outbox's
+   * route in the settings ({@link TransportOutboxSettings.route}).
+   */
+  deliversLocally(event: object): boolean {
+    const route = this.settings.route;
+    if (!route) {
+      return false;
+    }
+    const message = this.messages.of(event, this.destinations);
+    return (
+      message !== undefined &&
+      route({ headers: message.headers ?? {} }) === OutboxRoute.LOCAL
+    );
+  }
+
+  /** Whether this bus knows which events the outbox delivers `local` — see {@link deliversLocally}. */
+  get routesLocally(): boolean {
+    return this.settings.route !== undefined;
   }
 
   /**

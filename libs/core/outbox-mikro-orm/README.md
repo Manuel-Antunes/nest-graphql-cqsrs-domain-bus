@@ -15,9 +15,9 @@ declared:
     OutboxModule.forRootAsync({                         // @nestjs/outbox: transports, route, relay, retry
       imports: [PostEventsClientModule],
       transports: PostEventsClient.destinations(appConfig()),
-      inject: [outboxConfig.KEY],
-      useFactory: ({ relay, pollInterval, retry }: OutboxConfig) => ({
-        route: routeOf,
+      inject: [appConfig.KEY, outboxConfig.KEY],
+      useFactory: (app: AppConfig, { relay, pollInterval, retry }: OutboxConfig) => ({
+        route: PostEventsClient.route(app),
         relay: { enabled: relay === 'poll', pollInterval },
         retry,
       }),

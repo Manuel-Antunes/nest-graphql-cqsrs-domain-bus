@@ -29,7 +29,6 @@ import {
 import {
   EventTrace,
   IncomingRequest,
-  routeOf,
   TRANSPORT_EVENT_BUS_PUBLISHER,
   TransportEventBusModule,
   TransportIdentity,
@@ -127,9 +126,12 @@ import { validatedDtoClasses } from './interfaces/mapper/validated-dto.strategy'
     OutboxModule.forRootAsync({
       imports: [PostEventsClientModule],
       transports: PostEventsClient.destinations(appConfig()),
-      inject: [outboxConfig.KEY],
-      useFactory: ({ relay, pollInterval, retry }: OutboxConfig) => ({
-        route: routeOf,
+      inject: [appConfig.KEY, outboxConfig.KEY],
+      useFactory: (
+        app: AppConfig,
+        { relay, pollInterval, retry }: OutboxConfig,
+      ) => ({
+        route: PostEventsClient.route(app),
         relay: { enabled: relay === 'poll', pollInterval },
         retry,
       }),
@@ -153,8 +155,11 @@ import { validatedDtoClasses } from './interfaces/mapper/validated-dto.strategy'
       inbox: { descriptions: MikroOrmOutboxStore },
       outbox: {
         destinations: PostEventsClient.namespaces,
-        inject: [outboxConfig.KEY],
-        useFactory: ({ relay }: OutboxConfig) => ({ relay }),
+        inject: [appConfig.KEY, outboxConfig.KEY],
+        useFactory: (app: AppConfig, { relay }: OutboxConfig) => ({
+          relay,
+          route: PostEventsClient.route(app),
+        }),
       },
       requestContext: PostRequestContextCodec,
       subscriptions: appConfig().subscriptionsFromFeed,

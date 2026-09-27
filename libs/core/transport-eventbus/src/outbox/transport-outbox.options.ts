@@ -1,3 +1,5 @@
+import type { OutboxRouteFunction } from '../outbound/outbox-route';
+
 /**
  * **How this process takes part in publishing what its units of work staged.**
  *
@@ -26,6 +28,14 @@ export interface TransportOutboxSettings {
    * batches until one comes back short. Default `100`, the package's.
    */
   readonly batchSize?: number;
+  /**
+   * **The root `OutboxModule`'s `route`** ({@link OutboxRoute}), the same function. An event it
+   * routes `local` is told to this process's `EventBus` by the outbox — {@link LocalDelivery}, once
+   * the relay delivers it — and **not** at its unit of work's commit, which is where every other
+   * event is told. Without it every event is told at the commit, and a message that still goes
+   * `local` is only acknowledged there.
+   */
+  readonly route?: OutboxRouteFunction;
 }
 
 /**
@@ -34,16 +44,19 @@ export interface TransportOutboxSettings {
  *
  * The outbox itself is `@nestjs/outbox`'s, declared once at the application's root and global: its
  * `transports` — one `ClientProxyTransport` per namespace, around the application's client and with
- * the packet of its transport ({@link OutboxPackets}) — its `route` ({@link routeOf}), relay and
- * retry. This library writes to it and never configures it.
+ * the packet of its transport ({@link OutboxPackets}) — its `route` ({@link OutboxRoute}), relay and
+ * retry. This library writes to it and never configures it. A namespace listed here with no
+ * transport in the outbox — every one of them, for a service running with no broker — is routed to
+ * the outbox's `local` transport, and told to this process's `EventBus` there ({@link LocalDelivery})
+ * instead of at the commit, which the settings' `route` is what tells the bus.
  *
  * ```ts
  * OutboxModule.forRootAsync({
  *   imports: [PostEventsClientModule],
  *   transports: PostEventsClient.destinations(appConfig()),
- *   inject: [outboxConfig.KEY],
- *   useFactory: ({ relay, pollInterval, retry }: OutboxConfig) => ({
- *     route: routeOf,
+ *   inject: [appConfig.KEY, outboxConfig.KEY],
+ *   useFactory: (app: AppConfig, { relay, pollInterval, retry }: OutboxConfig) => ({
+ *     route: PostEventsClient.route(app),
  *     relay: { enabled: relay === 'poll', pollInterval },
  *     retry,
  *   }),
@@ -52,17 +65,18 @@ export interface TransportOutboxSettings {
  *   …,
  *   outbox: {
  *     destinations: PostEventsClient.namespaces,
- *     inject: [outboxConfig.KEY],
- *     useFactory: ({ relay }: OutboxConfig) => ({ relay }),
+ *     inject: [appConfig.KEY, outboxConfig.KEY],
+ *     useFactory: (app: AppConfig, { relay }: OutboxConfig) => ({ relay, route: PostEventsClient.route(app) }),
  *   },
  * }),
  * ```
  */
 export interface TransportOutboxOptions {
   /**
-   * The namespaces the root `OutboxModule` has a transport for — the keys of its `transports`. An
-   * event declared `@EventType({ namespace: 'posts' })` leaves when `'posts'` is here, and an event
-   * of any other namespace stays in the process.
+   * The namespaces this service publishes — the keys of the root `OutboxModule`'s `transports`, when
+   * it has a broker. An event declared `@EventType({ namespace: 'posts' })` is written to the outbox
+   * when `'posts'` is here, and an event of any other namespace stays in the process. One the outbox
+   * has no transport for goes `local`.
    */
   readonly destinations: readonly string[];
   readonly inject?: any[];

@@ -36,7 +36,6 @@ import { EventType } from '@nestposts/platform/domain/shared/event-type';
 import type { Observable } from 'rxjs';
 import { map } from 'rxjs';
 
-import { MemoryClient } from '../in-memory/memory-client';
 import { EventAddress } from '../outbound/event-address';
 import type { Ingestion } from '../outbound/transport-metadata';
 import type { ContextAttributes } from '../request-context';
@@ -175,7 +174,6 @@ class ShopEventsController {
 
 describe('the request that crosses: what a guard, a saga and a command all see', () => {
   let consuming: Awaited<ReturnType<typeof startInProcessService>>;
-  let publishing: MemoryClient;
   let seen: Seen;
   let bus: TransportEventBusService;
 
@@ -191,11 +189,7 @@ describe('the request that crosses: what a guard, a saga and a command all see',
       codec: new ShopRequestCodec(),
       request,
     });
-    await new Promise<void>((resolve, reject) =>
-      publishing
-        .emit(pattern, envelope)
-        .subscribe({ complete: () => resolve(), error: reject }),
-    );
+    await consuming.server.emit(pattern, envelope);
     await settle();
   };
 
@@ -228,7 +222,6 @@ describe('the request that crosses: what a guard, a saga and a command all see',
         OrderPlacedHandler,
       ],
     });
-    publishing = new MemoryClient({ servers: [consuming.server] });
     seen = consuming.app.get(Seen);
     bus = consuming.app.get(TransportEventBusService);
   });

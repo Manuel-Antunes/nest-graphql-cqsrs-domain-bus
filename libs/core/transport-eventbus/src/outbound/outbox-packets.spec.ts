@@ -19,7 +19,9 @@ import {
 } from './message-headers';
 import { CORRELATION_SESSION, OutboxPackets } from './outbox-packets';
 
-const TOPIC = 'posts.PostCreated.p-1';
+const TOPIC = 'posts.PostCreated';
+
+const ROUTING_KEY = 'posts.PostCreated.p-1';
 
 const envelope: OutboxEnvelope = {
   id: 'evt-1',
@@ -50,8 +52,8 @@ describe('an outbox message on each transport', () => {
   describe('RabbitMQ', () => {
     const packet = OutboxPackets.rabbitmq(message, envelope);
 
-    it('goes out under its routing key, which a topic exchange binds on', () => {
-      expect(packet.pattern).toBe(TOPIC);
+    it('goes out under its routing key, which a topic exchange binds on, and not under its topic', () => {
+      expect(packet.pattern).toBe(ROUTING_KEY);
     });
 
     it('is a record whose body is the envelope and whose AMQP headers are its headers', () => {
@@ -97,7 +99,7 @@ describe('an outbox message on each transport', () => {
 
     it('carries the envelope in the body, under the pattern a queue reads it back by', () => {
       expect(JSON.parse(first().Message ?? '')).toEqual({
-        pattern: TOPIC,
+        pattern: ROUTING_KEY,
         data: envelope,
       });
     });
@@ -112,7 +114,7 @@ describe('an outbox message on each transport', () => {
           ]),
         ),
       ).toEqual({
-        [AWS_ROUTING_KEY_ATTRIBUTE]: TOPIC,
+        [AWS_ROUTING_KEY_ATTRIBUTE]: ROUTING_KEY,
         [AWS_MESSAGE_TYPE_ATTRIBUTE]: 'posts.PostCreated#2.0.0',
         [AWS_QUALIFIED_NAME_ATTRIBUTE]: 'posts.PostCreated',
         [AWS_NAMESPACE_ATTRIBUTE]: 'posts',
@@ -166,15 +168,22 @@ describe('an outbox message on each transport', () => {
     });
   });
 
-  it('goes in process as the envelope itself', () => {
-    expect(OutboxPackets.memory(message, envelope)).toEqual({
-      pattern: TOPIC,
+  it('goes to a client in this process as the envelope itself, under the routing key', () => {
+    expect(OutboxPackets.inProcess(message, envelope)).toEqual({
+      pattern: ROUTING_KEY,
       data: envelope,
     });
   });
 
+  it('reads the routing key off the headers, whatever the topic says', () => {
+    const staged = { ...message, topic: 'posts.PostCreated.p-1' };
+
+    expect(OutboxPackets.rabbitmq(staged, envelope).pattern).toBe(ROUTING_KEY);
+    expect(OutboxPackets.inngest(staged, envelope).pattern).toBe(TOPIC);
+  });
+
   it('is picked by the kind of transport a client is', () => {
     expect(OutboxPackets.for('aws')).toBe(OutboxPackets.aws);
-    expect(OutboxPackets.for('memory')).toBe(OutboxPackets.memory);
+    expect(OutboxPackets.for('rabbitmq')).toBe(OutboxPackets.rabbitmq);
   });
 });

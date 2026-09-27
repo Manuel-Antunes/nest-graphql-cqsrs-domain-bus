@@ -31,8 +31,8 @@ import {
 import { EventType } from '@nestposts/platform/domain/shared/event-type';
 
 import { TRANSPORT_EVENT_BUS_PUBLISHER } from '../constants';
-import { routeOf } from '../outbound/event-messages';
 import { OutboxPackets } from '../outbound/outbox-packets';
+import { OutboxRoute } from '../outbound/outbox-route';
 import { identifierOf } from '../outbound/transport-metadata';
 import { RecordingClient } from '../testing/recording-client';
 import { TransportEventBusModule } from '../transport-event-bus.module';
@@ -110,6 +110,10 @@ const broker = new Broker();
 })
 class BrokerModule {}
 
+const transports = {
+  things: ClientProxyTransport(Broker, { toPacket: OutboxPackets.inProcess }),
+};
+
 @Injectable()
 class Told {
   readonly things: { thingId: string; visible: boolean }[] = [];
@@ -147,12 +151,8 @@ describe('the outbox, as the transport bus writes it', () => {
         TestSchemaModule.forRoot(),
         OutboxModule.forRoot({
           imports: [BrokerModule],
-          transports: {
-            things: ClientProxyTransport(Broker, {
-              toPacket: OutboxPackets.memory,
-            }),
-          },
-          route: routeOf,
+          transports,
+          route: OutboxRoute.over(transports),
           relay: { enabled: relay === 'poll', pollInterval: '1s' },
           retry: { attempts: 3, backoff: { delay: 1, jitter: 'none' } },
         }),

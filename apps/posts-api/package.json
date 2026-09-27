@@ -21,6 +21,7 @@
     "@nestposts/lambda": "workspace:*",
     "@nestposts/microservices-aws": "workspace:*",
     "@nestposts/microservices-inngest": "workspace:*",
+    "@nestposts/microservices-memory": "workspace:*",
     "@nestposts/notifications": "workspace:*",
     "@nestposts/observability": "workspace:*",
     "@nestposts/organizations": "workspace:*",

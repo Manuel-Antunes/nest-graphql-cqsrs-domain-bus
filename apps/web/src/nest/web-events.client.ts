@@ -9,7 +9,8 @@ import { SnsClientProxy } from '@nestposts/microservices-aws';
 import type { InngestClientProxyOptions } from '@nestposts/microservices-inngest';
 import { InngestClientProxy } from '@nestposts/microservices-inngest';
 import { NOTIFICATIONS_NAMESPACE } from '@nestposts/notifications/domain/notifications.namespace';
-import { MemoryClient, OutboxPackets } from '@nestposts/transport-eventbus';
+import type { OutboxRouteFunction } from '@nestposts/transport-eventbus';
+import { OutboxPackets, OutboxRoute } from '@nestposts/transport-eventbus';
 import { Inngest } from 'inngest';
 
 import type { AppConfig } from './config/app.config';
@@ -36,7 +37,7 @@ export class WebEventsClient {
     aws: AwsConfig,
     rabbitmq: RabbitmqConfig,
     inngestClient: InngestClientProxyOptions['inngest'],
-  ): ClientProxy {
+  ): ClientProxy | null {
     switch (app.transport) {
       case 'inngest':
         return new InngestClientProxy({ inngest: inngestClient });
@@ -46,7 +47,7 @@ export class WebEventsClient {
           clientConfig: aws.client,
         });
       case 'memory':
-        return new MemoryClient({ servers: [] });
+        return null;
       default:
         return ClientProxyFactory.create({
           transport: Transport.RMQ,
@@ -64,11 +65,18 @@ export class WebEventsClient {
   static readonly namespaces = [NOTIFICATIONS_NAMESPACE];
 
   static destinations(app: AppConfig): Record<string, Type<OutboxTransport>> {
+    if (app.transport === 'memory') {
+      return {};
+    }
     const transport = ClientProxyTransport(WebEventsClient, {
       toPacket: OutboxPackets.for(app.transport),
     });
     return Object.fromEntries(
       WebEventsClient.namespaces.map((namespace) => [namespace, transport]),
     );
+  }
+
+  static route(app: AppConfig): OutboxRouteFunction {
+    return OutboxRoute.over(WebEventsClient.destinations(app));
   }
 }

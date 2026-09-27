@@ -32,8 +32,8 @@ import {
 import { EventIngestion } from './inbound/event-ingestion';
 import { InboxDescriptions } from './inbound/inbox-descriptions';
 import { IncomingRequest } from './inbound/incoming-request';
-import { routeOf } from './outbound/event-messages';
 import { OutboxPackets } from './outbound/outbox-packets';
+import { OutboxRoute } from './outbound/outbox-route';
 import type { Ingestion } from './outbound/transport-metadata';
 import { EventOutbox } from './outbox/event-outbox';
 import { EventLog } from './persistence/event-log/event-log';
@@ -100,15 +100,17 @@ const persistence = () => [
 ];
 
 /** The application's outbox, declared at its root the way an application declares it. */
+const transports = {
+  things: ClientProxyTransport(ThingsClient, {
+    toPacket: OutboxPackets.inProcess,
+  }),
+};
+
 const outbox = (producer: string) => [
   OutboxModule.forRoot({
     imports: [ThingsClientModule],
-    transports: {
-      things: ClientProxyTransport(ThingsClient, {
-        toPacket: OutboxPackets.memory,
-      }),
-    },
-    route: routeOf,
+    transports,
+    route: OutboxRoute.over(transports),
     relay: { enabled: false },
   }),
   MikroOrmOutboxModule.forRoot({ producer }),

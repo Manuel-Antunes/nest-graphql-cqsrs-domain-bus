@@ -319,11 +319,13 @@ global — and the bus is told which namespaces it has a transport for:
 ```ts
 OutboxModule.forRootAsync({
   imports: [PostEventsClientModule],                    // OutboxModule instantiates the transports
-  transports: {
-    [POSTS_NAMESPACE]: ClientProxyTransport(PostEventsClient, { toPacket: OutboxPackets.for('rabbitmq') }),
-  },
+  transports,                                           // { [POSTS_NAMESPACE]: ClientProxyTransport(PostEventsClient, { toPacket }) }
   inject: [outboxConfig.KEY],
-  useFactory: ({ relay, retry }: OutboxConfig) => ({ route: routeOf, relay: { enabled: relay === 'poll' }, retry }),
+  useFactory: ({ relay, retry }: OutboxConfig) => ({
+    route: OutboxRoute.over(transports),                // a namespace with no transport goes `local`
+    relay: { enabled: relay === 'poll' },
+    retry,
+  }),
 }),
 MikroOrmOutboxModule.forRootAsync({                     // its store and tables, on MikroORM
   inject: [appConfig.KEY],
@@ -335,7 +337,10 @@ TransportEventBusModule.forRootAsync({
   outbox: {
     destinations: [POSTS_NAMESPACE],
     inject: [outboxConfig.KEY],
-    useFactory: ({ relay }: OutboxConfig) => ({ relay }),
+    useFactory: ({ relay }: OutboxConfig) => ({
+      relay,
+      route: OutboxRoute.over(transports),              // the same route: what goes `local` is not told at the commit
+    }),
   },
 })
 
@@ -345,7 +350,8 @@ export class PostCreatedEvent { /* … */ }
 
 **The event says what it is, and that is also where it goes.** The namespace in `@EventType` is
 already the event's identity on the wire — `posts.PostCreated#2.0.0` — and the outbox's `route` reads
-it back off each message (`routeOf`) to pick the destination under that key. An event that also named
+it back off each message (`OutboxRoute`) to pick the destination under that key, or the outbox's own
+`local` transport when there is none. An event that also named
 its destinations, or a class that listed which events it takes, would be the same fact written twice,
 in two places to keep in step, with a deployment detail sitting inside a domain event. It is also why
 `libs/posts` imports nothing from the transport: the domain events depend on `@nestposts/platform` and
@@ -441,16 +447,25 @@ one back.
 ### Four transports, and the applications cannot tell which
 
 The bus speaks through `@nestjs/microservices`, so a transport is a client and a server, plus the one
-function that turns an outbox message into that client's packet (`OutboxPackets`). There are four, and
-a controller, a handler and an event are identical on all of them:
+function that turns an outbox message into that client's packet (`OutboxPackets`). There are three
+brokers and the process itself, and a controller, a handler and an event are identical on all of them:
 
 | | RabbitMQ | AWS | Inngest | in process |
 |---|---|---|---|---|
-| the exchange | topic exchange | **SNS topic** (`SnsClientProxy`) | the Inngest app (`InngestClientProxy`) | `MemoryClient` |
-| the queue | a queue bound to `posts.#` | an **SQS queue** subscribed with a filter policy (`SqsStrategy`) | a function per binding (`InngestStrategy`) | `MemoryServer` |
-| the binding | the routing key pattern | `SnsFilterPolicy.everyEventOf(POSTS_NAMESPACE)` | the function's triggers (`inngestTriggers`) | the pattern, matched in process |
-| the packet | `RmqRecord`: the headers also as AMQP headers | `SnsRecord`: the routing facts as attributes, the aggregate as FIFO group, the envelope's id as deduplication id | `InngestRecord`: the qualified name, the envelope as `data`, `<name>:<id>` as the event id | the envelope |
+| the exchange | topic exchange | **SNS topic** (`SnsClientProxy`) | the Inngest app (`InngestClientProxy`) | none: the outbox has no transport, and its route answers `local` |
+| the queue | a queue bound to `posts.#` | an **SQS queue** subscribed with a filter policy (`SqsStrategy`) | a function per binding (`InngestStrategy`) | `@nestjs/outbox`'s `local` transport, and `LocalDelivery` telling this process's `EventBus` |
+| the binding | the routing key pattern | `SnsFilterPolicy.everyEventOf(POSTS_NAMESPACE)` | the function's triggers (`inngestTriggers`) | the topic — the qualified name — matched exactly; `LocalDelivery` takes every event the service publishes |
+| the packet | `RmqRecord`: the headers also as AMQP headers | `SnsRecord`: the routing facts as attributes, the aggregate as FIFO group, the envelope's id as deduplication id | `InngestRecord`: the qualified name, the envelope as `data`, `<name>:<id>` as the event id | the outbox message itself |
 | chosen with | `POSTS_TRANSPORT=rabbitmq` | `=aws` | `=inngest` (the default) | `=memory` |
+
+In process, the relay claims, delivers and marks published exactly as it does for a broker, and what
+receives the message is `LocalDelivery`, which tells it to this process's `EventBus`: an event with no
+broker reaches the handlers and the sagas **through the outbox**, after its unit of work has committed,
+retried when a handler fails, and not at the commit — the bus is given the outbox's route, so it knows
+which events not to tell there. That is also why the chain a mutation opens is one correlation id and
+not one `AsyncContext` object: each hop restores the request from the headers, as across a broker. A
+suite delivers what another service sends on `TopicMemoryServer.emit` (`@nestposts/microservices-memory`),
+the memory transport's server, which matches the routing key against every binding.
 
 Two things are different enough on AWS to be worth saying here. **A queue has no bindings**, so the
 selection happens twice: the subscription's *filter policy* decides what reaches the queue, and the
@@ -575,7 +590,7 @@ with.
 |---|---|---|
 | unit / slice | every project, beside the code | the rule, the handler, the mapping |
 | integration | `libs/core/transport-eventbus/src/**`, `apps/posts-api/test/persistence` | the message (a `Date` that survives the wire), each transport's packet, the outbox committing with the work and publishing after it, the outbox store against `@nestjs/outbox`'s own contract suites, the inbox rolling back with a failed reaction, the ORM mapping |
-| one hop, in process | `libs/core/transport-eventbus/src/in-memory/transport-loop.spec.ts` | two services over `MemoryServer` and `MemoryClient`, each able to reach the other: the real class arrives, the request is restored, one correlation id per request, a redelivery reaches nobody, the loop is cut |
+| one hop, in process | `libs/core/transport-eventbus/src/in-memory/transport-loop.spec.ts` | two services with no broker, each one's `local` carried to the other's `TopicMemoryServer`: the real class arrives, the request is restored, one correlation id per request, a redelivery reaches nobody, the loop is cut |
 | the whole system, in a browser | `pnpm test:web` (`apps/web-e2e`, **Playwright**) | **three processes over real RabbitMQ**, driven through Chromium: signing in and being refused, the three states of `/posts/new`, the polymorphic `me`, a post read by somebody who never signed in — and, in the same tests, what a browser cannot see: each service's durable state, both inboxes, idempotency through the broker's management API, the replica channel, **one correlation id for the whole saga**, and the `x-tenant` **of the browser** on the headers of both messages, each published by a different process |
 
 ```

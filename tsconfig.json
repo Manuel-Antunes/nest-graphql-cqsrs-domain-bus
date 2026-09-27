@@ -55,6 +55,9 @@
       "path": "./libs/core/microservices-inngest"
     },
     {
+      "path": "./libs/core/microservices-memory"
+    },
+    {
       "path": "./libs/asset"
     },
     {

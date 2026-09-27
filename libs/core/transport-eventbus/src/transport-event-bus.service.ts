@@ -152,7 +152,9 @@ export class TransportEventBusService implements IEventBus, OnModuleDestroy {
   /**
    * The three moments of a staged publish, on the unit that staged it: recorded while the unit's
    * transaction is open, told to this process once it has committed, and — with an outbox — handed
-   * to the relay after that, once per unit however many publishes it staged.
+   * to the relay after that, once per unit however many publishes it staged. An event the outbox
+   * delivers `local` is not told at the commit: the relay tells this process about it, through
+   * `LocalDelivery`, and telling it here as well would run every handler twice.
    */
   private stageIn<TEvent extends IEvent>(
     unit: UnitOfWork,
@@ -163,7 +165,9 @@ export class TransportEventBusService implements IEventBus, OnModuleDestroy {
     unit.on('prepareCommit', (prepared) =>
       this.record(staged, prepared.transactionHandle),
     );
-    unit.on('commit', () => this.dispatch(staged, dispatcherContext, context));
+    unit.on('commit', () =>
+      this.dispatch(this.toldAtCommit(staged), dispatcherContext, context),
+    );
     if (this.outbox && !this.relayed.has(unit)) {
       this.relayed.add(unit);
       const outbox = this.outbox;
@@ -207,6 +211,13 @@ export class TransportEventBusService implements IEventBus, OnModuleDestroy {
     }
     await this.log?.append(events as object[]);
     await this.outbox?.stage(events as object[], transaction);
+  }
+
+  private toldAtCommit<TEvent extends IEvent>(events: TEvent[]): TEvent[] {
+    const outbox = this.outbox;
+    return outbox
+      ? events.filter((event) => !outbox.deliversLocally(event as object))
+      : events;
   }
 
   private attach(event: object, context?: AsyncContext): void {

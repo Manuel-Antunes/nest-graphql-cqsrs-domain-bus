@@ -102,11 +102,7 @@ class BrokerWire extends Wire {
     routingKey: string,
     tags: string,
   ): unknown {
-    const envelope = TransportHeader.envelopeOfRedelivery(
-      event,
-      routingKey,
-      tags,
-    );
+    const envelope = TransportHeader.envelopeOfRedelivery(event, tags);
     return {
       properties: { headers: envelope.headers },
       routing_key: routingKey,
@@ -157,15 +153,15 @@ class InngestWire extends Wire {
    */
   async redeliver(
     event: StoredEvent,
-    routingKey: string,
+    _routingKey: string,
     tags: string,
   ): Promise<boolean> {
     const response = await fetch(`${this.baseUrl}/e/dev`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        name: event.message_type.split('#')[0],
-        data: TransportHeader.envelopeOfRedelivery(event, routingKey, tags),
+        name: TransportHeader.qualifiedNameOf(event.message_type),
+        data: TransportHeader.envelopeOfRedelivery(event, tags),
       }),
     });
     return response.ok;

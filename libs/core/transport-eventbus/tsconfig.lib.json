@@ -13,6 +13,9 @@
       "path": "../../platform/tsconfig.lib.json"
     },
     {
+      "path": "../microservices-memory/tsconfig.lib.json"
+    },
+    {
       "path": "../microservices-inngest/tsconfig.lib.json"
     },
     {

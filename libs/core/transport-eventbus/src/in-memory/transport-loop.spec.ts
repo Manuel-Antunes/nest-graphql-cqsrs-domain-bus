@@ -1,13 +1,17 @@
-import type { MemoryServer } from '@camcima/nestjs-memory-microservices';
 import { MikroOrmModule } from '@mikro-orm/nestjs';
-import { Controller, Injectable, Module } from '@nestjs/common';
+import { Controller, Injectable } from '@nestjs/common';
 import type { IEventHandler } from '@nestjs/cqrs';
 import { AsyncContext, CqrsModule, EventsHandler } from '@nestjs/cqrs';
 import { EventPattern, Payload } from '@nestjs/microservices';
-import type { OutboxEnvelope } from '@nestjs/outbox';
-import { ClientProxyTransport, OutboxModule } from '@nestjs/outbox';
+import type {
+  OutboxEnvelope,
+  OutboxHandlerContext,
+  OutboxMessage,
+} from '@nestjs/outbox';
+import { OnOutboxMessage, OutboxModule } from '@nestjs/outbox';
 import { ROOT_TENANT, TENANT_HEADER, Tenant } from '@nestposts/database';
 import { testDatabaseConfig } from '@nestposts/database/testing';
+import type { TopicMemoryServer } from '@nestposts/microservices-memory';
 import {
   MikroOrmOutboxModule,
   MikroOrmOutboxStore,
@@ -18,9 +22,9 @@ import { EventType } from '@nestposts/platform/domain/shared/event-type';
 
 import { EventIngestion } from '../inbound/event-ingestion';
 import { messageOf, reconstruct } from '../inbound/event-reconstruction';
-import { routeOf } from '../outbound/event-messages';
+import { EventAddress } from '../outbound/event-address';
 import { TRANSPORT_ORIGIN } from '../outbound/message-headers';
-import { OutboxPackets } from '../outbound/outbox-packets';
+import { OutboxRoute } from '../outbound/outbox-route';
 import type { Ingestion } from '../outbound/transport-metadata';
 import { identifierOf } from '../outbound/transport-metadata';
 import {
@@ -32,7 +36,6 @@ import { startInProcessService } from '../testing';
 import { TransportEventBusModule } from '../transport-event-bus.module';
 import { TransportEventBusService } from '../transport-event-bus.service';
 import { TransportIdentity } from '../transport-identity';
-import { MemoryClient } from './memory-client';
 
 const POSTS = 'posts';
 
@@ -67,42 +70,49 @@ class PostRequest extends AsyncContext {
 }
 
 const wire: {
-  readonly toConsuming: MemoryServer[];
-  readonly toPublishing: MemoryServer[];
+  readonly toConsuming: TopicMemoryServer[];
+  readonly toPublishing: TopicMemoryServer[];
 } = {
   toConsuming: [],
   toPublishing: [],
 };
 
-class PublishingClient extends MemoryClient {}
+const carry = async (
+  servers: readonly TopicMemoryServer[],
+  { id, topic, key, headers, createdAt, payload }: OutboxMessage,
+): Promise<void> => {
+  const routingKey = EventAddress.ofMessage({ id, topic, headers }).routingKey;
+  for (const server of servers) {
+    await server.emit(routingKey, {
+      id,
+      topic,
+      key,
+      headers,
+      createdAt,
+      payload,
+    });
+  }
+};
 
-class ConsumingClient extends MemoryClient {}
+@Injectable()
+class ToConsuming {
+  @OnOutboxMessage('posts.PostPreCreated', { consumer: 'wire', inbox: false })
+  carry(_payload: unknown, { message }: OutboxHandlerContext): Promise<void> {
+    return carry(wire.toConsuming, message);
+  }
+}
 
-@Module({
-  providers: [
-    {
-      provide: PublishingClient,
-      useFactory: () =>
-        new PublishingClient({ servers: () => wire.toConsuming }),
-    },
-  ],
-  exports: [PublishingClient],
-})
-class PublishingClientModule {}
+@Injectable()
+class ToPublishing {
+  @OnOutboxMessage('posts.PostPreCreated', { consumer: 'wire', inbox: false })
+  carry(_payload: unknown, { message }: OutboxHandlerContext): Promise<void> {
+    return carry(wire.toPublishing, message);
+  }
+}
 
-@Module({
-  providers: [
-    {
-      provide: ConsumingClient,
-      useFactory: () =>
-        new ConsumingClient({ servers: () => wire.toPublishing }),
-    },
-  ],
-  exports: [ConsumingClient],
-})
-class ConsumingClientModule {}
+const noBroker = OutboxRoute.over({});
 
-const draining = () => ({ relay: 'drain' as const });
+const local = () => ({ relay: 'drain' as const, route: noBroker });
 
 @Injectable()
 class Arrivals {
@@ -147,7 +157,7 @@ class PostEventsController {
   }
 }
 
-describe('one hop between two services, over the in-process transport', () => {
+describe('one hop between two services, with no broker between them', () => {
   let publishing: InProcessService;
   let consuming: InProcessService;
   let publishingBus: TransportEventBusService;
@@ -172,26 +182,17 @@ describe('one hop between two services, over the in-process transport', () => {
             allowGlobalContext: true,
           }),
         ),
-        OutboxModule.forRoot({
-          imports: [PublishingClientModule],
-          transports: {
-            [POSTS]: ClientProxyTransport(PublishingClient, {
-              toPacket: OutboxPackets.memory,
-            }),
-          },
-          route: routeOf,
-          relay: { enabled: false },
-        }),
+        OutboxModule.forRoot({ route: noBroker, relay: { enabled: false } }),
         MikroOrmOutboxModule.forRoot({ producer: 'publishing-service' }),
         TransportEventBusModule.forRoot({
           identity: TransportIdentity.named('publishing-service'),
           requestContext: CorrelatedRequestContext,
           transaction: MikroOrmUnitOfWorkTransaction,
-          outbox: { destinations: [POSTS], useFactory: draining },
+          outbox: { destinations: [POSTS], useFactory: local },
         }),
       ],
       controllers: [ArrivalsController],
-      providers: [Arrivals],
+      providers: [Arrivals, ToConsuming],
     });
     wire.toPublishing.push(publishing.server);
 
@@ -204,27 +205,18 @@ describe('one hop between two services, over the in-process transport', () => {
             allowGlobalContext: true,
           }),
         ),
-        OutboxModule.forRoot({
-          imports: [ConsumingClientModule],
-          transports: {
-            [POSTS]: ClientProxyTransport(ConsumingClient, {
-              toPacket: OutboxPackets.memory,
-            }),
-          },
-          route: routeOf,
-          relay: { enabled: false },
-        }),
+        OutboxModule.forRoot({ route: noBroker, relay: { enabled: false } }),
         MikroOrmOutboxModule.forRoot({ producer: 'consuming-service' }),
         TransportEventBusModule.forRoot({
           identity: TransportIdentity.named('consuming-service'),
           requestContext: CorrelatedRequestContext,
           transaction: MikroOrmUnitOfWorkTransaction,
           inbox: { descriptions: MikroOrmOutboxStore },
-          outbox: { destinations: [POSTS], useFactory: draining },
+          outbox: { destinations: [POSTS], useFactory: local },
         }),
       ],
       controllers: [PostEventsController],
-      providers: [Received, PostPreCreatedHandler],
+      providers: [Received, PostPreCreatedHandler, ToPublishing],
     });
     wire.toConsuming.push(consuming.server);
 
@@ -248,9 +240,7 @@ describe('one hop between two services, over the in-process transport', () => {
   });
 
   it('binds each service to the routing keys it declared, and to nothing else', () => {
-    expect(
-      publishing.app.get(PublishingClient, { strict: false }).bindings(),
-    ).toEqual(['posts.PostPreCreated.*']);
+    expect(publishing.server.bindings()).toEqual(['posts.PostPreCreated.*']);
   });
 
   it('carries the event across as an instance of the real class, fields and dates intact', async () => {

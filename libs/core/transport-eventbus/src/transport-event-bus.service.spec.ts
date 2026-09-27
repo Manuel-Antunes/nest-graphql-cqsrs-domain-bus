@@ -28,12 +28,12 @@ import type { Observable } from 'rxjs';
 import { map } from 'rxjs';
 
 import { TRANSPORT_EVENT_BUS_PUBLISHER } from './constants';
-import { routeOf } from './outbound/event-messages';
 import {
   TRANSPORT_MESSAGE_TYPE,
   TRANSPORT_ORIGIN,
 } from './outbound/message-headers';
 import { OutboxPackets } from './outbound/outbox-packets';
+import { OutboxRoute } from './outbound/outbox-route';
 import { RecordingClient } from './testing/recording-client';
 import { TransportEventBusModule } from './transport-event-bus.module';
 import { TransportEventBusService } from './transport-event-bus.service';
@@ -186,6 +186,12 @@ class Rabbit extends RecordingClient {}
 })
 class RabbitModule {}
 
+const transports = {
+  [SHOP]: ClientProxyTransport(Rabbit, {
+    toPacket: OutboxPackets.inProcess,
+  }),
+};
+
 const headersOf = (message: { data: unknown }) =>
   (message.data as OutboxEnvelope).headers;
 
@@ -206,12 +212,8 @@ describe('the transport event bus (the vendored base)', () => {
         TestSchemaModule.forRoot(),
         OutboxModule.forRoot({
           imports: [RabbitModule],
-          transports: {
-            [SHOP]: ClientProxyTransport(Rabbit, {
-              toPacket: OutboxPackets.memory,
-            }),
-          },
-          route: routeOf,
+          transports,
+          route: OutboxRoute.over(transports),
           relay: { enabled: false },
         }),
         MikroOrmOutboxModule.forRoot({ producer: 'the-suite' }),

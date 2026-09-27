@@ -10,6 +10,7 @@ import { SubscriptionBus } from '@nestposts/cqsrs';
 import { ROOT_TENANT_SCHEMA, TENANT_MIGRATIONS } from '@nestposts/database';
 import { migrate } from '@nestposts/migrator/main';
 import { tenantMigrations } from '@nestposts/migrator/migrations/tenant/index';
+import { correlationIdOf } from '@nestposts/transport-eventbus';
 import {
   AUTHOR_ROLE,
   Authorship,
@@ -212,7 +213,13 @@ describe('posts (e2e)', () => {
         'PostCreatedEvent',
         'NotificationReceivedEvent',
       ]);
-      expect(new Set(chain().map(requestOf)).size).toBe(1);
+      expect(
+        new Set(
+          chain().map((event) =>
+            correlationIdOf(requestOf(event) as PostRequest),
+          ),
+        ).size,
+      ).toBe(1);
     });
 
     it('rejects a blank title and a too long title with BAD_USER_INPUT', async () => {

@@ -101,9 +101,21 @@ upstream has:
 - **headers of what an event is** (`message-headers.ts`, `EventMessages`): a stable message type, a
   timestamp, the origin, the event's tags, the request and the trace — captured when the event is
   staged, because the relay publishes later, in no request at all;
-- **an address the event answers for itself** (`EventAddress`): the message type, the tags, and a topic
-  routing key of `namespace.Name.aggregateTag`, so a consumer binds to the slice it wants
-  (`EventAddress.everyEventOf`), and the ordering key a message is published under;
+- **an address the event answers for itself** (`EventAddress`): the message type, the tags, the
+  qualified name that is the outbox message's topic, and a routing key of
+  `namespace.Name.aggregateTag`, which each broker's packet reads back off the message
+  (`EventAddress.ofMessage`), so a consumer binds to the slice it wants (`EventAddress.everyEventOf`),
+  and the ordering key a message is published under;
+- **a route that knows the process is a destination too** (`OutboxRoute`, `LocalDelivery`): a namespace
+  the outbox has a transport for goes through it, and one it has none for goes to `@nestjs/outbox`'s
+  own `local` transport, where an `@OnOutboxMessage()` handler the module declares for every published
+  event restores it and tells it to the `EventBus` — which the unit of work's commit then does not,
+  because the bus is given the same route. That is where `@nestjs/outbox` and `@nestjs/cqrs` meet: an
+  event with no broker reaches its handlers through the outbox, after the commit, with its retries and
+  its inbox. It replaced a `MemoryClient` with no servers, which an application with no broker
+  published through to nobody, and the client itself is gone: a suite delivers on
+  `TopicMemoryServer.emit` (`@nestposts/microservices-memory`), which matches the bindings the way a
+  topic exchange does;
 - **one transaction per ingested message**: `EventIngestion` records the message in the inbox,
   appends it to the event log and publishes it on the local bus inside one unit of work, whose
   reactions — a projection, a saga's command — join it, and whose own events go to the outbox in the
@@ -128,8 +140,8 @@ upstream has:
   letters, a `sweep()` a schedule runs — is `OutboxHousekeeping`, in `libs/core/outbox-mikro-orm`;
 - **a trace across the hop** (`tracing.ts`): the trace an event was published in is stamped on it and
   written into its headers, and a consumer span wraps the whole ingestion;
-- the **doubles** that make all of the above testable with nothing running: `MemoryClient`,
-  `startInProcessService`, `RecordingClient` and `publishedEnvelope`;
+- the **doubles** that make all of the above testable with nothing running: `startInProcessService`
+  (on a `TopicMemoryServer`), `RecordingClient` and `publishedEnvelope`;
 - **the AWS and Inngest transports**, in `@nestposts/microservices-aws` and
   `@nestposts/microservices-inngest`: client proxies, strategies, contexts and record builders, which
   know nothing of this library. What stays here is what needs `@EventType`: the SNS filter policy built

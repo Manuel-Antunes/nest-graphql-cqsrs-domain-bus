@@ -57,7 +57,8 @@ process. `name` defaults to the class name without the `Event` suffix, `version`
 The **namespace is also the route**: the outbox's destinations are keyed by namespace, and that is
 the whole routing (step 3). An event whose namespace has no destination stays in this process, which
 is the right default for the events a domain is mostly made of — and so does an event with no
-`@EventType`, which has no namespace at all.
+`@EventType`, which has no namespace at all. The qualified name, `posts.PostCreated`, is the outbox
+message's `topic`.
 
 `tags` names the properties that identify **which aggregate** the event is about. It is the last
 segment of the routing key, so a consumer can bind to one post's stream; it is the outbox message's
@@ -83,10 +84,12 @@ import {
   OutboxHousekeepingModule,
 } from '@nestposts/outbox-mikro-orm';
 import {
-  routeOf,
+  OutboxRoute,
   TRANSPORT_EVENT_BUS_PUBLISHER,
   TransportEventBusModule,
 } from '@nestposts/transport-eventbus';
+
+const transports = PostEventsClient.destinations(appConfig());
 
 @Module({
   imports: [
@@ -94,8 +97,8 @@ import {
     DatabaseModule.forRootAsync({ /* the connection */ }),
     OutboxModule.forRoot({                                // @nestjs/outbox, global — step 3
       imports: [PostEventsClientModule],
-      transports: PostEventsClient.destinations(appConfig()),
-      route: routeOf,
+      transports,
+      route: OutboxRoute.over(transports),               // a namespace with no transport goes `local`
       relay: { enabled: true },
     }),
     MikroOrmOutboxModule.forRoot({ producer: 'tagging' }), // its store and its three tables
@@ -120,7 +123,7 @@ export class AppModule {}
 | `requestContext` | `CorrelatedRequestContext` | what a request means here |
 | `transaction` | — | the `UnitOfWorkTransaction` for the application's ORM — `MikroOrmUnitOfWorkTransaction`. Every command, every ingested message and every publish nobody staged runs in it, and the outbox and the inbox write through its handle |
 | `inbox` | — | `true`, or `{ descriptions }`, turns **receiving** on: `EventIngestion`, which admits each message through the application's `OutboxInbox`, keyed by this service's name and the envelope's id. `descriptions` is where each message's type and origin are noted beside it (`InboxDescriptions`) |
-| `outbox` | — | turns **publishing beyond this process** on: `destinations`, the namespaces the root `OutboxModule` has a transport for, and the settings (`inject` + `useFactory`, answering `TransportOutboxSettings`). Without it the bus publishes to this process only |
+| `outbox` | — | turns **publishing beyond this process** on: `destinations`, the namespaces this service publishes — the keys of the root `OutboxModule`'s `transports` when it has a broker — and the settings (`inject` + `useFactory`, answering `TransportOutboxSettings`). A destination the outbox has no transport for goes to its `local` transport, where `LocalDelivery` tells it to the `EventBus` — and the settings' `route`, the outbox's own, is what keeps the commit from telling it too. Without it the bus publishes to this process only |
 | `eventStore` | — | the aggregates this service event-sources; given, the `EventLog` is wired, with an `EventSourcedRepository` per aggregate |
 | `subscriptions` | — | binds the `EventBus` token to `EventSourcedEventBus` — see **Subscriptions across processes** |
 | `imports` / `providers` / `exports` | `[]` | whatever the above depend on |
@@ -133,9 +136,9 @@ from its `registerAs` configs:
 OutboxModule.forRootAsync({
   imports: [PostEventsClientModule],
   transports: PostEventsClient.destinations(appConfig()),
-  inject: [outboxConfig.KEY],
-  useFactory: ({ relay, pollInterval, retry }: OutboxConfig) => ({
-    route: routeOf,
+  inject: [appConfig.KEY, outboxConfig.KEY],
+  useFactory: (app: AppConfig, { relay, pollInterval, retry }: OutboxConfig) => ({
+    route: PostEventsClient.route(app),                   // OutboxRoute.over(PostEventsClient.destinations(app))
     relay: { enabled: relay === 'poll', pollInterval },
     retry,
   }),
@@ -158,8 +161,11 @@ TransportEventBusModule.forRootAsync({
   inbox: { descriptions: MikroOrmOutboxStore },
   outbox: {
     destinations: PostEventsClient.namespaces,
-    inject: [outboxConfig.KEY],
-    useFactory: ({ relay }: OutboxConfig) => ({ relay }),
+    inject: [appConfig.KEY, outboxConfig.KEY],
+    useFactory: (app: AppConfig, { relay }: OutboxConfig) => ({
+      relay,
+      route: PostEventsClient.route(app),                 // the root OutboxModule's route, the same one
+    }),
   },
 }),
 ```
@@ -218,8 +224,11 @@ export class PostEventsClient {
   static readonly namespaces = [POSTS_NAMESPACE, NOTIFICATIONS_NAMESPACE];
 
   static destinations(app: AppConfig): Record<string, Type<OutboxTransport>> {
+    if (app.transport === 'memory') {
+      return {};                                        // no broker: every namespace goes `local`
+    }
     const transport = ClientProxyTransport(PostEventsClient, {
-      toPacket: OutboxPackets.for(app.transport),       // 'rabbitmq' | 'aws' | 'inngest' | 'memory'
+      toPacket: OutboxPackets.for(app.transport),       // 'rabbitmq' | 'aws' | 'inngest'
     });
     return Object.fromEntries(
       PostEventsClient.namespaces.map((namespace) => [namespace, transport]),
@@ -262,12 +271,71 @@ in the applications here the `Inngest` client, which the inbound strategy serves
 the proxy sends through. A static module is one instance however many modules import it, so the relay
 publishes through the same client the rest of the application sees.
 
-**The route is the event's.** The outbox's `route` is `routeOf`, which reads the namespace off the
-message type the event declared, and picks the destination under that key. There is no class naming
-which events go where, so there is no second declaration to keep in step with the first: a new event in
-a namespace that already has a destination goes out routed, with nothing added anywhere. Two namespaces
-through one broker are two keys holding the same transport. One namespace is one route, so the same
-namespace on two brokers is not something this map can say — fan-out of that kind is the broker's.
+**The route is the event's.** The outbox's `route` is `OutboxRoute.over(transports)`, which reads the
+namespace off the message type the event declared, and picks the destination under that key. There is
+no class naming which events go where, so there is no second declaration to keep in step with the
+first: a new event in a namespace that already has a destination goes out routed, with nothing added
+anywhere. Two namespaces through one broker are two keys holding the same transport. One namespace is
+one route, so the same namespace on two brokers is not something this map can say — fan-out of that
+kind is the broker's.
+
+**A namespace with no transport goes `local` — and reaches this process's bus through the outbox.**
+`local` is `@nestjs/outbox`'s own in-process transport: the relay hands the message to the
+`@OnOutboxMessage()` handlers of this process, matched by exact topic — which is why the topic is the
+qualified name and not the routing key. A service running with no broker (`POSTS_TRANSPORT=memory`)
+has no transport at all, so everything it publishes is relayed there, claimed, delivered and marked
+published like any other message.
+
+Such an event is **not** told to the `EventBus` at its unit of work's commit, which is where every
+other event is told. The outbox tells it: the bus declares one `@OnOutboxMessage()` itself,
+`LocalDelivery`, for every event of `outbox.destinations`, and it restores the event — the real
+class, the identifier it was raised with, the request its headers carry, and **no** ingestion mark,
+because it is this service's own decision — and publishes it on the `EventBus`, in a unit of work of
+its own, in the tenant the message names, with the inbox row under this service's name. The
+`@EventsHandler`s, the sagas and whatever they dispatch run then, after the commit and with what the
+outbox gives a message: delivered until it is taken, retried when a handler fails, dead-lettered after
+the last attempt. A namespace that leaves through a broker is told at the commit, as always.
+
+For that the bus has to know what the outbox routes `local`, and it is told the **same** route, in
+`outbox.useFactory`:
+
+```ts
+export class PostEventsClient {
+  static route(app: AppConfig): OutboxRouteFunction {
+    return OutboxRoute.over(PostEventsClient.destinations(app));
+  }
+}
+
+OutboxModule.forRootAsync({ …, useFactory: (app: AppConfig, …) => ({ route: PostEventsClient.route(app), … }) }),
+TransportEventBusModule.forRootAsync({
+  …,
+  outbox: {
+    destinations: PostEventsClient.namespaces,
+    inject: [appConfig.KEY, outboxConfig.KEY],
+    useFactory: (app: AppConfig, { relay }: OutboxConfig) => ({ relay, route: PostEventsClient.route(app) }),
+  },
+}),
+```
+
+Without it every event is told at the commit, and `LocalDelivery` only acknowledges what still goes
+`local` — with a warning, because handlers running twice is the other way it could go.
+
+In `poll` mode the command answers before those handlers run, the way it would with a broker between
+two services; in `drain` it answers after the relay has delivered them. And a request that crosses the
+outbox is restored from the headers, as across a broker: a handler sees the same correlation id, the
+same tenant and the same attributes, in a new `AsyncContext`.
+
+Anything else of the application's that wants what goes `local` declares its own
+`@OnOutboxMessage(qualifiedName, { consumer })`, beside `LocalDelivery`. It runs outside Nest's
+enhancers — no guard, interceptor or pipe, so no tenant is opened for it:
+
+```ts
+@Injectable()
+export class PostCreatedAudit {
+  @OnOutboxMessage('posts.PostCreated', { consumer: 'post-created-audit' })
+  record(payload: Record<string, unknown>, { message }: OutboxHandlerContext) { … }
+}
+```
 
 **The code says what goes out; the configuration says where.** The namespaces are in the code and the
 factory says which broker that is, so what a service publishes is its contract rather than an
@@ -463,7 +531,7 @@ declares and nothing else:
 | | |
 |---|---|
 | `id` | the event's identifier — generated once per instance and remembered on it, and what every consumer's inbox deduplicates by |
-| `topic` | the routing key, `namespace.Name.aggregate`, which a consumer binds to |
+| `topic` | the qualified name, `namespace.Name`: what happened. It is what `@OnOutboxMessage()` is declared with, because the outbox's `local` transport matches a handler by its exact topic |
 | `key` | `namespace/aggregate`: one aggregate's messages are published one at a time, in the order their transactions committed. `null` for an event with no tag |
 | `payload` | the event's fields, encoded once for JSON (`encodeData`) — a `Date` comes back a `Date` |
 | `headers` | what is said about it: its type, the service that produced it, its tags, the timestamp, the request's attributes and the trace it was raised in |
@@ -478,7 +546,9 @@ or when no destination takes its namespace.
 
 ### Which routing key an event goes out under
 
-`EventAddress.routingKey`, read off the event and nothing else. Three segments:
+`EventAddress.routingKey`, read off the event and nothing else — and off the message, by
+`EventAddress.ofMessage`, when a transport's packet publishes it: the outbox's topic is the qualified
+name, and the routing key is what a broker adds to it. Three segments:
 
 ```
 posts.PostCreated.9f1d1f36-7c2e-4a0a-9b7d-2f5c1a3e4b60
@@ -500,7 +570,8 @@ triggers have no wildcards, is emitted under the qualified name instead — see 
 
 | the event | leaves through | runs locally |
 |---|---|---|
-| `@EventType({ namespace: 'posts' })`, with `destinations.posts` | that destination | yes |
+| `@EventType({ namespace: 'posts' })`, with `destinations.posts` and a transport for it | that destination | yes |
+| `@EventType({ namespace: 'posts' })`, with `destinations.posts` and no transport for it | the outbox's `local`, to the `@OnOutboxMessage()` handlers here | yes |
 | `@EventType({ namespace: 'tags' })`, and no `destinations.tags` | nowhere | yes |
 | no `@EventType` at all | nowhere: it has no namespace | yes |
 | any of the above, published by a service with `publishes: false` | nowhere | yes |
@@ -512,7 +583,7 @@ destinations, never by the event about this process.
 ### Who publishes what the outbox holds: the relay mode
 
 `@nestjs/outbox`'s relay claims due rows under a lease, publishes each through its namespace's
-`ClientProxyTransport`, deletes it once a transport took it, reschedules it with backoff when one did
+`ClientProxyTransport` — or `local`, for a namespace with none — deletes it once a transport took it, reschedules it with backoff when one did
 not, and dead-letters it after the last attempt. Where that loop runs is a decision about the
 **process**, and it is said twice at the application's root, from one config value: `relay.enabled` to
 the `OutboxModule`, and `relay` to the bus, in `outbox.useFactory` — which is what tells it what to do
@@ -831,53 +902,78 @@ correlation id, and a delivery whose tenant is refused never reaches the ingesti
 
 ## Testing without a broker
 
-The receiving half is [`MemoryServer`](https://github.com/camcima/nestjs-memory-microservices), which
-is not ours: it registers the handlers Nest already wrapped with guards, interceptors, pipes and
-filters, and invokes them in process. `MemoryClient` is the emitting half, and it is here because a
-topic exchange does two things that package does not: it is a `ClientProxy` (so the outbox's
-`ClientProxyTransport`, its packet and the serializer are exercised as they are in production) and it
-matches patterns (`posts.PostCreated.<id>` against the binding `posts.PostCreated.*`). Every message is
-serialised, `JSON.parse(JSON.stringify(...))`'d and deserialised, so a wire-format bug cannot hide.
-
-A publishing service in a spec is an ordinary one, with a `MemoryClient` as its destination and the
-relay in `drain`, so the message has crossed by the time the command answers. An outbox is a table,
-so it also gets a database — a schema of its own, from `testDatabaseConfig` in
-`@nestposts/database/testing`, with `outboxEntities` among its entities — and the root a spec declares
-is the one an application does:
+**One service on its own needs no transport at all.** With no broker its outbox routes `local`, and
+what it publishes reaches its own `EventBus` through `LocalDelivery` — so a spec asserts on the bus,
+or, for the message itself, declares an `@OnOutboxMessage()` of its own beside `LocalDelivery`, which
+is what `apps/tagging/test/tagging.spec.ts` does for the decision it publishes:
 
 ```ts
-import { ClientProxyTransport, OutboxModule } from '@nestjs/outbox';
-import { MikroOrmOutboxModule, MikroOrmUnitOfWorkTransaction } from '@nestposts/outbox-mikro-orm';
-import { MemoryClient, OutboxPackets, routeOf, TransportEventBusModule } from '@nestposts/transport-eventbus';
-import { startInProcessService } from '@nestposts/transport-eventbus/testing';
+@Injectable()
+class Published {
+  readonly messages: OutboxMessage[] = [];
 
-const consuming = await startInProcessService({ imports: [ConsumingModule] });
+  @OnOutboxMessage(['posts.PostCreated'], { consumer: 'tagging-spec', inbox: false })
+  record(_payload: unknown, { message }: OutboxHandlerContext) {
+    this.messages.push(message);                          // the topic, the key, the headers, the payload
+  }
+}
 
-class PublishingClient extends MemoryClient {}
+Test.createTestingModule({ imports: [AppModule], providers: [Published] });
+```
 
-@Module({
-  providers: [{ provide: PublishingClient, useFactory: () => new PublishingClient({ servers: () => [consuming.server] }) }],
-  exports: [PublishingClient],
-})
-class PublishingClientModule {}
+**What another service sends is delivered straight to the server.** `startInProcessService` starts a
+service on a `TopicMemoryServer` (`@nestposts/microservices-memory`): `@camcima`'s `MemoryServer`,
+which invokes the handlers Nest already wrapped with guards, interceptors, pipes and filters, extended
+with what a topic exchange adds — a routing key is matched against every binding
+(`posts.PostCreated.<id>` against `posts.PostCreated.*` and `posts.#`), and each delivery is a JSON
+copy, as if it had crossed a wire. `server.bindings()` is the in-process `list_bindings`:
 
-OutboxModule.forRoot({
-  imports: [PublishingClientModule],
-  transports: {
-    [POSTS_NAMESPACE]: ClientProxyTransport(PublishingClient, { toPacket: OutboxPackets.memory }),
-  },
-  route: routeOf,
-  relay: { enabled: false },
-}),
+```ts
+const tagging = await startInProcessService(await Test.createTestingModule({ imports: [AppModule] }).compile());
+
+await tagging.server.emit(`posts.PostPreCreated.${postId}`, envelope);   // the controller bound to posts.#
+tagging.server.bindings();                                              // ['posts.#']
+```
+
+`publishedEnvelope(event, { producer, request })` is that envelope **as another service's outbox would
+have published it**, built by the same `EventMessages` production stages with, so the headers, the
+routing key and the payload encoding are the real ones:
+
+```ts
+const { pattern, envelope } = publishedEnvelope(new PostPreCreatedEvent(id, 'Nest', new Date()), {
+  producer: 'posts-api',
+  codec: new PostRequestContextCodec(),
+  request: new PostRequest(id, 'acme'),
+});
+await consuming.server.emit(pattern, envelope);
+```
+
+**Two services in one suite** are two of those, and the broker between them is the publishing one's
+`local`: an `@OnOutboxMessage()` the spec declares there takes what its outbox delivers and emits it
+on the other's server, under its routing key. An outbox is a table, so each service also gets a
+database — a schema of its own, from `testDatabaseConfig` in `@nestposts/database/testing`, with
+`outboxEntities` among its entities — and the root a spec declares is the one an application running
+with no broker does:
+
+```ts
+const noBroker = OutboxRoute.over({});
+
+@Injectable()
+class ToConsuming {
+  @OnOutboxMessage('posts.PostPreCreated', { consumer: 'wire', inbox: false })
+  async carry(_payload: unknown, { message }: OutboxHandlerContext) {
+    await consuming.server.emit(EventAddress.ofMessage(message).routingKey, message);
+  }
+}
+
+OutboxModule.forRoot({ route: noBroker, relay: { enabled: false } }),
 MikroOrmOutboxModule.forRoot({ producer: 'publishing-service' }),
 TransportEventBusModule.forRoot({
   identity: 'publishing-service',
   transaction: MikroOrmUnitOfWorkTransaction,
-  outbox: { destinations: [POSTS_NAMESPACE], useFactory: () => ({ relay: 'drain' }) },
+  outbox: { destinations: [POSTS_NAMESPACE], useFactory: () => ({ relay: 'drain', route: noBroker }) },
 }),
 ```
-
-`app.get(PublishingClient).bindings()`, on the publishing service, is the in-process `list_bindings`.
 
 `startInProcessService` starts a service the way production starts it. It exists because
 `createTestingMicroservice` starts it with `init()`, and in Nest 12 `NestMicroservice.init()` runs the
@@ -885,7 +981,7 @@ bootstrap hooks **twice** — which binds every `@EventsHandler` twice, and deli
 to a suite that is there to prove one delivery is one thing. It creates the service's schema from its
 entities and drops it on close (`createSchema: false` for a spec whose tables the real migrations
 made), and it also takes an already compiled testing module, which is how a spec replaces a
-destination's client:
+destination's client with one that records what it was asked to send:
 
 ```ts
 const tagging = await startInProcessService(
@@ -899,37 +995,23 @@ tagging.app.get<RecordingClient>(PostEventsClient).sent;   // [{ pattern, data }
 ```
 
 `RecordingClient` keeps what it was asked to send instead of sending it: the pattern it went out under
-and what `toPacket` handed the client — the `OutboxEnvelope`, or the transport record around it.
-
-The other direction — a consumer spec that wants a message **as another service's outbox would have
-published it** — is `publishedEnvelope(event, { producer, request })`. It is built by the same
-`EventMessages` production stages with, so the headers, the routing key and the payload encoding are
-the real ones, with no broker and no second service in between:
-
-```ts
-const { pattern, envelope } = publishedEnvelope(new PostPreCreatedEvent(id, 'Nest', new Date()), {
-  producer: 'posts-api',
-  codec: new PostRequestContextCodec(),
-  request: new PostRequest(id, 'acme'),
-});
-await lastValueFrom(new MemoryClient({ servers: [consuming.server] }).emit(pattern, envelope), {
-  defaultValue: undefined,
-});
-```
-
-Through a `MemoryClient` and not `server.emit`, because the client is what matches the routing key
-against the patterns the consumer bound.
+and what `toPacket` handed the client — the `OutboxEnvelope`, or the transport record around it
+(`OutboxPackets.inProcess`, for a client with no record of its own, is the envelope under its routing
+key).
 
 The doubles — `startInProcessService`, `RecordingClient`, `publishedEnvelope` — are behind
 `@nestposts/transport-eventbus/testing` and not in the main barrel, because `startInProcessService`
-reaches Testcontainers and every production bundle would carry it. `MemoryClient` stays in the main
-barrel: it is a transport, not a double, and an application runs on it with `POSTS_TRANSPORT=memory`.
+reaches Testcontainers and every production bundle would carry it. There is no client for the memory
+transport: nothing publishes to a server in its own process except a suite.
 
-`src/in-memory/transport-loop.spec.ts` is the worked example: two services, each able to reach the
-other, the real class arriving, the request restored, a redelivery reaching nobody, each inbox keeping
-what its own service consumed, and the loop cut by the origin mark. `src/outbox/event-outbox.spec.ts`
+`src/in-memory/transport-loop.spec.ts` is the worked example: two services with no broker, each
+carrying its `local` to the other, the real class arriving, the request restored, a redelivery reaching
+nobody, each inbox keeping what its own service consumed, and the loop cut by the origin mark. `src/outbox/event-outbox.spec.ts`
 is the outbound half on its own: the event committed with the writes that raised it, discarded with a
 command that failed, kept while the broker is down and published once it is back, in each relay mode.
+`src/outbox/local-delivery.spec.ts` is the half with no broker: a namespace with no transport relayed
+to `local` and told to the bus there and not at the commit, as this service's own decision, once
+however often the relay delivers it, retried when a handler fails.
 `MikroOrmOutboxStore` passes `@nestjs/outbox/testing`'s own contract suites
 (`outboxStoreContract`, `outboxInboxStoreContract`) with their concurrency cases on, in
 `libs/core/outbox-mikro-orm`.
@@ -956,7 +1038,7 @@ headers      cqrs-transport-message-type   posts.PostCreated#2.0.0     ← resol
              traceparent                   00-4bf9…-01
 
 body         {"pattern":"posts.PostCreated.9f1d…",
-              "data":{"id":"0f0d2a5e-…","topic":"posts.PostCreated.9f1d…","key":"posts/9f1d…",
+              "data":{"id":"0f0d2a5e-…","topic":"posts.PostCreated","key":"posts/9f1d…",
                       "headers":{ …the same map… },
                       "createdAt":1788868800000,
                       "payload":{"postId":"9f1d…","title":"Nest","version":2,
@@ -972,7 +1054,8 @@ dead-letter queue expects to find routing facts without anybody decoding a body.
 The one thing the payload still encodes is a `Date`: `{"@date":"…"}` goes out and a `Date` comes back,
 because JSON has no date type and JavaScript has no field types at runtime to guess one.
 
-In process (`OutboxPackets.memory`) the data is the envelope itself. On SNS the routing facts are lifted
+To a client in this process (`OutboxPackets.inProcess`, a suite's `RecordingClient`) the data is the
+envelope itself. On SNS the routing facts are lifted
 into message attributes, and on Inngest the envelope is the event's `data`: see the next two sections.
 
 ---
@@ -1099,7 +1182,7 @@ FIFO                MessageGroupId          9f1d…               ← the aggreg
                     MessageDeduplicationId  0f0d2a5e-…          ← the envelope's id
 
 body                {"pattern":"posts.PostCreated.9f1d…",
-                     "data":{"id":"0f0d2a5e-…","topic":"posts.PostCreated.9f1d…","key":"posts/9f1d…",
+                     "data":{"id":"0f0d2a5e-…","topic":"posts.PostCreated","key":"posts/9f1d…",
                              "headers":{"cqrs-transport-message-type":"posts.PostCreated#2.0.0",
                                         "cqrs-transport-origin":"tagging",
                                         "cqrs-transport-correlation-id":"7b2c…",
@@ -1240,16 +1323,16 @@ own record as `data` when it has headers or keys of its own:
 ```ts
 const kafka = ClientProxyTransport(KafkaEventsClient, {
   toPacket: (message: OutboxMessage, envelope: OutboxEnvelope) => ({
-    pattern: message.topic.split('.').slice(0, 2).join('.'),   // the topic, if the routing key is not it
+    pattern: message.topic,                                     // the qualified name, posts.PostCreated
     data: { key: message.key, value: envelope, headers: envelope.headers },
   }),
 });
 ```
 
-The routing key arrives as `message.topic`, which every transport here uses as it is except Inngest;
-a transport whose addressing differs rewrites it there, which is the only place that has a reason to
-know. `OutboxPackets` holds the four this repository uses, and `OutboxPackets.for(kind)` is how a
-destination picks one.
+The qualified name arrives as `message.topic`, which Inngest uses as it is; a broker that binds by
+aggregate — RabbitMQ, SNS — is sent `EventAddress.ofMessage(message).routingKey` instead, which is the
+only place that has a reason to know. `OutboxPackets` holds the three brokers this repository uses, and
+`OutboxPackets.for(kind)` is how a destination picks one.
 
 On the way in, whatever the transport's server hands `@Payload()` has to be the envelope — its default
 deserializer, usually, since the envelope is plain JSON. If it is not, `EventIngestion` refuses the
@@ -1266,7 +1349,8 @@ For whoever knew this library before `@nestjs/outbox`; `NOTICE.md` has the reaso
 | before | now |
 |---|---|
 | `@Publisher(namespace)`, `EVERY_NAMESPACE`, `ITransportPublisherEventBus` | the root `OutboxModule`'s `transports`: namespace → `ClientProxyTransport(Client, { toPacket })`, and `outbox.destinations` naming the same namespaces |
-| `OutboxRouting` and its log line | `routeOf`, the outbox's `route`, reading the namespace off the message |
+| `OutboxRouting` and its log line | `OutboxRoute.over(transports)`, the outbox's `route`, reading the namespace off the message |
+| `MemoryClient`, as an application's destination (`POSTS_TRANSPORT=memory`) and as a suite's publisher | no transport: the outbox's own `local`, received by `LocalDelivery` and told to the bus; a suite delivers on `TopicMemoryServer.emit` |
 | `EventForwarder` (a direct emit) | nothing: `EventOutbox` writes, the relay sends |
 | `EventEnvelope` / `EventEnvelopeFactory` | `@nestjs/outbox`'s `OutboxEnvelope`, built from `EventMessages` |
 | every `*EventEnvelopeSerializer` / `*EventEnvelopeDeserializer` | `OutboxPackets` on the way out; the transports' default deserializers on the way in |
@@ -1287,8 +1371,8 @@ asks for — `TransportIdentity` (required), `RequestContextCodec` (defaulted), 
 (`transaction`), `InboxDescriptions` (`inbox.descriptions`) — and what it expects the application to
 have declared at its root: `@nestjs/cqrs` (`CqsrsModule.forRoot`), and, for a service with an inbox or
 an outbox, `@nestjs/outbox`'s `OutboxModule` with a store registered with it (`MikroOrmOutboxModule`).
-It binds `UnitOfWorkCommands` always, `EventIngestion` with an inbox, and `EventMessages` and
-`EventOutbox` with an outbox.
+It binds `UnitOfWorkCommands` always, `EventIngestion` with an inbox, and `EventMessages`,
+`EventOutbox` and `LocalDelivery` with an outbox.
 
 It exports the bus itself (`TransportEventBusService`, and `TRANSPORT_EVENT_BUS_PUBLISHER` bound to
 it), `IncomingRequest` and `RequestContextCodec`, and whatever of the above the options turned on.
@@ -1300,8 +1384,9 @@ it), `IncomingRequest` and `RequestContextCodec`, and whatever of the above the 
 | `@EventType` (in `@nestposts/platform`) | the event's identity on the wire, and its namespace is its route |
 | `TransportEventBusModule.forRoot` / `.forRootAsync` | the transport, started in one call |
 | `ClientProxyTransport(Client, { toPacket })` (`@nestjs/outbox`) | a destination: the client, and how a message becomes its packet |
-| `OutboxPackets.for('rabbitmq' \| 'aws' \| 'inngest' \| 'memory')` | the packet of each transport: an `RmqRecord`, an `SnsRecord`, an `InngestRecord`, the envelope |
-| `routeOf` | the outbox's route: the namespace of the message |
+| `OutboxPackets.for('rabbitmq' \| 'aws' \| 'inngest')` | the packet of each broker: an `RmqRecord`, an `SnsRecord`, an `InngestRecord`; `OutboxPackets.inProcess` is the envelope, for a suite's client |
+| `OutboxRoute.over(transports)` | the outbox's route: the namespace of the message, or `local` when the outbox has no transport for it |
+| `LocalDelivery` | the `@OnOutboxMessage()` handler that receives what goes `local` and tells it to the `EventBus` |
 | `EventMessages` | what an event becomes: one outbox message, with its headers |
 | `EventOutbox` | where the events a unit staged are written, and what happens after its commit |
 | `TransportOutboxSettings` / `OutboxRelayMode` | the relay's place in the process — `poll`, `drain`, `off` — as the bus acts on it after a commit |
@@ -1315,7 +1400,7 @@ it), `IncomingRequest` and `RequestContextCodec`, and whatever of the above the 
 | `envelopeOf` / `messageOf` / `reconstruct` | the envelope checked, read, and rebuilt as the real event |
 | `IncomingRequest` | the request a message belongs to — `from(envelope)` in a controller, `of(context)` in a guard, an interceptor or a filter, `traceOf` for the trace |
 | `EventAddress.everyEventOf(namespace)` / `.everyEventOf(EventClass)` | the binding: `posts.#`, or `posts.PostCreated.*` |
-| `EventAddress` | what an event says about itself — its message type, its tags and its `routingKey` |
+| `EventAddress` | what an event says about itself — its message type, its tags and its `routingKey`; `ofMessage` reads the same back off an outbox message |
 | `SnsClientProxy` / `SqsClientProxy` (`@nestposts/microservices-aws`) | a topic for a fact, a queue for a message addressed to one service |
 | `SqsStrategy` / `processSqsEvent` (`@nestposts/microservices-aws`) | the consumer: a polling loop, or a Lambda invocation |
 | `SnsFilterPolicy.everyEventOf(...)` / `.exceptFrom(...)` | the binding, for a subscription |
@@ -1326,8 +1411,8 @@ it), `IncomingRequest` and `RequestContextCodec`, and whatever of the above the 
 | `EventSourcedEventBus` | the `EventBus` whose observable side is that log |
 | `isIngested` / `originOf` / `identifierOf` | what an event says about where it came from |
 | `DatabaseModule.forRoot` / `.forFeature` (in `@nestposts/database`) | the connection, and the tables each module owns |
-| `MemoryClient` | the in-process transport |
 | `startInProcessService` / `RecordingClient` / `publishedEnvelope` (`/testing`) | the doubles |
+| `TopicMemoryServer` (`@nestposts/microservices-memory`) | the memory transport's server: a routing key matched against every binding, each delivery a JSON copy |
 
 ### Environment
 

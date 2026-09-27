@@ -1,5 +1,11 @@
 import { MikroORM } from '@mikro-orm/core';
-import type { OutboxEnvelope } from '@nestjs/outbox';
+import { Injectable } from '@nestjs/common';
+import type {
+  OutboxEnvelope,
+  OutboxHandlerContext,
+  OutboxMessage,
+} from '@nestjs/outbox';
+import { OnOutboxMessage } from '@nestjs/outbox';
 import { Test } from '@nestjs/testing';
 import { inRequestContext, TENANT_MIGRATIONS } from '@nestposts/database';
 import { migrate } from '@nestposts/migrator/main';
@@ -17,7 +23,6 @@ import {
   EventIngestion,
   EventSourcedRepository,
   encodeData,
-  MemoryClient,
   reconstruct,
   TRANSPORT_MESSAGE_TYPE,
   TRANSPORT_ORIGIN,
@@ -25,21 +30,36 @@ import {
   TRANSPORT_TIMESTAMP,
 } from '@nestposts/transport-eventbus';
 import type { InProcessService } from '@nestposts/transport-eventbus/testing';
-import {
-  RecordingClient,
-  startInProcessService,
-} from '@nestposts/transport-eventbus/testing';
+import { startInProcessService } from '@nestposts/transport-eventbus/testing';
 import { UserId } from '@nestposts/users/domain/user/vo/user-id';
-import { lastValueFrom } from 'rxjs';
 
 import { AppModule } from '../src/app.module';
-import { PostEventsClient } from '../src/infrastructure/transport/post-events.client';
 import { until } from './support/until';
+
+@Injectable()
+class Published {
+  readonly messages: OutboxMessage[] = [];
+
+  @OnOutboxMessage(['posts.PostCreated', 'posts.PostPreCreated'], {
+    consumer: 'tagging-spec',
+    inbox: false,
+  })
+  record(_payload: unknown, { message }: OutboxHandlerContext): void {
+    this.messages.push(message);
+  }
+
+  topics(): string[] {
+    return this.messages.map((message) => message.topic);
+  }
+
+  clear(): void {
+    this.messages.length = 0;
+  }
+}
 
 describe('the tagging service', () => {
   let tagging: InProcessService;
-  let postsApi: MemoryClient;
-  let outbound: RecordingClient;
+  let outbound: Published;
   let posts: EventSourcedRepository<Post>;
   let inbox: MikroOrmOutboxStore;
 
@@ -51,7 +71,7 @@ describe('the tagging service', () => {
     headers: Record<string, string> = {},
   ): OutboxEnvelope => ({
     id: identifier,
-    topic: `posts.PostPreCreated.${postId.value}`,
+    topic: 'posts.PostPreCreated',
     key: `posts/${postId.value}`,
     createdAt: Date.parse('2026-09-08T12:00:00.000Z'),
     payload: encodeData(
@@ -74,33 +94,29 @@ describe('the tagging service', () => {
   });
 
   const deliver = (postId: PostId, envelope: OutboxEnvelope) =>
-    lastValueFrom(
-      postsApi.emit(`posts.PostPreCreated.${postId.value}`, envelope),
-    );
+    tagging.server.emit(`posts.PostPreCreated.${postId.value}`, envelope);
 
   const inContext = <T>(work: () => Promise<T>): Promise<T> =>
     inRequestContext(tagging.app.get(MikroORM).em, work);
 
   const completions = () =>
-    outbound.sent.filter(({ pattern }) =>
-      pattern.startsWith('posts.PostCreated.'),
-    );
+    outbound.messages.filter(({ topic }) => topic === 'posts.PostCreated');
 
-  const envelopeOf = (index = 0) => completions()[index].data as OutboxEnvelope;
+  const envelopeOf = (index = 0) => completions()[index];
 
   beforeAll(async () => {
     await migrate();
     tagging = await startInProcessService(
-      await Test.createTestingModule({ imports: [AppModule] })
-        .overrideProvider(PostEventsClient)
-        .useValue(new RecordingClient())
+      await Test.createTestingModule({
+        imports: [AppModule],
+        providers: [Published],
+      })
         .overrideProvider(TENANT_MIGRATIONS)
         .useValue({ migrationsList: tenantMigrations })
         .compile(),
       { createSchema: false },
     );
-    postsApi = new MemoryClient({ servers: [tagging.server] });
-    outbound = tagging.app.get(PostEventsClient);
+    outbound = tagging.app.get(Published);
     posts = tagging.app.get(EventSourcedRepository);
     inbox = tagging.app.get(MikroOrmOutboxStore);
   });
@@ -112,7 +128,7 @@ describe('the tagging service', () => {
   });
 
   it('binds its queue to the whole posts namespace: one entry for what it acts on and what it replicates', () => {
-    expect(postsApi.bindings()).toEqual(['posts.#']);
+    expect(tagging.server.bindings()).toEqual(['posts.#']);
   });
 
   it('completes a post it was told was born, and publishes the decision', async () => {
@@ -121,7 +137,10 @@ describe('the tagging service', () => {
     await deliver(postId, preCreatedFrom(postId));
     await until(() => completions().length === 1);
 
-    expect(completions()[0].pattern).toBe(`posts.PostCreated.${postId.value}`);
+    expect(completions()[0]).toMatchObject({
+      topic: 'posts.PostCreated',
+      key: `posts/${postId.value}`,
+    });
     const event = reconstruct(envelopeOf());
     expect(event).toBeInstanceOf(PostCreatedEvent);
     expect(event).toMatchObject({
@@ -195,9 +214,7 @@ describe('the tagging service', () => {
     await until(() => completions().length === 1);
 
     expect(
-      outbound
-        .patterns()
-        .filter((key) => key.startsWith('posts.PostPreCreated.')),
+      outbound.topics().filter((topic) => topic === 'posts.PostPreCreated'),
     ).toEqual([]);
   });
 

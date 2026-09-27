@@ -20,7 +20,7 @@ import { MikroOrmOutboxStore } from './mikro-orm-outbox.store';
  * @Module({
  *   imports: [
  *     DatabaseModule.forRoot(mikroOrmConfig()),
- *     OutboxModule.forRoot({ transports: { … }, route: routeOf }),
+ *     OutboxModule.forRoot({ transports, route: OutboxRoute.over(transports) }),
  *     MikroOrmOutboxModule.forRoot({ producer: 'posts-api' }),
  *   ],
  * })

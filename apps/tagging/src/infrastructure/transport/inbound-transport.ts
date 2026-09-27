@@ -1,9 +1,9 @@
-import { MemoryServer } from '@camcima/nestjs-memory-microservices';
 import type { HttpServer } from '@nestjs/common';
 import type { MicroserviceOptions } from '@nestjs/microservices';
 import { Transport } from '@nestjs/microservices';
 import { SqsStrategy } from '@nestposts/microservices-aws';
 import { InngestStrategy } from '@nestposts/microservices-inngest';
+import { TopicMemoryServer } from '@nestposts/microservices-memory';
 import { RmqRetryTopology } from '@nestposts/retry-policy/adapters/rmq-retry.topology';
 import { inngestTriggers } from '@nestposts/transport-eventbus';
 import { Inngest } from 'inngest';
@@ -60,7 +60,7 @@ export class InboundTransport {
           }),
         };
       case 'memory':
-        return { strategy: new MemoryServer() };
+        return { strategy: new TopicMemoryServer() };
       default:
         return {
           transport: Transport.RMQ,

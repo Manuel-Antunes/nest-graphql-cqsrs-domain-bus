@@ -17,9 +17,9 @@ import { NotificationId } from '@nestposts/notifications/domain/notification/vo/
 import { MikroOrmOutboxStore } from '@nestposts/outbox-mikro-orm';
 import { PostId } from '@nestposts/posts/domain/post/vo/post-id';
 import {
+  EventAddress,
   EventIngestion,
   encodeData,
-  MemoryClient,
   TRANSPORT_MESSAGE_TYPE,
   TRANSPORT_ORIGIN,
   TRANSPORT_TAGS,
@@ -27,7 +27,6 @@ import {
 } from '@nestposts/transport-eventbus';
 import type { InProcessService } from '@nestposts/transport-eventbus/testing';
 import { startInProcessService } from '@nestposts/transport-eventbus/testing';
-import { lastValueFrom } from 'rxjs';
 
 import { AppModule } from '../src/app.module';
 import { until } from './support/until';
@@ -47,7 +46,7 @@ const envelopeOf = (
   { [IDENTIFIER]: id, ...headers }: Record<string, string>,
 ): OutboxEnvelope & { readonly data: NotificationReceivedEvent } => ({
   id,
-  topic: `notifications.NotificationReceived.${event.notificationId}`,
+  topic: 'notifications.NotificationReceived',
   key: `notifications/${event.notificationId}`,
   createdAt: event.occurredAt.getTime(),
   headers,
@@ -57,7 +56,6 @@ const envelopeOf = (
 
 describe('the notificator service', () => {
   let notificator: InProcessService;
-  let postsApi: MemoryClient;
   let mails: CapturingMailService;
 
   const notificationFrom = (
@@ -93,7 +91,10 @@ describe('the notificator service', () => {
   };
 
   const deliver = (envelope: OutboxEnvelope) =>
-    lastValueFrom(postsApi.emit(envelope.topic, envelope));
+    notificator.server.emit(
+      EventAddress.ofMessage(envelope).routingKey,
+      envelope,
+    );
 
   const recordsOf = (notificationId: string) =>
     notificator.app
@@ -129,9 +130,6 @@ describe('the notificator service', () => {
         .compile(),
       { createSchema: false },
     );
-    postsApi = new MemoryClient({
-      servers: [notificator.server],
-    });
     mails = notificator.app.get<MailService, CapturingMailService>(MailService);
   });
 
@@ -142,7 +140,7 @@ describe('the notificator service', () => {
   });
 
   it('binds its queue to the one event it delivers', () => {
-    expect(postsApi.bindings()).toEqual([
+    expect(notificator.server.bindings()).toEqual([
       'notifications.NotificationReceived.*',
     ]);
   });

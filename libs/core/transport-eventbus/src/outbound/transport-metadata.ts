@@ -76,6 +76,19 @@ export const markIngested = (event: object, message: Ingestion): void => {
   });
 };
 
+/**
+ * Gives a rebuilt event the identifier it was published under, and nothing else: an event this
+ * service raised, read back from its own outbox, is still this service's decision — not a message
+ * from elsewhere, which is what {@link markIngested} says.
+ */
+export const markIdentified = (event: object, identifier: string): void => {
+  Object.defineProperty(event, IDENTIFIER, {
+    value: identifier,
+    enumerable: false,
+    configurable: true,
+  });
+};
+
 export const ingestionOf = (event: object): Ingestion | undefined =>
   (event as Record<symbol, Ingestion | undefined>)[INGESTION];
 

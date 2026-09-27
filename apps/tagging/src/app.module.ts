@@ -16,7 +16,6 @@ import { postsEntities } from '@nestposts/posts/infrastructure/posts-infrastruct
 import { RetryPolicyModule } from '@nestposts/retry-policy/retry-policy.module';
 import {
   IncomingRequest,
-  routeOf,
   TRANSPORT_EVENT_BUS_PUBLISHER,
   TransportEventBusModule,
   TransportIdentity,
@@ -87,9 +86,12 @@ import { PostEventsController } from './interfaces/messaging/post-events.control
     OutboxModule.forRootAsync({
       imports: [PostEventsClientModule],
       transports: PostEventsClient.destinations(appConfig()),
-      inject: [outboxConfig.KEY],
-      useFactory: ({ relay, pollInterval, retry }: OutboxConfig) => ({
-        route: routeOf,
+      inject: [appConfig.KEY, outboxConfig.KEY],
+      useFactory: (
+        app: AppConfig,
+        { relay, pollInterval, retry }: OutboxConfig,
+      ) => ({
+        route: PostEventsClient.route(app),
         relay: { enabled: relay === 'poll', pollInterval },
         retry,
       }),
@@ -113,8 +115,11 @@ import { PostEventsController } from './interfaces/messaging/post-events.control
       inbox: { descriptions: MikroOrmOutboxStore },
       outbox: {
         destinations: PostEventsClient.namespaces,
-        inject: [outboxConfig.KEY],
-        useFactory: ({ relay }: OutboxConfig) => ({ relay }),
+        inject: [appConfig.KEY, outboxConfig.KEY],
+        useFactory: (app: AppConfig, { relay }: OutboxConfig) => ({
+          relay,
+          route: PostEventsClient.route(app),
+        }),
       },
       eventStore: [Post],
     }),

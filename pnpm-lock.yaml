@@ -614,6 +614,9 @@ importers:
       '@nestposts/microservices-inngest':
         specifier: workspace:*
         version: link:../../libs/core/microservices-inngest
+      '@nestposts/microservices-memory':
+        specifier: workspace:*
+        version: link:../../libs/core/microservices-memory
       '@nestposts/notifications':
         specifier: workspace:*
         version: link:../../libs/notifications
@@ -708,6 +711,9 @@ importers:
       '@nestposts/microservices-inngest':
         specifier: workspace:*
         version: link:../../libs/core/microservices-inngest
+      '@nestposts/microservices-memory':
+        specifier: workspace:*
+        version: link:../../libs/core/microservices-memory
       '@nestposts/observability':
         specifier: workspace:*
         version: link:../../libs/core/observability
@@ -793,6 +799,9 @@ importers:
       '@nestposts/microservices-inngest':
         specifier: workspace:*
         version: link:../../libs/core/microservices-inngest
+      '@nestposts/microservices-memory':
+        specifier: workspace:*
+        version: link:../../libs/core/microservices-memory
       '@nestposts/notifications':
         specifier: workspace:*
         version: link:../../libs/notifications
@@ -893,6 +902,9 @@ importers:
       '@nestposts/microservices-inngest':
         specifier: workspace:*
         version: link:../../libs/core/microservices-inngest
+      '@nestposts/microservices-memory':
+        specifier: workspace:*
+        version: link:../../libs/core/microservices-memory
       '@nestposts/observability':
         specifier: workspace:*
         version: link:../../libs/core/observability
@@ -1346,6 +1358,12 @@ importers:
 
   libs/core/microservices-inngest: {}
 
+  libs/core/microservices-memory:
+    dependencies:
+      '@nestposts/microservices-aws':
+        specifier: workspace:*
+        version: link:../microservices-aws
+
   libs/core/observability: {}
 
   libs/core/outbox-mikro-orm:
@@ -1374,6 +1392,9 @@ importers:
       '@nestposts/microservices-inngest':
         specifier: workspace:*
         version: link:../microservices-inngest
+      '@nestposts/microservices-memory':
+        specifier: workspace:*
+        version: link:../microservices-memory
       '@nestposts/platform':
         specifier: workspace:*
         version: link:../../platform

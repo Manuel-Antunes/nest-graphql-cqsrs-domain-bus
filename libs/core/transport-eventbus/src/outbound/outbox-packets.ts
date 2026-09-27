@@ -6,24 +6,25 @@ import type {
 } from '@nestjs/outbox';
 import {
   asMessageAttributes,
-  orderingKeyIn,
   SnsRecordBuilder,
 } from '@nestposts/microservices-aws';
 import { InngestRecordBuilder } from '@nestposts/microservices-inngest';
-import { qualifiedNameIn } from '@nestposts/platform/domain/shared/event-type';
 
 import { routingAttributesOf } from '../aws/aws-message';
 import { CORRELATION_ID } from '../request-context';
+import { EventAddress } from './event-address';
 import type { MessageHeaders } from './message-headers';
-import { TRANSPORT_MESSAGE_TYPE } from './message-headers';
 
 /** What `ClientProxyTransport`'s `toPacket` answers: the pattern to emit under, and the data. */
 export type OutboxPacket = ReturnType<
   NonNullable<ClientProxyTransportOptions['toPacket']>
 >;
 
-/** The transports this library publishes on, as `toPacket` must tell them apart. */
-export type OutboxPacketKind = 'rabbitmq' | 'aws' | 'inngest' | 'memory';
+/**
+ * The brokers this library publishes on, as `toPacket` must tell them apart. The process itself is
+ * not one of them: a namespace with no transport goes to the outbox's `local` ({@link OutboxRoute}).
+ */
+export type OutboxPacketKind = 'rabbitmq' | 'aws' | 'inngest';
 
 /** The session Inngest groups a request's runs under: the correlation id. */
 export const CORRELATION_SESSION = 'correlation_id';
@@ -35,14 +36,18 @@ export const CORRELATION_SESSION = 'correlation_id';
  * The body is always the `OutboxEnvelope` the relay built: `id`, `topic`, `key`, `headers`,
  * `createdAt`, `payload`. What each packet adds is the transport's own record, the way the package
  * asks for it ("return a transport record as `data` to use broker headers and keys"), so the client's
- * default serializer sends it and nothing of this library sits on the wire path:
+ * default serializer sends it and nothing of this library sits on the wire path.
+ *
+ * The message's `topic` is the qualified name, `posts.PostCreated`. A broker that binds by aggregate
+ * is sent the routing key instead, `posts.PostCreated.<aggregate>`, read off the message's headers by
+ * {@link EventAddress.ofMessage}:
  *
  * | | pattern | record |
  * |---|---|---|
- * | RabbitMQ | the routing key, `posts.PostCreated.<aggregate>` | `RmqRecord`: the headers as AMQP headers, the id as `messageId`, persistent |
+ * | RabbitMQ | the routing key | `RmqRecord`: the headers as AMQP headers, the id as `messageId`, persistent |
  * | SNS | the routing key | `SnsRecord`: the routing facts as message attributes (a filter policy reads nothing else), the aggregate as FIFO group, the id as deduplication id |
- * | Inngest | the QUALIFIED name, `posts.PostCreated` — a trigger has no wildcards | `InngestRecord`: the id as idempotency key, the correlation id as session |
- * | in process | the routing key | the envelope itself |
+ * | Inngest | the qualified name — a trigger has no wildcards | `InngestRecord`: the id as idempotency key, the correlation id as session |
+ * | a client in this process | the routing key | the envelope itself |
  *
  * The consumer reads the envelope back with `@Payload()` on every one of them: the transports' own
  * deserializers already hand over `{ pattern, data }`.
@@ -53,7 +58,7 @@ export class OutboxPackets {
     envelope: OutboxEnvelope,
   ): OutboxPacket {
     return {
-      pattern: message.topic,
+      pattern: EventAddress.ofMessage(message).routingKey,
       data: new RmqRecordBuilder(envelope)
         .setOptions({
           headers: { ...envelope.headers },
@@ -65,15 +70,16 @@ export class OutboxPackets {
   }
 
   static aws(message: OutboxMessage, envelope: OutboxEnvelope): OutboxPacket {
+    const address = EventAddress.ofMessage(message);
     return {
-      pattern: message.topic,
+      pattern: address.routingKey,
       data: new SnsRecordBuilder(envelope)
         .setMessageAttributes(
           asMessageAttributes(
-            routingAttributesOf(message.topic, headersOf(envelope)),
+            routingAttributesOf(address.routingKey, headersOf(envelope)),
           ),
         )
-        .setMessageGroupId(orderingKeyIn(message.topic))
+        .setMessageGroupId(address.orderingKey)
         .setMessageDeduplicationId(envelope.id)
         .build(),
     };
@@ -83,14 +89,12 @@ export class OutboxPackets {
     message: OutboxMessage,
     envelope: OutboxEnvelope,
   ): OutboxPacket {
-    const headers = headersOf(envelope);
-    const messageType = headers[TRANSPORT_MESSAGE_TYPE];
-    const correlationId = headers[CORRELATION_ID];
+    const correlationId = headersOf(envelope)[CORRELATION_ID];
     const record = new InngestRecordBuilder(envelope).setIdempotencyKey(
       envelope.id,
     );
     return {
-      pattern: messageType ? qualifiedNameIn(messageType) : message.topic,
+      pattern: EventAddress.ofMessage(message).qualifiedName,
       data: (correlationId
         ? record.setSessions({ [CORRELATION_SESSION]: correlationId })
         : record
@@ -98,11 +102,19 @@ export class OutboxPackets {
     };
   }
 
-  static memory(
+  /**
+   * **A client in this process** — a suite's `RecordingClient`: the envelope itself, under the routing
+   * key a binding is matched against. No application publishes through one: a namespace with no
+   * broker goes to the outbox's `local` instead.
+   */
+  static inProcess(
     message: OutboxMessage,
     envelope: OutboxEnvelope,
   ): OutboxPacket {
-    return { pattern: message.topic, data: envelope };
+    return {
+      pattern: EventAddress.ofMessage(message).routingKey,
+      data: envelope,
+    };
   }
 
   /** The `toPacket` of a transport, by kind — what a `ClientProxyTransport` is built with. */

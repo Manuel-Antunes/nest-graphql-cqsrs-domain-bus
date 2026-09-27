@@ -7,7 +7,7 @@ import type { RequestContextCodec } from '../request-context';
 import { CorrelatedRequestContext } from '../request-context';
 import { TransportIdentity } from '../transport-identity';
 
-/** What a producer's outbox publishes for one event: the pattern, and the envelope. */
+/** What a producer's outbox publishes for one event: the routing key a broker emits it under, and the envelope. */
 export interface PublishedEnvelope {
   readonly pattern: string;
   readonly envelope: OutboxEnvelope;
@@ -39,7 +39,7 @@ export const publishedEnvelope = (
     );
   }
   return {
-    pattern: message.topic,
+    pattern: address.routingKey,
     envelope: {
       id: message.id ?? address.identifier,
       topic: message.topic,
