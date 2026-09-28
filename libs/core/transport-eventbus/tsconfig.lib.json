@@ -19,13 +19,13 @@
       "path": "../microservices-inngest/tsconfig.lib.json"
     },
     {
-      "path": "../microservices-aws/tsconfig.lib.json"
+      "path": "../outbox-mikro-orm/tsconfig.lib.json"
+    },
+    {
+      "path": "../event-store-mikro-orm/tsconfig.lib.json"
     },
     {
       "path": "../../database/tsconfig.lib.json"
-    },
-    {
-      "path": "../outbox-mikro-orm/tsconfig.lib.json"
     },
     {
       "path": "../cqsrs/tsconfig.lib.json"

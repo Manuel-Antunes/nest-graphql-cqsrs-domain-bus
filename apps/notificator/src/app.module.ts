@@ -9,7 +9,11 @@ import { authNotifications } from '@nestposts/auth/domain/auth/notification/auth
 import { AuthInfrastructureModule } from '@nestposts/auth/infrastructure/auth-infrastructure.module';
 import { SubscriptionChangeNotification } from '@nestposts/billing/domain/billing/notification/subscription-change.notification';
 import { CqsrsModule } from '@nestposts/cqsrs';
-import { DatabaseModule, TenancyModule } from '@nestposts/database';
+import {
+  DatabaseModule,
+  MessageTenantResolver,
+  TenancyModule,
+} from '@nestposts/database';
 import { CalendarEventRescheduledNotification } from '@nestposts/events/domain/calendar-event/notification/calendar-event-rescheduled.notification';
 import { CalendarEventScheduledNotification } from '@nestposts/events/domain/calendar-event/notification/calendar-event-scheduled.notification';
 import { MailModule } from '@nestposts/mail/mail.module';
@@ -28,8 +32,7 @@ import { TenantMembershipModule } from '@nestposts/organizations/infrastructure/
 import {
   MikroOrmOutboxModule,
   MikroOrmOutboxStore,
-  MikroOrmUnitOfWorkTransaction,
-  OutboxHousekeepingModule,
+  MikroOrmTransactionManager,
 } from '@nestposts/outbox-mikro-orm';
 import { PostCreatedNotification } from '@nestposts/posts/domain/post/notification/post-created.notification';
 import { RetryPolicyModule } from '@nestposts/retry-policy/retry-policy.module';
@@ -38,7 +41,6 @@ import {
   TRANSPORT_EVENT_BUS_PUBLISHER,
   TransportEventBusModule,
   TransportIdentity,
-  TransportTenantResolver,
 } from '@nestposts/transport-eventbus';
 import { Inngest } from 'inngest';
 
@@ -95,7 +97,7 @@ import { InterfacesModule } from './interfaces/interfaces.module';
         MikroOrmConfiguration.connection(postgres),
     }),
     TenancyModule.forRoot({
-      resolver: TransportTenantResolver,
+      resolver: MessageTenantResolver,
       migrations: MikroOrmConfiguration.tenantMigrations(),
     }),
     AuthInfrastructureModule.forRoot({
@@ -127,12 +129,11 @@ import { InterfacesModule } from './interfaces/interfaces.module';
       inject: [appConfig.KEY],
       useFactory: ({ name }: AppConfig) => ({ producer: name }),
     }),
-    OutboxHousekeepingModule.forRoot({}),
     TransportEventBusModule.forRootAsync({
       inject: [appConfig.KEY],
       useFactory: ({ name }: AppConfig) =>
         TransportIdentity.named(name, { publishes: false }),
-      transaction: MikroOrmUnitOfWorkTransaction,
+      transactionManager: MikroOrmTransactionManager,
       inbox: { descriptions: MikroOrmOutboxStore },
     }),
     MailModule.forRootAsync({

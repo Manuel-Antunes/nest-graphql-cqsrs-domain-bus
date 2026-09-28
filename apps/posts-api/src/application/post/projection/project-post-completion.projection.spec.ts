@@ -8,13 +8,7 @@ import {
   Tag,
 } from '@nestposts/posts/domain/tag/tag.entity';
 import { TagId } from '@nestposts/posts/domain/tag/vo/tag-id';
-import {
-  markIngested,
-  TRANSPORT_MESSAGE_TYPE,
-  TRANSPORT_ORIGIN,
-  TRANSPORT_TAGS,
-  TRANSPORT_TIMESTAMP,
-} from '@nestposts/transport-eventbus';
+import { markIngested } from '@nestposts/transport-eventbus';
 import { UserId } from '@nestposts/users/domain/user/vo/user-id';
 
 import {
@@ -49,18 +43,7 @@ describe('ProjectPostCompletion', () => {
     );
 
   const fromAnotherService = (event: PostCreatedEvent) => {
-    markIngested(event, {
-      origin: 'tagging',
-      identifier: 'evt-1',
-      messageType: 'posts.PostCreated#2.0.0',
-      metadata: {
-        [TRANSPORT_MESSAGE_TYPE]: 'posts.PostCreated#2.0.0',
-        [TRANSPORT_TIMESTAMP]: event.occurredAt.toISOString(),
-        [TRANSPORT_ORIGIN]: 'tagging',
-        [TRANSPORT_TAGS]: `postId=${event.postId}`,
-      },
-      tags: [{ key: 'postId', value: event.postId }],
-    });
+    markIngested(event, 'tagging');
     return event;
   };
 

@@ -3,17 +3,17 @@ import { Injectable } from '@nestjs/common';
 import type { AsyncContext } from '@nestjs/cqrs';
 import type { Context } from '@opentelemetry/api';
 
+import { EventMessages } from '../outbound/event-messages';
 import { RequestContextCodec } from '../request-context';
 import { traceContextOf } from '../tracing';
-import { envelopeOf, messageOf } from './event-reconstruction';
+import { envelopeOf } from './event-reconstruction';
 
 /**
  * **The request a delivery belongs to, for whoever is not a handler's parameter.**
  *
- * `@TransportRequest()` is a pipe, and a pipe runs **after** the guards and the interceptors — so a
- * guard that wants the tenant, the user or whatever else the request carries cannot use it. This is
- * the same decode, reachable from an `ExecutionContext`, which is what a guard, an interceptor and a
- * filter are given:
+ * A pipe runs **after** the guards and the interceptors — so a guard that wants the tenant, the user
+ * or whatever else the request carries cannot take it as a parameter. This is the same decode,
+ * reachable from an `ExecutionContext`, which is what a guard, an interceptor and a filter are given:
  *
  * ```ts
  * @Injectable()
@@ -26,12 +26,6 @@ import { envelopeOf, messageOf } from './event-reconstruction';
  *   }
  * }
  * ```
- *
- * ## Why this matters more than it looks
- * Because it is what makes the framework's own machinery work on a message: everything the publishing
- * service put in the context — authentication, a tenant id, a feature flag, a locale — is on the
- * envelope's headers, and from here a **shared guard** reads it the way it reads an HTTP request.
- * Without it, a service that consumes messages has to write a parallel authorisation path for them.
  */
 @Injectable()
 export class IncomingRequest {
@@ -39,7 +33,7 @@ export class IncomingRequest {
 
   /** From the payload as the transport handed it over: the `OutboxEnvelope`. */
   from(message: unknown): AsyncContext | undefined {
-    return this.codec.decode(messageOf(envelopeOf(message)));
+    return this.codec.fromMessage(EventMessages.read(envelopeOf(message)));
   }
 
   /** From what a guard, an interceptor or a filter is looking at. */
@@ -49,9 +43,9 @@ export class IncomingRequest {
 
   /**
    * **The trace a delivery belongs to**, read off its envelope — or `undefined` for anything that is
-   * not a message. The handler's `process` span is a child of it, and it has ended by the time an
-   * interceptor or a filter sees the failure; this is how they still reach the trace of the work
-   * that failed (`ErrorReportingModule`'s `traceOf`, in `@nestposts/observability`).
+   * not a message. The handler's `process` span has ended by the time an interceptor or a filter sees
+   * the failure; this is how they still reach the trace of the work that failed
+   * (`ErrorReportingModule`'s `traceOf`, in `@nestposts/observability`).
    */
   static traceOf(context: ExecutionContext): Context | undefined {
     if (context.getType() !== 'rpc') {

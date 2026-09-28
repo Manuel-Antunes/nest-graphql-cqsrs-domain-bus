@@ -10,3 +10,6 @@ export const TRANSPORT_OUTBOX_DESTINATIONS = Symbol(
 
 /** The application's `TransportOutboxSettings`, resolved. */
 export const TRANSPORT_OUTBOX_SETTINGS = Symbol('TransportOutboxSettings');
+
+/** The correlation data providers `MessageInterceptors` is built with, in order. */
+export const CORRELATION_DATA_PROVIDERS = Symbol('CorrelationDataProviders');

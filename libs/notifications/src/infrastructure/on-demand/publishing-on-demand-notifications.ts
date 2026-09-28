@@ -1,9 +1,9 @@
 import { Injectable, Optional } from '@nestjs/common';
 import { EventPublisher } from '@nestjs/cqrs';
 import {
-  UnitOfWork,
-  UnitOfWorkTransaction,
-} from '@nestposts/transport-eventbus/unit-of-work/unit-of-work';
+  SimpleUnitOfWorkFactory,
+  UnitOfWorkFactory,
+} from '@nestposts/transport-eventbus/unit-of-work/unit-of-work-factory';
 
 import type { Notification } from '../../domain/notification/notification';
 import type { OnDemandNotifiable } from '../../domain/notification/on-demand-notifiable';
@@ -14,17 +14,21 @@ import { OnDemandNotifications } from '../../domain/notification/on-demand-notif
  * `CqsrsModule.forRoot({ aggregatePublisher: TRANSPORT_EVENT_BUS_PUBLISHER })` made it one — so the
  * `NotificationReceivedEvent` leaves for the process that delivers notifications.
  *
- * The notify and the commit run inside a unit of work: the publish is staged and sent at its commit,
- * and `send` resolves only once that is done. Called from inside a unit that is already open, it joins
- * it instead, and goes out with the rest of that unit's events.
+ * The notify and the commit run in a unit of work of their own: the publish is staged, written to the
+ * outbox in its `PREPARE_COMMIT`, and `send` resolves only once that committed. Called from inside
+ * another unit — a Better Auth callback during a command — it is still a unit of its own, which joins
+ * that unit's transaction.
  */
 @Injectable()
 export class PublishingOnDemandNotifications extends OnDemandNotifications {
+  private readonly units: UnitOfWorkFactory;
+
   constructor(
     private readonly publisher: EventPublisher,
-    @Optional() private readonly transaction?: UnitOfWorkTransaction,
+    @Optional() units?: UnitOfWorkFactory,
   ) {
     super();
+    this.units = units ?? new SimpleUnitOfWorkFactory();
   }
 
   async send(
@@ -32,14 +36,10 @@ export class PublishingOnDemandNotifications extends OnDemandNotifications {
     notification: Notification,
     now: Date = new Date(),
   ): Promise<void> {
-    await UnitOfWork.run(
-      async () => {
-        const addressed = this.publisher.mergeObjectContext(notifiable);
-        addressed.notify(notification, now);
-        addressed.commit();
-      },
-      undefined,
-      { transaction: this.transaction },
-    );
+    await this.units.create().executeWithResult(async () => {
+      const addressed = this.publisher.mergeObjectContext(notifiable);
+      addressed.notify(notification, now);
+      addressed.commit();
+    });
   }
 }

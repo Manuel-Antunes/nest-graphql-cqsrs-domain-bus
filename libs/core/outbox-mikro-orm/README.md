@@ -1,8 +1,8 @@
 # @nestposts/outbox-mikro-orm
 
 [`@nestjs/outbox`](https://docs.nestjs.com/reliability/outbox) on MikroORM and PostgreSQL: the store the
-package leaves to the application, the tables it keeps, the transaction a unit of work writes through,
-and the housekeeping the package does not do.
+package leaves to the application, the tables it keeps, and the transaction manager a unit of work
+runs in.
 
 It knows nothing about the bus that writes to the outbox. `@nestposts/transport-eventbus` uses what this
 library provides, and the application is where the two meet — at its root, where every one of them is
@@ -26,16 +26,9 @@ declared:
       inject: [appConfig.KEY],
       useFactory: ({ name }: AppConfig) => ({ producer: name }),
     }),
-    OutboxHousekeepingModule.forRootAsync({             // pruning, health, the scheduled sweep
-      inject: [outboxConfig.KEY],
-      useFactory: ({ relay, inboxRetention }: OutboxConfig) => ({
-        interval: relay === 'poll' ? '1h' : false,
-        inboxRetention,
-      }),
-    }),
     TransportEventBusModule.forRootAsync({
       /* identity, … */
-      transaction: MikroOrmUnitOfWorkTransaction,        // what every unit of work runs in
+      transactionManager: MikroOrmTransactionManager,    // what every unit of work runs in
       inbox: { descriptions: MikroOrmOutboxStore },      // what each admitted message was, and from whom
     }),
   ],
@@ -59,6 +52,13 @@ owns tables does:
 
 It is global, like the `OutboxModule` it serves, and needs that module and the MikroORM connection.
 
+**It prunes nothing, and runs nothing on a timer.** A message leaves `outbox_messages` when the relay
+publishes it or dead-letters it, and a dead letter stays until `@nestjs/outbox`'s `OutboxDeadLetters`
+requeues or purges it. The inbox is forgotten from outside: `apps/migrator`'s `migrate()` ends with
+`pruneInbox()`, which deletes from `OutboxInboxRecord`'s table (`OutboxInboxEntitySchema`,
+`@nestposts/outbox-mikro-orm/outbox.entities`) every row processed longer ago than
+`INBOX_RETENTION_DAYS` — one statement for every consumer, on every deploy and every `setup`.
+
 **The store is scoped by producer.** One `transport` schema (`TRANSPORT_SCHEMA`, `@nestposts/database`)
 serves every service, and a relay may only publish what its own service produced: the destinations a
 message is sent through are the producer's transports, and another service has none of them. Every
@@ -78,26 +78,46 @@ transaction: the fork `em.transactional` hands its callback, or the global one w
 is its context. Anything else is refused with `OutboxTransactionRequiredError` — writing outside the
 caller's transaction would be the dual write the outbox exists to remove.
 
-## `MikroOrmUnitOfWorkTransaction`
+## `MikroOrmTransactionManager`
 
-The transaction a unit of work runs in, on MikroORM: `inRequestContext` around `em.transactional`, whose
-fork every injected entity manager resolves to while the unit runs, and which it hands the unit as the
-transaction's handle — the `Tx` the outbox and the inbox write through. `detached()` is the same with
-`REQUIRES_NEW`, for a publish that nobody awaits inside the caller's transaction.
+The transaction a unit of work runs in, on MikroORM — `transport-eventbus`'s `TransactionManager`,
+Axon 5's port, which it satisfies by its shape without importing it. The application hands it to the
+bus: `transactionManager: MikroOrmTransactionManager`.
 
-It is `transport-eventbus`'s `UnitOfWorkTransaction` by its shape, without importing it, and it is the
-application that hands it to the bus: `transaction: MikroOrmUnitOfWorkTransaction`.
+**`em.transactional`, decided later.** A unit opens its transaction in `PRE_INVOCATION` and commits it
+in `COMMIT`, three phases apart; a MikroORM transaction is a callback. So the callback is started and
+left waiting on the unit's decision: `commit()` lets it return — MikroORM flushes and commits — and
+`rollback()` makes it throw. Everything else is MikroORM's own: the fork is the transaction's `handle`
+— the `Tx` the outbox, the inbox and the event store write through — and `run(work)` enters its
+`TransactionContext`, which the unit does around every phase action, so every `EntityManager` a handler
+injects resolves to it.
 
-## `OutboxHousekeepingModule`
+**An open transaction is joined, as a savepoint**, exactly as a nested `em.transactional` would join it
+— which is Axon's JPA manager joining the thread's transaction. That is what a command a saga
+dispatches inside an ingestion gets: a unit of its own, whose writes commit with the ingestion's or not
+at all.
 
-What `@nestjs/outbox` leaves to the application, in `OutboxHousekeeping`:
+**After-commit work waits for the transaction that owns it.** `afterCommit(callback)` only queues
+`callback`. A transaction that joined another hands its queue to that one when it commits — its own
+commit only releases a savepoint — and drops it when it rolls back; the transaction that owns the
+connection runs the queue in `runAfterCommit()`, which the unit that opened it calls in its
+`AFTER_COMMIT`, outside the transaction's scope. A callback that fails is logged, and the commit
+stands. The queue used to run inside `commit()`, and that was measured to fail: it ran in the committed
+fork's `TransactionContext`, and a drain that delivered synchronously to another unit joined a
+transaction that was already over — `Transaction is already committed`.
 
-- the inbox is **pruned** of what every consumer processed longer ago than `inboxRetention` (`30d`);
-- the outbox's **health** is read and reported when a due message has waited longer than `lagWarning`
-  (`1m`) or there are dead letters;
-- a message given up on is an **error** in the log, not a warning among the retries.
+**`detached()` is the same with `REQUIRES_NEW`**, for a publish that nobody awaits inside the caller's
+transaction: as a savepoint it would release after that transaction committed — measured, `RELEASE
+SAVEPOINT can only be used in transaction blocks`, from a provisioning that published inside
+`UserRepository.exclusively`.
 
-A long-lived process does the first two on a timer (`interval`, `1h`, unreferenced). A function has no
-timer that survives it (`interval: false`), so a schedule calls `sweep()`, which also publishes what is
-due, a batch at a time (`batchSize`, `100` — the relay's, when it is not the default). It speaks only
-`@nestjs/outbox`, so it holds for whichever store is registered.
+**In the tenant the message names.** The relay delivers a streaming group's messages outside any
+request, so nothing has opened the tenant a message belongs to. The manager is told the message the
+unit handles, and when that message's metadata names a tenant (`x-tenant`) and there is no open
+transaction to join, it opens the transaction on that tenant's entity manager
+(`TenantEntityManagerService`, `@nestposts/database`, optional) — which is where Axon's multi-tenancy
+picks a connection too, before the handler runs. Otherwise it opens it on the entity manager of the
+context: the request's, which `TenancyModule` already put in its tenant.
+
+**One connection carries everything a unit writes**, so it answers `requiresSequentialInvocation =
+true`, and the unit runs its phase actions one at a time.

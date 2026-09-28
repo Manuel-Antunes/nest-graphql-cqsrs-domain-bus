@@ -1,26 +1,36 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
+import type { NewOutboxMessage } from '@nestjs/outbox';
 import { Outbox, OutboxRelay } from '@nestjs/outbox';
 
 import {
   TRANSPORT_OUTBOX_DESTINATIONS,
   TRANSPORT_OUTBOX_SETTINGS,
 } from '../constants';
+import { EventHandlingComponents } from '../eventhandling/event-handling-components';
+import { ProcessingGroups } from '../eventhandling/processing-groups';
+import type { EventMessage } from '../messaging/event-message';
 import { EventMessages } from '../outbound/event-messages';
 import { OutboxRoute } from '../outbound/outbox-route';
-import { UnitOfWorkTransaction } from '../unit-of-work/unit-of-work';
+import type { ProcessingContext } from '../unit-of-work/processing-context';
+import { TransactionManager } from '../unit-of-work/transaction-manager';
 import type { TransportOutboxSettings } from './transport-outbox.options';
 
 /**
- * **Where an event that leaves the process is written, instead of being sent.**
+ * **Where an event that must be delivered later is written, instead of being sent.**
  *
- * `TransportEventBusService` hands it the events a unit of work staged, in the unit's `prepareCommit`
- * phase and so inside its transaction: each one whose namespace has a destination becomes one
- * message of the outbox ({@link EventMessages}), written with `Outbox.add(tx, …)` through the unit's
- * own transaction handle, and so committed with the writes that raised it or rolled back with them.
- * Nothing reaches a broker here — the relay publishes the message through the destination's
- * `ClientProxyTransport` once the transaction has committed, and again until a broker takes it.
+ * The bus hands it every batch its unit of work stages, in `PREPARE_COMMIT` and so inside the unit's
+ * transaction. Each event becomes up to two kinds of `@nestjs/outbox` message, written with
+ * `Outbox.add(tx, …)` through the unit's transaction handle — committed with the writes that raised
+ * them, or rolled back with them:
  *
- * The outbox is the application's `OutboxModule`, global; this only writes to it and tells its relay.
+ * - **one for its namespace's destination**, when this service publishes that namespace and the
+ *   outbox has a transport for it — the relay publishes it through the destination's
+ *   `ClientProxyTransport`, to the other services;
+ * - **one per streaming processing group** whose handlers take it — the relay delivers it `local`, to
+ *   that group alone (`StreamingGroupDelivery`), in a unit of work of its own.
+ *
+ * Nothing reaches a broker or a handler here. Once the unit committed, {@link committed} wakes the
+ * relay, or drains it where no relay polls.
  */
 @Injectable()
 export class EventOutbox {
@@ -28,70 +38,65 @@ export class EventOutbox {
 
   private readonly logger = new Logger(EventOutbox.name);
 
-  /** The transaction a publish that no unit of work staged is recorded in: its own. */
-  readonly detached: UnitOfWorkTransaction;
-
   private readonly destinations: ReadonlySet<string>;
 
   constructor(
     private readonly outbox: Outbox,
     private readonly relay: OutboxRelay,
     private readonly messages: EventMessages,
-    transaction: UnitOfWorkTransaction,
+    private readonly components: EventHandlingComponents,
+    private readonly groups: ProcessingGroups,
     @Inject(TRANSPORT_OUTBOX_SETTINGS)
     private readonly settings: TransportOutboxSettings,
     @Inject(TRANSPORT_OUTBOX_DESTINATIONS) destinations: readonly string[],
   ) {
-    this.detached = transaction.detached();
     this.destinations = new Set(destinations);
   }
 
-  /** Whether any of these events leaves the process — and so owes the outbox a row. */
-  leaves(events: readonly object[]): boolean {
-    return events.some(
-      (event) => this.messages.of(event, this.destinations) !== undefined,
+  /** The outbox messages one event becomes — none when it concerns nobody outside its unit. */
+  messagesOf(message: EventMessage): NewOutboxMessage[] {
+    const written: NewOutboxMessage[] = [];
+    const destination = this.messages.forDestination(
+      message,
+      this.destinations,
     );
+    if (destination && this.hasTransport(destination)) {
+      written.push(destination);
+    }
+    const interested = new Set(this.components.groupsFor(message.payload));
+    for (const group of this.groups.streaming) {
+      if (interested.has(group)) {
+        written.push(this.messages.forGroup(message, group));
+      }
+    }
+    return written;
+  }
+
+  /** Whether any of these events owes the outbox a message. */
+  concerns(messages: readonly EventMessage[]): boolean {
+    return messages.some((message) => this.messagesOf(message).length > 0);
   }
 
   /**
-   * Whether the outbox delivers this event `local` — to this process's bus, through the relay, once
-   * its unit of work has committed — so the commit must not tell it too. Only with the outbox's
-   * route in the settings ({@link TransportOutboxSettings.route}).
+   * Writes the messages these events become through the transaction of `context`'s unit, and answers
+   * whether it wrote any.
    */
-  deliversLocally(event: object): boolean {
-    const route = this.settings.route;
-    if (!route) {
+  async stage(
+    context: ProcessingContext | undefined,
+    messages: readonly EventMessage[],
+  ): Promise<boolean> {
+    const written = messages.flatMap((message) => this.messagesOf(message));
+    if (written.length === 0) {
       return false;
     }
-    const message = this.messages.of(event, this.destinations);
-    return (
-      message !== undefined &&
-      route({ headers: message.headers ?? {} }) === OutboxRoute.LOCAL
-    );
-  }
-
-  /** Whether this bus knows which events the outbox delivers `local` — see {@link deliversLocally}. */
-  get routesLocally(): boolean {
-    return this.settings.route !== undefined;
+    await this.outbox.add(TransactionManager.handleOf(context), written);
+    return true;
   }
 
   /**
-   * Writes the events a destination takes through `transaction` — the handle of the transaction the
-   * unit of work is in ({@link UnitOfWork.transactionHandle}).
-   */
-  async stage(events: readonly object[], transaction: unknown): Promise<void> {
-    const messages = events.flatMap(
-      (event) => this.messages.of(event, this.destinations) ?? [],
-    );
-    if (messages.length === 0) {
-      return;
-    }
-    await this.outbox.add(transaction, messages);
-  }
-
-  /**
-   * What happens once a unit of work that staged rows has committed — see {@link OutboxRelayMode}.
-   * It never fails the unit: the rows are committed, and publishing them is the relay's to retry.
+   * What happens once a unit of work that staged messages has committed — see {@link OutboxRelayMode}.
+   * It never fails the unit: the messages are committed, so failing it would answer an error for work
+   * that happened — and a caller retrying would do the work again, not publish it.
    */
   async committed(): Promise<void> {
     switch (this.settings.relay ?? 'poll') {
@@ -101,7 +106,7 @@ export class EventOutbox {
       case 'drain':
         await this.drain().catch((failure: unknown) =>
           this.logger.error(
-            `the outbox could not be drained after a commit; the relay will publish it later`,
+            'the outbox could not be drained after a commit; the next drain of this service will publish it',
             failure instanceof Error ? failure.stack : String(failure),
           ),
         );
@@ -111,14 +116,30 @@ export class EventOutbox {
     }
   }
 
-  /** Publishes what is due, a batch at a time, until a batch comes back short. */
+  /**
+   * Publishes what is due, a batch at a time, while batches publish something. A batch that publishes
+   * nothing — the broker is down — ends the drain: its messages were rescheduled with the outbox's
+   * backoff, and retrying them here, as soon as they are due again, would spend every attempt they
+   * have before the broker is back.
+   */
   async drain(): Promise<void> {
-    const batchSize = this.settings.batchSize ?? 100;
     for (let round = 0; round < EventOutbox.MAX_DRAIN_ROUNDS; round += 1) {
-      const { claimed } = await this.relay.runOnce();
-      if (claimed < batchSize) {
+      const { claimed, published } = await this.relay.runOnce();
+      if (claimed === 0 || published === 0) {
         return;
       }
     }
+  }
+
+  /**
+   * Whether the outbox has a transport for this destination message. A service with no broker routes
+   * every namespace to `local`, where nothing receives a destination message; writing it would only
+   * leave a message for the relay to dead-letter.
+   */
+  private hasTransport(message: NewOutboxMessage): boolean {
+    const route = this.settings.route;
+    return (
+      !route || route({ headers: message.headers ?? {} }) !== OutboxRoute.LOCAL
+    );
   }
 }

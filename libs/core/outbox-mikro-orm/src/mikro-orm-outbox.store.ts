@@ -84,7 +84,7 @@ interface Tables {
  * ## How it is registered
  * `MikroOrmOutboxModule` builds it and it registers itself with the application's `OutboxStorage`,
  * for both contracts. A transaction handle is the `EntityManager` of an open transaction — the fork
- * `MikroOrmUnitOfWorkTransaction` hands a unit of work, or the global one while that transaction is
+ * `MikroOrmTransactionManager` hands a unit of work, or the global one while that transaction is
  * its context.
  */
 export class MikroOrmOutboxStore

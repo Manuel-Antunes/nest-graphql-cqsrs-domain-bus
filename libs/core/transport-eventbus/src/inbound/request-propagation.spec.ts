@@ -26,24 +26,28 @@ import {
 import { EventPattern, Payload } from '@nestjs/microservices';
 import type { OutboxEnvelope } from '@nestjs/outbox';
 import { OutboxModule } from '@nestjs/outbox';
-import { testDatabaseConfig } from '@nestposts/database/testing';
+import {
+  testDatabaseConfig,
+  testSchemaLifecycle,
+} from '@nestposts/database/testing';
 import {
   MikroOrmOutboxModule,
-  MikroOrmUnitOfWorkTransaction,
+  MikroOrmTransactionManager,
   outboxEntities,
 } from '@nestposts/outbox-mikro-orm';
 import { EventType } from '@nestposts/platform/domain/shared/event-type';
 import type { Observable } from 'rxjs';
 import { map } from 'rxjs';
 
+import { Message } from '../messaging/message';
 import { EventAddress } from '../outbound/event-address';
-import type { Ingestion } from '../outbound/transport-metadata';
 import type { ContextAttributes } from '../request-context';
-import { CorrelatedRequestContext, correlationIdOf } from '../request-context';
+import { DefaultRequestContextCodec } from '../request-context';
 import { publishedEnvelope, startInProcessService } from '../testing';
 import { TransportEventBusModule } from '../transport-event-bus.module';
 import { TransportEventBusService } from '../transport-event-bus.service';
 import { TransportIdentity } from '../transport-identity';
+import { ProcessingContext } from '../unit-of-work/processing-context';
 import { EventIngestion } from './event-ingestion';
 import { IncomingRequest } from './incoming-request';
 
@@ -79,8 +83,8 @@ class ShopRequest extends AsyncContext implements ContextAttributes {
 }
 
 @Injectable()
-class ShopRequestCodec extends CorrelatedRequestContext {
-  protected override contextFor(message: Ingestion): AsyncContext | undefined {
+class ShopRequestCodec extends DefaultRequestContextCodec {
+  protected override contextFor(message: Message): AsyncContext | undefined {
     const tenantId = message.metadata[TENANT];
     const userId = message.metadata[USER];
     return tenantId && userId ? new ShopRequest(tenantId, userId) : undefined;
@@ -131,7 +135,8 @@ class NoteTheOrderHandler implements ICommandHandler<NoteTheOrder> {
     this.seen.commanded.push({
       tenantId: shop?.tenantId,
       userId: shop?.userId,
-      correlationId: shop ? correlationIdOf(shop) : undefined,
+      correlationId: Message.fromContext(ProcessingContext.current())?.metadata
+        .correlationId,
     });
   }
 }
@@ -183,45 +188,53 @@ describe('the request that crosses: what a guard, a saga and a command all see',
     }
   };
 
-  const publish = async (event: object, request?: AsyncContext) => {
+  const publish = async (
+    event: object,
+    request?: AsyncContext,
+    correlationId?: string,
+  ) => {
     const { pattern, envelope } = publishedEnvelope(event, {
       producer: 'orders',
       codec: new ShopRequestCodec(),
       request,
+      metadata: correlationId ? { correlationId } : {},
     });
     await consuming.server.emit(pattern, envelope);
     await settle();
   };
 
   beforeAll(async () => {
-    consuming = await startInProcessService({
-      imports: [
-        CqrsModule.forRoot(),
-        DiscoveryModule,
-        MikroOrmModule.forRoot(
-          testDatabaseConfig({
-            entities: [...outboxEntities],
-            allowGlobalContext: true,
+    consuming = await startInProcessService(
+      {
+        imports: [
+          CqrsModule.forRoot(),
+          DiscoveryModule,
+          MikroOrmModule.forRoot(
+            testDatabaseConfig({
+              entities: [...outboxEntities],
+              allowGlobalContext: true,
+            }),
+          ),
+          OutboxModule.forRoot({ relay: { enabled: false } }),
+          MikroOrmOutboxModule.forRoot({ producer: 'shop' }),
+          TransportEventBusModule.forRoot({
+            identity: TransportIdentity.named('shop'),
+            requestContext: ShopRequestCodec,
+            transactionManager: MikroOrmTransactionManager,
+            inbox: true,
           }),
-        ),
-        OutboxModule.forRoot({ relay: { enabled: false } }),
-        MikroOrmOutboxModule.forRoot({ producer: 'shop' }),
-        TransportEventBusModule.forRoot({
-          identity: TransportIdentity.named('shop'),
-          requestContext: ShopRequestCodec,
-          transaction: MikroOrmUnitOfWorkTransaction,
-          inbox: true,
-        }),
-      ],
-      controllers: [ShopEventsController],
-      providers: [
-        Seen,
-        TenantGuard,
-        NoteTheOrderHandler,
-        NoteOnOrderPlaced,
-        OrderPlacedHandler,
-      ],
-    });
+        ],
+        controllers: [ShopEventsController],
+        providers: [
+          Seen,
+          TenantGuard,
+          NoteTheOrderHandler,
+          NoteOnOrderPlaced,
+          OrderPlacedHandler,
+        ],
+      },
+      testSchemaLifecycle,
+    );
     seen = consuming.app.get(Seen);
     bus = consuming.app.get(TransportEventBusService);
   });
@@ -258,17 +271,13 @@ describe('the request that crosses: what a guard, a saga and a command all see',
       });
     });
 
-    it('reaches the request-scoped COMMAND handler, under the same correlation id', async () => {
+    it('reaches the request-scoped COMMAND handler, under the correlation id the publisher opened', async () => {
       const request = new ShopRequest('acme', 'u-3');
 
-      await publish(new OrderPlacedEvent('o-3', new Date()), request);
+      await publish(new OrderPlacedEvent('o-3', new Date()), request, 'c-3');
 
       expect(seen.commanded).toEqual([
-        {
-          tenantId: 'acme',
-          userId: 'u-3',
-          correlationId: correlationIdOf(request),
-        },
+        { tenantId: 'acme', userId: 'u-3', correlationId: 'c-3' },
       ]);
     });
 
@@ -296,7 +305,7 @@ describe('the request that crosses: what a guard, a saga and a command all see',
   });
 
   describe('an event raised in this service', () => {
-    it('carries the same request into the saga and the command, with nothing on the wire', async () => {
+    it('carries the same request into the saga and the command, which starts a chain of its own: no message caused it', async () => {
       const request = new ShopRequest('acme', 'u-6');
       const event = new OrderPlacedEvent('o-6', new Date());
 
@@ -305,11 +314,7 @@ describe('the request that crosses: what a guard, a saga and a command all see',
       await expect
         .poll(() => seen.commanded, { timeout: 2_000, interval: 10 })
         .toEqual([
-          {
-            tenantId: 'acme',
-            userId: 'u-6',
-            correlationId: correlationIdOf(request),
-          },
+          { tenantId: 'acme', userId: 'u-6', correlationId: undefined },
         ]);
       expect(seen.handled[0]).toBe(request);
       expect(seen.guarded).toEqual([]);

@@ -1,6 +1,6 @@
 import type { MikroORM } from '@mikro-orm/postgresql';
 
-import { bootstrap, migrate, migrateTenants } from '../main';
+import { bootstrap, migrate, migrateTenants, pruneInbox } from '../main';
 import type { MigratorContext } from './bootstrap';
 
 describe('migrating the system, then every tenant', () => {
@@ -109,5 +109,23 @@ describe('migrating the system, then every tenant', () => {
         'select count(*)::int as applied from tenant_root.mikro_orm_migrations',
       ),
     ).toEqual([{ applied: 4 }]);
+  });
+
+  it('forgets what the inbox processed longer ago than its retention, and remembers the rest', async () => {
+    await query(
+      context.orm,
+      `insert into transport.outbox_inbox (consumer, message_id, processed_at) values
+         ('migrations-spec', 'forgotten', now() - interval '31 days'),
+         ('migrations-spec', 'remembered', now() - interval '29 days')`,
+    );
+
+    await expect(pruneInbox()).resolves.toBe(1);
+
+    expect(
+      await query(
+        context.orm,
+        `select message_id from transport.outbox_inbox where consumer = 'migrations-spec'`,
+      ),
+    ).toEqual([{ message_id: 'remembered' }]);
   });
 });

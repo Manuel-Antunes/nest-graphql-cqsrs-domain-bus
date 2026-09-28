@@ -58,8 +58,8 @@ export const isInngestRecord = <TData>(
  * options without the producer learning the transport.
  *
  * It is what a caller composes when a send must say more than its name and data: one that must not
- * run twice (an idempotency key — `@nestposts/transport-eventbus`'s outbox packet gives every message
- * its id), one that should not run yet, one that belongs to a session of its own.
+ * run twice (an idempotency key — an application's outbox packet gives every message its id), one
+ * that should not run yet, one that belongs to a session of its own.
  *
  * ```ts
  * client.emit(pattern, new InngestRecordBuilder(payload)

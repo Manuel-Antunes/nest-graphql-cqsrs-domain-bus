@@ -551,6 +551,9 @@ importers:
       '@nestposts/database':
         specifier: workspace:*
         version: link:../../libs/database
+      '@nestposts/event-store-mikro-orm':
+        specifier: workspace:*
+        version: link:../../libs/core/event-store-mikro-orm
       '@nestposts/events':
         specifier: workspace:*
         version: link:../../libs/events
@@ -572,9 +575,6 @@ importers:
       '@nestposts/posts':
         specifier: workspace:*
         version: link:../../libs/posts
-      '@nestposts/transport-eventbus':
-        specifier: workspace:*
-        version: link:../../libs/core/transport-eventbus
       '@nestposts/users':
         specifier: workspace:*
         version: link:../../libs/users
@@ -702,6 +702,9 @@ importers:
       '@nestposts/database':
         specifier: workspace:*
         version: link:../../libs/database
+      '@nestposts/event-store-mikro-orm':
+        specifier: workspace:*
+        version: link:../../libs/core/event-store-mikro-orm
       '@nestposts/lambda':
         specifier: workspace:*
         version: link:../../libs/core/lambda
@@ -787,6 +790,9 @@ importers:
       '@nestposts/database':
         specifier: workspace:*
         version: link:../../libs/database
+      '@nestposts/event-store-mikro-orm':
+        specifier: workspace:*
+        version: link:../../libs/core/event-store-mikro-orm
       '@nestposts/events':
         specifier: workspace:*
         version: link:../../libs/events
@@ -893,6 +899,9 @@ importers:
       '@nestposts/database':
         specifier: workspace:*
         version: link:../../libs/database
+      '@nestposts/event-store-mikro-orm':
+        specifier: workspace:*
+        version: link:../../libs/core/event-store-mikro-orm
       '@nestposts/lambda':
         specifier: workspace:*
         version: link:../../libs/core/lambda
@@ -1306,6 +1315,12 @@ importers:
 
   libs/core/cqsrs: {}
 
+  libs/core/event-store-mikro-orm:
+    dependencies:
+      '@nestposts/database':
+        specifier: workspace:*
+        version: link:../../database
+
   libs/core/federation-gateway: {}
 
   libs/core/lambda:
@@ -1383,12 +1398,6 @@ importers:
 
   libs/core/transport-eventbus:
     dependencies:
-      '@nestposts/database':
-        specifier: workspace:*
-        version: link:../../database
-      '@nestposts/microservices-aws':
-        specifier: workspace:*
-        version: link:../microservices-aws
       '@nestposts/microservices-inngest':
         specifier: workspace:*
         version: link:../microservices-inngest
@@ -1402,6 +1411,12 @@ importers:
       '@nestposts/cqsrs':
         specifier: workspace:*
         version: link:../cqsrs
+      '@nestposts/database':
+        specifier: workspace:*
+        version: link:../../database
+      '@nestposts/event-store-mikro-orm':
+        specifier: workspace:*
+        version: link:../event-store-mikro-orm
       '@nestposts/outbox-mikro-orm':
         specifier: workspace:*
         version: link:../outbox-mikro-orm

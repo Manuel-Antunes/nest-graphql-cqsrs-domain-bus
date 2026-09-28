@@ -1,6 +1,9 @@
-import { UnitOfWork, UnitOfWorkTransaction } from './unit-of-work';
+import { DefaultPhases } from './phase';
+import { ProcessingContext } from './processing-context';
+import { ResourceKey } from './resource-key';
+import { UnitOfWork } from './unit-of-work';
 
-describe('a unit of work', () => {
+describe('a unit of work, as Axon 5 runs one', () => {
   const trace: string[] = [];
 
   beforeEach(() => {
@@ -11,330 +14,324 @@ describe('a unit of work', () => {
     trace.push(name);
   };
 
-  it('runs the phases in order, and only after the work is done', async () => {
-    await UnitOfWork.run(async () => {
-      const unit = UnitOfWork.current();
-      unit?.on('afterCommit', record('afterCommit'));
-      unit?.on('commit', record('commit'));
-      unit?.on('prepareCommit', record('prepareCommit'));
-      unit?.on('cleanup', record('cleanup'));
-      trace.push('work');
-    });
+  it('runs its phases in order, whatever order they were registered in', async () => {
+    const unit = new UnitOfWork();
+    unit.onAfterCommit(record('AFTER_COMMIT'));
+    unit.onCommit(record('COMMIT'));
+    unit.onPrepareCommit(record('PREPARE_COMMIT'));
+    unit.onPostInvocation(record('POST_INVOCATION'));
+    unit.onInvocation(record('INVOCATION'));
+    unit.onPreInvocation(record('PRE_INVOCATION'));
+
+    await unit.execute();
 
     expect(trace).toEqual([
-      'work',
-      'prepareCommit',
-      'commit',
-      'afterCommit',
-      'cleanup',
+      'PRE_INVOCATION',
+      'INVOCATION',
+      'POST_INVOCATION',
+      'PREPARE_COMMIT',
+      'COMMIT',
+      'AFTER_COMMIT',
     ]);
   });
 
-  it('answers what the work answered', async () => {
-    await expect(UnitOfWork.run(async () => 'done')).resolves.toBe('done');
+  it('runs a phase of its own between two of the defaults', async () => {
+    const unit = new UnitOfWork();
+    unit.onCommit(record('COMMIT'));
+    unit.on({ name: 'audit', order: 25000 }, record('audit'));
+    unit.onPrepareCommit(record('PREPARE_COMMIT'));
+
+    await unit.execute();
+
+    expect(trace).toEqual(['PREPARE_COMMIT', 'audit', 'COMMIT']);
   });
 
-  it("does not commit work that failed: the events are discarded and the failure is the caller's", async () => {
-    await expect(
-      UnitOfWork.run(async () => {
-        UnitOfWork.current()?.on('commit', record('commit'));
-        UnitOfWork.current()?.on('rollback', record('rollback'));
-        UnitOfWork.current()?.on('cleanup', record('cleanup'));
-        throw new Error('the handler refused');
-      }),
-    ).rejects.toThrow('the handler refused');
+  it('answers what the invocation answered, once the unit committed', async () => {
+    const unit = new UnitOfWork();
+    unit.onAfterCommit(record('AFTER_COMMIT'));
 
-    expect(trace).toEqual(['rollback', 'cleanup']);
+    await expect(unit.executeWithResult(async () => 'done')).resolves.toBe(
+      'done',
+    );
+    expect(trace).toEqual(['AFTER_COMMIT']);
   });
 
-  it('commits despite tracked work that failed, which is the bus that dispatched it to report', async () => {
-    await UnitOfWork.run(async () => {
-      UnitOfWork.current()?.on('commit', record('commit'));
-      void UnitOfWork.current()
-        ?.track(Promise.reject(new Error('the saga command refused')))
-        .catch(() => undefined);
-    });
-
-    expect(trace).toEqual(['commit']);
-  });
-
-  it('fails with the tracked work when its caller asked to be told', async () => {
-    await expect(
-      UnitOfWork.run(
-        async () => {
-          UnitOfWork.current()?.on('commit', record('commit'));
-          UnitOfWork.current()?.on('rollback', record('rollback'));
-          void UnitOfWork.current()
-            ?.track(Promise.reject(new Error('the saga command refused')))
-            .catch(() => undefined);
-        },
-        undefined,
-        { failOnTrackedFailure: true },
-      ),
-    ).rejects.toThrow('the saga command refused');
-
-    expect(trace).toEqual(['rollback']);
-  });
-
-  it('is joined, not nested: a command dispatched from inside one commits with it', async () => {
-    await UnitOfWork.run(async () => {
-      const outer = UnitOfWork.current();
-      await UnitOfWork.run(async () => {
-        expect(UnitOfWork.current()).toBe(outer);
-        UnitOfWork.current()?.on('commit', record('inner'));
-      });
-      expect(trace).toEqual([]);
-      UnitOfWork.current()?.on('commit', record('outer'));
-    });
-
-    expect(trace).toEqual(['inner', 'outer']);
-  });
-
-  it('prepares again for whatever was staged while preparing', async () => {
-    await UnitOfWork.run(async () => {
-      const unit = UnitOfWork.current();
-      unit?.on('prepareCommit', () => {
-        trace.push('first');
-        unit.on('prepareCommit', record('second'));
-      });
-    });
-
-    expect(trace).toEqual(['first', 'second']);
-  });
-
-  it('stops taking work once it is telling the world, so a reaction is new work', async () => {
-    let stagingDuringCommit: boolean | undefined;
-
-    await UnitOfWork.run(async () => {
-      const unit = UnitOfWork.current();
-      expect(unit?.staging).toBe(true);
-      unit?.on('commit', () => {
-        stagingDuringCommit = unit.staging;
-      });
-    });
-
-    expect(stagingDuringCommit).toBe(false);
-  });
-
-  describe('the request is the scope', () => {
-    it('joins a unit that belongs to the same request', async () => {
-      const request = { correlationId: 'c-1' };
-
-      await UnitOfWork.run(async () => {
-        const outer = UnitOfWork.current();
-        await UnitOfWork.run(async () => {
-          expect(UnitOfWork.current()).toBe(outer);
-          UnitOfWork.current()?.on('commit', record('inner'));
-        }, request);
-        expect(trace).toEqual([]);
-      }, request);
-
-      expect(trace).toEqual(['inner']);
-    });
-
-    it('does NOT join a unit that belongs to another request, and commits on its own', async () => {
-      const mine = { correlationId: 'c-1' };
-      const theirs = { correlationId: 'c-2' };
-
-      await UnitOfWork.run(async () => {
-        await UnitOfWork.run(async () => {
-          UnitOfWork.current()?.on('commit', record('theirs'));
-        }, theirs);
-        expect(trace).toEqual(['theirs']);
-        UnitOfWork.current()?.on('commit', record('mine'));
-      }, mine);
-
-      expect(trace).toEqual(['theirs', 'mine']);
-    });
-
-    it('shares the unit when either side names no request, so nothing starts one by accident', async () => {
-      const request = { correlationId: 'c-1' };
-
-      await UnitOfWork.run(async () => {
-        const outer = UnitOfWork.current();
-        await UnitOfWork.run(async () => {
-          expect(UnitOfWork.current()).toBe(outer);
-        });
-      }, request);
-    });
-
-    it('carries the request it belongs to, the way Axon carries the message', async () => {
-      const request = { correlationId: 'c-1' };
-
-      await UnitOfWork.run(async () => {
-        expect(UnitOfWork.current()?.request).toBe(request);
-      }, request);
-    });
-  });
-
-  it('refuses a listener that stages forever instead of hanging', async () => {
-    await expect(
-      UnitOfWork.run(async () => {
-        const unit = UnitOfWork.current();
-        const again = (): void => {
-          unit?.on('prepareCommit', again);
-        };
-        unit?.on('prepareCommit', again);
-      }),
-    ).rejects.toThrow(/prepare rounds/);
-  });
-
-  describe('in a transaction', () => {
-    class RecordingTransaction extends UnitOfWorkTransaction<string> {
-      async run<T>(work: (transaction: string) => Promise<T>): Promise<T> {
-        trace.push('begin');
-        try {
-          const answer = await work('the-transaction');
-          trace.push('transaction committed');
-          return answer;
-        } catch (failure) {
-          trace.push('transaction rolled back');
-          throw failure;
-        }
+  it('takes an action for a later phase while it runs, and refuses one for the phase it is in', async () => {
+    const unit = new UnitOfWork();
+    let refused: unknown;
+    unit.onInvocation((context) => {
+      context.onAfterCommit(record('registered during INVOCATION'));
+      try {
+        context.onInvocation(record('never'));
+      } catch (error) {
+        refused = error;
       }
+    });
 
-      detached(): UnitOfWorkTransaction<string> {
-        return this;
+    await unit.execute();
+
+    expect(trace).toEqual(['registered during INVOCATION']);
+    expect((refused as Error).message).toMatch(
+      /cannot run an action in INVOCATION: it is already in INVOCATION/,
+    );
+  });
+
+  it('runs once: a second execute is refused', async () => {
+    const unit = new UnitOfWork();
+    await unit.execute();
+
+    await expect(unit.execute()).rejects.toThrow(
+      /cannot be committed \(again\)/,
+    );
+  });
+
+  it('finishes the phase that failed, skips every later one, and tells the error actions which phase it was', async () => {
+    const unit = new UnitOfWork();
+    const failures: string[] = [];
+    unit.onPrepareCommit(() => {
+      throw new Error('the append was refused');
+    });
+    unit.onPrepareCommit(record('the rest of PREPARE_COMMIT'));
+    unit.onCommit(record('COMMIT'));
+    unit.whenComplete(record('whenComplete'));
+    unit.onError((_context, phase, error) => {
+      failures.push(`${phase.name}: ${(error as Error).message}`);
+    });
+    unit.doFinally(record('doFinally'));
+
+    await expect(unit.execute()).rejects.toThrow('the append was refused');
+
+    expect(trace).toEqual(['the rest of PREPARE_COMMIT', 'doFinally']);
+    expect(failures).toEqual(['PREPARE_COMMIT: the append was refused']);
+    expect(unit.isError()).toBe(true);
+    expect(unit.isCommitted()).toBe(false);
+  });
+
+  it('keeps the first failure of a phase and the others as suppressed', async () => {
+    const unit = new UnitOfWork();
+    unit.onPrepareCommit(() => Promise.reject(new Error('first')));
+    unit.onPrepareCommit(() => Promise.reject(new Error('second')));
+
+    const failure = await unit.execute().catch((error: unknown) => error);
+
+    expect((failure as Error).message).toBe('first');
+    expect(
+      (failure as { suppressed?: Error[] }).suppressed?.map(
+        (error) => error.message,
+      ),
+    ).toEqual(['second']);
+  });
+
+  it('never lets an error or a completion action change the outcome', async () => {
+    const committed = new UnitOfWork();
+    committed.whenComplete(() => {
+      throw new Error('a completion action failed');
+    });
+    await expect(committed.execute()).resolves.toBeUndefined();
+
+    const failed = new UnitOfWork();
+    failed.onInvocation(() => {
+      throw new Error('the handler failed');
+    });
+    failed.onError(() => {
+      throw new Error('an error action failed too');
+    });
+    await expect(failed.execute()).rejects.toThrow('the handler failed');
+  });
+
+  it('runs an error or completion action registered too late at once', async () => {
+    const unit = new UnitOfWork();
+    await unit.execute();
+
+    unit.whenComplete(record('late completion'));
+    await Promise.resolve();
+
+    expect(trace).toEqual(['late completion']);
+  });
+
+  it('says it committed only once every phase ran', async () => {
+    const unit = new UnitOfWork();
+    const seen: boolean[] = [];
+    unit.onAfterCommit((context) => {
+      seen.push(context.isCommitted());
+    });
+
+    await unit.execute();
+
+    expect(seen).toEqual([false]);
+    expect(unit.isCommitted()).toBe(true);
+  });
+
+  it('starts every action of a phase before any finishes, unless it is told to run them one at a time', async () => {
+    const concurrent = new UnitOfWork();
+    const sequential = new UnitOfWork({ sequential: true });
+    for (const [unit, name] of [
+      [concurrent, 'concurrent'],
+      [sequential, 'sequential'],
+    ] as const) {
+      for (const action of ['a', 'b']) {
+        unit.onInvocation(async () => {
+          trace.push(`${name} ${action} starts`);
+          await new Promise((resolve) => setTimeout(resolve, 5));
+          trace.push(`${name} ${action} ends`);
+        });
       }
     }
 
-    const transaction = new RecordingTransaction();
+    await concurrent.execute();
+    await sequential.execute();
 
-    it('prepares inside the transaction and tells the process only once it has committed', async () => {
-      await UnitOfWork.run(
-        async () => {
-          const unit = UnitOfWork.current();
-          unit?.on('commit', record('commit'));
-          unit?.on('prepareCommit', record('prepareCommit'));
-          unit?.on('afterCommit', record('afterCommit'));
-          trace.push('work');
+    expect(trace).toEqual([
+      'concurrent a starts',
+      'concurrent b starts',
+      'concurrent a ends',
+      'concurrent b ends',
+      'sequential a starts',
+      'sequential a ends',
+      'sequential b starts',
+      'sequential b ends',
+    ]);
+  });
+
+  it('wraps every action with its interceptors, the first outermost', async () => {
+    const unit = new UnitOfWork({
+      interceptors: [
+        (action) => async (context) => {
+          trace.push('outer in');
+          await action(context);
+          trace.push('outer out');
         },
-        undefined,
-        { transaction },
-      );
-
-      expect(trace).toEqual([
-        'begin',
-        'work',
-        'prepareCommit',
-        'transaction committed',
-        'commit',
-        'afterCommit',
-      ]);
-    });
-
-    it('waits for what it tracked before the transaction commits, so the reactions commit with it', async () => {
-      await UnitOfWork.run(
-        async () => {
-          void UnitOfWork.current()?.track(
-            new Promise<void>((resolve) =>
-              setTimeout(() => {
-                trace.push('reaction');
-                resolve();
-              }, 5),
-            ),
-          );
+        (action) => async (context) => {
+          trace.push('inner in');
+          await action(context);
+          trace.push('inner out');
         },
-        undefined,
-        { transaction },
-      );
+      ],
+    });
+    unit.onInvocation(record('action'));
 
-      expect(trace).toEqual(['begin', 'reaction', 'transaction committed']);
+    await unit.execute();
+
+    expect(trace).toEqual([
+      'outer in',
+      'inner in',
+      'action',
+      'inner out',
+      'outer out',
+    ]);
+  });
+
+  it('is the current context of every action it runs, and of nothing outside it', async () => {
+    const unit = new UnitOfWork();
+    let inside: ProcessingContext | undefined;
+    unit.onInvocation(async () => {
+      await Promise.resolve();
+      inside = ProcessingContext.current();
     });
 
-    it('rolls the transaction back with the unit, and tells nobody', async () => {
-      await expect(
-        UnitOfWork.run(
-          async () => {
-            UnitOfWork.current()?.on('commit', record('commit'));
-            UnitOfWork.current()?.on('rollback', record('rollback'));
-            throw new Error('the handler refused');
-          },
-          undefined,
-          { transaction },
-        ),
-      ).rejects.toThrow('the handler refused');
+    await unit.execute();
 
-      expect(trace).toEqual(['begin', 'transaction rolled back', 'rollback']);
-    });
+    expect(inside).toBe(unit.processingContext);
+    expect(ProcessingContext.current()).toBeUndefined();
+  });
 
-    it('rolls back when a prepare listener fails, which is an event nobody could record', async () => {
-      await expect(
-        UnitOfWork.run(
-          async () => {
-            UnitOfWork.current()?.on('prepareCommit', () => {
-              throw new Error('the outbox refused');
-            });
-            UnitOfWork.current()?.on('commit', record('commit'));
-          },
-          undefined,
-          { transaction },
-        ),
-      ).rejects.toThrow('the outbox refused');
-
-      expect(trace).toEqual(['begin', 'transaction rolled back']);
-    });
-
-    it('runs joined work inside the transaction that is already open, never a second one', async () => {
-      await UnitOfWork.run(
-        async () => {
-          await UnitOfWork.run(
-            async () => {
-              trace.push('joined');
-            },
-            undefined,
-            { transaction },
-          );
-        },
-        undefined,
-        { transaction },
-      );
-
-      expect(trace).toEqual(['begin', 'joined', 'transaction committed']);
-      expect(UnitOfWork.current()).toBeUndefined();
-    });
-
-    it('says whether it has one', async () => {
-      await UnitOfWork.run(
-        async () => {
-          expect(UnitOfWork.current()?.transactional).toBe(true);
-        },
-        undefined,
-        { transaction },
-      );
-      await UnitOfWork.run(async () => {
-        expect(UnitOfWork.current()?.transactional).toBe(false);
+  it('does not nest: a unit run inside another is a unit of its own', async () => {
+    const outer = new UnitOfWork();
+    let innerContext: ProcessingContext | undefined;
+    outer.onInvocation(async () => {
+      const inner = new UnitOfWork();
+      inner.onInvocation(() => {
+        innerContext = ProcessingContext.current();
       });
+      inner.onAfterCommit(record('inner committed'));
+      await inner.execute();
+      trace.push('outer invocation ends');
+    });
+    outer.onAfterCommit(record('outer committed'));
+
+    await outer.execute();
+
+    expect(innerContext).not.toBe(outer.processingContext);
+    expect(trace).toEqual([
+      'inner committed',
+      'outer invocation ends',
+      'outer committed',
+    ]);
+  });
+
+  describe('its resources', () => {
+    const counter = new ResourceKey<number>('counter');
+    const other = new ResourceKey<number>('counter');
+
+    it('are keyed by the key object, not by its label', async () => {
+      const unit = new UnitOfWork();
+      const context = unit.processingContext;
+
+      context.putResource(counter, 1);
+
+      expect(context.getResource(counter)).toBe(1);
+      expect(context.getResource(other)).toBeUndefined();
     });
 
-    it('hands its listeners the handle of the open transaction, and nothing once it has committed', async () => {
-      const handles: Record<string, unknown> = {};
+    it('have the operations of a concurrent map', () => {
+      const context = new UnitOfWork().processingContext;
 
-      await UnitOfWork.run(
-        async () => {
-          const unit = UnitOfWork.current();
-          handles.work = unit?.transactionHandle;
-          unit?.on('prepareCommit', (prepared) => {
-            handles.prepareCommit = prepared.transactionHandle;
-          });
-          unit?.on('commit', (committed) => {
-            handles.commit = committed.transactionHandle;
-          });
-        },
-        undefined,
-        { transaction },
-      );
+      expect(context.putResourceIfAbsent(counter, 1)).toBeUndefined();
+      expect(context.putResourceIfAbsent(counter, 2)).toBe(1);
+      expect(context.computeResourceIfAbsent(counter, () => 3)).toBe(1);
+      expect(context.updateResource(counter, (value = 0) => value + 1)).toBe(2);
+      expect(context.updateResource(counter, () => undefined)).toBeUndefined();
+      expect(context.containsResource(counter)).toBe(false);
+      expect(context.putResource(counter, 5)).toBeUndefined();
+      expect(context.removeResource(counter)).toBe(5);
+    });
 
-      expect(handles).toEqual({
-        work: 'the-transaction',
-        prepareCommit: 'the-transaction',
-        commit: undefined,
-      });
+    it('refuse a recursive update of the same key', () => {
+      const context = new UnitOfWork().processingContext;
+
+      expect(() =>
+        context.computeResourceIfAbsent(counter, () =>
+          context.computeResourceIfAbsent(counter, () => 1),
+        ),
+      ).toThrow(/recursive update/);
     });
   });
 
-  it('is undefined outside one, which is how a publisher knows to send straight away', async () => {
-    expect(UnitOfWork.current()).toBeUndefined();
-    expect(UnitOfWork.isStarted()).toBe(false);
+  describe('a branch of its context', () => {
+    const message = new ResourceKey<string>('message');
+    const shared = new ResourceKey<string>('shared');
+
+    it('differs in one resource and shares every other, and the phases', async () => {
+      const unit = new UnitOfWork();
+      const context = unit.processingContext;
+      context.putResource(message, 'the root');
+      const branch = context.withResource(message, 'the branch');
+      let seenInAction: string | undefined;
+      branch.onPrepareCommit((running) => {
+        seenInAction = running.getResource(message);
+        running.putResource(shared, 'written through the branch');
+      });
+
+      await unit.execute();
+
+      expect(context.getResource(message)).toBe('the root');
+      expect(branch.getResource(message)).toBe('the branch');
+      expect(seenInAction).toBe('the branch');
+      expect(context.getResource(shared)).toBe('written through the branch');
+    });
+
+    it('is the current context of the actions registered on it', async () => {
+      const unit = new UnitOfWork();
+      const branch = unit.processingContext.withResource(message, 'the branch');
+      let current: ProcessingContext | undefined;
+      branch.onInvocation(() => {
+        current = ProcessingContext.current();
+      });
+
+      await unit.execute();
+
+      expect(current).toBe(branch);
+      expect(current?.phase).toEqual(DefaultPhases.INVOCATION);
+    });
   });
 });

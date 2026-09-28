@@ -56,7 +56,7 @@ pins:
 | pin | lives in | |
 |---|---|---|
 | `SYSTEM_SCHEMA` (`'public'`) | `public` | Better Auth's and the organizations' tables |
-| `TRANSPORT_SCHEMA` (`'transport'`) | `transport` | the messaging's bookkeeping: the outbox and its dead letters and every consumer's inbox (`@nestposts/outbox-mikro-orm`), the event log (`@nestposts/transport-eventbus`) |
+| `TRANSPORT_SCHEMA` (`'transport'`) | `transport` | the messaging's bookkeeping: the outbox and its dead letters and every consumer's inbox (`@nestposts/outbox-mikro-orm`), the event store's `event_log` (`@nestposts/event-store-mikro-orm`) |
 | `TENANT_SCHEMA` (`'*'`) | `tenant_<name>` | everything else — MikroORM's wildcard: the schema of the entity manager a query runs on |
 
 It reads `MIKRO_ORM_DEBUG`, validates what it got through `DatabaseConfigSchema`, and sets
@@ -78,6 +78,12 @@ for a spec that boots Nest: it creates the schema on `init()` and drops it on `c
 `beforeApplicationShutdown`, which is the last hook that still has a connection. `metadataOnly(entities)`
 is for a domain spec that needs an ORM only so a `Collection` can find its owner's metadata.
 
+`ensureTestSchema(orm)` and `dropTestSchema(orm)` are the two halves on their own, and
+`testSchemaLifecycle` is the pair as the hooks a harness that boots an application of its own takes —
+`@nestposts/transport-eventbus/testing`'s `startInProcessService(module, testSchemaLifecycle)`, which
+knows no database and so cannot make a schema itself: `onStart` creates the schema of the application's
+`MikroORM` once it listens, `onClose` drops it before it closes.
+
 `startPostgres()` is what the Vitest global setup calls: it uses the server already listening —
 `docker compose up -d postgres`, or whatever `POSTGRES_URL` points at — and starts a throwaway
 container when there is none. A project opts in with `database: true` in its `vitest.config.mts`; one
@@ -94,15 +100,15 @@ failed`, a port conflict wearing a credentials bug's clothes.
 **Native SQL has to say where the table is.** `tableIn(orm, 'posts')` qualifies a table with the
 configured schema, because a raw statement is resolved against the `search_path` and not against the
 connection's schema — which is a spec reading the column behind a mapping, and which is also why
-`MikroOrmOutboxStore` (`@nestposts/outbox-mikro-orm`) and `MikroOrmEventLog`
-(`@nestposts/transport-eventbus`) ask the metadata for
-their own table names.
+`MikroOrmOutboxStore` (`@nestposts/outbox-mikro-orm`) and `MikroOrmEventStorageEngine`
+(`@nestposts/event-store-mikro-orm`) ask the metadata for their own table names.
 
 ## `DatabaseModule`: the entity list is not a list
 
 `forRoot(options)` is the connection. Every table reaches it through `forFeature(entities)` in the
 module that **owns** it — `PostsInfrastructureModule`, `UsersInfrastructureModule`, `IdentityModule`,
-`TransportEventBusModule` — and `forRoot` resolves the union of them **lazily**, in a factory.
+`MikroOrmOutboxModule`, `MikroOrmEventStoreModule` — and `forRoot` resolves the union of them
+**lazily**, in a factory.
 
 Two measured failures are why it is not `autoLoadEntities`. The flag fills `entitiesTs` with only the
 registered entities and MikroORM prefers that list under TypeScript, so the application's own entities
@@ -133,12 +139,19 @@ an aggregate — but a message off a broker never passes through HTTP at all, an
 `allowGlobalContext: false` refuses its first query. The interceptor **defers to a context that
 already exists**, which is what makes running both safe: one request is one entity manager, never two.
 
-A unit of work's transaction runs **inside** that context, not beside it: `MikroOrmUnitOfWorkTransaction`
-(`@nestposts/outbox-mikro-orm`) is `inRequestContext` around `em.transactional`, whose fork keeps
-the schema of the entity manager it was forked from — the tenant's — and becomes what every injected
-entity manager resolves to while the unit runs. A command's writes, its event log append and its
-outbox rows are therefore one transaction, on the tenant's wildcard tables and the pinned `transport`
-ones alike.
+A unit of work's transaction runs **inside** that context, not beside it: `MikroOrmTransactionManager`
+(`@nestposts/outbox-mikro-orm`) opens `em.transactional` on the context's entity manager, whose fork
+keeps the schema of the entity manager it was forked from — the tenant's — and becomes what every
+injected entity manager resolves to while the unit runs. A command's writes, its event store append
+and its outbox rows are therefore one transaction, on the tenant's wildcard tables and the pinned
+`transport` ones alike.
+
+**A unit with no request around it is opened in the tenant its message names.** The outbox's relay
+delivers a streaming processing group's messages outside any request, so neither the middleware nor
+the interceptor has opened a tenant for them. The transaction manager is told the message the unit
+handles, and when there is no open transaction to join and the message's metadata carries `x-tenant`,
+it opens the transaction on `TenantEntityManagerService`'s entity manager for that tenant — migrating
+it first, if this process has not met it yet.
 
 **A tenant is a schema: `tenant_<name>`**, and `tenant_root` for whoever names none
 (`Tenant.schemaOf`). `TenantEntityManagerService` is `tmp/organization`'s service, in this
@@ -173,8 +186,10 @@ far side then looks for a schema named after them. It is the kind of bug that su
 away from where it was caused.
 
 **`Tenant.stamp(event, tenant)` / `Tenant.of(event)`** mark an object as belonging to a tenant, for
-whoever has nothing else to tell it by: the transport's event log stamps every event it reads back
-with the tenant its row was written in, and a subscription filters on it.
+whoever has nothing else to tell it by. The event store does not need them any more: an event read back
+carries its tenant in its metadata (`x-tenant`), which `MikroOrmEventStorageEngine` fills in from the
+row's `tenant` column — `Tenant.ofSchema` of the entity manager the event was appended in — when the
+metadata does not say. `PostRequest.tenantOf(event)` reads that first and falls back to `Tenant.of`.
 
 **Where the tenant is read from is a token, and it takes three shapes.** `TENANT_RESOLVER` accepts a
 plain `(context: ExecutionContext) => string`, a ready-made instance, or an injectable class — and a
@@ -183,15 +198,21 @@ has to be provided from outside:
 
 ```ts
 TenancyModule.forRoot({ migrations, resolver: (context) => context.switchToHttp().getRequest().tenant })
-TenancyModule.forRoot({ migrations, resolver: TransportTenantResolver })   // injects IncomingRequest
+TenancyModule.forRoot({ migrations, resolver: MessageTenantResolver })
 ```
 
 A token rather than an abstract class because the answer is usually one expression, and a class to
 hold it would be ceremony. `HeaderTenantResolver` is the default and reads `x-tenant` off HTTP,
 GraphQL and the RPC context; its `read(context)` is static, so `@CurrentTenant()` can use the same
 rule with no injector to reach a resolver through. A message carries the tenant in the **envelope's
-headers** instead, and decoding that belongs to `@nestposts/transport-eventbus` — which is why
-`TransportTenantResolver` lives there and this package knows nothing about envelopes.
+headers** instead — the message's metadata, under the same `x-tenant` — and `MessageTenantResolver`
+reads it there, **by its shape**: the delivered payload (parsed, when it arrives as a string or a
+Buffer) is an object whose `headers` may name a tenant. It runs in an interceptor, before any pipe, so it
+reads the raw payload; it falls back to `HeaderTenantResolver`, because `apps/posts-api` is a hybrid and
+one resolver has to be right for HTTP and messages both. It used to be `TransportTenantResolver`, in
+`@nestposts/transport-eventbus`, decoding the envelope through `IncomingRequest`; moving it here is what
+let that library drop its dependency on this package, and this package still imports nothing of the
+bus.
 
 **The schema itself is created by a trigger on the organization row** — `libs/organizations`
 carries it, as a MikroORM `trigger` emitted into a system migration, so `tenant_<slug>` exists

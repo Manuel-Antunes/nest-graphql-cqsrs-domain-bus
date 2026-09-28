@@ -2,7 +2,10 @@ import type { OutboxMessage } from '@nestjs/outbox';
 import { namespaceIn } from '@nestposts/platform/domain/shared/event-type';
 
 import type { MessageHeaders } from './message-headers';
-import { TRANSPORT_MESSAGE_TYPE } from './message-headers';
+import {
+  TRANSPORT_MESSAGE_TYPE,
+  TRANSPORT_PROCESSING_GROUP,
+} from './message-headers';
 
 /**
  * What the outbox's `route` is: the name of the transport a message goes through. It reads the
@@ -13,20 +16,14 @@ export type OutboxRouteFunction = (
 ) => string;
 
 /**
- * **The outbox's `route`: a message goes through the transport named after its namespace — and, when
- * the outbox has none for it, to `local`, the outbox's own in-process transport.**
+ * **The outbox's `route`: a message for a streaming processing group goes to `local`, and any other
+ * through the transport named after its namespace — or to `local` when the outbox has none for it.**
  *
- * The namespace is read off the message type the event declared, so the decision is the event's own.
- * `local` is what the relay itself falls back to when it has no transport at all; saying it here is
- * what makes it hold per namespace, for an outbox with a transport for some of what the service
- * publishes and not for the rest — and what keeps a namespace with no transport from being
- * dead-lettered as a transport nobody registered.
- *
- * `local` delivers to the `@OnOutboxMessage()` handlers of this process, by exact topic. One of them
- * is always there: `TransportEventBusModule` registers {@link LocalDelivery} for every event of the
- * namespaces the service publishes, and it is what tells this process's `EventBus` about an event
- * routed `local` — once its unit of work has committed, through the relay, and not at the commit.
- * For that the bus is given the **same** route, so it knows which events not to tell at the commit:
+ * `local` is the outbox's own in-process transport: it delivers to this process's
+ * `@OnOutboxMessage()` handlers by exact topic, and every streaming group has one
+ * (`StreamingGroupDelivery`), bound to the group's topic. A destination message the outbox has no
+ * transport for — a service running with no broker — is not written at all: the bus is given the same
+ * route, and does not stage a message that would only reach `local` and find nobody there.
  *
  * ```ts
  * OutboxModule.forRootAsync({
@@ -55,6 +52,9 @@ export class OutboxRoute {
   ): OutboxRouteFunction {
     const names = new Set(Object.keys(transports));
     return (message) => {
+      if ((message.headers as MessageHeaders)[TRANSPORT_PROCESSING_GROUP]) {
+        return OutboxRoute.LOCAL;
+      }
       const namespace = OutboxRoute.namespaceOf(message);
       return names.has(namespace) ? namespace : OutboxRoute.LOCAL;
     };

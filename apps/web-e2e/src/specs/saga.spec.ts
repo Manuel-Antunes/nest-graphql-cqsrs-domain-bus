@@ -82,6 +82,9 @@ test.describe
      * `notifications.*` is the notificator's — from posts-api (a post is live) and from the web, whose
      * Better Auth sent the verification emails the accounts were created with. The assertion is about
      * EVERY row: a service that ingested its own echo would leave one that fits none of the three.
+     * A row whose consumer names a group as well as a service (`posts-api/notifications`) is not an
+     * ingestion but a streaming processing group's delivery, inside the service that published or
+     * ingested the event, and it is set apart before the three are counted.
      */
     test('cada serviço só ingere o que o outro produziu: a marca de origem corta o laço', async ({
       inbox,
@@ -92,15 +95,19 @@ test.describe
           row.origin === 'posts-api',
         20_000,
       );
-      const ingestedByPosts = rows.filter(
+      const deliveredToProcessingGroups = rows.filter((row) =>
+        row.consumer.includes('/'),
+      );
+      const ingested = rows.filter((row) => !row.consumer.includes('/'));
+      const ingestedByPosts = ingested.filter(
         (row) =>
           row.message_type.startsWith(CREATED) && row.origin === 'tagging',
       );
-      const ingestedByTagging = rows.filter(
+      const ingestedByTagging = ingested.filter(
         (row) =>
           row.message_type.startsWith('posts.') && row.origin === 'posts-api',
       );
-      const deliveredByNotificator = rows.filter((row) =>
+      const deliveredByNotificator = ingested.filter((row) =>
         row.message_type.startsWith('notifications.'),
       );
 
@@ -108,7 +115,7 @@ test.describe
         ingestedByPosts.length +
           ingestedByTagging.length +
           deliveredByNotificator.length,
-      ).toBe(rows.length);
+      ).toBe(ingested.length);
       expect(
         ingestedByPosts.length,
         'a posts-api não ingeriu nada',
@@ -139,6 +146,10 @@ test.describe
         ].every(Boolean),
         'each row is in the inbox of the service that ingested it',
       ).toBe(true);
+      expect(
+        [...new Set(deliveredToProcessingGroups.map((row) => row.consumer))],
+        "the only streaming group is posts-api's notifications",
+      ).toEqual(['posts-api/notifications']);
     });
 
     test('reentregar a MESMA mensagem não produz uma segunda decisão', async ({

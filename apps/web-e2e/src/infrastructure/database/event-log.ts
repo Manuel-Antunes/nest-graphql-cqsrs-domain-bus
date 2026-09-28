@@ -8,16 +8,19 @@ export interface StoredEvent {
 }
 
 export class EventLog {
+  private static readonly TAGGED =
+    "exists (select 1 from unnest(tags) as tag where split_part(tag, '=', 2) = ?)";
+
   constructor(private readonly database: Database) {}
 
   static withoutVersion(messageType: string): string {
     return messageType.split('#')[0];
   }
 
-  /** The event types of one aggregate's stream, in the order they were appended. */
+  /** The event types tagged with one aggregate's id, in the order they were appended. */
   async streamOf(aggregateId: string): Promise<string[]> {
     const rows = await this.database.query<{ message_type: string }>(
-      'select message_type from event_log where stream_id = ? order by sequence',
+      `select message_type from event_log where ${EventLog.TAGGED} order by position`,
       aggregateId,
     );
     return rows.map((row) => EventLog.withoutVersion(row.message_type));
@@ -36,7 +39,7 @@ export class EventLog {
 
   count(aggregateId: string, type: string): Promise<number> {
     return this.database.count(
-      'select count(*) as total from event_log where stream_id = ? and message_type like ?',
+      `select count(*) as total from event_log where ${EventLog.TAGGED} and message_type like ?`,
       aggregateId,
       `${type}%`,
     );
@@ -44,7 +47,7 @@ export class EventLog {
 
   async eventOf(aggregateId: string, type: string): Promise<StoredEvent> {
     const [row] = await this.database.query<StoredEvent>(
-      'select identifier, message_type, payload from event_log where stream_id = ? and message_type like ?',
+      `select identifier, message_type, payload from event_log where ${EventLog.TAGGED} and message_type like ?`,
       aggregateId,
       `${type}%`,
     );

@@ -10,7 +10,6 @@ const OutboxEnvSchema = z.object({
     .positive()
     .default(1_000),
   TAGGING_OUTBOX_RETRY_ATTEMPTS: z.coerce.number().int().positive().default(20),
-  TAGGING_INBOX_RETENTION_DAYS: z.coerce.number().int().positive().default(30),
 });
 
 export const outboxConfig = registerAs('outbox', () => {
@@ -19,7 +18,6 @@ export const outboxConfig = registerAs('outbox', () => {
     relay: parsed.TAGGING_OUTBOX_RELAY,
     pollInterval: parsed.TAGGING_OUTBOX_POLL_INTERVAL_MS,
     retry: { attempts: parsed.TAGGING_OUTBOX_RETRY_ATTEMPTS },
-    inboxRetention: `${parsed.TAGGING_INBOX_RETENTION_DAYS}d` as const,
   };
 });
 

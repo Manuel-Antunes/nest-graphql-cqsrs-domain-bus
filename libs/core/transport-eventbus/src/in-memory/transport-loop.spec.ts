@@ -1,38 +1,45 @@
 import { MikroOrmModule } from '@mikro-orm/nestjs';
-import { Controller, Injectable } from '@nestjs/common';
-import type { IEventHandler } from '@nestjs/cqrs';
-import { AsyncContext, CqrsModule, EventsHandler } from '@nestjs/cqrs';
+import { Controller, Injectable, Module } from '@nestjs/common';
+import type { ICommandHandler, IEventHandler } from '@nestjs/cqrs';
+import {
+  AsyncContext,
+  Command,
+  CommandBus,
+  CommandHandler,
+  CqrsModule,
+  EventsHandler,
+} from '@nestjs/cqrs';
+import type { ReadPacket } from '@nestjs/microservices';
 import { EventPattern, Payload } from '@nestjs/microservices';
-import type {
-  OutboxEnvelope,
-  OutboxHandlerContext,
-  OutboxMessage,
-} from '@nestjs/outbox';
-import { OnOutboxMessage, OutboxModule } from '@nestjs/outbox';
+import type { OutboxEnvelope } from '@nestjs/outbox';
+import { ClientProxyTransport, OutboxModule } from '@nestjs/outbox';
 import { ROOT_TENANT, TENANT_HEADER, Tenant } from '@nestposts/database';
-import { testDatabaseConfig } from '@nestposts/database/testing';
+import {
+  testDatabaseConfig,
+  testSchemaLifecycle,
+} from '@nestposts/database/testing';
 import type { TopicMemoryServer } from '@nestposts/microservices-memory';
 import {
   MikroOrmOutboxModule,
   MikroOrmOutboxStore,
-  MikroOrmUnitOfWorkTransaction,
+  MikroOrmTransactionManager,
   outboxEntities,
 } from '@nestposts/outbox-mikro-orm';
 import { EventType } from '@nestposts/platform/domain/shared/event-type';
 
 import { EventIngestion } from '../inbound/event-ingestion';
-import { messageOf, reconstruct } from '../inbound/event-reconstruction';
-import { EventAddress } from '../outbound/event-address';
+import { EventMessage } from '../messaging/event-message';
+import { EventMessages } from '../outbound/event-messages';
 import { TRANSPORT_ORIGIN } from '../outbound/message-headers';
 import { OutboxRoute } from '../outbound/outbox-route';
-import type { Ingestion } from '../outbound/transport-metadata';
 import { identifierOf } from '../outbound/transport-metadata';
 import {
-  CorrelatedRequestContext,
+  DefaultRequestContextCodec,
   TransportRequestContext,
 } from '../request-context';
 import type { InProcessService } from '../testing';
-import { startInProcessService } from '../testing';
+import { RecordingClient, startInProcessService } from '../testing';
+import { InProcessPacket } from '../testing/in-process-packet';
 import { TransportEventBusModule } from '../transport-event-bus.module';
 import { TransportEventBusService } from '../transport-event-bus.service';
 import { TransportIdentity } from '../transport-identity';
@@ -69,55 +76,55 @@ class PostRequest extends AsyncContext {
   }
 }
 
-const wire: {
-  readonly toConsuming: TopicMemoryServer[];
-  readonly toPublishing: TopicMemoryServer[];
-} = {
-  toConsuming: [],
-  toPublishing: [],
-};
+/**
+ * A broker in this process: a client whose emits are delivered to the servers of the other side, so
+ * the outbox's relay, its packets and its route are the production ones, end to end.
+ */
+class Wire extends RecordingClient {
+  readonly to: TopicMemoryServer[] = [];
 
-const carry = async (
-  servers: readonly TopicMemoryServer[],
-  { id, topic, key, headers, createdAt, payload }: OutboxMessage,
-): Promise<void> => {
-  const routingKey = EventAddress.ofMessage({ id, topic, headers }).routingKey;
-  for (const server of servers) {
-    await server.emit(routingKey, {
-      id,
-      topic,
-      key,
-      headers,
-      createdAt,
-      payload,
-    });
-  }
-};
-
-@Injectable()
-class ToConsuming {
-  @OnOutboxMessage('posts.PostPreCreated', { consumer: 'wire', inbox: false })
-  carry(_payload: unknown, { message }: OutboxHandlerContext): Promise<void> {
-    return carry(wire.toConsuming, message);
+  protected override async dispatchEvent<T = unknown>(
+    packet: ReadPacket,
+  ): Promise<T> {
+    for (const server of this.to) {
+      await server.emit(String(packet.pattern), packet.data);
+    }
+    return undefined as T;
   }
 }
 
-@Injectable()
-class ToPublishing {
-  @OnOutboxMessage('posts.PostPreCreated', { consumer: 'wire', inbox: false })
-  carry(_payload: unknown, { message }: OutboxHandlerContext): Promise<void> {
-    return carry(wire.toPublishing, message);
-  }
-}
+class ToConsuming extends Wire {}
 
-const noBroker = OutboxRoute.over({});
+class ToPublishing extends Wire {}
 
-const local = () => ({ relay: 'drain' as const, route: noBroker });
+const toConsuming = new ToConsuming();
+const toPublishing = new ToPublishing();
+
+@Module({
+  providers: [
+    { provide: ToConsuming, useValue: toConsuming },
+    { provide: ToPublishing, useValue: toPublishing },
+  ],
+  exports: [ToConsuming, ToPublishing],
+})
+class WireModule {}
+
+const publishingTransports = {
+  [POSTS]: ClientProxyTransport(ToConsuming, {
+    toPacket: InProcessPacket.of,
+  }),
+};
+
+const consumingTransports = {
+  [POSTS]: ClientProxyTransport(ToPublishing, {
+    toPacket: InProcessPacket.of,
+  }),
+};
 
 @Injectable()
 class Arrivals {
   readonly messages: object[] = [];
-  readonly envelopes: Ingestion[] = [];
+  readonly headers: Record<string, string>[] = [];
 }
 
 @Controller()
@@ -126,8 +133,8 @@ class ArrivalsController {
 
   @EventPattern('posts.PostPreCreated.*')
   record(@Payload() envelope: OutboxEnvelope): void {
-    this.arrivals.messages.push(reconstruct(envelope));
-    this.arrivals.envelopes.push(messageOf(envelope));
+    this.arrivals.messages.push(EventMessages.read(envelope).payload);
+    this.arrivals.headers.push(envelope.headers as Record<string, string>);
   }
 }
 
@@ -135,6 +142,7 @@ class ArrivalsController {
 class Received {
   readonly events: PostPreCreatedEvent[] = [];
   readonly contexts: (AsyncContext | undefined)[] = [];
+  readonly messages: EventMessage[] = [];
 }
 
 @EventsHandler(PostPreCreatedEvent)
@@ -144,6 +152,7 @@ class PostPreCreatedHandler implements IEventHandler<PostPreCreatedEvent> {
   handle(event: PostPreCreatedEvent): void {
     this.received.events.push(event);
     this.received.contexts.push(AsyncContext.of(event));
+    this.received.messages.push(EventMessage.of(event));
   }
 }
 
@@ -154,6 +163,26 @@ class PostEventsController {
   @EventPattern('posts.PostPreCreated.*')
   postPreCreated(@Payload() envelope: OutboxEnvelope): Promise<void> {
     return this.ingestion.ingest(envelope);
+  }
+}
+
+class PublishTwice extends Command<void> {
+  constructor(readonly postId: string) {
+    super();
+  }
+}
+
+@CommandHandler(PublishTwice)
+class PublishTwiceHandler implements ICommandHandler<PublishTwice> {
+  constructor(private readonly bus: TransportEventBusService) {}
+
+  async execute({ postId }: PublishTwice): Promise<void> {
+    await this.bus.publish(
+      new PostPreCreatedEvent(postId, 'first', new Date()),
+    );
+    await this.bus.publish(
+      new PostPreCreatedEvent(postId, 'second', new Date()),
+    );
   }
 }
 
@@ -173,52 +202,80 @@ describe('one hop between two services, with no broker between them', () => {
   };
 
   beforeAll(async () => {
-    publishing = await startInProcessService({
-      imports: [
-        CqrsModule.forRoot(),
-        MikroOrmModule.forRoot(
-          testDatabaseConfig({
-            entities: [...outboxEntities],
-            allowGlobalContext: true,
+    publishing = await startInProcessService(
+      {
+        imports: [
+          CqrsModule.forRoot(),
+          MikroOrmModule.forRoot(
+            testDatabaseConfig({
+              entities: [...outboxEntities],
+              allowGlobalContext: true,
+            }),
+          ),
+          OutboxModule.forRoot({
+            imports: [WireModule],
+            transports: publishingTransports,
+            route: OutboxRoute.over(publishingTransports),
+            relay: { enabled: false },
           }),
-        ),
-        OutboxModule.forRoot({ route: noBroker, relay: { enabled: false } }),
-        MikroOrmOutboxModule.forRoot({ producer: 'publishing-service' }),
-        TransportEventBusModule.forRoot({
-          identity: TransportIdentity.named('publishing-service'),
-          requestContext: CorrelatedRequestContext,
-          transaction: MikroOrmUnitOfWorkTransaction,
-          outbox: { destinations: [POSTS], useFactory: local },
-        }),
-      ],
-      controllers: [ArrivalsController],
-      providers: [Arrivals, ToConsuming],
-    });
-    wire.toPublishing.push(publishing.server);
+          MikroOrmOutboxModule.forRoot({ producer: 'publishing-service' }),
+          TransportEventBusModule.forRoot({
+            identity: TransportIdentity.named('publishing-service'),
+            requestContext: DefaultRequestContextCodec,
+            transactionManager: MikroOrmTransactionManager,
+            outbox: {
+              destinations: [POSTS],
+              useFactory: () => ({
+                relay: 'drain',
+                route: OutboxRoute.over(publishingTransports),
+              }),
+            },
+          }),
+        ],
+        controllers: [ArrivalsController],
+        providers: [Arrivals, PublishTwiceHandler],
+      },
+      testSchemaLifecycle,
+    );
+    toPublishing.to.push(publishing.server);
 
-    consuming = await startInProcessService({
-      imports: [
-        CqrsModule.forRoot(),
-        MikroOrmModule.forRoot(
-          testDatabaseConfig({
-            entities: [...outboxEntities],
-            allowGlobalContext: true,
+    consuming = await startInProcessService(
+      {
+        imports: [
+          CqrsModule.forRoot(),
+          MikroOrmModule.forRoot(
+            testDatabaseConfig({
+              entities: [...outboxEntities],
+              allowGlobalContext: true,
+            }),
+          ),
+          OutboxModule.forRoot({
+            imports: [WireModule],
+            transports: consumingTransports,
+            route: OutboxRoute.over(consumingTransports),
+            relay: { enabled: false },
           }),
-        ),
-        OutboxModule.forRoot({ route: noBroker, relay: { enabled: false } }),
-        MikroOrmOutboxModule.forRoot({ producer: 'consuming-service' }),
-        TransportEventBusModule.forRoot({
-          identity: TransportIdentity.named('consuming-service'),
-          requestContext: CorrelatedRequestContext,
-          transaction: MikroOrmUnitOfWorkTransaction,
-          inbox: { descriptions: MikroOrmOutboxStore },
-          outbox: { destinations: [POSTS], useFactory: local },
-        }),
-      ],
-      controllers: [PostEventsController],
-      providers: [Received, PostPreCreatedHandler, ToPublishing],
-    });
-    wire.toConsuming.push(consuming.server);
+          MikroOrmOutboxModule.forRoot({ producer: 'consuming-service' }),
+          TransportEventBusModule.forRoot({
+            identity: TransportIdentity.named('consuming-service'),
+            requestContext: DefaultRequestContextCodec,
+            transactionManager: MikroOrmTransactionManager,
+            inbox: { descriptions: MikroOrmOutboxStore },
+            outbox: {
+              destinations: [POSTS],
+              useFactory: () => ({
+                relay: 'drain',
+                route: OutboxRoute.over(consumingTransports),
+              }),
+            },
+          }),
+        ],
+        controllers: [PostEventsController],
+        providers: [Received, PostPreCreatedHandler],
+      },
+      testSchemaLifecycle,
+    );
+    toConsuming.to.push(consuming.server);
 
     publishingBus = publishing.app.get(TransportEventBusService);
     consumingBus = consuming.app.get(TransportEventBusService);
@@ -234,9 +291,10 @@ describe('one hop between two services, with no broker between them', () => {
 
   beforeEach(() => {
     arrivals.messages.length = 0;
-    arrivals.envelopes.length = 0;
+    arrivals.headers.length = 0;
     received.events.length = 0;
     received.contexts.length = 0;
+    received.messages.length = 0;
   });
 
   it('binds each service to the routing keys it declared, and to nothing else', () => {
@@ -275,28 +333,18 @@ describe('one hop between two services, with no broker between them', () => {
 
     const context = received.contexts.at(-1);
     expect(context).toBeInstanceOf(TransportRequestContext);
-    expect((context as TransportRequestContext).attributes).toMatchObject({
+    expect((context as TransportRequestContext).metadata).toMatchObject({
       'post-id': 'p-2',
     });
   });
 
-  it('keeps one correlation id for every event of one request', async () => {
-    const request = new PostRequest('p-3');
-
-    await publishingBus.publish(
-      new PostPreCreatedEvent('p-3', 'first', new Date()),
-      request,
-    );
-    await publishingBus.publish(
-      new PostPreCreatedEvent('p-3', 'second', new Date()),
-      request,
-    );
+  it('keeps one correlation id for every event of one command, across the hop', async () => {
+    await publishing.app.get(CommandBus).execute(new PublishTwice('p-3'));
     await settle();
 
-    const [first, second] = received.contexts.slice(
-      -2,
-    ) as TransportRequestContext[];
-    expect(first.correlationId).toBe(second.correlationId);
+    const [first, second] = received.messages.slice(-2);
+    expect(first.metadata.correlationId).toBeDefined();
+    expect(first.metadata.correlationId).toBe(second.metadata.correlationId);
   });
 
   it('remembers each message under the name of the service that consumed it', async () => {
@@ -365,11 +413,13 @@ describe('one hop between two services, with no broker between them', () => {
       await settle();
       return received.contexts.at(-1) as TransportRequestContext;
     };
+    const tenantOf = (context: TransportRequestContext) =>
+      context.metadata[TENANT_HEADER];
 
     it('the tenant the first service named arrives as an attribute of the restored context', async () => {
       const context = await tenanted('p-8', 'acme');
 
-      expect(context.attributes).toMatchObject({
+      expect(context.metadata).toMatchObject({
         [TENANT_HEADER]: 'acme',
         'post-id': 'p-8',
       });
@@ -377,7 +427,7 @@ describe('one hop between two services, with no broker between them', () => {
 
     it('and goes back out on the second service own event, without it having to know about tenants', async () => {
       const context = await tenanted('p-9', 'globex');
-      arrivals.envelopes.length = 0;
+      arrivals.headers.length = 0;
 
       await consumingBus.publish(
         new PostPreCreatedEvent('p-9', 'decided', new Date()),
@@ -385,14 +435,14 @@ describe('one hop between two services, with no broker between them', () => {
       );
       await settle();
 
-      expect(arrivals.envelopes.at(-1)?.metadata).toMatchObject({
+      expect(arrivals.headers.at(-1)).toMatchObject({
         [TENANT_HEADER]: 'globex',
       });
     });
 
     it('but the authorship does NOT: the second service publishes under its own name', async () => {
       const context = await tenanted('p-10', 'initech');
-      arrivals.envelopes.length = 0;
+      arrivals.headers.length = 0;
 
       await consumingBus.publish(
         new PostPreCreatedEvent('p-10', 'decided', new Date()),
@@ -400,21 +450,17 @@ describe('one hop between two services, with no broker between them', () => {
       );
       await settle();
 
-      const metadata = arrivals.envelopes.at(-1)?.metadata ?? {};
+      const metadata = arrivals.headers.at(-1) ?? {};
       expect(metadata[TRANSPORT_ORIGIN]).toBe('consuming-service');
       expect(metadata[TRANSPORT_ORIGIN]).not.toBe('publishing-service');
     });
 
     it('a tenant nobody named crosses as the root one', async () => {
-      expect(
-        (await tenanted('p-11', ROOT_TENANT)).attributes[TENANT_HEADER],
-      ).toBe(ROOT_TENANT);
+      expect(tenantOf(await tenanted('p-11', ROOT_TENANT))).toBe(ROOT_TENANT);
     });
 
     it('the wire carries whatever the producer wrote — the reader is what normalizes it', async () => {
-      const onTheWire = (await tenanted('p-12', 'undefined')).attributes[
-        TENANT_HEADER
-      ];
+      const onTheWire = tenantOf(await tenanted('p-12', 'undefined'));
 
       expect(onTheWire).toBe('undefined');
       expect(Tenant.normalize(onTheWire)).toBe(ROOT_TENANT);

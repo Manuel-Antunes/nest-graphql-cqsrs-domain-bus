@@ -15,13 +15,11 @@ import { EventType } from '@nestposts/platform/domain/shared/event-type';
 import { EventAddress } from '../outbound/event-address';
 import { EventMessages } from '../outbound/event-messages';
 import {
-  CorrelatedRequestContext,
+  DefaultRequestContextCodec,
   RequestContextCodec,
   TransportRequestContext,
 } from '../request-context';
-import { startInProcessService } from '../testing';
-import { TransportIdentity } from '../transport-identity';
-import { reconstruct } from './event-reconstruction';
+import { publishedEnvelope, startInProcessService } from '../testing';
 import { IncomingRequest } from './incoming-request';
 
 const SHOP = 'shop';
@@ -79,7 +77,8 @@ class NoteTheOrderHandler implements ICommandHandler<NoteTheOrder> {
 
   async execute(): Promise<void> {
     this.arrivals.correlations.push(
-      (this.request as TransportRequestContext)?.correlationId,
+      (this.request as Partial<TransportRequestContext> | undefined)?.metadata
+        ?.correlationId,
     );
   }
 }
@@ -95,36 +94,23 @@ class ShopEventsController {
   @EventPattern(EventAddress.everyEventOf(SHOP))
   shop(@Payload() envelope: OutboxEnvelope): Promise<void> {
     const request = this.incoming.from(envelope);
-    this.arrivals.arrivals.push(new Arrival(reconstruct(envelope), request));
+    this.arrivals.arrivals.push(
+      new Arrival(EventMessages.read(envelope).payload, request),
+    );
     return this.commandBus.execute(new NoteTheOrder('o-1'), request);
   }
 }
 
 describe('one entry per namespace, through @Payload() and the IncomingRequest', () => {
   let consuming: Awaited<ReturnType<typeof startInProcessService>>;
-  let messages: EventMessages;
   let arrivals: Arrivals;
 
-  const publish = (event: object, request?: AsyncContext) => {
-    if (request) {
-      request.attachTo(event);
-    }
-    const staged = messages.of(event, new Set([SHOP]));
-    if (!staged) {
-      return Promise.resolve();
-    }
-    const envelope: OutboxEnvelope = {
-      id: staged.id ?? 'unidentified',
-      topic: staged.topic,
-      key: staged.key ?? null,
-      headers: staged.headers ?? {},
-      createdAt: Date.now(),
-      payload: staged.payload,
-    };
-    return consuming.server.emit(
-      EventAddress.ofMessage(envelope).routingKey,
-      envelope,
-    );
+  const publish = (event: object, correlationId?: string) => {
+    const { pattern, envelope } = publishedEnvelope(event, {
+      producer: 'shop',
+      metadata: correlationId ? { correlationId } : {},
+    });
+    return consuming.server.emit(pattern, envelope);
   };
 
   beforeAll(async () => {
@@ -133,15 +119,11 @@ describe('one entry per namespace, through @Payload() and the IncomingRequest', 
       controllers: [ShopEventsController],
       providers: [
         IncomingRequest,
-        { provide: RequestContextCodec, useClass: CorrelatedRequestContext },
+        { provide: RequestContextCodec, useClass: DefaultRequestContextCodec },
         Arrivals,
         NoteTheOrderHandler,
       ],
     });
-    messages = new EventMessages(
-      TransportIdentity.named('shop'),
-      new CorrelatedRequestContext(),
-    );
     arrivals = consuming.app.get(Arrivals);
   });
 
@@ -189,21 +171,17 @@ describe('one entry per namespace, through @Payload() and the IncomingRequest', 
   });
 
   it('hands over the request the message belongs to, rebuilt by the application codec', async () => {
-    const request = new TransportRequestContext('c-1', undefined, {});
-
-    await publish(new OrderPlacedEvent('o-2', 1, new Date()), request);
+    await publish(new OrderPlacedEvent('o-2', 1, new Date()), 'c-1');
 
     const [arrival] = arrivals.arrivals;
     expect(arrival.request).toBeInstanceOf(TransportRequestContext);
-    expect((arrival.request as TransportRequestContext).correlationId).toBe(
-      'c-1',
-    );
+    expect(
+      (arrival.request as TransportRequestContext).metadata.correlationId,
+    ).toBe('c-1');
   });
 
   it('runs the command it dispatches in that same request', async () => {
-    const request = new TransportRequestContext('c-2', undefined, {});
-
-    await publish(new OrderPlacedEvent('o-3', 1, new Date()), request);
+    await publish(new OrderPlacedEvent('o-3', 1, new Date()), 'c-2');
 
     expect(arrivals.correlations).toEqual(['c-2']);
   });

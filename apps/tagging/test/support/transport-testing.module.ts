@@ -1,9 +1,14 @@
-import { type DynamicModule } from '@nestjs/common';
+import type { DynamicModule, Type } from '@nestjs/common';
 import { DatabaseModule } from '@nestposts/database';
 import {
   TestSchemaModule,
   testDatabaseConfig,
 } from '@nestposts/database/testing';
+import {
+  MikroOrmEventStorageEngine,
+  MikroOrmEventStoreModule,
+} from '@nestposts/event-store-mikro-orm';
+import { MikroOrmTransactionManager } from '@nestposts/outbox-mikro-orm';
 import { Post } from '@nestposts/posts/domain/post/post.entity';
 import { postsEntities } from '@nestposts/posts/infrastructure/posts-infrastructure.module';
 import {
@@ -28,8 +33,14 @@ export const persistenceTesting = (): DynamicModule[] => [
 ];
 
 /** The transport as a spec wants it: the event store of this service, publishing nowhere. */
-export const transportTesting = (): DynamicModule =>
+export const transportTesting = (): (DynamicModule | Type)[] => [
+  MikroOrmEventStoreModule,
   TransportEventBusModule.forRoot({
     identity: TransportIdentity.silent('tagging-spec'),
-    eventStore: [Post],
-  });
+    transactionManager: MikroOrmTransactionManager,
+    eventStore: {
+      engine: MikroOrmEventStorageEngine,
+      entities: [{ entity: Post, tagKey: 'postId' }],
+    },
+  }),
+];

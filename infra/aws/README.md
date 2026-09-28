@@ -1,6 +1,6 @@
 # The same system, on Lambda
 
-Eleven functions of ours plus the Next server — three of them on a schedule —, one FIFO topic, three
+Eight functions of ours plus the Next server — none of them on a schedule —, one FIFO topic, three
 FIFO queues (and their dead-letter queues), one Postgres, one CloudFront router and one SES identity.
 The domain, application and presentation code is **unchanged**: what a handler here does is hand AWS's
 calling convention to the same container `main.ts` starts.
@@ -41,8 +41,8 @@ calling convention to the same container `main.ts` starts.
   /  ────────────► Web   apps/web, OpenNext, in the VPC (it holds its own Better Auth)
                           └─ notifications.NotificationReceived ─► topic   (its own outbox, drained)
 
-  every minute ──► PostsApiRelay / TaggingRelay     OutboxHousekeeping.sweep(): what a drain left behind
-               ──► WebOutboxSweep ──► POST /api/outbox/sweep   the same, for the web's outbox
+  what a drain could not publish stays in that service's outbox, committed, and leaves with the
+  next unit of work of the same service that writes to it — nothing runs on a timer
 ```
 
 ## How to read this if you know the RabbitMQ version
@@ -53,15 +53,18 @@ It is not a new design. It is `nestposts.events`, piece by piece:
 |---|---|---|
 | topic exchange `nestposts.events` | SNS FIFO topic | `messaging/topic.ts` |
 | a queue's binding | a subscription's **filter policy** | `messaging/routing.ts` |
-| routing key `posts.PostCreated.<id>` | the `routingKey` message attribute, and `pattern` in the body | `OutboxPackets.aws` |
+| routing key `posts.PostCreated.<id>` | the `routingKey` message attribute, and `pattern` in the body | each publishing app's `OutboxPackets.aws` (`infrastructure/transport/outbox-packets.ts` in posts-api and tagging, `src/nest/outbox-packets.ts` in the web) |
 | one queue per consuming service | one SQS FIFO queue per consuming service | `messaging/queues.ts` |
 | `@EventPattern(...)` on a controller | **the same `@EventPattern`** | unchanged |
 | `outbox.destinations`, keyed by namespace | **the same destinations**, around an `SnsClientProxy` | unchanged |
 
 Switching transports cost **one branch in each application's transport factories** —
 `InboundTransport`, and the client its `PostEventsClient` builds, with the packet it is wrapped in
-(`OutboxPackets.for(app.transport)`) — which is what keeping the destination out of the event and the
-wire format in one `toPacket` bought: the code says *what* goes out, the configuration says *where*.
+(`OutboxPackets.for(app.transport)`, the application's own, beside the client) — which is what keeping
+the destination out of the event and the wire format in one `toPacket` bought: the code says *what*
+goes out, the configuration says *where*. The SNS packet lifts into message attributes the routing
+facts `routingAttributesOf` names (`@nestposts/transport-eventbus`), the same list the filter policies
+below select on, so the two cannot drift apart.
 
 The filter policies are not written here twice, either — `messaging/routing.ts` imports
 `SnsFilterPolicy` and `POSTS_NAMESPACE` from the workspace, so a namespace renamed in `@EventType`
@@ -142,11 +145,11 @@ infra/aws/
   compute/           the functions
     platform.ts        where support/ finds the resources: network, links, environment, the build
     build.ts, environment.ts, api.ts, gateway.ts, workers.ts, migrations.ts
-    relays.ts          the outbox's scheduled sweeps, one per publishing service
   edge/              the CloudFront router: router.ts creates it, routes.ts points it
-  web/               the Next application, on the same origin, and the schedule that sweeps its outbox
+  web/               the Next application, on the same origin
 infra/lambda/
-  web-outbox-sweep.ts  that schedule's handler: one authenticated POST to the web
+  collector.yaml     the collector extension's configuration, travelling beside every bundle
+  otel-preload.cjs   the Lambda instrumentation, loaded through NODE_OPTIONS=--require before the handler
 ```
 
 The arrow always points the same way: **the definer does not know the instantiator**.
@@ -213,6 +216,11 @@ repeating costs one query against the history table. The gain is that **a migrat
 becomes a deploy that fails**, instead of a forgotten function and a `relation "posts"."post" does
 not exist` on the first request.
 
+`migrate()` ends by pruning the inbox (`pruneInbox()`, `apps/migrator/README.md`): the
+`transport.outbox_inbox` rows processed longer ago than `INBOX_RETENTION_DAYS` are forgotten. That is
+the only thing that ever deletes them on AWS — no function here runs on a timer — so the table is
+trimmed once per deploy, for every service at once, since it is one table for all of them.
+
 `if (!$dev)` because under `sst dev` there is no published artifact to invoke.
 `infra/scripts/migrate.sh` re-runs it by hand.
 
@@ -237,7 +245,7 @@ up. `SEED_AUTHOR_EMAIL`, `SEED_AUTHOR_PASSWORD` and their `SEED_READER_` twins c
 without touching code. They are ordinary credentials in a deployed database: for anything but a demo
 stage, set them.
 
-### The functions, from five builds and one script
+### The functions, from five builds
 
 | function | handler | what triggers it |
 |---|---|---|
@@ -247,16 +255,13 @@ stage, set them.
 | `PostsApiInbox` | `apps/posts-api/dist/lambda/sqs.handler` | the `PostsApiCompleted` queue |
 | `Tagging` | `apps/tagging/dist/lambda/sqs.handler` | the `TaggingPostEvents` queue |
 | `Notificator` | `apps/notificator/dist/lambda/sqs.handler` | the `NotificatorNotifications` queue |
-| `PostsApiRelay` | `apps/posts-api/dist/lambda/relay.handler` | `PostsApiRelaySchedule`, every minute |
-| `TaggingRelay` | `apps/tagging/dist/lambda/relay.handler` | `TaggingRelaySchedule`, every minute |
-| `WebOutboxSweep` | `infra/lambda/web-outbox-sweep.handler` | its own `sst.aws.Cron`, every minute |
 | `Migrate` | `apps/migrator/dist/lambda.handler` | the deploy, and `migrate.sh` |
 | `Seed` | `apps/migrator/dist/lambda.seedHandler` | the deploy, when the seeders change |
 
-`PostsApi`, `PostsApiInbox` and `PostsApiRelay` are the **same bundle**, one webpack build with three
-handler entries, sharing one `bootOnce`. Nothing in Node forces the split a Quarkus classpath would,
-and one bundle means the projection that runs in the queue function cannot drift from the read model
-the API serves.
+`PostsApi` and `PostsApiInbox` are the **same bundle**, one webpack build with two handler entries
+(`lambda/http`, `lambda/sqs`), sharing one `bootOnce`. Nothing in Node forces the split a Quarkus
+classpath would, and one bundle means the projection that runs in the queue function cannot drift from
+the read model the API serves.
 
 ### Email: an SES identity, linked to the one function that sends
 
@@ -279,41 +284,53 @@ nothing is stored twice when it is redriven.
 
 Push is not configured here: without `FIREBASE_CREDENTIALS` the `push` channel sends nothing.
 
-## The outbox: every function drains, and a schedule sweeps
+## The outbox: every function drains, and nothing runs on a timer
 
 A service does not send an event, it writes it — one outbox row, in the transaction of the command or
 the ingested message that raised it — and `@nestjs/outbox`'s relay publishes it afterwards
 (`libs/core/transport-eventbus/README.md`). In a container the relay is a loop. A function is frozen
 the moment it answers and can hold no loop, so every function that publishes runs with
 `POSTS_OUTBOX_RELAY=drain` / `TAGGING_OUTBOX_RELAY=drain` (`compute/environment.ts`), and the web with
-`WEB_OUTBOX_RELAY=drain`: after each unit of work commits, the function publishes what is due before it
-answers — the command's own promise covers the publish, the way it covered the emit before.
+`WEB_OUTBOX_RELAY=drain`: after each unit of work that staged messages commits, `EventOutbox.drain()`
+calls the relay's `runOnce()` while a round publishes something, ten rounds at most, before the
+function answers — the command's own promise covers the publish.
 
-A drain that fails — SNS unreachable, a function that times out mid-publish — does not fail the
-request: the rows are committed, and publishing them is the relay's to retry. Something has to come
-back for them, and that is the schedule:
+The outbox is still worth its table with no scheduled component behind it, because both ways of
+doing without it lose. Publishing inside the transaction — a dual write — puts an event on the wire
+for a transaction that may still fail to commit: a phantom `PostPreCreated`, which tagging decides on
+and posts-api has no row for. Publishing after the commit without a durable record loses the event
+whenever the function is frozen or killed between the two.
 
-| schedule | calls | |
-|---|---|---|
-| `PostsApiRelaySchedule` → `PostsApiRelay` | `OutboxHousekeeping.sweep()` (`apps/posts-api/src/lambda/relay.ts`, a `scheduledHandler`) | drains what is due, prunes the inbox, reports the outbox's lag and dead letters |
-| `TaggingRelaySchedule` → `TaggingRelay` | the same, for tagging's rows | |
-| `WebOutboxSweep` | `POST /api/outbox/sweep` on the router | the web's container is inside OpenNext's function, so the schedule asks the web to sweep itself |
+**What a drain could not publish stays in the outbox, committed, and the next unit of the same service
+that writes to it drains it with its own.** A broker that refused a message had it rescheduled with
+the outbox's backoff; a function that died between the commit and the publish left it due. Either way
+it is there, and `runOnce()` claims whatever of the service's messages is due, not only what the
+committing unit staged — so the next command posts-api runs, or the next message tagging decides on,
+publishes what the previous one left behind. Only a unit that wrote to the outbox drains: a query
+publishes nothing and so sends nothing on. A round that publishes nothing ends the drain, which is
+what keeps a broker that is down from spending every attempt a message has inside one invocation.
+**While the service receives nothing that publishes, nothing publishes what it left behind.** That is
+the deliberate trade for having no scheduled component: nothing is deployed, invoked or authenticated
+on a clock, and the delay is bounded by the service's traffic rather than by one.
 
-Each relay is the service's own bundle and its own `producer`: the `transport` schema is one for every
-service, and a relay only ever publishes the rows its service wrote. The notificator publishes nothing
-and has no relay; its inbox rows are pruned by whichever sweep runs, because pruning is not scoped by
-consumer.
+**A failure after the commit is never turned into the caller's error** — no 500, no SQS redelivery.
+The work happened, and retrying it would redo the work, not publish it: a client sending
+`createPost` again would create a second post, and a redelivered message would be dropped by the
+inbox, whose row committed with the work. Only a failure up to and including `PREPARE_COMMIT` rolls
+the unit back, and that one the edge retries: SQS redelivers the message, the client sends the
+request again.
 
-**The web's sweep is authenticated by a secret nobody sets.** `outboxSweepSecret` in
-`compute/environment.ts` is a SHA-256 of `AuthSecret` under a label of its own, handed to the web as
-`WEB_OUTBOX_SWEEP_SECRET` and to the schedule as the bearer it sends. The route compares digests in
-constant time, answers `401` to anything else, and `404` when the variable is not set at all — which
-is `pnpm dev`, unless somebody sets it.
+Every row carries its service's `producer`: the `transport` schema is one for every service, and a
+drain only ever publishes the rows its own service wrote. The notificator publishes nothing and drains
+nothing. The inbox is not the outbox's to prune: the deploy does it, once, for every service (see
+**The migrations run on their own**).
 
-A message the relay gives up on — twenty attempts, by default — is a **dead letter**, and is reported to
-GlitchTip by `DeadLetterReporting` in the trace of the request that raised it; the sweep's warning
-carries the counts. Requeueing one is `@nestjs/outbox`'s `OutboxDeadLetters`, once whatever refused it
-is fixed.
+A message the relay gives up on — twenty attempts, by default — is a **dead letter**, and is reported
+to GlitchTip by `DeadLetterReporting`, from `@nestjs/outbox`'s `nestjs:outbox:dead-lettered`
+diagnostics channel, in the trace of the request that raised it. That report is the only signal: there
+is no lag warning, and a message waiting for its service's next drain is not an alarm. Requeueing a
+dead letter is `@nestjs/outbox`'s `OutboxDeadLetters`, once whatever refused it is fixed; the requeued
+message goes out with the service's next drain, like any other that is due.
 
 ## Build and deploy
 
@@ -330,7 +347,9 @@ One secret, once per stage:
 npx sst secret set AuthSecret "$(openssl rand -base64 32)" --stage dev
 ```
 
-The web's outbox-sweep bearer is derived from it, so there is no second one to set.
+It is Better Auth's `AUTH_SECRET` in every process that holds an instance — posts-api, the
+notificator, the migrator and the web — which is what makes a session one of them signed a session
+the others resolve.
 
 Billing is three more, all **optional**, and a stage that sets none of them deploys with billing
 off — each is an `sst.Secret` with a placeholder, so a missing one is a value and not a failed deploy:
@@ -524,9 +543,8 @@ Two colours, both Pulumi's own. **`#AA6639`** is a parent edge, which is the com
 group. **`#246C60`** is a dependency, and that is the one worth reading: it is the order the engine
 computed, and the edge carries the property that created it (`secretId`, `secretString`). `Build` is
 the node to look for, because **every** function built from the applications hangs off it —
-`Gateway`, `Migrate`, `PostsApi`, `PostsApiInbox`, `PostsApiRelay`, `Seed`, `Tagging`, `TaggingRelay`
-and the notificator's two — which is `dependsOn: [build]` in `compute/platform.ts` and the whole
-reason that resource exists. `WebOutboxSweep` does not: SST bundles its one file itself.
+`Gateway`, `Migrate`, `PostsApi`, `PostsApiInbox`, `Seed`, `Tagging` and the notificator's two —
+which is `dependsOn: [build]` in `compute/platform.ts` and the whole reason that resource exists.
 
 The SVG is rendered `rankdir=LR`: top to bottom, a stack this size comes out a strip twenty times
 wider than it is tall. The DOT is left exactly as Pulumi wrote it, to be re-rendered however you

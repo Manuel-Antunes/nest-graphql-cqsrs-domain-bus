@@ -2,14 +2,21 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { OutboxModule } from '@nestjs/outbox';
 import { CqsrsModule } from '@nestposts/cqsrs';
-import { DatabaseModule, TenancyModule } from '@nestposts/database';
+import {
+  DatabaseModule,
+  MessageTenantResolver,
+  TenancyModule,
+} from '@nestposts/database';
+import {
+  MikroOrmEventStorageEngine,
+  MikroOrmEventStoreModule,
+} from '@nestposts/event-store-mikro-orm';
 import { loggingModuleAsync } from '@nestposts/observability';
 import { ErrorReportingModule } from '@nestposts/observability/error-reporting.module';
 import {
   MikroOrmOutboxModule,
   MikroOrmOutboxStore,
-  MikroOrmUnitOfWorkTransaction,
-  OutboxHousekeepingModule,
+  MikroOrmTransactionManager,
 } from '@nestposts/outbox-mikro-orm';
 import { Post } from '@nestposts/posts/domain/post/post.entity';
 import { postsEntities } from '@nestposts/posts/infrastructure/posts-infrastructure.module';
@@ -19,7 +26,6 @@ import {
   TRANSPORT_EVENT_BUS_PUBLISHER,
   TransportEventBusModule,
   TransportIdentity,
-  TransportTenantResolver,
 } from '@nestposts/transport-eventbus';
 import { usersEntities } from '@nestposts/users/infrastructure/users-infrastructure.module';
 import { Inngest } from 'inngest';
@@ -67,7 +73,7 @@ import { ExceptionProducers } from './infrastructure/transport/exception-produce
     DatabaseModule.forFeature([...postsEntities, ...usersEntities]),
     TenancyModule.forRoot({
       http: false,
-      resolver: TransportTenantResolver,
+      resolver: MessageTenantResolver,
       migrations: MikroOrmConfiguration.tenantMigrations(),
     }),
     RetryPolicyModule.forRootAsync({
@@ -82,14 +88,17 @@ import { ExceptionProducers } from './infrastructure/transport/exception-produce
       inject: [appConfig.KEY],
       useFactory: ({ name }: AppConfig) => ({ producer: name }),
     }),
-    OutboxHousekeepingModule.forRoot({}),
+    MikroOrmEventStoreModule,
     TransportEventBusModule.forRootAsync({
       inject: [appConfig.KEY],
       useFactory: ({ name, publishes }: AppConfig) =>
         TransportIdentity.named(name, { publishes }),
-      transaction: MikroOrmUnitOfWorkTransaction,
+      transactionManager: MikroOrmTransactionManager,
       inbox: { descriptions: MikroOrmOutboxStore },
-      eventStore: [Post],
+      eventStore: {
+        engine: MikroOrmEventStorageEngine,
+        entities: [{ entity: Post, tagKey: 'postId' }],
+      },
     }),
   ],
   providers: [

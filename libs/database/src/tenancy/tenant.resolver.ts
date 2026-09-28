@@ -34,7 +34,7 @@ type HeaderBag = Record<string, string | string[] | undefined>;
  * The tenant as a header says it: `x-tenant` on HTTP and GraphQL, and the same key on the RPC context
  * for a transport that carries one. A message whose tenant is on the envelope needs the transport's
  * resolver instead — this one answers {@link ROOT_TENANT} for it, which is a wrong answer given
- * quietly, and the reason `TransportTenantResolver` exists.
+ * quietly, and the reason {@link MessageTenantResolver} exists.
  */
 @Injectable()
 export class HeaderTenantResolver implements TenantResolver {
@@ -85,11 +85,60 @@ export class HeaderTenantResolver implements TenantResolver {
 }
 
 /**
+ * **The tenant of a message, read off the envelope the transport delivered.**
+ *
+ * Every event between the services here is `@nestjs/outbox`'s `OutboxEnvelope`, and its `headers` are
+ * the message's metadata — the tenant among them, under the same `x-tenant` an HTTP request uses. A
+ * delivery has no headers of its own, so {@link HeaderTenantResolver} can only shrug at one; this reads
+ * the envelope instead, by its shape, so this package still knows nothing of the bus that published
+ * it. It runs in an interceptor, before any pipe, which is why it reads the raw payload.
+ *
+ * Falling back to the header resolver is not a formality: the same service answers HTTP and messages
+ * (`apps/posts-api` is a hybrid), and one resolver has to be right for both.
+ */
+@Injectable()
+export class MessageTenantResolver extends HeaderTenantResolver {
+  /** The tenant an envelope's headers name, or `undefined` for anything that is not one. */
+  static tenantOfEnvelope(data: unknown): string | undefined {
+    const envelope = MessageTenantResolver.parsed(data) as
+      | { headers?: Record<string, unknown> }
+      | undefined;
+    const carried = envelope?.headers?.[TENANT_HEADER];
+    return typeof carried === 'string' && carried !== ''
+      ? Tenant.normalize(carried)
+      : undefined;
+  }
+
+  override tenantOf(context: ExecutionContext): string {
+    if (context.getType<string>() === 'rpc') {
+      const carried = MessageTenantResolver.tenantOfEnvelope(
+        context.switchToRpc().getData(),
+      );
+      if (carried) {
+        return carried;
+      }
+    }
+    return super.tenantOf(context);
+  }
+
+  private static parsed(data: unknown): unknown {
+    if (typeof data !== 'string' && !Buffer.isBuffer(data)) {
+      return data;
+    }
+    try {
+      return JSON.parse(data.toString());
+    } catch {
+      return undefined;
+    }
+  }
+}
+
+/**
  * Turns whichever shape was configured into the providers that answer {@link TENANT_RESOLVER}.
  *
  * A class is **registered here**, so a caller passes the class and nothing else: it is constructed by
- * this module's injector and whatever it injects is resolved from there — which is how
- * `TransportTenantResolver` gets its `IncomingRequest` without anybody providing it from outside.
+ * this module's injector and whatever it injects is resolved from there, without anybody providing
+ * its dependencies from outside.
  */
 export class TenantResolverProviders {
   static for(resolver: TenantResolverLike = HeaderTenantResolver): Provider[] {

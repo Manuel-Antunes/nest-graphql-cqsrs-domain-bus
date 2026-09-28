@@ -10,9 +10,12 @@ import type { OutboxRouteFunction } from '../outbound/outbox-route';
  * | `off` | never polls | nothing: another process relays |
  *
  * `poll` is a long-lived process. `drain` is a function, which is frozen the moment it answers and
- * so can have no loop: the command's own promise covers the publish, and whatever a failure leaves
- * behind is published by the next unit or by a scheduled sweep. `off` is an API-only instance beside
- * relay workers.
+ * so can have no loop: the command's own promise covers the publish. What a drain could not publish —
+ * a broker that refused it, a function frozen or killed between the commit and the publish — stays in
+ * the outbox, committed, and the next unit of this service that writes to its outbox drains it with
+ * its own: every drain publishes whatever of this service's messages is due, not only what its unit
+ * staged. While the service receives nothing that publishes, nothing publishes it. `off` is an API-only instance beside another
+ * process that relays.
  *
  * Whether the relay polls is `@nestjs/outbox`'s own `relay.enabled`, declared with the rest of the
  * outbox at the application's root: `poll` is `enabled: true`, the other two `false`.
@@ -24,16 +27,9 @@ export interface TransportOutboxSettings {
   /** See {@link OutboxRelayMode}. Default `poll`. */
   readonly relay?: OutboxRelayMode;
   /**
-   * The root `OutboxModule`'s `relay.batchSize`, when it is not the default: a drain publishes
-   * batches until one comes back short. Default `100`, the package's.
-   */
-  readonly batchSize?: number;
-  /**
-   * **The root `OutboxModule`'s `route`** ({@link OutboxRoute}), the same function. An event it
-   * routes `local` is told to this process's `EventBus` by the outbox — {@link LocalDelivery}, once
-   * the relay delivers it — and **not** at its unit of work's commit, which is where every other
-   * event is told. Without it every event is told at the commit, and a message that still goes
-   * `local` is only acknowledged there.
+   * **The root `OutboxModule`'s `route`** ({@link OutboxRoute}), the same function. A destination
+   * message it routes `local` — its namespace has no transport, as in a service with no broker — is
+   * not written: nothing in this process receives it. Without it every destination message is written.
    */
   readonly route?: OutboxRouteFunction;
 }
@@ -44,11 +40,9 @@ export interface TransportOutboxSettings {
  *
  * The outbox itself is `@nestjs/outbox`'s, declared once at the application's root and global: its
  * `transports` — one `ClientProxyTransport` per namespace, around the application's client and with
- * the packet of its transport ({@link OutboxPackets}) — its `route` ({@link OutboxRoute}), relay and
- * retry. This library writes to it and never configures it. A namespace listed here with no
- * transport in the outbox — every one of them, for a service running with no broker — is routed to
- * the outbox's `local` transport, and told to this process's `EventBus` there ({@link LocalDelivery})
- * instead of at the commit, which the settings' `route` is what tells the bus.
+ * the application's own `toPacket` for its broker, built from {@link EventAddress.ofMessage} and the
+ * message's headers — its `route` ({@link OutboxRoute}), relay and retry. This library writes to it and never configures it. The streaming processing groups
+ * (`processingGroups`) are delivered through the same outbox, on its `local` transport.
  *
  * ```ts
  * OutboxModule.forRootAsync({
@@ -76,7 +70,7 @@ export interface TransportOutboxOptions {
    * The namespaces this service publishes — the keys of the root `OutboxModule`'s `transports`, when
    * it has a broker. An event declared `@EventType({ namespace: 'posts' })` is written to the outbox
    * when `'posts'` is here, and an event of any other namespace stays in the process. One the outbox
-   * has no transport for goes `local`.
+   * has no transport for is not written.
    */
   readonly destinations: readonly string[];
   readonly inject?: any[];

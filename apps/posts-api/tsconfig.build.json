@@ -56,6 +56,9 @@
       "path": "../../libs/events/tsconfig.lib.json"
     },
     {
+      "path": "../../libs/core/event-store-mikro-orm/tsconfig.lib.json"
+    },
+    {
       "path": "../../libs/database/tsconfig.lib.json"
     },
     {

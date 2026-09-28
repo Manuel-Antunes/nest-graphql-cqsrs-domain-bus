@@ -6,6 +6,7 @@
     "@nestjs-modules/mailer": "catalog:",
     "@nestposts/cqsrs": "workspace:*",
     "@nestposts/database": "workspace:*",
+    "@nestposts/event-store-mikro-orm": "workspace:*",
     "@nestposts/lambda": "workspace:*",
     "@nestposts/microservices-aws": "workspace:*",
     "@nestposts/microservices-inngest": "workspace:*",

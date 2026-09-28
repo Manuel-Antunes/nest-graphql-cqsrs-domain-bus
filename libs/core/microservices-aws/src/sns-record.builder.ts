@@ -30,9 +30,9 @@ export interface SnsRecord<TData = unknown> {
  * the producer learning the transport.
  *
  * It is how a send says something about itself: a filterable attribute a subscription's policy can
- * select on, a header the far side should read back, the FIFO group and deduplication id —
- * `@nestposts/transport-eventbus`'s outbox packet builds one per message, with the routing facts as
- * attributes, the aggregate as the group and the message id as the deduplication id.
+ * select on, a header the far side should read back, the FIFO group and deduplication id — an
+ * application's outbox packet builds one per message, with the routing facts as attributes, the
+ * message's sequence as the group and the message id as the deduplication id.
  *
  * ```ts
  * client.emit(pattern, new SnsRecordBuilder(payload).setMetadata({ 'x-tenant': 'acme' }).build());

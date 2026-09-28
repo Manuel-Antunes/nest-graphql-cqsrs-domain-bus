@@ -6,7 +6,7 @@ import { PostNotFoundException } from '@nestposts/posts/domain/post/exception/po
 import type { Post } from '@nestposts/posts/domain/post/post.entity';
 import type { PostId } from '@nestposts/posts/domain/post/vo/post-id';
 import { Tag } from '@nestposts/posts/domain/tag/tag.entity';
-import { EventSourcedRepository } from '@nestposts/transport-eventbus';
+import { EventSourcingRepository } from '@nestposts/transport-eventbus';
 
 export namespace CompletePostWithDefaultTagCommand {
   export class CompletePostWithDefaultTag extends Command<void> {
@@ -20,7 +20,7 @@ export namespace CompletePostWithDefaultTagCommand {
     private readonly logger = new Logger('CompletePostWithDefaultTagCommand');
 
     constructor(
-      private readonly posts: EventSourcedRepository<Post>,
+      private readonly posts: EventSourcingRepository<Post>,
       private readonly publisher: EventPublisher,
       @Inject(REQUEST) private readonly request: AsyncContext,
     ) {}

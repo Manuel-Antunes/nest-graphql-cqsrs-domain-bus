@@ -12,9 +12,6 @@
       "path": "../../libs/users/tsconfig.lib.json"
     },
     {
-      "path": "../../libs/core/transport-eventbus/tsconfig.lib.json"
-    },
-    {
       "path": "../../libs/posts/tsconfig.lib.json"
     },
     {
@@ -34,6 +31,9 @@
     },
     {
       "path": "../../libs/events/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/core/event-store-mikro-orm/tsconfig.lib.json"
     },
     {
       "path": "../../libs/database/tsconfig.lib.json"

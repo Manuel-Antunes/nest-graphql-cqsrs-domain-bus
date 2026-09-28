@@ -10,7 +10,6 @@ const OutboxEnvSchema = z.object({
     .positive()
     .default(1_000),
   POSTS_OUTBOX_RETRY_ATTEMPTS: z.coerce.number().int().positive().default(20),
-  POSTS_INBOX_RETENTION_DAYS: z.coerce.number().int().positive().default(30),
 });
 
 export const outboxConfig = registerAs('outbox', () => {
@@ -19,7 +18,6 @@ export const outboxConfig = registerAs('outbox', () => {
     relay: parsed.POSTS_OUTBOX_RELAY,
     pollInterval: parsed.POSTS_OUTBOX_POLL_INTERVAL_MS,
     retry: { attempts: parsed.POSTS_OUTBOX_RETRY_ATTEMPTS },
-    inboxRetention: `${parsed.POSTS_INBOX_RETENTION_DAYS}d` as const,
   };
 });
 

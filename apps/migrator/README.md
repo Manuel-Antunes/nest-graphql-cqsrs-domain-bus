@@ -12,7 +12,7 @@ entity that maps it (`defineEntity({ schema })`):
 | pin | schema | tables | migrations |
 |---|---|---|---|
 | `SYSTEM_SCHEMA` | `public` | Better Auth's (`auth_user`, `session`, `account`, the OAuth ones…) and the organizations' (`organization`, `member`, `invitation`, `team`…) | `src/migrations/system` |
-| `TRANSPORT_SCHEMA` | `transport` | the outbox, dead letters and inbox (`libs/core/outbox-mikro-orm`) and the event log (`libs/core/transport-eventbus`) | `src/migrations/system` |
+| `TRANSPORT_SCHEMA` | `transport` | the outbox, dead letters and inbox (`libs/core/outbox-mikro-orm`) and the event store's `event_log` (`libs/core/event-store-mikro-orm`) | `src/migrations/system` |
 | `TENANT_SCHEMA` (`*`) | `tenant_<name>` | posts, tags, users, authors, notifications, deliveries, devices | `src/migrations/tenant` |
 
 `tenant_root` is the root tenant — whoever names none. An organization is a tenant, `tenant_<slug>`:
@@ -38,21 +38,52 @@ them.
 `ignoreSchema` is enumerated from the live connection on every run: a development database
 accumulates tenants, and a diff that saw them would emit DDL for somebody else's leftovers.
 
-**The system migrations run before any tenant's**, always: `migrate()` is `migrateSystem()` then
-`migrateTenants()`, and `migrateTenants()` provisions `tenant_root` and every `tenant_*` schema that
-exists, through the same `TenantEntityManagerService` the applications use — so a deploy brings every
-tenant up to date, and the service still migrates, on its first request, a tenant created after it.
+**The system migrations run before any tenant's**, always: `migrate()` is `migrateSystem()`, then
+`migrateTenants()`, then `pruneInbox()` (below), and `migrateTenants()` provisions `tenant_root` and
+every `tenant_*` schema that exists, through the same `TenantEntityManagerService` the applications
+use — so a deploy brings every tenant up to date, and the service still migrates, on its first
+request, a tenant created after it.
 
 The default tag is a tenant migration (`Migration…_default_tag`), not a seeder: the saga cannot complete
 without it, and a tenant born at runtime — when its organization is — never runs a seeder.
+
+**`Migration20260928120000_event_store_tags` turned the event log into an event store.** The log kept
+one stream per aggregate (`stream_id`, `sequence`) and the trace beside each event (`trace_context`);
+the store `@nestposts/transport-eventbus` now appends to has no streams, only tags and metadata. The
+migration adds `metadata jsonb` and `tags text[]`, fills the metadata from the old trace context and
+each row's tag from its stream id and the payload property that carried it (`postId=…`), drops the
+three old columns and the stream's unique constraint, and indexes `tags` with GIN. Its `down` rebuilds
+the streams, numbering each one's rows by position and taking the trace back out of the metadata.
+
+## `migrate()` ends by pruning the inbox
+
+`pruneInbox()` deletes the `transport.outbox_inbox` rows processed longer ago than
+`INBOX_RETENTION_DAYS` — read by `src/config/outbox.config.ts`, 30 by default, which is longer than any
+redelivery, a dead letter's requeue included — and logs how many it forgot. It deletes through
+`OutboxInboxRecord`'s mapping (`OutboxInboxEntitySchema`,
+`@nestposts/outbox-mikro-orm/outbox.entities`), so the table is wherever the entity says it is, and it
+is **not** scoped by consumer: the inbox is one table for every service, keyed by
+`(consumer, message)`, and one prune serves all of them.
+
+It lives here because the migrator is the one process that already runs at predictable moments against
+the whole `transport` schema: `migrate()` is invoked on every deploy (the `Migrate` function, with
+`Date.now()` as its input), in every `setup` — so every `pnpm dev`, every `pnpm db:setup` and the
+`apps/web-e2e` stack — and it can be run alone as `inbox:prune`. No service carries a timer for it, and
+none reads a retention of its own; `@nestposts/outbox-mikro-orm` provides the table and prunes nothing.
+
+A forgotten row is a message the inbox no longer recognises: one redelivered after the retention would
+be acted on again. That is why the retention outlives every redelivery, and why the aggregate's own
+state — or the event store's append condition — stays a guard that survives an emptied inbox.
 
 ## Where the entity list comes from
 
 Nowhere in this app is a table or a column named. `app/connections.ts` composes the arrays the
 modules owning those tables already export — `OrganizationEntities.withAuth()`, `postsEntities`,
-`usersEntities`, `notificationsEntities`, `transportEntities`, `eventLogEntities` — and
-`app/migrator.module.ts` imports those modules, exactly as an application does. The CLI configs boot
-it, read the entity list off the container and hand back a plain config.
+`usersEntities`, `eventsEntities`, `notificationsEntities`, `outboxEntities`
+(`@nestposts/outbox-mikro-orm`) and `eventStoreEntities` (`@nestposts/event-store-mikro-orm`) — and
+`app/migrator.module.ts` imports those modules, exactly as an application does, mapping the two
+transport lists with `DatabaseModule.forFeature`. The CLI configs boot it, read the entity list off the
+container and hand back a plain config.
 
 It boots Nest because `TestUsersSeeder` needs the **real** `BETTER_AUTH`: a seeded credential is one
 Better Auth issued, with the hash its own version produces. What it does **not** import is an
@@ -65,7 +96,7 @@ Every command has a root-level script (`pnpm db:*`) and an Nx target; the target
 configuration:
 
 ```bash
-pnpm db:setup                          # migrate (system, then every tenant), then the OAuth resources
+pnpm db:setup                          # migrate (system, every tenant, the inbox's prune), then the OAuth resources
 pnpm db:migrate                        # the same without seeding
 pnpm db:migrate:system                 # mikro-orm migration:up on the system config
 pnpm db:migrate:tenant                 # mikro-orm migration:up on tenant_root only
@@ -77,6 +108,7 @@ pnpm db:migration:create -- --name add-something          # a TENANT migration
 pnpm db:migration:create:system -- --name add-something   # a SYSTEM migration
 pnpm db:seeder:create -- --name SomeThing
 nx run @nestposts/migrator:pending     # migration:pending, tenant (:system)
+node apps/migrator/dist/main.js inbox:prune   # the inbox's prune alone, which every migrate ends with
 ```
 
 ### Changing an entity
@@ -130,14 +162,16 @@ through the web's sign-up endpoint, which is the path worth exercising. The depl
 `dist/main.js` is a module before it is a script:
 
 ```ts
-const { migrate, migrateSystem, migrateTenants, seed, setup, fresh } = require('@nestposts/migrator');
+const { migrate, migrateSystem, migrateTenants, pruneInbox, seed, setup, fresh } = require('@nestposts/migrator');
 ```
 
 Each function boots its container, does the work and closes it, so a Lambda handler is a call and a
-`return`. As a script it takes the same names (`node dist/main.js migrate`), which is what the Nx
-targets, the Docker image and `apps/web-e2e` use. `lambda.ts` exports `handler` (migrate) and
-`seedHandler` (seed), and `infra/aws` gives each a function of its own.
+`return`. As a script it takes the same names (`node dist/main.js migrate`, `migrate:system`,
+`migrate:tenants`, `inbox:prune`, `seed`, `seed:users`, `seed:deployment`, `setup`, `fresh`), which is
+what the Nx targets, the Docker image and `apps/web-e2e` use. `lambda.ts` exports `handler` (migrate)
+and `seedHandler` (seed), and `infra/aws` gives each a function of its own.
 
 The specs run against a DATABASE of their own (`testProject({ database: 'own' })`) and the real
-`migrate()`: `migrations.spec.ts` asserts the layout above and that a second pass applies nothing,
+`migrate()`: `migrations.spec.ts` asserts the layout above, that a second pass applies nothing, and
+that `pruneInbox()` forgets a row processed 31 days ago and keeps one processed 29 days ago;
 `tenant-migration.generator.spec.ts` the rewrite a generated file goes through.

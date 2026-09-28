@@ -26,14 +26,14 @@ import {
 } from '@nestposts/database/testing';
 import {
   MikroOrmOutboxModule,
-  MikroOrmUnitOfWorkTransaction,
+  MikroOrmTransactionManager,
 } from '@nestposts/outbox-mikro-orm';
 import { EventType } from '@nestposts/platform/domain/shared/event-type';
 
 import { TRANSPORT_EVENT_BUS_PUBLISHER } from '../constants';
-import { OutboxPackets } from '../outbound/outbox-packets';
 import { OutboxRoute } from '../outbound/outbox-route';
 import { identifierOf } from '../outbound/transport-metadata';
+import { InProcessPacket } from '../testing/in-process-packet';
 import { RecordingClient } from '../testing/recording-client';
 import { TransportEventBusModule } from '../transport-event-bus.module';
 import type { OutboxRelayMode } from './transport-outbox.options';
@@ -111,7 +111,7 @@ const broker = new Broker();
 class BrokerModule {}
 
 const transports = {
-  things: ClientProxyTransport(Broker, { toPacket: OutboxPackets.inProcess }),
+  things: ClientProxyTransport(Broker, { toPacket: InProcessPacket.of }),
 };
 
 @Injectable()
@@ -136,7 +136,10 @@ class TellThings implements IEventHandler<ThingHappenedEvent> {
 describe('the outbox, as the transport bus writes it', () => {
   let module: TestingModule;
 
-  const boot = async (relay: OutboxRelayMode) => {
+  const boot = async (
+    relay: OutboxRelayMode,
+    withTransports: typeof transports | Record<string, never> = transports,
+  ) => {
     module = await Test.createTestingModule({
       imports: [
         CqsrsModule.forRoot({
@@ -151,18 +154,21 @@ describe('the outbox, as the transport bus writes it', () => {
         TestSchemaModule.forRoot(),
         OutboxModule.forRoot({
           imports: [BrokerModule],
-          transports,
-          route: OutboxRoute.over(transports),
+          transports: withTransports,
+          route: OutboxRoute.over(withTransports),
           relay: { enabled: relay === 'poll', pollInterval: '1s' },
-          retry: { attempts: 3, backoff: { delay: 1, jitter: 'none' } },
+          retry: { attempts: 3, backoff: () => 0 },
         }),
         MikroOrmOutboxModule.forRoot({ producer: 'things-api' }),
         TransportEventBusModule.forRoot({
           identity: 'things-api',
-          transaction: MikroOrmUnitOfWorkTransaction,
+          transactionManager: MikroOrmTransactionManager,
           outbox: {
             destinations: ['things'],
-            useFactory: () => ({ relay }),
+            useFactory: () => ({
+              relay,
+              route: OutboxRoute.over(withTransports),
+            }),
           },
         }),
       ],
@@ -224,12 +230,10 @@ describe('the outbox, as the transport bus writes it', () => {
       expect(told()).toEqual([]);
     });
 
-    it('tells this process only once the writes are visible to everybody', async () => {
+    it('tells the subscribing handlers inside the transaction, before anybody else can see the writes', async () => {
       await execute(new DoThing('t-4'));
 
-      await expect
-        .poll(() => told(), { timeout: 500, interval: 10 })
-        .toEqual([{ thingId: 't-4', visible: true }]);
+      expect(told()).toEqual([{ thingId: 't-4', visible: false }]);
     });
 
     it('keeps the event while the broker is down, and publishes it once it is back', async () => {
@@ -306,6 +310,32 @@ describe('the outbox, as the transport bus writes it', () => {
 
       expect(await thingsIn()).toEqual(['t-8']);
       expect(await stats()).toMatchObject({ pending: 1 });
+    });
+
+    it('publishes what an earlier drain left behind with the next command that commits', async () => {
+      broker.down = true;
+      await execute(new DoThing('t-12'));
+      broker.down = false;
+
+      await execute(new DoThing('t-13'));
+
+      expect([...broker.patterns()].sort()).toEqual([
+        'things.ThingHappened.t-12',
+        'things.ThingHappened.t-13',
+      ]);
+      expect(await stats()).toMatchObject({ pending: 0 });
+    });
+  });
+
+  describe('with no transport for the namespace, as a service with no broker', () => {
+    beforeEach(() => boot('off', {}));
+
+    it('writes no message nothing in this process would receive, and still tells the handlers', async () => {
+      await execute(new DoThing('t-11'));
+
+      expect(await thingsIn()).toEqual(['t-11']);
+      expect(await stats()).toMatchObject({ pending: 0 });
+      expect(told()).toEqual([{ thingId: 't-11', visible: false }]);
     });
   });
 

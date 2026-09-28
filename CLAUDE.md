@@ -42,7 +42,8 @@ The only exceptions:
    `libs/ui/**` so that refreshing one is a copy and not a merge. Its TypeScript carries no comments
    — they were stripped on arrival, as every registry file is — and its CSS keeps its own.
 3. **The in-house libraries** — `libs/core/cqsrs`, `libs/database`, `libs/core/validated-dto`,
-   `libs/core/transport-eventbus`, `libs/core/outbox-mikro-orm`, `libs/core/microservices-aws`,
+   `libs/core/transport-eventbus`, `libs/core/outbox-mikro-orm`, `libs/core/event-store-mikro-orm`,
+   `libs/core/microservices-aws`,
    `libs/core/microservices-inngest`, `libs/core/microservices-memory`, `libs/core/mail`,
    `libs/core/federation-gateway`,
    `libs/core/observability`, `libs/notifications`, `libs/asset`, `libs/auth` and
@@ -223,7 +224,7 @@ The system schema is **never** created by an application, and a tenant's only by
 request (see `apps/migrator/README.md` and **Tenancy** below):
 
 ```bash
-pnpm db:migrate                                        # the system migrations, THEN tenant_root and every tenant_* there is
+pnpm db:migrate                                        # the system migrations, THEN tenant_root and every tenant_* there is, THEN the inbox pruned
 pnpm db:migrate:system                                 # public + transport only (:tenant for tenant_root only)
 pnpm db:migration:create -- --name add-a-thing         # a TENANT migration: apps/migrator/src/migrations/tenant/*.ts
 pnpm db:migration:create:system -- --name add-a-thing  # a SYSTEM migration: apps/migrator/src/migrations/system/*.ts
@@ -253,7 +254,7 @@ Environment variables, per application:
 | inngest | `INNGEST_BASE_URL` (default `http://localhost:8288`), `INNGEST_SERVE_ORIGIN`, `INNGEST_DEV`, `INNGEST_EVENT_KEY`, `INNGEST_SIGNING_KEY` | idem, plus `TAGGING_PORT` (default 3001) | idem, plus `NOTIFICATOR_PORT` (default 3002) |
 | publishing | `POSTS_PUBLISH_EVENTS=false` turns the outbound half off | `TAGGING_PUBLISH_EVENTS` | — (it publishes nothing) |
 | retries | — | `TAGGING_RETRY_DELAY_MS` (default 5000): the delay between two deliveries of a message whose handler failed — the retry queue's TTL on RabbitMQ, a `RetryAfterError` on Inngest. `TAGGING_MAX_RETRIES` (default 3): the app's one max-retries rule, the Inngest function's `retries` and `RetryPolicyModule`'s default | `NOTIFICATOR_RETRY_DELAY_MS` (default 5000), `NOTIFICATOR_MAX_RETRIES` (default 3) |
-| outbox | `POSTS_OUTBOX_RELAY` = `poll` (default) \| `drain` \| `off` — how this process relays its outbox (see transport-eventbus), `POSTS_OUTBOX_POLL_INTERVAL_MS` (1000), `POSTS_OUTBOX_RETRY_ATTEMPTS` (20, then a dead letter), `POSTS_INBOX_RETENTION_DAYS` (30) | the same, `TAGGING_*` | — (an inbox only, with its defaults) |
+| outbox | `POSTS_OUTBOX_RELAY` = `poll` (default) \| `drain` \| `off` — how this process relays its outbox (see transport-eventbus), `POSTS_OUTBOX_POLL_INTERVAL_MS` (1000), `POSTS_OUTBOX_RETRY_ATTEMPTS` (20, then a dead letter) | the same, `TAGGING_*` | — (an inbox only, with its defaults) |
 | broker | `RABBITMQ_URL`, `POSTS_EXCHANGE`, `POSTS_COMPLETED_QUEUE` | `RABBITMQ_URL`, `TAGGING_EXCHANGE`, `TAGGING_QUEUE` | `RABBITMQ_URL`, `NOTIFICATOR_EXCHANGE`, `NOTIFICATOR_QUEUE` |
 | aws | `POSTS_TOPIC_ARN`, `POSTS_COMPLETED_QUEUE_URL` — both default to LocalStack | `TAGGING_TOPIC_ARN`, `TAGGING_QUEUE_URL` | `NOTIFICATOR_QUEUE_URL` |
 | | `AWS_ENDPOINT_URL` (LocalStack), `AWS_REGION` and the SDK's own credentials address all three | | |
@@ -283,9 +284,7 @@ a session, and the resource the migrator registers. `AUTH_ISSUER` (default `WEB_
 `WEB_TRANSPORT` = `inngest` (default) \| `rabbitmq` \| `memory` \| `aws`, with `INNGEST_BASE_URL`,
 `RABBITMQ_URL`/`WEB_EXCHANGE` or `WEB_TOPIC_ARN` as the mode needs, and `WEB_PUBLISH_EVENTS=false` to
 turn it off. It publishes through an outbox: `WEB_OUTBOX_RELAY` (`drain` by default — the container
-lives inside Next, and a polling timer there could hold a build open), `WEB_OUTBOX_RETRY_ATTEMPTS`,
-and `WEB_OUTBOX_SWEEP_SECRET`, which turns `POST /api/outbox/sweep` on (AWS derives it from
-`AuthSecret` and a schedule calls it every minute).
+lives inside Next, and a polling timer there could hold a build open) and `WEB_OUTBOX_RETRY_ATTEMPTS`.
 
 ## Architecture
 
@@ -345,15 +344,28 @@ libs/core/validated-dto  Zod → DTO/value object mixins
 libs/core/mail           class-based email (Mail, Message, MailService) over @nestjs-modules/mailer,
                          configured with the mailer's own options; offers a React Email template
                          resolver and a plain-text plugin, and any other adapter still works. README
-libs/core/transport-eventbus  the CQRS event bus over Nest's microservice transports (see below),
-                         RabbitMQ / SNS+SQS / Inngest / in-process — the envelope's wire on each —
-                         and the unit of work every command and every ingested message runs in.
-                         It USES @nestjs/cqrs and @nestjs/outbox, which the application declares
+libs/core/transport-eventbus  Axon Framework 5's messaging on @nestjs/cqrs and @nestjs/outbox (see
+                         below): the unit of work every command, ingested message and streaming
+                         delivery runs in, messages and correlation, subscribing and streaming
+                         processing groups, the event store with dynamic consistency boundaries —
+                         and the CQRS event bus over Nest's microservice transports, RabbitMQ /
+                         SNS+SQS / Inngest — the envelope and what a broker's packet is built from;
+                         the packet itself (`toPacket`) is each application's. It USES
+                         @nestjs/cqrs and @nestjs/outbox, which the application declares, and knows
+                         no database: the TransactionManager and the EventStorageEngine are ports.
+                         README and NOTICE
 libs/core/outbox-mikro-orm  @nestjs/outbox on MikroORM: MikroOrmOutboxModule (the store for the
                          messages, dead letters and inbox, and their three tables),
-                         MikroOrmUnitOfWorkTransaction (the transaction a unit of work runs in, and
-                         whose handle the store writes through) and OutboxHousekeepingModule. It
-                         knows nothing of the bus. README
+                         MikroOrmTransactionManager (a unit of work's transaction: savepoints,
+                         REQUIRES_NEW, the tenant a message names, after-commit work handed to the
+                         owning transaction — whose handle the store writes through). It knows
+                         nothing of the bus, and prunes nothing: the inbox's retention is the
+                         migrator's. README
+libs/core/event-store-mikro-orm  the event store on MikroORM and PostgreSQL: MikroOrmEventStoreModule
+                         (global), MikroOrmEventStorageEngine (transport-eventbus's
+                         EventStorageEngine by shape: tags text[] with a GIN index, advisory locks
+                         per tag, the append condition checked in SQL, the tenant kept) and
+                         eventStoreEntities, the one table transport.event_log. README
 libs/core/microservices-aws  SNS and SQS as a plain Nest transport: the client proxies, SqsStrategy,
                          SqsContext, processSqsEvent. No CQRS, no envelope, no @EventType — and no
                          environment: the application hands every client a clientConfig
@@ -524,14 +536,19 @@ A small in-house library, which knows nothing about GraphQL, adding a subscripti
   which is imported **and** exported before the re-exported `CqrsModule` — both orders matter, because
   a handler resolves either through the exports of the module it imports or through the global modules
   in registration order, and the loser of either race is Nest's plain publisher, silently. The
-  publisher itself has to come from a global module (`TransportModule` is one).
+  publisher itself has to come from a global module (`TransportEventBusModule` is one).
 
-### transport-eventbus: the CQRS bus across services (`libs/core/transport-eventbus`)
+### transport-eventbus: Axon 5's messaging, across services (`libs/core/transport-eventbus`)
 
-A vendored and adapted copy of **nestjs-transport-eventbus** plus an integration layer, **publishing
-and remembering through `@nestjs/outbox`**. `README.md` in that directory is the usage guide —
-wiring, publishing, receiving, testing without a broker, adding a transport — and `NOTICE.md` is the
-account of what came from where; read the second before changing the library's shape. The essentials:
+A vendored and adapted copy of **nestjs-transport-eventbus**, ported to **Axon Framework 5**'s
+semantics — the unit of work, messages and correlation, subscribing and streaming event processors, an
+event store with dynamic consistency boundaries — and **publishing and remembering through
+`@nestjs/outbox`**. `README.md` in that directory is the usage guide — wiring, the unit of work,
+transaction managers, messages, interceptors, processing groups, the event store, receiving, testing
+without a broker, adding a transport, and an Axon 5 → library table — and `NOTICE.md` is the account of
+what came from where; read the second before changing the library's shape. **The library knows no
+database**: `@nestposts/database` is only a devDependency, for its specs, and the transaction manager,
+the storage engine and the tenant resolver are the application's. The essentials:
 
 - **The integration point is `IEventBus`.** `TransportEventBusService` stands in for the CQRS
   `EventBus`: everything that already publishes — a handler, a saga, an aggregate's `commit()` —
@@ -544,118 +561,196 @@ account of what came from where; read the second before changing the library's s
   events silently never leave — which is what the binding exists to make impossible.
 - **An event's identity on the wire is `@EventType({ namespace, name, version, tags })`**
   (`libs/platform`): `posts.PostCreated#2.0.0`, tagged by `postId`. It is what routes the event, what
-  the routing key's last segment comes from, and what lets the other side rebuild the **real class** —
-  which `@nestjs/cqrs` 12 requires, because it matches handlers by an id it stamps on the event class,
-  not by its name. An event with no `@EventType` has no namespace, and never leaves the process.
-- **Publishing is writing, and the unit of work is a transaction.** Every unit of work (a command, an
-  ingested message, an on-demand notification) runs in a `UnitOfWorkTransaction` — the port lives in
-  this library (`unit-of-work/`, moved here from `libs/core/cqsrs`), and the application names its
-  implementation, `transaction: MikroOrmUnitOfWorkTransaction`: the handlers' writes, then — in the
-  `prepareCommit` phase —
-  the event log and the **outbox**: `EventOutbox` turns each event whose namespace has a destination
-  into one `@nestjs/outbox` message (`EventMessages`: id = the event's identifier, topic = the routing
-  key, key = `namespace/aggregate`, payload = the event's fields, headers = type, origin, tags, request,
-  trace — captured now) and writes it with `Outbox.add(tx, …)`, `tx` being the unit's own
-  `transactionHandle` (what `UnitOfWorkTransaction.run` handed it). The transaction commits; only then is
-  the event told to this process (`commit`), and the relay published (`afterCommit`). There is **no
-  direct emit**: a service without an `outbox` publishes to its own process only. A publish no unit
-  staged (an unawaited `aggregate.commit()` outside a command) runs in a unit of its own, on a
-  **detached** transaction (`UnitOfWorkTransaction.detached()`, `REQUIRES_NEW` on MikroORM) — as a
-  savepoint of the caller's transaction it would
-  release after that transaction committed (measured: `RELEASE SAVEPOINT can only be used in
+  lets the other side rebuild the **real class** — which `@nestjs/cqrs` 12 requires, because it matches
+  handlers by an id it stamps on the event class, not by its name — and its tags are what the event
+  store files it under and what the default sequencing policy orders by. An event with no `@EventType`
+  has no namespace, and never leaves the process.
+- **Every message is handled in a unit of work of its own — Axon 5's** (`unit-of-work/`): `UnitOfWork`,
+  `ProcessingLifecycle`, `ProcessingContext` with its `ResourceKey`s, and `DefaultPhases` with Axon's
+  orders — `PRE_INVOCATION` -10000, `INVOCATION` 0, `POST_INVOCATION` 10000, `PREPARE_COMMIT` 20000,
+  `COMMIT` 30000, `AFTER_COMMIT` 40000, spaced so an application can declare a phase between two. Axon's
+  rules: registering into the running or an earlier phase throws; a failure finishes its phase, skips
+  every later one and rejects with the first cause (the rest `suppressed`); error and completion actions
+  never change the outcome; a unit runs once (`execute()`), and `executeWithResult` answers only once it
+  committed. Every command (`UnitOfWorkCommands`, as Axon 5's `SimpleCommandBus`), every ingested
+  message (`EventIngestion`) and every streaming delivery (`StreamingGroupDelivery`) gets one, and
+  `UnitOfWorkFactory` makes one for anything else (`PublishingOnDemandNotifications`). **Nothing joins**:
+  a command a saga dispatches is a unit of its own, and what crosses is correlation data.
+  `ProcessingContext.current()` travels in an `AsyncLocalStorage` only because `execute(command)` has no
+  parameter for it — a carrier, never a way to join units. The delivery that told a saga **waits** for
+  the saga's command (`DeliveryScope`), because `@nestjs/cqrs` dispatches it into the void and a Lambda
+  freezes the moment the handler returns.
+- **The transaction is the application's `TransactionManager`** — Axon 5's port,
+  `transactionManager: MikroOrmTransactionManager` (`libs/core/outbox-mikro-orm`): begun in
+  `PRE_INVOCATION` (told the message the unit handles, so it can pick the tenant), committed in `COMMIT`,
+  rolled back on any failure. `TransactionManager.handleOf(context)` is the handle — MikroORM's fork,
+  `@nestjs/outbox`'s `Tx` — the outbox, the inbox and the event store write through. A unit started
+  while a transaction is open — a saga's command inside an ingestion — **joins it as a savepoint** and is
+  still a unit of its own; its after-commit work (`TransactionManager.afterCommit`: the subscriptions
+  hearing its events, the relay being woken) is queued on its transaction, handed to the owning one when
+  the savepoint releases, dropped if it rolls back, and run by `runAfterCommit()` in the owning unit's
+  `AFTER_COMMIT`, outside the transaction's scope. `detached()` is a transaction of its own even inside
+  another (`REQUIRES_NEW`), for a publish nobody awaits — as a savepoint of the caller's transaction it
+  would release after that transaction committed (measured: `RELEASE SAVEPOINT can only be used in
   transaction blocks`, from `UserProvisioning` publishing inside `UserRepository.exclusively`).
+  MikroORM's is one connection, so it answers `requiresSequentialInvocation` and every phase runs its
+  actions one at a time.
+- **Publishing is staging, and `PREPARE_COMMIT` writes and tells.** `TransportEventBusService` is Axon
+  5's `EventSink`/`SimpleEventBus`: inside a unit, every publish becomes an `EventMessage` and is staged,
+  and the unit's first publish registers ONE `PREPARE_COMMIT` action that takes the staged events a batch
+  at a time — the event store's append (on the unit's append condition), then `EventOutbox` (the
+  destination's message when the namespace has a transport, and one message per streaming group that
+  takes the event, written with `Outbox.add(tx, …)`), then `LocalEventDelivery` (the subscribing
+  handlers, inside the transaction) — and again for whatever those handlers published. The transaction
+  commits; `AFTER_COMMIT` wakes or drains the relay and lets the subscriptions hear. A unit that fails
+  publishes **nothing**, and a publish once a unit is past `PREPARE_COMMIT` **throws**, as in Axon. With
+  no unit, a publish runs in a unit of its own on a **detached** transaction — or, when nothing has to
+  be written, goes straight to the handlers, synchronously. There is **no direct emit**: a service
+  without an `outbox` publishes to its own process only.
+- **Messages and correlation are Axon 5's** (`messaging/`). An `EventMessage` — identifier,
+  `MessageType`, payload, `Metadata`, timestamp — travels attached to its payload
+  (`EventMessage.of(event)`), because `@nestjs/cqrs` hands handlers the payload. Its metadata is the
+  envelope's `headers`, key for key. `MessageOriginProvider` stamps `correlationId` and `causationId` —
+  Axon's keys; the old `cqrs-transport-correlation-id`/`-causation-id` are still READ and never written —
+  and `ForwardedMetadataProvider` forwards every application key, which is how a tenant crosses a service
+  that knows nothing about tenants; `CorrelationDataInterceptor` computes them where a message is handled
+  and stamps them on what is dispatched there, and correlation data wins over the dispatcher's own keys.
+  `MessageDispatchInterceptor`s run synchronously (an unawaited `aggregate.commit()` must publish what it
+  staged) and `MessageHandlerInterceptor`s around each handling, first registered outermost; the
+  application adds its own with `dispatchInterceptors`/`handlerInterceptors`. The trace travels in the
+  metadata too (`TraceContextDispatchInterceptor`).
+- **Processing groups, subscribing or streaming** (`eventhandling/`). `@ProcessingGroup(name, {
+  processor?, events? })` on a handler or saga class names its group (a class without one is a group of
+  its own); `processingGroups: { notifications: 'streaming' }` at the root decides what processes it, and
+  the root wins over the decorator. **Subscribing** (the default, Axon's `SubscribingEventProcessor`):
+  told in the publishing unit's `PREPARE_COMMIT`, inside its transaction, and a failure goes to the
+  group's `ErrorHandler` — `PropagatingErrorHandler` by default, which fails the unit (the command fails,
+  the ingestion is redelivered); `LoggingErrorHandler` logs and goes on. **Streaming** (Axon's
+  `PooledStreamingEventProcessor`, on the outbox): each event is a message of the group's own — topic
+  `@processing-group`, id `<event>@<service>/<group>`, header `cqrs-transport-processing-group` — which
+  the relay delivers `local` after the commit to `StreamingGroupDelivery`, in a unit of its own with the
+  inbox record under `<service>/<group>` (`posts-api/notifications`, `OutboxInbox.processInTransaction`:
+  one outbox and one inbox serve every service, and a group named only by itself would collide with
+  another service's group of the same name), retried with backoff and dead-lettered by the
+  outbox. A saga declares its events on its group (`events: [...]`), because its `ofType` is inside a
+  stream; one that declares none takes every event, and a streaming group then gets a message for every
+  event (a warning at boot). A group the decorator declares streaming where there is no outbox falls back
+  to subscribing with a warning; one the ROOT declares streaming without an outbox fails the module.
+  `EventHandlingComponents` wraps every `@EventsHandler`'s `handle` on its prototype — request-scoped
+  ones included — and every `@Saga`, in `onModuleInit`, so each takes part only in the deliveries that
+  admit its group. The `SequencingPolicy` (per entity by default) is the outbox message's `key`, the
+  routing key's last segment and SNS's message group. `CommittedEvents` keeps what a `@SubscriptionHandler`
+  hears to events whose transaction committed. posts-api's notification sagas are the `notifications`
+  streaming group.
+- **The event store is Axon 5's, with dynamic consistency boundaries** (`eventsourcing/`). No streams:
+  an event is filed under every `Tag` its `TagResolver` gives it (`@EventType({ tags })`), a decision reads
+  with `EventCriteria` (`havingTags(...)`, `andBeingOneOfTypes(...)`, `or(...)`), and the unit's
+  `EventStoreTransaction` widens its criteria and keeps the earliest `ConsistencyMarker` with every read,
+  so the bus's append in `PREPARE_COMMIT` carries an `AppendCondition` and is refused with
+  `AppendEventsTransactionRejectedError` if anything the decision read has changed. `eventStore: { engine,
+  entities: [{ entity, tagKey, token? }] }` — the engine is a port (`EventStorageEngine`),
+  `MikroOrmEventStorageEngine` in `libs/core/event-store-mikro-orm`, whose `MikroOrmEventStoreModule` the
+  application imports; each entity gets an `EventSourcingRepository` (the class is there to `new` the
+  empty aggregate `loadFromHistory` replays; a per-unit cache; `load` records the entity's tag as the
+  unit's criteria; no `save` — `commit()` is what appends). Every event a unit publishes or ingests is
+  appended, with its metadata, and an identifier the store already has is not appended again. Nothing
+  guards a creation that ARRIVES — a redelivery is the inbox's and the unique identifier's, and a second
+  creation under another identifier cannot be produced; uniqueness of creation, if ever needed, is the
+  creating command's append condition (`ORIGIN` on the entity's tag).
 - **The namespace is the routing, and the event declares nothing else.** A destination is
   `@nestjs/outbox`'s own `ClientProxyTransport(Client, { toPacket: OutboxPackets.for(transport) })`,
-  keyed by the namespace it carries in the root `OutboxModule`'s `transports`, and the outbox's
-  `route` (`OutboxRoute.over(transports)`) reads the namespace off each message. The bus is told the same namespaces as
-  `outbox.destinations`, from the one list each client declares (`PostEventsClient.namespaces`, which
-  its `destinations()` maps). There is no `@Publisher` and no `@TransportType`: either would
-  be the same fact twice and a deployment detail inside a domain event — which is also why
-  `libs/posts` imports **nothing** from this library. Each application's client lives in a module of
-  its own (`PostEventsClientModule`, `WebEventsClientModule`) exporting the client and the `Inngest`
-  instance, imported by the outbox (whose `OutboxModule` instantiates `ClientProxyTransport`) and by
-  `AppModule` (whose inbound transport injects the same `Inngest`).
+  keyed by the namespace it carries in the root `OutboxModule`'s `transports`, and the outbox's `route`
+  (`OutboxRoute.over(transports)`) reads the namespace off each message — and sends a streaming group's
+  message `local`. The bus is told the same namespaces as `outbox.destinations`, from the one list each
+  client declares (`PostEventsClient.namespaces`, which its `destinations()` maps), and the same route in
+  `outbox.useFactory`, so it does not write a destination message the route would send `local`. There is
+  no `@Publisher` and no `@TransportType`: either would be the same fact twice and a deployment detail
+  inside a domain event — which is also why `libs/posts` imports **nothing** from this library. Each
+  application's client lives in a module of its own (`PostEventsClientModule`, `WebEventsClientModule`)
+  exporting the client and the `Inngest` instance, imported by the outbox (whose `OutboxModule`
+  instantiates `ClientProxyTransport`) and by `AppModule` (whose inbound transport injects the same
+  `Inngest`).
 - **The outbox is the application's, declared at its root; the bus only uses it.** Each `AppModule`
   lists, in this order, `OutboxModule.forRootAsync({ imports: [PostEventsClientModule], transports,
-  useFactory: → { route: OutboxRoute.over(transports), relay: { enabled }, retry } })` (`@nestjs/outbox`, global),
-  `MikroOrmOutboxModule.forRootAsync(→ { producer })` (the store, registered with `OutboxStorage`,
-  and the three tables `transport.outbox_messages`, `outbox_dead_letters`, `outbox_inbox`),
-  `OutboxHousekeepingModule` and then `TransportEventBusModule.forRootAsync(...)`: `identity`,
-  `transaction: MikroOrmUnitOfWorkTransaction`, `inbox: { descriptions: MikroOrmOutboxStore }` (which
-  turns receiving on, and notes each message's type and origin beside its inbox row),
-  `outbox: { destinations, inject, useFactory: → { relay } }`, `eventStore: [Post]`,
-  `subscriptions`, `requestContext`. The bus injects `Outbox`, `OutboxRelay` and `OutboxInbox`
-  from the global `OutboxModule` — a bare `imports: [OutboxModule]` would be a second, unconfigured
-  instance — and an `inbox` or an `outbox` without the root `OutboxModule` fails the boot naming
-  what it could not resolve. It is global, and `forRootAsync` is the same with the identity resolved
-  at runtime. It also provides `UnitOfWorkCommands`, which puts every command in a unit of work.
+  useFactory: → { route: OutboxRoute.over(transports), relay: { enabled }, retry } })` (`@nestjs/outbox`,
+  global), `MikroOrmOutboxModule.forRootAsync(→ { producer })` (the store, registered with
+  `OutboxStorage`, and the three tables `transport.outbox_messages`, `outbox_dead_letters`,
+  `outbox_inbox`), `MikroOrmEventStoreModule` where it event-sources, and
+  then `TransportEventBusModule.forRootAsync(...)`: `identity`, `transactionManager:
+  MikroOrmTransactionManager`, `inbox: { descriptions: MikroOrmOutboxStore }` (which turns receiving on,
+  and notes each message's type and origin beside its inbox row), `outbox: { destinations, inject,
+  useFactory: → { relay, route } }`, `eventStore`, `processingGroups`, `subscriptions`, `requestContext`.
+  The bus injects `Outbox`, `OutboxRelay` and `OutboxInbox` from the global `OutboxModule` — a bare
+  `imports: [OutboxModule]` would be a second, unconfigured instance — and an `inbox` or an `outbox`
+  without the root `OutboxModule` fails the boot naming what it could not resolve. It is global, and
+  `forRootAsync` is the same with the identity resolved at runtime.
 - **The relay's mode is the process's** (`<APP>_OUTBOX_RELAY`, `outbox.config.ts` in each app):
-  `poll` — the relay polls in this process and a commit wakes it (`notify()`); `drain` — no loop, and
-  a unit publishes what is due before it answers (every Lambda, and the web by default: a function is
-  frozen between invocations, and the web's container lives inside Next); `off` — an API-only
-  instance. The same mode is told twice, and the root says both: `relay.enabled: relay === 'poll'` to
-  the `OutboxModule`, `relay` to the bus. `OutboxHousekeeping` (`OutboxHousekeepingModule`,
-  `libs/core/outbox-mikro-orm`) does what the package leaves to the application: prunes the inbox
-  (`<APP>_INBOX_RETENTION_DAYS`) on a timer only a `poll` process keeps (`interval: false`
-  otherwise), warns on lag and dead letters, and `sweep()`s for a schedule —
-  `PostsApiRelay`/`TaggingRelay` every minute on AWS, and `POST /api/outbox/sweep` for the web.
+  `poll` — `@nestjs/outbox`'s relay polls in this process, retries with backoff and dead-letters, and a
+  commit wakes it (`notify()`); `drain` — no loop, and a unit publishes what is due before it answers,
+  `runOnce()` while a round publishes something (every Lambda, and the web by default: a function is
+  frozen between invocations, and the web's container lives inside Next); `off` — an API-only instance
+  beside another process that relays. The same mode is told twice, and the root says both:
+  `relay.enabled: relay === 'poll'` to the `OutboxModule`, `relay` to the bus. **Nothing is scheduled.**
+  What a drain could not publish — a broker that refused it, a function frozen or killed between the
+  commit and the publish — stays in the outbox, committed, and the next unit of the same service that
+  writes to its outbox drains it with its own, because `runOnce()` claims whatever of the service's
+  messages is due (a query drains nothing); while the service receives nothing that publishes, nothing
+  publishes it. That is the trade for having no relay
+  function and no cron. A failure after the commit is never an error for the caller — the work
+  happened, and a caller retrying would redo it, not publish it; only what fails up to `PREPARE_COMMIT`
+  rolls back and is retried by the edge (a redelivery, the request sent again).
   `DeadLetterReporting` (`libs/core/observability`) reports a dead letter to GlitchTip from the
-  `nestjs:outbox:dead-lettered` diagnostics channel. Every Nest `main.ts` calls
-  `app.enableShutdownHooks()`, so a deploy drains the relay instead of leaving messages leased.
+  `nestjs:outbox:dead-lettered` diagnostics channel. The inbox is pruned by the migrator (see below).
+  Every Nest `main.ts` calls `app.enableShutdownHooks()`, so a deploy drains the relay instead of
+  leaving messages leased.
 - **`MikroOrmOutboxStore` (`libs/core/outbox-mikro-orm`) is scoped by producer.** One `transport`
-  schema serves every service, and a
-  relay may only publish what its own service produced — through its own destinations — so every
-  message and dead letter carries the service's name; the inbox is keyed by `(consumer, message)`,
-  the consumer being the ingesting service's name. It is native SQL (advisory locks per key,
-  `FOR UPDATE SKIP LOCKED`, writes fenced by the lease owner) and passes `@nestjs/outbox/testing`'s
-  contract suites with `concurrent: true` — `mikro-orm-outbox.store.spec.ts`.
+  schema serves every service, and a relay may only publish what its own service produced — through its
+  own destinations — so every message and dead letter carries the service's name; the inbox is keyed by
+  `(consumer, message)`, the consumer being the ingesting service's name (or `<service>/<group>`, for a
+  streaming group's delivery). It is native SQL (advisory locks per key, `FOR UPDATE SKIP LOCKED`, writes fenced
+  by the lease owner) and passes `@nestjs/outbox/testing`'s contract suites with `concurrent: true` —
+  `mikro-orm-outbox.store.spec.ts`.
 - **The wire is the `OutboxEnvelope`** — `id`, `topic`, `key`, `headers`, `createdAt`, `payload` — in
-  Nest's own `{ pattern, data }` packet, and each transport's placement is `toPacket`
-  (`OutboxPackets`): an `RmqRecord` (the headers as AMQP headers, the id as `messageId`), an
-  `SnsRecord` (the routing facts as message attributes — SNS allows ten and a filter policy reads
-  nothing else — the aggregate as FIFO group, the id as deduplication id), an `InngestRecord` (the id
-  as idempotency key, the correlation id as session). The clients use their **default** serializers,
-  and the strategies their default deserializers: there is no envelope serializer or deserializer any
-  more, and nothing in `libs/core/microservices-aws` or `-inngest` knows an envelope exists.
+  Nest's own `{ pattern, data }` packet, and each transport's placement is `toPacket`, which is the
+  **application's**, not the library's: `OutboxPackets`, one copy in each publishing app
+  (`apps/posts-api` and `apps/tagging`'s `infrastructure/transport/outbox-packets.ts`, the web's
+  `src/nest/outbox-packets.ts`) — an `RmqRecord` (the headers as AMQP headers, the id as `messageId`),
+  an `SnsRecord` (the routing facts as message attributes — SNS allows ten and a filter policy reads
+  nothing else — the message's `key` as FIFO group, the id as deduplication id), an `InngestRecord` (the
+  id as idempotency key, the correlation id as session). The library only supplies what a packet is
+  built from — `EventAddress.ofMessage`, `routingAttributesOf` and the header names — and keeps
+  `InProcessPacket` (`/testing`) for its own suites; it could not live in `libs/platform`, which the
+  library depends on, without a cycle. The headers are the message's metadata plus
+  the framework's facts: `cqrs-transport-message-type`, `-timestamp`, `-origin`, `-tags`, `-event-id`
+  and, for a group's message, `-processing-group`. The clients use their **default** serializers, and
+  the strategies their default deserializers: nothing in `libs/core/microservices-aws` or `-inngest`
+  knows an envelope exists.
 - **Four transports, one wire.** RabbitMQ, AWS (`SnsClientProxy` out, `SqsStrategy` in — the topic is
   the exchange, a subscription's **filter policy** is the binding), Inngest and the process itself.
   `SqsStrategy` runs either as a polling loop (`queueUrl`) or driven by a Lambda (`processSqsEvent`,
   which reports `batchItemFailures`); the controllers, the handlers and the events are the same on all.
-- **With no broker, the outbox delivers `local` — and that is how the event reaches the bus.**
-  `<APP>_TRANSPORT=memory` registers **no** transport (`destinations()` answers `{}`, the client is
-  `null`), and `OutboxRoute` sends a namespace the outbox has no transport for to `@nestjs/outbox`'s
-  own `local` transport — claimed, delivered and marked published like any message. `local` runs the
-  `@OnOutboxMessage()` handlers by **exact** topic, which is why the topic is the qualified name;
-  `TransportEventBusModule` declares one for every event of `outbox.destinations` (`LocalDelivery`),
-  which restores the event — its class, its identifier, **no** ingestion mark: it is this service's
-  own decision, and `TaggingStandIn` and `ProjectPostCompletion` read `isIngested` — and publishes it
-  on the `EventBus`, in a unit of work of its own, in the tenant the message names (it opens it: the
-  relay runs outside any request and any enhancer), with the inbox row under the service's name. So
-  the handlers and the sagas of an event with no broker run **through the outbox, after the commit**,
-  and not at the commit: the bus is given the **same** route (`outbox.useFactory → route`,
-  `PostEventsClient.route(app)` in both places) and `TransportEventBusService` skips at the commit
-  what `EventOutbox.deliversLocally`. Without that route the commit tells everything and
-  `LocalDelivery` only acknowledges, with a warning. Two consequences: in `poll` a command answers
-  before those handlers run, as it would across a broker; and the request is restored from the headers
-  at each hop — one correlation id, not one `AsyncContext` object, which is what posts-api's e2e
-  asserts. An application's own `@OnOutboxMessage(qualifiedName, { consumer })` runs beside it, outside
-  Nest's enhancers. It replaced a `MemoryClient({ servers: [] })`, which published to nobody, and the
-  client is gone: the memory transport is `TopicMemoryServer` (`libs/core/microservices-memory`), and
-  a suite delivers on `server.emit(routingKey, envelope)`.
+- **With no broker, nothing leaves — and nothing has to come back.** `<APP>_TRANSPORT=memory` registers
+  **no** transport (`destinations()` answers `{}`, the client is `null`), so the route would send every
+  destination message to `@nestjs/outbox`'s `local` transport, where nothing receives it: the bus, given
+  the same route, does not write it. The process's own handlers are told in `PREPARE_COMMIT` like
+  everything else, and a streaming group's messages still go through the outbox's `local`. `LocalDelivery`
+  — which used to write every destination message anyway and deliver it back to this process's bus
+  after the commit — is gone. The memory transport is `TopicMemoryServer`
+  (`libs/core/microservices-memory`), and a suite delivers on `server.emit(routingKey, envelope)`.
 - **Inngest is the local default** (`libs/core/transport-eventbus/src/inngest`), and it inverts
   who calls whom: a broker delivers, Inngest **invokes**. The client proxy sends an event, the
   strategy turns every `@EventPattern` into a function and serves it over the host application's
   HTTP adapter, and the dev server (a container in `docker-compose.yml`) routes between them.
   - **The event's name is the QUALIFIED name**, `posts.PostCreated`, not the routing key: Inngest
-    matches a trigger by exact name and has no wildcards, so a name carrying the aggregate would mint
-    one event name per post and no function could be declared for it. The aggregate stays in the
+    matches a trigger by exact name and has no wildcards, so a name carrying the entity would mint
+    one event name per post and no function could be declared for it. The entity stays in the
     envelope, where the ingestion already reads it.
   - **A binding is resolved at boot**, by `inngestTriggers`: `posts.#` becomes one trigger per
     registered `@EventType` of that namespace, `posts.PostCreated.*` becomes `posts.PostCreated`. A
     function takes at most **ten**, and past that the strategy refuses to start rather than serve
     traffic nothing triggers.
   - **The envelope is the event's `data`**, its id becomes the event's `id` (so the relay publishing
-    twice is one run), and the request's correlation id becomes `meta.sessions.correlation_id` —
+    twice is one run), and the message's `correlationId` becomes `meta.sessions.correlation_id` —
     Inngest's own grouping, which from inngest-js 4.18 propagates by itself to every event a run sends.
   - **`apps/tagging` is a hybrid on this transport**, with an HTTP port whose only route is
     `/api/inngest`. It is the one thing this transport costs that a broker does not, and it is why the
@@ -667,51 +762,45 @@ account of what came from where; read the second before changing the library's s
   the inbox's consumer name. Remove it and `apps/tagging` ingests its own `PostCreated` and decides
   again (`tagging.spec` covers exactly that).
 - **A controller takes the envelope with `@Payload()`** — `@nestjs/outbox`'s consumer pattern — and
-  hands it to `EventIngestion.ingest(envelope)`, which rebuilds the real class and marks it as
+  hands it to `EventIngestion.ingest(envelope)`, which reads it back as the `EventMessage` it was
+  published as (`EventMessages.read`: the real class, the identifier it was raised with) and marks it as
   ingested; `IncomingRequest.from(envelope)` is the `AsyncContext` the message belongs to, for a
   controller that dispatches a command itself. A payload that is not an `OutboxEnvelope` is refused by
   name.
-- **A binding is `EventAddress.everyEventOf(...)`**: a namespace (`posts.#`, one entry for every event of it — the
-  message type resolves the concrete class) or one event class (`posts.PostCreated.*`). `apps/tagging`
-  binds the namespace because it keeps the Post's whole stream; `apps/posts-api` binds the one type it
-  waits for.
-- **The routing key is the event's own** (`EventAddress.routingKey`): `namespace.Name.aggregateTag`,
-  which is what lets a consumer bind to `posts.PostCreated.*`. It is **not** the outbox message's
-  `topic` — that is the qualified name, `posts.PostCreated`, what `@OnOutboxMessage()` matches — but
-  the pattern RabbitMQ and SNS are sent, which their packet reads back off the message's headers
-  (`EventAddress.ofMessage`), so a row staged before the topic changed still routes the same.
+- **A binding is `EventAddress.everyEventOf(...)`**: a namespace (`posts.#`, one entry for every event
+  of it — the message type resolves the concrete class) or one event class (`posts.PostCreated.*`).
+  `apps/tagging` binds the namespace because it keeps the Post's whole history; `apps/posts-api` binds
+  the one type it waits for.
+- **The routing key is the event's own** (`EventAddress.routingKey`): `namespace.Name.sequence` — the
+  entity, under the default policy — which is what lets a consumer bind to `posts.PostCreated.*`. It is
+  **not** the outbox message's `topic` — that is the qualified name, `posts.PostCreated` — but the pattern
+  RabbitMQ and SNS are sent, which their packet reads back off the message (`EventAddress.ofMessage`).
 - **Three guards keep one delivery one thing**: the origin mark on the message (an event this service
   produced and got back is dropped, which is what cuts the publish/ingest loop), the inbox row written
-  in the same transaction as the work, and the aggregate's own state — the last one being the only one
-  that survives an emptied inbox.
-- **Event sourcing is the framework's, not an application's** (`persistence/event-log`): there is ONE
-  table, `event_log`, and two reads of it. `readStream(streamId)` is an aggregate's history, keyed by
-  `(stream_id, sequence)`, and `EventSourcedRepository.of(Post)` replays from it;
-  `readAfter(position)` is the service's own order, keyed by a global `position`, and it is what a
-  subscription reads. They were two tables with the same columns, filled by two write paths with two
-  different guarantees, until they were not — the shape is Axon's event store, which reads one store
-  by `aggregateIdentifier + sequenceNumber` and by `globalIndex`. A service that event-sources adds
-  `eventLogEntities` to its MikroORM list and writes **no** store, no sink and no repository.
-- **The request crosses the wire.** `publish(event, request)` attaches the `AsyncContext` exactly as
-  `EventBus` does; `RequestContextCodec` writes what it stands for into the message's headers
-  (correlation, causation, and whatever the application's context declares in `toAttributes()`); the
-  ingestion restores it and publishes **with** it, so `PostRequest.of(event)` answers on the other side
-  too. A codec of its own overrides **`contextFor`**, never `decode`: `decode` is what writes the
-  arriving correlation id onto the rebuilt context, and replacing it starts a new trace at every hop,
-  silently.
+  in the same transaction as the work, and the aggregate's own state or the event store's append
+  condition — the last one being the only one that survives an emptied inbox.
+- **The request crosses the wire as metadata.** `publish(event, request)` attaches the `AsyncContext`
+  exactly as `EventBus` does; `RequestContextCodec.toMetadata(context)` writes what it stands for (the
+  application context's `toAttributes()`) into the message's metadata, and `fromMessage(message)`
+  rebuilds it on the other side, so `PostRequest.of(event)` answers there too. `DefaultRequestContextCodec`
+  is the default; an application's own overrides **`contextFor(message: Message)`**
+  (`PostRequestContextCodec`) and otherwise gets a `TransportRequestContext`, which wraps the message
+  (`.metadata`). Correlation and causation are not the codec's: they are the unit of work's correlation
+  data, so a codec cannot break the chain by forgetting them.
 - **A guard reads the request with `IncomingRequest.of(executionContext)`**, because a pipe runs after
   the guards. That is what lets a shared guard authorise a message by the tenant or the session the
   publishing service put in its context.
-- **What the ingestion's transaction covers — everything.** One message is one unit of work in one
-  transaction: the inbox row (`OutboxInbox.processInTransaction`), the `EventLog` append, the local
-  publish, every reaction the unit tracks (a projection, a saga's command) and the outbox rows those
-  reactions stage. A reaction that fails rolls all of it back — the inbox row included, so the
-  transport's redelivery is acted on. The event reaches the local bus INSIDE the transaction, which is
-  what makes its reactions part of it; whatever reacts untracked (a subscription's stream) sees it
-  before the commit and reads what the event carries rather than querying for what the reactions
-  wrote. A delivery that is itself a side effect outside the database commits on its own:
-  `NotificationDeliveryRepository.recordAfter` sends and records each channel in a `REQUIRES_NEW`
-  transaction, so an ingestion rolled back by a later channel does not send an email twice.
+- **What the ingestion's unit covers — everything.** One message is one unit of work in one
+  transaction: the inbox row (`OutboxInbox.processInTransaction`), then the event staged, and in
+  `PREPARE_COMMIT` its append, the outbox rows the streaming groups are owed, the subscribing handlers
+  and every command their sagas dispatch — each a unit of its own, joined to the transaction and
+  waited for — and whatever those publish. A reaction that fails, under the default propagating error
+  handler, rolls all of it back — the inbox row included, so the transport's redelivery is acted on. A
+  subscription hears the event only after the commit (`CommittedEvents`). A delivery that is itself a
+  side effect outside the database commits on its own: `NotificationDeliveryRepository.recordAfter`
+  sends and records each channel in a `REQUIRES_NEW` transaction, so an ingestion rolled back by a
+  later channel does not send an email twice — or the reaction is a streaming group, a unit of its own
+  after the commit.
 
 ### The applications are images too, and `@nx/docker` is what discovers them
 
@@ -765,22 +854,30 @@ ProjectPostCompletion        ◀──  posts.PostCreated.<postId>      ◀─�
   choreography, and it is deliberate.
 - Neither application names the other: each declares the routing keys it binds to.
 - `apps/tagging` has **no read model**. It event-sources the `Post` through the framework's event store
-  (`eventStore: [Post]` in its `TransportModule`): what it
-  ingests is appended to the aggregate's stream, the `Post` is replayed from it with `loadFromHistory`,
-  and its own decision is appended and published. That is why it can decide about a Post without having
-  a row for one — and why it also ingests `PostUpdated`/`Deleted`/`Restored`, which nothing there reacts
-  to: a decision taken against half a history is a wrong decision.
+  (`eventStore: { engine: MikroOrmEventStorageEngine, entities: [{ entity: Post, tagKey: 'postId' }] }`
+  in its `TransportEventBusModule`): what it ingests is appended, filed under `postId`, the `Post` is
+  replayed from the events carrying its tag (`EventSourcingRepository.load`, then `loadFromHistory`), and
+  its own decision is appended on condition that none of them changed meanwhile, and published. That is
+  why it can decide about a Post without having a row for one — and why it also ingests
+  `PostUpdated`/`Deleted`/`Restored`, which nothing there reacts to: a decision taken against half a
+  history is a wrong decision.
 - In the `apps/posts-api` suite the tagging step is **doubled in process**
   by `TaggingStandIn`, because eventual consistency makes an in-flight message cross the boundary of
   a test that truncates between cases. It lives in `apps/posts-api/test/support/` and the e2e
   registers it beside `AppModule` — **not** in `ApplicationModule` and not behind an environment
-  variable, which is where it used to be. A stand-in that the application carries is a second path
+  variable, which is where it used to be. It is
+  `@ProcessingGroup('tagging-stand-in', { processor: 'streaming', events: [PostPreCreatedEvent] })`: a
+  streaming group, delivered through the outbox after the commit, as tagging's decision would arrive —
+  a subscribing stand-in would complete the post inside `createPost`'s own transaction. A stand-in that the application carries is a second path
   deciding a tag the application has no business deciding, and the flag that gated it was set in
   exactly one file in the repository: the e2e's own Vitest config. The real path is covered by
   `pnpm test:web`.
-- **Then the author is told.** `NotifyAuthorOnPostCreated` (a saga in `apps/posts-api`) reacts to
+- **Then the author is told.** `NotifyAuthorOnPostCreated` (a saga in `apps/posts-api`, in the
+  `notifications` processing group, which posts-api's root declares **streaming**) reacts to
   `PostCreated` — its own, or ingested from tagging — with `NotifyPostCreatedCommand`, which loads the
-  author and calls `user.notify(new PostCreatedNotification(post, { url }))`. The event it raises,
+  author and calls `user.notify(new PostCreatedNotification(post, { url }))`. Being streaming, it runs
+  after the commit, in a unit of its own, retried by the outbox — a notification that fails does not fail
+  the completion. The event it raises,
   `notifications.NotificationReceived`, goes out through the same publisher, and `apps/notificator`
   delivers it. See **Notifications**.
 - The default tag's id is a **domain fact** (`DEFAULT_TAG_ID` in `libs/posts`), which is what makes two
@@ -841,8 +938,9 @@ ProjectPostCompletion        ◀──  posts.PostCreated.<postId>      ◀─�
   (`auth.PasswordReset`, `organizations.Invitation`, …) and send it through `OnDemandNotifications`
   to an `OnDemandNotifiable` — someone known only by the address, because most of them are not users
   yet. They go through `email` only: no identity to keep a record against, and a secret in the data.
-  `PublishingOnDemandNotifications` commits inside a unit of work, so the callback resolves once the
-  event has left — which is what makes `apps/web` a publisher (below). The notificator registers
+  `PublishingOnDemandNotifications` commits in a unit of work of its own (`UnitOfWorkFactory`), so the
+  callback resolves once the event is in the outbox — and published, where the relay drains — which is
+  what makes `apps/web` a publisher (below). The notificator registers
   `authNotifications` and `OrganizationInvitationNotification` beside `PostCreatedNotification`.
 - **A calendar event invites by email, with an `.ics`.** `NotifyAttendeesOnCalendarEvent` (a saga in
   `apps/posts-api`) turns `CalendarEventCreated` and `CalendarEventRescheduled` into a notification
@@ -885,7 +983,7 @@ are three kinds:
 | pin | where | what |
 |---|---|---|
 | `SYSTEM_SCHEMA` (`public`) | `public` | Better Auth's tables and the organizations' — `libs/auth`, `libs/organizations` |
-| `TRANSPORT_SCHEMA` (`libs/database`) | `transport` | the messaging's bookkeeping: the outbox and the inbox (`libs/core/outbox-mikro-orm`) and the event log (`libs/core/transport-eventbus`) |
+| `TRANSPORT_SCHEMA` (`libs/database`) | `transport` | the messaging's bookkeeping: the outbox and the inbox (`libs/core/outbox-mikro-orm`) and the event store's `event_log` (`libs/core/event-store-mikro-orm`) |
 | `TENANT_SCHEMA` (`*`, MikroORM's wildcard) | `tenant_<name>` | everything else: posts, tags, users, notifications, devices |
 
 A wildcard table exists once per tenant, and which copy a query reaches is the schema of the entity
@@ -927,8 +1025,9 @@ signed in included. An organization is a tenant: `tenant_<slug>`. `libs/database
   every `['graph']` query and refreshes the server components.
 - **A subscription only hears its tenant.** `OnPostCreated`/`OnPostUpdated` take the tenant as a
   criterion and match it against `PostRequest.tenantOf(event)`: the request the event carries, or the
-  tenant the event log stamped on it (`Tenant.of(event)`) — the log is one table for every tenant,
-  and each row records the tenant it was appended in.
+  `x-tenant` of its metadata — an event read back from the event store says it there, the store being
+  one table for every tenant whose engine fills the tenant in from the row when the metadata does not —
+  or `Tenant.of(event)`.
 - **A sign-up provisions its profile in the root tenant**; any other tenant provisions the caller's
   profile on its first request there, through the session pipe, as before. A screen asks several root
   fields at once (`me`, `members`, `events`), so those first requests arrive together: whatever
@@ -947,7 +1046,7 @@ x-tenant: acme  ──▶  @CurrentTenant()  ──▶  new PostRequest(postId, 
                                               │ toAttributes()
                                               ▼
                                        AMQP header x-tenant  ──▶  apps/tagging
-                                                                    │ TransportTenantResolver
+                                                                    │ MessageTenantResolver
                                                                     │ reads it off the envelope,
                                                                     │ TenantInterceptor opens tenant_acme
                                                                     ▼
@@ -958,15 +1057,25 @@ x-tenant: acme  ──▶  @CurrentTenant()  ──▶  new PostRequest(postId, 
 - **Where the tenant is read from is the `TENANT_RESOLVER` token**, and it takes a function, an
   instance or an injectable class — a class being registered by `TenancyModule` itself, so its
   dependencies resolve from inside and nothing is provided from outside. `HeaderTenantResolver` is the
-  default; `TransportTenantResolver` (`libs/core/transport-eventbus`) answers for a message,
-  decoding the envelope through `IncomingRequest` from the `ExecutionContext`, because an interceptor
-  runs before any pipe, the same reason a guard does. It falls back to
-  the header resolver, because `apps/posts-api` is a hybrid and one resolver has to be right for both.
-- **`TransportRequestContext.toAttributes()` re-emits what arrived**, which is what makes a service in
-  the middle of a chain carry the tenant onward without knowing tenants exist. It excludes everything
-  under `TRANSPORT_METADATA_PREFIX`: re-emitting `cqrs-transport-origin` would republish somebody
-  else's authorship, the far side would read its own name and drop the message as its echo, and the
-  saga would stop dead with every message still flowing. `tagging.spec` catches exactly that.
+  default; `MessageTenantResolver` (`libs/database`, what every service here installs) answers for a
+  message, reading `x-tenant` off the envelope's headers **by shape** — the raw payload, because an
+  interceptor runs before any pipe, the same reason a guard does — so `libs/database` still knows
+  nothing of the bus and the bus nothing of the database. It falls back to the header resolver, because
+  `apps/posts-api` is a hybrid and one resolver has to be right for both.
+- **A delivery with no request around it is opened in its message's tenant by the transaction
+  manager.** The outbox's relay delivers a streaming group's messages outside any request and any
+  enhancer; the unit is given the message before it begins, and `MikroOrmTransactionManager` —
+  when there is no open transaction to join and the metadata names `x-tenant` — opens the transaction on
+  that tenant's entity manager (`TenantEntityManagerService`), which is where Axon's multi-tenancy picks
+  a connection too.
+- **`ForwardedMetadataProvider` re-emits what arrived**, as correlation data, which is what makes a
+  service in the middle of a chain carry the tenant onward without knowing tenants exist — a command a
+  saga dispatches carries the metadata of the event it reacted to, and the command's events carry the
+  command's. `TransportRequestContext.toAttributes()` answers with the same provider. It excludes
+  everything under `TRANSPORT_METADATA_PREFIX`: re-emitting `cqrs-transport-origin` would republish
+  somebody else's authorship, the far side would read its own name and drop the message as its echo,
+  and the saga would stop dead with every message still flowing — `tagging.spec` catches exactly that.
+  It excludes the trace and the origin's two ids as well, which each hop writes for itself.
 - The proof is `pnpm test:web`: `x-tenant` on the AMQP headers of **both** events, and a browser that
   creates two organizations, writes in each, and sees the feed change as it switches between them.
 
@@ -1080,7 +1189,7 @@ useFactory: MikroOrmConfiguration.connection })` (`libs/database/src/database.mo
 connection, and every table
 reaches it through `DatabaseModule.forFeature(...)` in the module that **owns** it:
 `PostsInfrastructureModule`, `UsersInfrastructureModule`, `BetterAuthModule` (the Better Auth tables, composed
-with whatever a contributed plugin adds), `MikroOrmOutboxModule` (the outbox and the inbox) and `TransportEventBusModule` (the event log). An application's `mikro-orm.config.ts` therefore
+with whatever a contributed plugin adds), `MikroOrmOutboxModule` (the outbox and the inbox) and `MikroOrmEventStoreModule` (the event store). An application's `mikro-orm.config.ts` therefore
 holds the connection and nothing else — and `apps/tagging`, which needs the Post's *mapping* but not its
 repositories, imports `DatabaseModule.forFeature([...postsEntities, ...usersEntities])` and nothing more.
 
@@ -1135,6 +1244,12 @@ layer says what to tell the client about it.
   every `tenant_*` schema there is, through the same `TenantEntityManagerService` the applications use.
   A tenant's tables may reference a system table (the generator points such a reference at `public`),
   never the other way round.
+- **`migrate()` ends by pruning the inbox** (`pruneInbox()`): the `transport.outbox_inbox` rows
+  processed longer ago than `INBOX_RETENTION_DAYS` (`config/outbox.config.ts`, default 30 — longer than
+  any redelivery, a dead letter's requeue included), for every consumer at once, the inbox being one
+  table. `@nestjs/outbox` prunes nothing by itself, and nothing else in the system is scheduled: the
+  migrator is what runs on every deploy (`Migrate`, invoked with `Date.now()`) and before every
+  `pnpm dev`. `inbox:prune` runs it alone.
 - **No application creates the system schema.** `postgresDatabase` sets
   `ensureDatabase: { create: false }`, so a service whose system migrations have not run fails with
   `relation ... does not exist`, which is the honest answer. A TENANT schema is the exception, by
@@ -1152,7 +1267,7 @@ layer says what to tell the client about it.
   Auth's HTTP surface and the AMQP client out of whatever runs a migration, and what lets the
   applications' specs and the web depend on it for `tenantMigrations` without a cycle.
 - `dist/main.js` is a module as well as a script: `migrate()`, `migrateSystem()`, `migrateTenants()`,
-  `seed()`, `setup()`, `fresh()`. `apps/web-e2e`'s stack runs `setup` before starting any service.
+  `pruneInbox()`, `seed()`, `setup()`, `fresh()`. `apps/web-e2e`'s stack runs `setup` before starting any service.
 
 ### GraphQL edge
 
@@ -1171,19 +1286,22 @@ layer says what to tell the client about it.
   promise.
 - **A subscription reads the `EventBus`, and the bus is what is event sourced.** A
   `@SubscriptionHandler` writes `this.eventBus.pipe(ofType(PostCreatedEvent))` — what `@nestjs/cqrs`
-  already gives every application — and that works in one process or in twelve. With
-  `subscriptions: true` on `TransportEventBusModule.forRoot`, the `EventBus` token is bound to
-  `EventSourcedEventBus`, whose **observable side** is the `EventLog`. There is no port to implement
-  and no option on `CqsrsModule`: the one that existed bought only "events from other containers",
-  which the bus can carry itself. `POSTS_SUBSCRIPTION_SOURCE=feed` still picks it.
+  already gives every application — and that works in one process or in twelve. By default the bus's
+  observable side is `CommittedEvents`, which lets a subscription hear an event only once the
+  transaction that owns it committed (a subscribing handler is told inside it, and a browser cannot be
+  un-told). With `subscriptions: true` on `TransportEventBusModule.forRoot` — which requires an
+  `eventStore` — it is `EventSourcedEventBus` instead, whose **observable side** is the event store's
+  global order (`readAfter`, gap-aware). There is no port to implement and no option on `CqsrsModule`:
+  the one that existed bought only "events from other containers", which the bus can carry itself.
+  `POSTS_SUBSCRIPTION_SOURCE=feed` picks it, and gives posts-api an event store for it.
 - **`@nestjs/cqrs` reads a bus three different ways, and the ORDER of boot is what separates them.**
   An `@EventsHandler` is bound to `subject$` **directly**, inside `bind()`; a saga is handed the
   observable **at registration**; everything else reads the observable whenever it pipes it.
-  `EventSourcedEventBus` repoints `EventBus.source` at the log in `onApplicationBootstrap`, and
-  `CqrsModule` — which `CqsrsModule` imports — bootstraps **first**: by then the handlers and the
-  sagas hold `subject$` and keep it, so a projection runs once in the container that did the work
-  and a saga dispatches once however many containers run. Only a `@SubscriptionHandler`, resolved
-  per client long after boot, reads the log.
+  `EventSourcedEventBus` (or `CommittedEvents`) repoints `EventBus.source` in
+  `onApplicationBootstrap`, and `CqrsModule` — which `CqsrsModule` imports — bootstraps **first**: by
+  then the handlers and the sagas hold `subject$` and keep it, so a projection runs once in the
+  container that did the work and a saga dispatches once however many containers run. Only a
+  `@SubscriptionHandler`, resolved per client long after boot, reads the store.
 - **NEVER bind `EventBus` or `CommandBus` to a substitute provider. Decorate the instance.** It cost
   this repository two outages in one afternoon. `CqrsModule` registers every `@CommandHandler` and
   every `@EventsHandler` on the instance **it** resolves, and anything outside that module resolves
@@ -1191,7 +1309,8 @@ layer says what to tell the client about it.
   With `CommandBus` that is `CommandHandlerNotFoundException`, which a saga swallows: the chain stops
   with nothing in the log. With `EventBus` it is worse, because everything looks healthy — the inbox
   logs `inbox ← posts.PostCreated#2.0.0 from 'tagging'` and the read model simply stays at version 1.
-  `UnitOfWorkCommands` and `EventSourcedEventBus` both wrap what `moduleRef.get(...)` hands back.
+  `UnitOfWorkCommands`, `CommittedEvents` and `EventSourcedEventBus` all decorate what
+  `moduleRef.get(...)` hands back.
 - **The GraphQL error codes are ours now.** `@nestjs/apollo` mapped a Nest `HttpException`'s status
   to `extensions.code` inside the driver; Yoga does not, so `HttpExceptionFilter` does it explicitly
   (`UNAUTHORIZED → UNAUTHENTICATED`, `UNPROCESSABLE_ENTITY → BAD_USER_INPUT`, …). It is better where
@@ -1263,11 +1382,12 @@ error at all**: the system works, the trace is just wrong or absent, and only on
 - **The gateway traces each call to a subgraph** — `subgraph posts`, a client span around the
   executor (`tracedExecutor`, `libs/core/federation-gateway`) with the HTTP request, and its
   `traceparent`, inside it.
-- **A subscription delivers each event in the trace that produced it.** The event log stores the
-  trace each event was appended in (`transport.event_log.trace_context`), `EventSourcedEventBus`
-  stamps it back on what it reads (`EventTrace`, beside `Tenant.stamp`), `MapSubscriptionInterceptor`
-  carries it onto the view, and the plugin opens `subscription OnPostCreated event` as a **child** of
-  it, **linked** to the subscription. The event's result carries that span's `traceparent` in its
+- **A subscription delivers each event in the trace that produced it.** The trace travels in the
+  event's metadata (`TraceContextDispatchInterceptor` writes it at dispatch), so it is in the outbox row,
+  on the wire and in the event store beside the event (`transport.event_log.metadata`); `EventTrace.of`
+  reads it back off the event's attached message, `MapSubscriptionInterceptor` carries it onto the view
+  (`EventTrace.carry`), and the plugin opens `subscription OnPostCreated event` as a **child** of it,
+  **linked** to the subscription. The event's result carries that span's `traceparent` in its
   `extensions`, the gateway's executor remembers it for the event's objects (`subgraphEventOrigin`),
   and the gateway's own delivery is one more child. A subscription's operation span ends when the
   stream is set up; only the events are in the mutation's trace.
@@ -1292,10 +1412,11 @@ error at all**: the system works, the trace is just wrong or absent, and only on
   object is spread into `apps/web`'s Next server, whose artifact has neither the file nor the
   packages it requires.
 - **A span that ends before the unit of work commits publishes nothing.** Outbound events are staged
-  while a handler runs and only leave at `commit()`, so `ingesting()` in
-  `libs/core/transport-eventbus/src/tracing.ts` wraps `UnitOfWork.run`, not the other way round.
-  `injectTraceContext` writes `traceparent` from the **active** context; with no span active it
-  writes nothing, and the next service opens a trace of its own.
+  while a handler runs and only written to the outbox in `PREPARE_COMMIT`, so `ingesting()` in
+  `libs/core/transport-eventbus/src/tracing.ts` wraps the delivery's **whole** unit —
+  `units.create(…).executeWithResult(…)`, in `EventIngestion` and `StreamingGroupDelivery` — not the
+  other way round. `injectTraceContext` writes `traceparent` from the **active** context; with no span
+  active it writes nothing, and the next service opens a trace of its own.
 - **The Next server's spans leave at the end of each request, or they may never leave.**
   `@vercel/otel`'s `'auto'` processor is a `BatchSpanProcessor` in the process; on Vercel it is
   flushed through `waitUntil` when a request ends, and on OpenNext's Lambda nothing flushed it — the
@@ -1352,8 +1473,16 @@ There is no fake repository: handler specs boot the real `CqsrsModule` and a **s
 on the shared Postgres, through `createCqrsTestingModule([...])` (`apps/posts-api/test/support/cqrs-testing-module.ts`),
 registering **only the handler under test** — an accidental dependency between handlers breaks the
 test. That module also imports `transportTesting()` — the root's `OutboxModule` with no relay, the
-MikroORM store and `TransportEventBusModule` with `TransportIdentity.silent(...)` — because the
-handlers commit through the transport publisher and a suite publishes nowhere. The database proves what was saved; `RecordingEvents`
+MikroORM store and `TransportEventBusModule` with `TransportIdentity.silent(...)` and
+`transactionManager: MikroOrmTransactionManager` — because the handlers commit through the transport
+publisher and a suite publishes nowhere.
+
+A spec that boots a service as a microservice does it with `startInProcessService(module, { onStart,
+onClose })` (`@nestposts/transport-eventbus/testing`), on a `TopicMemoryServer`, delivering with
+`server.emit(routingKey, envelope)`. The library knows no database, so the schema is a hook:
+`testSchemaLifecycle` (`@nestposts/database/testing`) creates the spec's schema from its entities once
+the service listens and drops it before it closes; a spec whose tables the real `migrate()` made passes
+nothing. The database proves what was saved; `RecordingEvents`
 (attached to the `EventBus`) proves what was published. Because handlers are request-scoped, tests
 dispatch through the `CommandBus` with a `PostRequest`.
 
@@ -1377,7 +1506,7 @@ Four levels, and each answers something the others cannot:
 |---|---|---|
 | unit / slice | every project, beside the code | the rule, the handler, the mapping |
 | integration | `libs/core/transport-eventbus/src/**`, `libs/auth/src/infrastructure/persistence`, `apps/posts-api/test/persistence` | the envelope, the routing table's refusals, the inbox, the event store and its replay, the ORM mapping — and that Better Auth writes and reads through the entities `libs/auth` maps by hand |
-| one hop, in process | `libs/core/transport-eventbus/src/in-memory/transport-loop.spec.ts` | two services with no broker, each one's `local` carried by the spec to the other's `TopicMemoryServer`: the real class arrives, the request is restored, a redelivery is deduplicated, the loop is cut |
+| one hop, in process | `libs/core/transport-eventbus/src/in-memory/transport-loop.spec.ts` | two services with no broker, each publishing through a real `ClientProxyTransport` around a client in the process that emits on the other's `TopicMemoryServer`: the real class arrives, the request and the tenant are restored, a redelivery is deduplicated, the loop is cut |
 | the whole system, in a browser | `pnpm test:web` (`apps/web-e2e`, **Playwright**) | **the packaged services over Inngest AND over real RabbitMQ**, driven through Chromium: signing in, being refused, the three states of `/posts/new`, the polymorphic `me`, a post read by someone who never signed in — and then what the browser cannot see, in the same test: each service's durable state, both inboxes, idempotency through the broker's management API, the replica channel, one correlation id across two processes, and the `x-tenant` **of the browser** on the headers of both events. Every email flow is walked through its inbox — sign-up verification, reset, magic link, email code, two factor by email, email change, account deletion, an organization invitation accepted by the invitee — plus the admin screens and an OAuth authorization code grant with PKCE through the consent screen. With a Polar SANDBOX token in `.env.test`, billing too: checkout (free, and paid with a test card) and the customer portal in Polar's own pages, and every webhook delivered back to the web through a tunnel (ngrok, else a Cloudflare quick tunnel) to an endpoint the run registers — the author role and the emails each one causes, a forged one refused, a redelivered one harmless |
 
 **`test-e2e` is the target name for every level of e2e there is**, in `apps/posts-api` and in
@@ -1482,10 +1611,11 @@ DTOs count.
 - **A native statement is not resolved against the connection's schema.** `insert into
   outbox_messages` reaches whatever the `search_path` finds, which in a service that lives in a schema
   of its own is nothing at all. Raw SQL asks the metadata where the table is — `MikroOrmOutboxStore`
-  and the event log do, and `tableIn(orm, 'posts')` is the same thing for a spec.
+  and `MikroOrmEventStorageEngine` do, and `tableIn(orm, 'posts')` is the same thing for a spec.
 - **A MikroORM raw statement expands a JavaScript array into a list of placeholders**, so
   `any(?::bigint[])` handed an array is a syntax error. An array travels as a PostgreSQL array
-  literal, every element quoted (`MikroOrmOutboxStore`'s `pgArray`).
+  literal, every element quoted (`pgArray`, in `MikroOrmOutboxStore` and in
+  `MikroOrmEventStorageEngine`).
 - **`count(*)` is a bigint, and the `pg` driver gives a bigint back as a STRING**, so `'1' === 1` is
   false and an idempotency assertion fails for a reason that has nothing to do with idempotency.
   `apps/web-e2e` sets a type parser for it.
@@ -1594,73 +1724,107 @@ DTOs count.
   modules through a runner of its own. **The only place this is provable is a deployed stage**, by
   reading the collector's destination.
 - **A command runs in a unit of work, and that is why there is nothing to drain.** `UnitOfWork`
-  (`@nestposts/transport-eventbus`, `unit-of-work/`) is Axon's, in the shape this framework can have
-  one. While a command handler
-  runs, every `publish` is **staged**; when it returns, the staged events are appended to the
-  `EventLog` (`prepareCommit`) and then published and forwarded (`commit`). It also **waits for what
-  the publish set off**: `@nestjs/cqrs` drops whatever a handler or a saga returns, so
-  `UnitOfWorkCommands` wraps `CommandBus.execute` and every discovered `@EventsHandler`'s `handle`
-  to register their promises on the open unit. `EventIngestion.ingest` runs in a unit too, which is
-  what makes `processSqsEvent` await the whole chain. Measured: before it, the deployed log ended one
-  line after `was born untagged — completing it`, because Lambda froze the container mid-saga.
-  A handler that throws rolls back and the events are **discarded**, where before they had already
-  been published.
-- **The unit of work is scoped to the REQUEST, which is what Axon scopes it to.** Axon's is
-  `UnitOfWork<T extends Message<?>>` — it carries the message being handled — and here that message
-  is the `AsyncContext` this repository already propagates, the same object `PostRequest.of(event)`
-  answers with. `UnitOfWork.run(work, request)` joins an open unit only when the request **matches**:
-  a saga dispatching with `request.attachTo(command)` commits as part of the same unit, while work
-  carrying a different request — one that arrived from another service, say — gets a unit of its own
-  rather than being committed as part of somebody else's. Unknown on either side means no evidence
-  of a difference, and the unit is shared, which is what keeps a command dispatched without a
-  context from starting one by accident.
-- **Every reaction to one ingested event shares ONE EntityManager, concurrently.** The ingestion
-  publishes inside its request context, so an `@EventsHandler` and the command a saga dispatches run
-  interleaved on the same identity map. A second `findOne(..., { populate })` of an aggregate another
-  reaction is writing re-hydrates its collection from the database — and the writer's flush then
-  saves the scalar change without the collection. Measured: `NotifyPostCreatedCommand` re-loaded the
-  Post with its tags while `ProjectPostCompletion` projected the completion, and a post reached
-  version 2 with no tag, on Inngest, once in three runs. A reaction reads what the event carries; it
-  does not load the aggregate a projection of the same event is writing.
-- **`EventIngestion` decodes the request ONCE.** Decoding it in `ingest` and again in
-  `ingestMessage` would make two `AsyncContext` objects for one message, and the unit would then not
-  recognise the command a saga dispatches with the request it received — a unit of its own,
-  untracked, and the Lambda freeze is back.
+  (`@nestposts/transport-eventbus`, `unit-of-work/`) is Axon 5's. While a command handler runs, every
+  `publish` is **staged**; in `PREPARE_COMMIT` the staged events are appended to the event store,
+  written to the outbox and told to the subscribing handlers, inside the transaction, and `COMMIT`
+  commits all of it. It also **waits for what the publish set off**: `@nestjs/cqrs` drops whatever a
+  handler or a saga returns, so each delivery keeps a `DeliveryScope` in its branch of the context, and
+  every wrapped `@EventsHandler` and every command a saga dispatches is tracked there and settled before
+  the phase ends. `EventIngestion.ingest` runs in a unit too, which is what makes `processSqsEvent`
+  await the whole chain. Measured: before it, the deployed log ended one line after `was born untagged —
+  completing it`, because Lambda froze the container mid-saga. A handler that throws rolls back and the
+  events are **discarded**, where before they had already been published.
+- **Nothing joins a unit of work: every command gets its own.** `UnitOfWorkCommands` creates a unit per
+  command, whoever dispatched it — Axon 5's `SimpleCommandBus` — and starts it OUTSIDE the dispatcher's
+  `ProcessingContext`. A saga's command is caused by the event (its `correlationId`/`causationId` say
+  so), is waited for by the delivery, and is still a unit of its own. What the unit used to do — join an
+  open unit when the request matched (`UnitOfWork.run`, `covers`, `failOnTrackedFailure`) — is gone, and
+  `ProcessingContext.current()` (an `AsyncLocalStorage`) is only a carrier. Two units may still share a
+  **database transaction**: that is the transaction manager's decision, a savepoint.
+- **A joined unit's after-commit work belongs to the transaction that owns it.** A saga's command
+  inside an ingestion joins the ingestion's transaction as a savepoint, so its `COMMIT` releases a
+  savepoint and nothing more. `TransactionManager.afterCommit(context, callback)` queues what must wait
+  for the database — the subscriptions hearing the command's events, the relay being woken — on the
+  transaction; a joined transaction hands its queue to the owning one when it commits and drops it when
+  it rolls back, and the owning unit runs it (`runAfterCommit`) in its `AFTER_COMMIT`, outside the
+  transaction's scope. Measured, when the queue ran inside `commit()` instead: it executed within the
+  committed fork's MikroORM `TransactionContext`, and a drain that delivered synchronously to another
+  unit failed with `Transaction is already committed` — a savepoint on a finished transaction.
+- **The subscribing handlers run INSIDE the publishing transaction.** Axon 5's
+  `SubscribingEventProcessor`, and a change from what this repository did before, which was to tell
+  them after the commit. A projection commits with the command that caused it; a subscribing handler
+  that throws **fails the command** (or the ingestion) under the default `PropagatingErrorHandler`.
+  What must not hold the work back or be lost with it — a notification, an email — belongs to a
+  **streaming** group (`processingGroups: { notifications: 'streaming' }`), delivered after the commit in
+  a unit of its own and retried by the outbox. A GraphQL subscription still hears only committed events
+  (`CommittedEvents`).
+- **A saga in a streaming group declares its events.** `@EventsHandler(PostCreatedEvent)` says what it
+  takes; a `@Saga`'s `ofType` is inside a stream nothing can read. So
+  `@ProcessingGroup('notifications', { events: [PostCreatedEvent] })` — without it the group takes every
+  event, and the outbox gets a `@processing-group` message for every event the service publishes or
+  ingests. The module warns at boot, naming the group.
+- **Every reaction to one ingested event shares ONE transaction, side by side.** The subscribing
+  handlers of an event are invoked together and tracked together, and a saga's command joins the same
+  transaction as a savepoint, so a projection and a saga's command interleave on the same connection.
+  A second `findOne(..., { populate })` of an aggregate another reaction is writing re-hydrates its
+  collection from the database — and the writer's flush then saves the scalar change without the
+  collection. Measured: `NotifyPostCreatedCommand` re-loaded the Post with its tags while
+  `ProjectPostCompletion` projected the completion, and a post reached version 2 with no tag, on Inngest,
+  once in three runs. A reaction reads what the event carries; it does not load the aggregate a
+  projection of the same event is writing (and the notification is a streaming group now, which runs
+  after the commit anyway).
 - **The handlers are found, not intercepted.** Wrapping `EventBus.bind` would be the obvious way to
-  reach them and it is **too late**: `CqrsModule`'s explorer calls it during ITS bootstrap, before
-  the importing module's. They are discovered through the `ModulesContainer` instead, which works
-  after the fact because Nest's `bind` reads `handler.instance.handle` when the event is published,
-  not when it binds.
+  reach them and it is **too late**: `CqrsModule`'s explorer calls it during ITS bootstrap.
+  `EventHandlingComponents` discovers them through the `ModulesContainer` in `onModuleInit`, which every
+  module runs before any runs `onApplicationBootstrap`, and wraps `handle` on the handler's
+  **prototype** — so a request-scoped handler, resolved afresh per event, is covered — and every
+  `@Saga` on its instance, before `CqrsModule` hands the saga its observable.
 - **`publishAll` copies the array it is given.** `AggregateRoot.commit()` hands it the aggregate's
   INTERNAL event array and then calls `uncommit()`, which empties it. Publishing straight away never
-  noticed; a unit of work holds the events until its commit phase and finds the array cleared — the
+  noticed; a unit of work holds the events until its `PREPARE_COMMIT` and finds the array cleared — the
   command succeeds, appends nothing and tells nobody.
-- **A saga's command that throws fails the INGESTION, and only the ingestion.** A unit of work
-  waits for tracked work to finish, not to succeed — except one started with
-  `failOnTrackedFailure`, which is how `EventIngestion` opens its own. So a command a saga dispatched
-  from an ingested event rejects the controller's `ingest`, which is what gives a transport's retry
-  (and `@RetryPolicy`) something to act on; and the inbox row rolls back with the rest of the
-  ingestion's transaction, or the redelivery would be dropped as a duplicate. `pnpm test:web`'s `saga-retry.spec`
-  proves it on both transports, failing the append with a Postgres trigger rather than a code path
-  the service carries for a test.
+- **A saga's command that throws fails the INGESTION, and only the ingestion.** The command is tracked
+  by the delivery that told the saga, and its failure is the saga's group's: under the default
+  `PropagatingErrorHandler` the delivery hands it on and the ingestion's unit fails. So a command a saga
+  dispatched from an ingested event rejects the controller's `ingest`, which is what gives a transport's
+  retry (and `@RetryPolicy`) something to act on; and the inbox row rolls back with the rest of the
+  ingestion's transaction, or the redelivery would be dropped as a duplicate. A group with a
+  `LoggingErrorHandler` logs instead, and a streaming group is retried by the outbox, apart from the
+  ingestion. `pnpm test:web`'s `saga-retry.spec` proves it on both transports, failing the append with a
+  Postgres trigger rather than a code path the service carries for a test.
 - **`ServerRMQ` with `noAck: false` never acknowledges an event.** Nest leaves it to the handler, and
   for years nothing here did: every message sat unacked until the channel closed. On `apps/tagging`
   the `@RetryPolicy` interceptor acknowledges a handled message through the `RmqExceptionProducer`,
   and the producer `nack`s a failed one into the dead-letter delay. `apps/posts-api` still acks
   nothing.
-- **Publishing after a unit has started committing goes out immediately.** A handler reacting to a
-  committed event and dispatching a command of its own is new work, not a late addition to work that
-  is already leaving — `UnitOfWork.staging` is the question, and Axon answers it by throwing
-  (`Unit of Work is already committed`).
+- **Publishing once a unit is past `PREPARE_COMMIT` throws**, as Axon throws `Unit of Work is already
+  committed`: its events would be told after the unit had already written what it publishes. A handler
+  reacting to a committed event and publishing is new work — its own unit, or a streaming group's. Inside
+  `PREPARE_COMMIT` it is fine: events published while the batch is delivered are drained in the same
+  phase, and a unit still publishing after ten rounds fails.
+- **A drain stops at the first round that publishes nothing, not at the first that claims nothing.**
+  `EventOutbox.drain()` calls the relay's `runOnce()` while a round publishes something (ten rounds at
+  most, and no `batchSize` of its own). Measured, when it looped until nothing was claimed: a message
+  the broker refused was rescheduled with the outbox's backoff, became due again, and the same drain
+  claimed it again — every attempt it had was spent in one drain while the broker was down, and it was
+  dead-lettered before the broker came back. A round that publishes nothing leaves the message to the
+  service's next drain, with the real backoff.
+- **A DI token imported through a circular import is `undefined` when the decorator runs.**
+  `@Inject(TOKEN)` evaluates `TOKEN` at class-definition time; if the file that declares it is still
+  being evaluated because of a cycle, the decorator records `@Inject(undefined)` and Nest fails to
+  resolve the parameter, with an error that names the class and not the cycle. A token used across the
+  files of a library lives in a file that imports nothing of theirs — `transport-eventbus`'s
+  `constants.ts` is that file.
 - **`context.callbackWaitsForEmptyEventLoop = false` in every Lambda handler.** Without it Lambda
   waits for the event loop to drain before finishing the invocation, and these applications hold a
   MikroORM pool, a transport client and OpenTelemetry's batch timers — so it never drains, every
   invocation runs to its full timeout, no warm container is reused and every request pays a cold
   start while being billed for the timeout.
-- **SQS FIFO orders messages within a queue, not between queues.** A consumer that appends to an
-  aggregate's stream therefore wants ONE queue: two events of one post arriving through two queues
-  are two appends racing for the same sequence. `infra/aws/messaging/queues.ts` has the failure and
-  the fix.
+- **SQS FIFO orders messages within a queue, not between queues.** A consumer that appends to the
+  event store and decides on an entity's history therefore wants ONE queue: two events of one post
+  arriving through two queues are two appends racing on the same tag, and a decision taken between them
+  is refused by its append condition or taken against half a history. `infra/aws/messaging/queues.ts`
+  has the failure and the fix.
 - **`batch: { partialResponses: true }` on the Lambda's event-source mapping** is what makes
   `batchItemFailures` mean anything. Without it AWS decides the whole batch by whether the invocation
   threw: throwing redrives the records that succeeded, and returning deletes the one that failed.
@@ -1833,7 +1997,7 @@ default external list. Three more things follow from bundling:
   the header and the pages at once, with no server action in between.
 - **The container publishes.** `WebAppModule` imports `CqsrsModule` and a publish-only
   `TransportEventBusModule` (identity `web`, an outbox whose one destination is
-  `NOTIFICATIONS_NAMESPACE`, relayed in `drain` mode, no inbox, no event log) and binds `PublishingOnDemandNotifications` into `BetterAuthModule`, so a verification
+  `NOTIFICATIONS_NAMESPACE`, relayed in `drain` mode, `transactionManager: MikroOrmTransactionManager`, no inbox, no event store) and binds `PublishingOnDemandNotifications` into `BetterAuthModule`, so a verification
   email asked for in the browser reaches the notificator on the same transport the services use.
   Turbopack cannot externalize `@nestjs/microservices` (it resolves to ESM) and so bundles it, and
   with it the optional transports it `require`s lazily: `resolveAlias` points `ioredis`, `kafkajs`,

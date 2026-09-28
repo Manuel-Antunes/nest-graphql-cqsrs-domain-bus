@@ -5,7 +5,7 @@ export class TransportHeader {
   static readonly TIMESTAMP = 'cqrs-transport-timestamp';
   static readonly ORIGIN = 'cqrs-transport-origin';
   static readonly TAGS = 'cqrs-transport-tags';
-  static readonly CORRELATION_ID = 'cqrs-transport-correlation-id';
+  static readonly CORRELATION_ID = 'correlationId';
   static readonly TENANT = 'x-tenant';
 
   static ofRedelivery(

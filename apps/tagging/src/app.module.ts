@@ -2,14 +2,21 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { OutboxModule } from '@nestjs/outbox';
 import { CqsrsModule } from '@nestposts/cqsrs';
-import { DatabaseModule, TenancyModule } from '@nestposts/database';
+import {
+  DatabaseModule,
+  MessageTenantResolver,
+  TenancyModule,
+} from '@nestposts/database';
+import {
+  MikroOrmEventStorageEngine,
+  MikroOrmEventStoreModule,
+} from '@nestposts/event-store-mikro-orm';
 import { loggingModuleAsync } from '@nestposts/observability';
 import { ErrorReportingModule } from '@nestposts/observability/error-reporting.module';
 import {
   MikroOrmOutboxModule,
   MikroOrmOutboxStore,
-  MikroOrmUnitOfWorkTransaction,
-  OutboxHousekeepingModule,
+  MikroOrmTransactionManager,
 } from '@nestposts/outbox-mikro-orm';
 import { Post } from '@nestposts/posts/domain/post/post.entity';
 import { postsEntities } from '@nestposts/posts/infrastructure/posts-infrastructure.module';
@@ -19,7 +26,6 @@ import {
   TRANSPORT_EVENT_BUS_PUBLISHER,
   TransportEventBusModule,
   TransportIdentity,
-  TransportTenantResolver,
 } from '@nestposts/transport-eventbus';
 import { usersEntities } from '@nestposts/users/infrastructure/users-infrastructure.module';
 
@@ -73,7 +79,7 @@ import { PostEventsController } from './interfaces/messaging/post-events.control
     DatabaseModule.forFeature([...postsEntities, ...usersEntities]),
     TenancyModule.forRoot({
       http: false,
-      resolver: TransportTenantResolver,
+      resolver: MessageTenantResolver,
       migrations: MikroOrmConfiguration.tenantMigrations(),
     }),
     RetryPolicyModule.forRootAsync({
@@ -100,18 +106,12 @@ import { PostEventsController } from './interfaces/messaging/post-events.control
       inject: [appConfig.KEY],
       useFactory: ({ name }: AppConfig) => ({ producer: name }),
     }),
-    OutboxHousekeepingModule.forRootAsync({
-      inject: [outboxConfig.KEY],
-      useFactory: ({ relay, inboxRetention }: OutboxConfig) => ({
-        interval: relay === 'poll' ? '1h' : false,
-        inboxRetention,
-      }),
-    }),
+    MikroOrmEventStoreModule,
     TransportEventBusModule.forRootAsync({
       inject: [appConfig.KEY],
       useFactory: ({ name, publishes }: AppConfig) =>
         TransportIdentity.named(name, { publishes }),
-      transaction: MikroOrmUnitOfWorkTransaction,
+      transactionManager: MikroOrmTransactionManager,
       inbox: { descriptions: MikroOrmOutboxStore },
       outbox: {
         destinations: PostEventsClient.namespaces,
@@ -121,7 +121,10 @@ import { PostEventsController } from './interfaces/messaging/post-events.control
           route: PostEventsClient.route(app),
         }),
       },
-      eventStore: [Post],
+      eventStore: {
+        engine: MikroOrmEventStorageEngine,
+        entities: [{ entity: Post, tagKey: 'postId' }],
+      },
     }),
     PostEventsClientModule,
   ],

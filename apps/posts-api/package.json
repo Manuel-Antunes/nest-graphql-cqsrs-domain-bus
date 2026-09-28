@@ -17,6 +17,7 @@
     "@nestposts/auth": "workspace:*",
     "@nestposts/cqsrs": "workspace:*",
     "@nestposts/database": "workspace:*",
+    "@nestposts/event-store-mikro-orm": "workspace:*",
     "@nestposts/events": "workspace:*",
     "@nestposts/lambda": "workspace:*",
     "@nestposts/microservices-aws": "workspace:*",

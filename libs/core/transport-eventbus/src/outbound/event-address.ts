@@ -1,21 +1,22 @@
 import type { Type } from '@nestjs/common';
-import { Logger } from '@nestjs/common';
 import type { OutboxMessage } from '@nestjs/outbox';
-import {
-  eventTagsOf,
-  eventTypeOf,
-  namespaceIn,
-  qualifiedNameIn,
-  requireEventTypeOf,
-} from '@nestposts/platform/domain/shared/event-type';
+import { requireEventTypeOf } from '@nestposts/platform/domain/shared/event-type';
 
+import {
+  DefaultSequencingPolicy,
+  SequentialPolicy,
+} from '../eventhandling/sequencing-policy';
+import type { Tag } from '../eventsourcing/tag';
+import { AnnotationBasedTagResolver } from '../eventsourcing/tag';
+import { EventMessage } from '../messaging/event-message';
+import { MessageType } from '../messaging/message-type';
 import type { MessageHeaders, WireTag } from './message-headers';
 import {
   decodeTags,
+  TRANSPORT_EVENT_ID,
   TRANSPORT_MESSAGE_TYPE,
   TRANSPORT_TAGS,
 } from './message-headers';
-import { identifierOf, wireTagsOf } from './transport-metadata';
 
 /**
  * **Where this event goes, read from the event itself.** Not one field here comes from configuration.
@@ -29,7 +30,8 @@ import { identifierOf, wireTagsOf } from './transport-metadata';
  * ({@link ofMessage}).
  */
 export class EventAddress {
-  private static readonly logger = new Logger(EventAddress.name);
+  private static readonly tagResolver = new AnnotationBasedTagResolver();
+  private static readonly sequencing = new DefaultSequencingPolicy();
 
   /**
    * What becomes the ordering key of an event with no tag at all. It should not happen — an event
@@ -37,7 +39,7 @@ export class EventAddress {
    * that aggregate — and the sentinel exists so the key keeps the same number of segments, because
    * that is what the bindings depend on.
    */
-  static readonly NO_AGGREGATE = 'none';
+  static readonly NO_AGGREGATE = SequentialPolicy.SEQUENCE;
 
   /** AMQP's wildcards, and the ones {@link topicMatches} understands: one segment, and the rest. */
   private static readonly ONE_SEGMENT = '*';
@@ -56,7 +58,7 @@ export class EventAddress {
     /** The namespace on its own: it is by this that the outbox picks the destination ({@link OutboxRoute}). */
     readonly namespace: string,
     readonly identifier: string,
-    /** The identity of the instance — see {@link orderingKeyOf}. */
+    /** The sequence the event was published in — its {@link SequencingPolicy}'s answer. */
     readonly orderingKey: string,
     readonly tags: readonly WireTag[],
   ) {}
@@ -65,7 +67,8 @@ export class EventAddress {
    * **The pattern a broker's binding is matched against** — RabbitMQ's routing key, SNS's
    * `routingKey` attribute, and what a `TopicMemoryServer` matches its bindings against. It is not the
    * outbox's topic, which names the event and not the instance ({@link qualifiedName}): each
-   * transport's packet reads it off the message it publishes ({@link OutboxPackets}).
+   * transport's packet — the application's `toPacket` — reads it off the message it publishes
+   * ({@link EventAddress.ofMessage}).
    *
    * ## Three segments: `namespace.localName.orderingKey`
    * Because a topic exchange's routing key serves two things that pull against each other:
@@ -83,8 +86,8 @@ export class EventAddress {
    * goes out routed already, because the key is derived from metadata the event already carries.
    *
    * ## A transport that addresses differently
-   * Does it in its own `toPacket` ({@link OutboxPackets}), which receives the message and answers the
-   * pattern the transporter sends under — Inngest's qualified name, a Kafka topic. That is the one
+   * Does it in its own `toPacket` — the application's, one per broker — which receives the message and
+   * answers the pattern the transporter sends under — Inngest's qualified name, a Kafka topic. That is the one
    * place that already knows the protocol, and it is why this is a property and not an abstraction.
    */
   get routingKey(): string {
@@ -92,45 +95,61 @@ export class EventAddress {
   }
 
   /**
-   * Reads the address off the event.
+   * **The address of a message this service publishes** — its type, its identifier, its tags, and
+   * the sequence its {@link SequencingPolicy} put it in, which is the routing key's last segment.
+   *
+   * Given a bare event, it reads the message the event is attached to, the tags `@EventType` declares
+   * and the default policy's sequence — what a suite that builds an envelope by hand wants.
    *
    * ## An event with no `@EventType`
-   * Gets the identity upstream gives it: **its class name**, no namespace and no version. It has no
-   * namespace for a destination to take, and therefore stays in the process, which is the right
-   * default for the events most of a domain is made of.
+   * Gets its class name as its type, no namespace and no version. It has no namespace for a
+   * destination to take, and therefore stays in the process, which is the right default for the
+   * events most of a domain is made of.
    */
-  static of(event: object): EventAddress {
-    const metadata = eventTypeOf(event);
-    const tags = wireTagsOf(eventTagsOf(event));
-    const messageType = metadata?.messageType ?? event.constructor.name;
+  static of(
+    event: EventMessage | object,
+    tags?: readonly Tag[],
+    sequence?: string,
+  ): EventAddress {
+    const message =
+      event instanceof EventMessage ? event : EventMessage.of(event);
+    const resolved = tags ?? EventAddress.tagResolver.resolve(message);
     return new EventAddress(
-      messageType,
-      metadata?.qualifiedName ?? event.constructor.name,
-      metadata?.namespace ?? '',
-      identifierOf(event),
-      EventAddress.orderingKeyOf(messageType, tags),
-      tags,
+      message.type.toString(),
+      message.type.qualifiedName,
+      message.type.namespace,
+      message.identifier,
+      sequence ??
+        EventAddress.sequencing.sequenceIdentifierFor(message, resolved) ??
+        EventAddress.NO_AGGREGATE,
+      resolved.map((tag) => ({ key: tag.key, value: tag.value })),
     );
   }
 
   /**
    * **The same address, read back off a message the outbox holds** — what a transport's packet has
-   * in hand, because the relay publishes a message and not an event. Everything it needs was written
-   * into the headers when the event was staged: the message type, and the tags the ordering key comes
-   * from. The topic is only the fallback for a message whose headers do not say its type.
+   * in hand, because the relay publishes a message and not an event. The sequence is the message's
+   * `key` after its namespace, and, for a message with no key, its first tag.
    */
   static ofMessage(
-    message: Pick<OutboxMessage, 'id' | 'topic' | 'headers'>,
+    message: Pick<OutboxMessage, 'id' | 'topic' | 'headers'> & {
+      readonly key?: string | null;
+    },
   ): EventAddress {
     const headers = message.headers as MessageHeaders;
-    const messageType = headers[TRANSPORT_MESSAGE_TYPE] ?? message.topic;
+    const type = MessageType.parse(
+      headers[TRANSPORT_MESSAGE_TYPE] ?? message.topic,
+    );
     const tags = decodeTags(headers[TRANSPORT_TAGS]);
+    const prefix = `${type.namespace}/`;
     return new EventAddress(
-      messageType,
-      qualifiedNameIn(messageType),
-      namespaceIn(messageType),
-      message.id,
-      EventAddress.orderingKeyOf(messageType, tags),
+      type.toString(),
+      type.qualifiedName,
+      type.namespace,
+      headers[TRANSPORT_EVENT_ID] ?? message.id,
+      message.key?.startsWith(prefix)
+        ? message.key.slice(prefix.length)
+        : (tags[0]?.value ?? EventAddress.NO_AGGREGATE),
       tags,
     );
   }
@@ -172,34 +191,5 @@ export class EventAddress {
     return typeof target === 'string'
       ? `${target}.${EventAddress.EVERY_SEGMENT}`
       : `${requireEventTypeOf(target).qualifiedName}.${EventAddress.ONE_SEGMENT}`;
-  }
-
-  /**
-   * **The event's tag — and not a hand-written list of preferences.**
-   *
-   * An event in this system has exactly one tag, and it is the identity of the aggregate it belongs
-   * to. A second tag would mean an event that belongs to two aggregates, which is not something the
-   * ordering key can express: whichever one it picked, messages about the same aggregate could land
-   * on different consumers. The warning makes that choice visible instead of silent — the tags arrive
-   * sorted, so it is stable, just not *informed*.
-   */
-  private static orderingKeyOf(
-    messageType: string,
-    tags: readonly WireTag[],
-  ): string {
-    if (tags.length === 0) {
-      return EventAddress.NO_AGGREGATE;
-    }
-    if (tags.length > 1) {
-      EventAddress.logger.warn(
-        `${messageType} has ${tags.length} tags (${tags
-          .map((tag) => tag.key)
-          .join(
-            ', ',
-          )}) — the ordering key will be '${tags[0].key}', the first in order. Two tags ` +
-          `mean two aggregates, and a message can only be ordered by one: check the @EventType.`,
-      );
-    }
-    return tags[0].value;
   }
 }

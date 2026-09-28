@@ -1,7 +1,5 @@
 /// <reference path="../../../.sst/platform/config.d.ts" />
 
-import { createHash } from 'node:crypto';
-
 import { errorReporting } from '../../sentry';
 import { postgresUrl } from '../data';
 import { router } from '../edge/router';
@@ -24,12 +22,6 @@ export const authSecret = new sst.Secret('AuthSecret');
 export const polarAccessToken = new sst.Secret('PolarAccessToken', '');
 export const polarEnvironment = new sst.Secret('PolarEnvironment', 'sandbox');
 export const polarWebhookSecret = new sst.Secret('PolarWebhookSecret', '');
-
-export const outboxSweepSecret = $util.secret(
-  authSecret.value.apply((secret) =>
-    createHash('sha256').update(`outbox-sweep\u0000${secret}`).digest('hex'),
-  ),
-);
 
 /**
  * **A variable the deploy cannot do without**, read from the `.env` at the root of the repository —

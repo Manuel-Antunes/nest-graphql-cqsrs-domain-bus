@@ -24,7 +24,11 @@ comes from the Lambda's environment and the credentials from its role.
 With no serializer and no deserializer, a proxy sends `{ pattern, data }` as the body and the strategy
 reads it back with Nest's `IncomingRequestDeserializer`. A serializer may instead answer an
 `AwsOutgoingMessage` — a body, the message attributes a subscription filters on, and the FIFO group
-and deduplication ids. `@nestposts/transport-eventbus` ships the pair for domain events.
+and deduplication ids. Domain events take the other road, with no serializer: each publishing
+application's outbox packet (`OutboxPackets.aws`, in posts-api's and tagging's
+`infrastructure/transport/outbox-packets.ts`) hands the proxy an `SnsRecordBuilder` record carrying
+the routing facts `@nestposts/transport-eventbus` names (`routingAttributesOf`) as attributes, the
+message's key as FIFO group and its id as deduplication id.
 
 ```ts
 const client = new SqsClientProxy({ queueUrl });
