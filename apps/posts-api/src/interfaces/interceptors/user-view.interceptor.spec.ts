@@ -62,7 +62,7 @@ describe('UserViewInterceptor', () => {
     const user = aUser([]);
     expect(await intercept(user)).toEqual([[User, UserView]]);
 
-    user.grantRole(AUTHOR_ROLE, now);
+    user.role = AUTHOR_ROLE;
 
     expect(await intercept(user)).toEqual([[User, AuthorView]]);
   });

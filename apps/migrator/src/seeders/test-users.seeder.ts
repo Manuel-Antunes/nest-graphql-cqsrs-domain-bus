@@ -6,8 +6,8 @@ import { BETTER_AUTH } from '@nestposts/auth/infrastructure/better-auth/tokens';
 import { inRequestContext } from '@nestposts/database';
 import { AUTHOR_ROLE } from '@nestposts/users/domain/user/author.entity';
 import { IdentityProvider } from '@nestposts/users/domain/user/identity.provider';
-import { CredentialId } from '@nestposts/users/domain/user/vo/credential-id';
 import { Email } from '@nestposts/users/domain/user/vo/email';
+import { UserId } from '@nestposts/users/domain/user/vo/user-id';
 
 import type { SeedConfig } from '../config/seed.config';
 import { seedConfig } from '../config/seed.config';
@@ -34,10 +34,7 @@ export class TestUsersSeeder extends Seeder {
           return signedUp;
         });
         if (user.author) {
-          await identities.grantRole(
-            CredentialId.parse(created.id),
-            AUTHOR_ROLE,
-          );
+          await identities.grantRole(UserId.parse(created.id), AUTHOR_ROLE);
         }
       }
       await em.nativeUpdate(AuthUser, { email }, { emailVerified: true });

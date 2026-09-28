@@ -48,6 +48,7 @@ export class Stack {
       appendFileSync(join(environment.logDirectory, 'containers.log'), line);
     const endpoints = await this.containers.up({
       transport: environment.transport,
+      postsSubscriptionSource: environment.postsSubscriptionSource,
       apiPort: await FreePort.pick(),
       gatewayPort: await FreePort.pick(),
       storagePort: await FreePort.pick(),

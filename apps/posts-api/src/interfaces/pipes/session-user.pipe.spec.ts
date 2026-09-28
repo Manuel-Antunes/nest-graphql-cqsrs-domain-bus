@@ -1,5 +1,5 @@
 import type { User } from '@nestposts/users/domain/user/user.entity';
-import { CredentialId } from '@nestposts/users/domain/user/vo/credential-id';
+import { UserId } from '@nestposts/users/domain/user/vo/user-id';
 import type { UserSession } from '@thallesp/nestjs-better-auth';
 
 import type { UserProvisioning } from '../../application/user/user-provisioning.service';
@@ -7,14 +7,14 @@ import { SessionUserPipe } from './session-user.pipe';
 
 describe('SessionUserPipe', () => {
   const profile = { id: 'quem-quer-que-seja' } as unknown as User;
-  let asked: CredentialId[];
+  let asked: UserId[];
   let pipe: SessionUserPipe;
 
   beforeEach(() => {
     asked = [];
     const provisioning = {
-      provision: async (credentialId: CredentialId) => {
-        asked.push(credentialId);
+      provision: async (userId: UserId) => {
+        asked.push(userId);
         return profile;
       },
     } as unknown as UserProvisioning;
@@ -34,7 +34,7 @@ describe('SessionUserPipe', () => {
 
     expect(user).toBe(profile);
     expect(asked).toHaveLength(1);
-    expect(asked[0]).toBeInstanceOf(CredentialId);
+    expect(asked[0]).toBeInstanceOf(UserId);
     expect(asked[0].value).toBe('cred-1');
   });
 

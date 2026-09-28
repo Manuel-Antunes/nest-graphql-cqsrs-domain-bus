@@ -4,7 +4,11 @@ import { PostgreSqlContainer } from '@testcontainers/postgresql';
 import type { StartedNetwork, StartedTestContainer } from 'testcontainers';
 import { GenericContainer, Network, Wait } from 'testcontainers';
 
-import type { E2eTransport, Endpoints } from '../environment/run-environment';
+import type {
+  E2eTransport,
+  Endpoints,
+  PostsSubscriptionSource,
+} from '../environment/run-environment';
 import { Storage } from '../infrastructure/storage/storage';
 import { EmailSender } from '../model/email';
 import { Poll } from '../support/poll';
@@ -12,6 +16,7 @@ import { Poll } from '../support/poll';
 export interface ContainerStackOptions {
   /** Which transport this run drives the system over. */
   readonly transport: E2eTransport;
+  readonly postsSubscriptionSource: PostsSubscriptionSource;
   readonly apiPort: number;
   /** Chosen up front: the gateway's URL is the audience every OAuth access token is issued for. */
   readonly gatewayPort: number;
@@ -277,6 +282,7 @@ export class ContainerStack {
         ...shared,
         PORT: '3000',
         POSTS_TRANSPORT: options.transport,
+        POSTS_SUBSCRIPTION_SOURCE: options.postsSubscriptionSource,
         INNGEST_SERVE_ORIGIN: 'http://posts-api:3000',
         AUTH_URL: apiUrl,
         WEB_URL: options.webUrl,

@@ -1,14 +1,14 @@
 import type { Logger } from '@nestjs/common';
 import type { TenantEntityManagerService } from '@nestposts/database';
 import type { User } from '@nestposts/users/domain/user/user.entity';
-import { CredentialId } from '@nestposts/users/domain/user/vo/credential-id';
+import { UserId } from '@nestposts/users/domain/user/vo/user-id';
 
 import type { UserProvisioning } from '../../application/user/user-provisioning.service';
 import { UserProvisioningHooks } from './user-provisioning.hooks';
 
 describe('UserProvisioningHooks', () => {
   const profile = { id: 'perfil' } as unknown as User;
-  let asked: CredentialId[];
+  let asked: UserId[];
   let tenantsAsked: string[];
   let fail: Error | null;
   let hooks: UserProvisioningHooks;
@@ -18,8 +18,8 @@ describe('UserProvisioningHooks', () => {
     tenantsAsked = [];
     fail = null;
     const provisioning = {
-      provision: async (credentialId: CredentialId) => {
-        asked.push(credentialId);
+      provision: async (userId: UserId) => {
+        asked.push(userId);
         if (fail) {
           throw fail;
         }
@@ -39,7 +39,7 @@ describe('UserProvisioningHooks', () => {
     await hooks.onCredentialCreated({ id: 'cred-1' });
 
     expect(asked).toHaveLength(1);
-    expect(asked[0]).toBeInstanceOf(CredentialId);
+    expect(asked[0]).toBeInstanceOf(UserId);
     expect(asked[0].value).toBe('cred-1');
   });
 

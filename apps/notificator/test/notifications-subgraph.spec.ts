@@ -13,6 +13,7 @@ import { migrate } from '@nestposts/migrator/main';
 import { tenantMigrations } from '@nestposts/migrator/migrations/tenant/index';
 import { NotificationRecord } from '@nestposts/notifications/domain/notification/notification-record.entity';
 import { User } from '@nestposts/users/domain/user/user.entity';
+import { Email } from '@nestposts/users/domain/user/vo/email';
 import { UserId } from '@nestposts/users/domain/user/vo/user-id';
 
 import { AppModule } from '../src/app.module';
@@ -49,7 +50,7 @@ describe('the notifications subgraph', () => {
     return (await response.json()) as Answer;
   };
 
-  const signedUp = async (name: string, profile = true): Promise<Caller> => {
+  const signedUp = async (name: string): Promise<Caller> => {
     const email = `${name.toLowerCase()}-${UserId.generate().value}@example.com`;
     const auth = app.get<BetterAuth>(BETTER_AUTH);
     const { headers } = await inRequestContext(app.get(MikroORM), () =>
@@ -62,14 +63,7 @@ describe('the notifications subgraph', () => {
       .getSetCookie()
       .map((entry: string) => entry.split(';')[0])
       .join('; ');
-    const user = User.register(
-      UserId.generate(),
-      { email, name },
-      [],
-      new Date(),
-    );
-    user.uncommit();
-    if (profile) await em().persist(user).flush();
+    const user = await em().findOneOrFail(User, { email: Email.parse(email) });
     return { cookie, user };
   };
 
@@ -112,8 +106,8 @@ describe('the notifications subgraph', () => {
     });
   });
 
-  it('answers nothing, and no error, to a session whose user has no profile yet', async () => {
-    const newcomer = await signedUp('Newcomer', false);
+  it('answers nothing, and no error, to a user who was never notified', async () => {
+    const newcomer = await signedUp('Newcomer');
 
     const answer = await execute(
       '{ unreadNotificationCount notifications { id } }',

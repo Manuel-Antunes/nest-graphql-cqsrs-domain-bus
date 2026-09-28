@@ -2,6 +2,7 @@ import 'server-only';
 
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { EventEmitterModule } from '@nestjs/event-emitter';
 import { OutboxModule } from '@nestjs/outbox';
 import { BetterAuthModule } from '@nestposts/auth/infrastructure/better-auth/better-auth.module';
 import { BillingInfrastructureModule } from '@nestposts/billing/infrastructure/billing-infrastructure.module';
@@ -27,13 +28,10 @@ import {
   TransportIdentity,
 } from '@nestposts/transport-eventbus';
 
-import { SubscriptionAuthorship } from './billing/subscription-authorship';
-import { SubscriptionEmails } from './billing/subscription-emails';
 import type { AppConfig } from './config/app.config';
 import { appConfig } from './config/app.config';
 import { authConfig } from './config/auth.config';
 import { awsConfig } from './config/aws.config';
-import { billingConfig } from './config/billing.config';
 import { inngestConfig } from './config/inngest.config';
 import type { OutboxConfig } from './config/outbox.config';
 import { outboxConfig } from './config/outbox.config';
@@ -43,8 +41,6 @@ import { rabbitmqConfig } from './config/rabbitmq.config';
 import { NextCookiesBetterAuthPluginProvider } from './next-cookies.plugin';
 import { WebEventsClient } from './web-events.client';
 import { WebEventsClientModule } from './web-events-client.module';
-
-const billing = billingConfig().polar;
 
 /**
  * **The Next server's Nest application** — a container, not a server.
@@ -77,13 +73,13 @@ const billing = billingConfig().polar;
         appConfig,
         authConfig,
         awsConfig,
-        billingConfig,
         inngestConfig,
         outboxConfig,
         postgresConfig,
         rabbitmqConfig,
       ],
     }),
+    EventEmitterModule.forRoot(),
     CqsrsModule.forRoot({ aggregatePublisher: TRANSPORT_EVENT_BUS_PUBLISHER }),
     DatabaseModule.forRootAsync({
       inject: [postgresConfig.KEY],
@@ -125,16 +121,11 @@ const billing = billingConfig().polar;
     BetterAuthModule.forRoot({
       plugins: [
         ...organizationAuthPluginProviders,
-        ...BillingInfrastructureModule.authPlugins(billing),
+        ...BillingInfrastructureModule.authPlugins(),
       ],
       trailingPlugins: [NextCookiesBetterAuthPluginProvider],
       entities: OrganizationEntities.withAuth(),
-      imports: [
-        OrganizationsInfrastructureModule,
-        BillingInfrastructureModule.forRoot(billing, {
-          listeners: [SubscriptionEmails, SubscriptionAuthorship],
-        }),
-      ],
+      imports: [OrganizationsInfrastructureModule, BillingInfrastructureModule],
       config: authConfig.KEY,
       notifications: PublishingOnDemandNotifications,
     }),

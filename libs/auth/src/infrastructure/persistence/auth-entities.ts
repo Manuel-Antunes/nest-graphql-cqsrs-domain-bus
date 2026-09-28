@@ -1,6 +1,7 @@
 import type { EntitySchema } from '@nestposts/database';
 import { OnDemandNotifications } from '@nestposts/notifications/domain/notification/on-demand-notifications';
 import { LoggingOnDemandNotifications } from '@nestposts/notifications/infrastructure/on-demand/logging-on-demand-notifications';
+import { UserEntitySchema } from '@nestposts/users/infrastructure/persistence/entities/user-orm.entity';
 import type { BetterAuthPlugin } from 'better-auth';
 
 import { AuthConfiguration } from '../better-auth/config';
@@ -53,6 +54,7 @@ export class BetterAuthEntities {
     );
 
     return [
+      UserEntitySchema,
       AuthUserEntitySchema,
       ...BetterAuthSchema.define(
         BetterAuthInstance.optionsFor(

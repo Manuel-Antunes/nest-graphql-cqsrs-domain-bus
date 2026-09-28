@@ -2,8 +2,8 @@ import { ref } from '@mikro-orm/core';
 import { AuthUser } from '@nestposts/auth/domain/auth/auth-user.entity';
 import type { AnyMikroORM } from '@nestposts/database/testing';
 import { metadataOnly } from '@nestposts/database/testing';
-import { CredentialId } from '@nestposts/users/domain/user/vo/credential-id';
 import { Email } from '@nestposts/users/domain/user/vo/email';
+import { UserId } from '@nestposts/users/domain/user/vo/user-id';
 
 import { OrganizationEntities } from '../../infrastructure/persistence/organization-entities';
 import { Invitation } from './invitation.entity';
@@ -26,7 +26,7 @@ describe('the organization domain', () => {
 
   const ORGANIZATION = OrganizationId.parse('org_1');
   const OTHER_ORGANIZATION = OrganizationId.parse('org_2');
-  const CREDENTIAL = CredentialId.parse('cred_1');
+  const CREDENTIAL = UserId.parse('cred_1');
   const NOW = new Date('2026-09-21T12:00:00.000Z');
 
   beforeAll(async () => {
@@ -81,7 +81,7 @@ describe('the organization domain', () => {
       expect(member.belongsTo(ORGANIZATION)).toBe(true);
       expect(member.belongsTo(OTHER_ORGANIZATION)).toBe(false);
       expect(member.identifies(CREDENTIAL)).toBe(true);
-      expect(member.identifies(CredentialId.parse('cred_2'))).toBe(false);
+      expect(member.identifies(UserId.parse('cred_2'))).toBe(false);
     });
   });
 

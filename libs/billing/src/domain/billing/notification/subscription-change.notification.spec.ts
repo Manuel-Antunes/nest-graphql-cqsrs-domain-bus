@@ -3,7 +3,7 @@ import { EMAIL_CHANNEL } from '@nestposts/notifications/domain/channel/channel-n
 import { OnDemandNotifiable } from '@nestposts/notifications/domain/notification/on-demand-notifiable';
 
 import { SubscriptionChangeEmail } from '../../../mail/templates/subscription-change.email';
-import type { SubscriptionChange } from '../subscription-listener';
+import type { SubscriptionChange } from '../subscription-change';
 import { SubscriptionChangeNotification } from './subscription-change.notification';
 
 const change = (overrides: Partial<SubscriptionChange> = {}) => ({

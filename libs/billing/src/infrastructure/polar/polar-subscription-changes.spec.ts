@@ -1,9 +1,9 @@
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import type { Subscription } from '@polar-sh/sdk/models/components/subscription.js';
 
-import type {
-  SubscriptionChange,
-  SubscriptionListener,
-} from '../../domain/billing/subscription-listener';
+import { BillingEvent } from '../../domain/billing/billing-event';
+import type { SubscriptionChange } from '../../domain/billing/subscription-change';
+import { BillingEventService } from '../events/billing-event.service';
 import { PolarSubscriptionChanges } from './polar-subscription-changes';
 
 const periodEnd = new Date('2026-10-24T00:00:00Z');
@@ -21,14 +21,21 @@ const subscription = (overrides: Partial<Subscription> = {}): Subscription =>
     ...overrides,
   }) as Subscription;
 
-const recorder = () => {
+const emitter = () => {
+  const events = new EventEmitter2();
   const changes: SubscriptionChange[] = [];
-  const listener: SubscriptionListener = {
-    onChange: async (change) => {
-      changes.push(change);
-    },
+  const listen = (onChange: (change: SubscriptionChange) => Promise<void>) =>
+    events.on(BillingEvent.SUBSCRIPTION_CHANGED, onChange);
+  listen(async (change) => {
+    changes.push(change);
+  });
+  return {
+    changes,
+    listen,
+    subscriptionChanges: new PolarSubscriptionChanges(
+      new BillingEventService(events),
+    ),
   };
-  return { changes, listener };
 };
 
 describe('PolarSubscriptionChanges', () => {
@@ -65,23 +72,23 @@ describe('PolarSubscriptionChanges', () => {
     ).toEqual(ended);
   });
 
-  it('hands every change to every listener', async () => {
-    const first = recorder();
-    const second = recorder();
+  it('emits every change as the subscription-changed event, to every listener', async () => {
+    const { changes, listen, subscriptionChanges } = emitter();
+    const second: SubscriptionChange[] = [];
+    listen(async (change) => {
+      second.push(change);
+    });
 
-    await new PolarSubscriptionChanges([
-      first.listener,
-      second.listener,
-    ]).dispatch('revoked', subscription());
+    await subscriptionChanges.dispatch('revoked', subscription());
 
-    expect(first.changes.map(({ event }) => event)).toEqual(['revoked']);
-    expect(second.changes).toEqual(first.changes);
+    expect(changes.map(({ event }) => event)).toEqual(['revoked']);
+    expect(second).toEqual(changes);
   });
 
   it('ignores a customer this application did not create', async () => {
-    const { changes, listener } = recorder();
+    const { changes, subscriptionChanges } = emitter();
 
-    await new PolarSubscriptionChanges([listener]).dispatch(
+    await subscriptionChanges.dispatch(
       'activated',
       subscription({
         customer: {
@@ -95,17 +102,13 @@ describe('PolarSubscriptionChanges', () => {
   });
 
   it('fails when a listener fails, so Polar delivers the event again', async () => {
-    const failing: SubscriptionListener = {
-      onChange: async () => {
-        throw new Error('the mail transport is down');
-      },
-    };
+    const { listen, subscriptionChanges } = emitter();
+    listen(async () => {
+      throw new Error('the mail transport is down');
+    });
 
     await expect(
-      new PolarSubscriptionChanges([failing]).dispatch(
-        'activated',
-        subscription(),
-      ),
+      subscriptionChanges.dispatch('activated', subscription()),
     ).rejects.toThrow('the mail transport is down');
   });
 });

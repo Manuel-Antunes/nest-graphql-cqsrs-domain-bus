@@ -1,6 +1,7 @@
 import {
   defineEntity,
   p,
+  SYSTEM_SCHEMA,
   TENANT_SCHEMA,
   valueObjectType,
 } from '@nestposts/database';
@@ -16,32 +17,47 @@ import {
 import { Authorship } from '../../../domain/user/author.entity';
 import { InvalidUserException } from '../../../domain/user/exception/invalid-user.exception';
 import { UserSchema } from '../../../domain/user/schemas/user.schema';
+import { USER_ID_MAX_LENGTH } from '../../../domain/user/schemas/user-id.schema';
 import { User } from '../../../domain/user/user.entity';
 import { Email } from '../../../domain/user/vo/email';
 import { UserId } from '../../../domain/user/vo/user-id';
 import { UserName } from '../../../domain/user/vo/user-name';
 
-const UserIdType = valueObjectType(UserId, { columnType: 'varchar(36)' });
+export const UserIdType = valueObjectType(UserId, {
+  columnType: `varchar(${USER_ID_MAX_LENGTH})`,
+});
 const EmailType = valueObjectType(Email, { columnType: 'varchar(320)' });
 const UserNameType = valueObjectType(UserName, { columnType: 'varchar(100)' });
+
+export const USER_KIND = 'user';
 
 export const UserEntitySchema = defineEntity({
   class: User,
   tableName: 'users',
-  schema: TENANT_SCHEMA,
+  schema: SYSTEM_SCHEMA,
+  abstract: true,
+  discriminatorColumn: 'kind',
   forceConstructor: true,
   properties: {
     id: p.type(UserIdType).primary(),
     email: p.type(EmailType),
     name: p.type(UserNameType),
-    roles: p.array(),
+    role: p.string().nullable(),
     createdAt: p.datetime(),
     updatedAt: p.datetime(),
-    version: p.integer(),
+    version: p.integer().default(1),
     deleted: () => softDeleteProperty(),
+    kind: p.string().default(USER_KIND),
   },
   filters: activeFilter,
-  indexes: [{ properties: ['email'] }, softDeleteIndex],
+  uniques: [
+    {
+      name: 'users_email_unique',
+      properties: ['email'],
+      where: '"deleted_at" is null',
+    },
+  ],
+  indexes: [softDeleteIndex],
 });
 
 export const AuthorshipEntitySchema = defineEntity({

@@ -5,7 +5,6 @@ import {
   postgresDatabase,
   SYSTEM_SCHEMA,
 } from '@nestposts/database';
-import { SoftDeleteSubscriber } from '@nestposts/platform/infrastructure/persistence/soft-delete/soft-delete.subscriber';
 
 import type { PostgresConfig } from '../../config/postgres.config';
 
@@ -20,7 +19,6 @@ export class MikroOrmConfiguration {
     return postgresDatabase(SYSTEM_SCHEMA, {
       clientUrl: url,
       debug,
-      subscribers: [new SoftDeleteSubscriber()],
       dataloader: DataloaderType.ALL,
     });
   }

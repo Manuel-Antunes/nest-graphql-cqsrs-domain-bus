@@ -4,7 +4,7 @@ import {
   ROOT_TENANT,
   TenantEntityManagerService,
 } from '@nestposts/database';
-import { CredentialId } from '@nestposts/users/domain/user/vo/credential-id';
+import { UserId } from '@nestposts/users/domain/user/vo/user-id';
 import {
   AfterCreate,
   AfterUpdate,
@@ -37,15 +37,10 @@ export class UserProvisioningHooks {
     await this.provision(user.id, 'credencial atualizada');
   }
 
-  private async provision(
-    credentialId: string,
-    because: string,
-  ): Promise<void> {
-    const parsed = CredentialId.safeParse(credentialId);
+  private async provision(userId: string, because: string): Promise<void> {
+    const parsed = UserId.safeParse(userId);
     if (!parsed.success) {
-      this.logger.warn(
-        `${because}: id de credencial inválido (${credentialId})`,
-      );
+      this.logger.warn(`${because}: id de credencial inválido (${userId})`);
       return;
     }
     try {

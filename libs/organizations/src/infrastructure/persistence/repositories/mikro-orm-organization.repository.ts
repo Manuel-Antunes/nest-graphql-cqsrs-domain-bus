@@ -1,7 +1,7 @@
 import { EntityManager } from '@mikro-orm/core';
 import { Injectable } from '@nestjs/common';
 import { inRequestContext } from '@nestposts/database';
-import type { CredentialId } from '@nestposts/users/domain/user/vo/credential-id';
+import type { UserId } from '@nestposts/users/domain/user/vo/user-id';
 
 import { Member } from '../../../domain/organization/member.entity';
 import { Organization } from '../../../domain/organization/organization.entity';
@@ -27,11 +27,11 @@ export class MikroOrmOrganizationRepository extends OrganizationRepository {
     );
   }
 
-  findAllOf(credentialId: CredentialId): Promise<Organization[]> {
+  findAllOf(userId: UserId): Promise<Organization[]> {
     return inRequestContext(this.em, async () => {
       const memberships = await this.em.find(
         Member,
-        { user: credentialId },
+        { user: userId },
         { populate: ['organization'], orderBy: { createdAt: 'asc' } },
       );
       return memberships.map((membership) =>

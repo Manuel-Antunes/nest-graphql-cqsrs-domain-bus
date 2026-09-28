@@ -2,6 +2,8 @@ import { Workspace } from './workspace';
 
 export type E2eTransport = 'inngest' | 'rabbitmq';
 
+export type PostsSubscriptionSource = 'feed' | 'local';
+
 /** Where the host reaches what the containers publish. Everything else is an alias on the network. */
 export interface Endpoints {
   readonly postgresUrl: string;
@@ -39,6 +41,10 @@ export class RunEnvironment {
 
   get transport(): E2eTransport {
     return this.variables.E2E_TRANSPORT === 'rabbitmq' ? 'rabbitmq' : 'inngest';
+  }
+
+  get postsSubscriptionSource(): PostsSubscriptionSource {
+    return this.transport === 'inngest' ? 'feed' : 'local';
   }
 
   get webPort(): number {

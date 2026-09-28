@@ -5,7 +5,11 @@ import { dehydrate, HydrationBoundary } from '@tanstack/react-query';
 
 import { Organization } from '@/components/auth/organization/organization';
 import { WebAuth } from '@/lib/auth/server';
-import { ORGANIZATION_VIEW_PATHS, signInFor } from '@/lib/auth/views';
+import {
+  BILLING_SETTINGS_PATH,
+  ORGANIZATION_VIEW_PATHS,
+  signInFor,
+} from '@/lib/auth/views';
 import { getQueryClient } from '@/lib/query-client';
 
 export default async function OrganizationPage({
@@ -14,7 +18,10 @@ export default async function OrganizationPage({
   params: Promise<{ path: string }>;
 }) {
   const { path } = await params;
-  if (!ORGANIZATION_VIEW_PATHS.has(path)) {
+  const available =
+    ORGANIZATION_VIEW_PATHS.has(path) ||
+    (path === BILLING_SETTINGS_PATH && WebAuth.billingEnabled());
+  if (!available) {
     notFound();
   }
 

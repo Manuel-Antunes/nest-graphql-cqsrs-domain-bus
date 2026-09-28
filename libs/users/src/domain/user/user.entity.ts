@@ -9,7 +9,6 @@ import { WithSoftDelete } from '@nestposts/platform/domain/shared/soft-delete/so
 import { UserDeletedEvent } from './event/user-deleted.event';
 import { UserRegisteredEvent } from './event/user-registered.event';
 import { UserRestoredEvent } from './event/user-restored.event';
-import { UserRoleGrantedEvent } from './event/user-role-granted.event';
 import { InvalidUserException } from './exception/invalid-user.exception';
 import type { NewUser } from './schemas/new-user.schema';
 import { NewUserSchema } from './schemas/new-user.schema';
@@ -20,7 +19,6 @@ import { UserName } from './vo/user-name';
 
 export type UserEvent =
   | UserRegisteredEvent
-  | UserRoleGrantedEvent
   | UserDeletedEvent
   | UserRestoredEvent
   | NotificationReceivedEvent;
@@ -42,9 +40,9 @@ export class User
   @AutoMap(() => UserName)
   name!: UserName;
 
-  roles: string[] = [];
+  role: string | null = null;
 
-  version!: number;
+  version = 1;
 
   static register(
     id: UserId,
@@ -85,16 +83,15 @@ export class User
     return channel === EMAIL_CHANNEL ? this.email.value : undefined;
   }
 
-  hasRole(role: string): boolean {
-    return this.roles.includes(role);
+  get roles(): readonly string[] {
+    return (this.role ?? '')
+      .split(',')
+      .map((role) => role.trim())
+      .filter((role) => role.length > 0);
   }
 
-  grantRole(role: string, now: Date): this {
-    if (this.hasRole(role)) {
-      throw new InvalidUserException(`user ${this.id} já tem o papel ${role}`);
-    }
-    this.apply(new UserRoleGrantedEvent(this.id.value, role, now));
-    return this;
+  hasRole(role: string): boolean {
+    return this.roles.includes(role);
   }
 
   isActive(): boolean {
@@ -117,18 +114,10 @@ export class User
     this.id = UserId.parse(event.userId);
     this.email = Email.parse(event.email);
     this.name = UserName.parse(event.name);
-    this.roles = [...event.roles];
+    this.role = event.roles.length > 0 ? event.roles.join(',') : null;
     this.stampCreation(event.occurredAt);
     this.applyRestoration();
     this.version = 1;
-  }
-
-  onUserRoleGrantedEvent(event: UserRoleGrantedEvent): void {
-    this.roles = this.hasRole(event.role)
-      ? this.roles
-      : [...this.roles, event.role];
-    this.touch(event.occurredAt);
-    this.version += 1;
   }
 
   onUserDeletedEvent(event: UserDeletedEvent): void {

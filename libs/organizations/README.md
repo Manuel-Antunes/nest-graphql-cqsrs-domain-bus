@@ -11,7 +11,7 @@ know organizations exist — that is what lets a service authenticate without on
 | | `@nestposts/auth` | this package |
 |---|---|---|
 | the instance | builds it (`BETTER_AUTH`), with the CORE plugins | contributes the `organization` plugin to it |
-| tables | `auth_user`, and everything Better Auth generates | `organization`, `member`, `invitation` |
+| tables | `users` (`AuthUser`, a kind of `User`), and everything Better Auth generates | `organization`, `member`, `invitation` |
 | the question | *who is this?* — `AuthService` | *what may they do in which organization?* — `OrganizationService` |
 | access control | the system roles (`admin`, `author`, `user`) | the organization roles (`owner`, `admin`, `member`) |
 

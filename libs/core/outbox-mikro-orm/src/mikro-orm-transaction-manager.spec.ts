@@ -89,6 +89,20 @@ describe('MikroOrmTransactionManager', () => {
     expect(await notes()).toEqual(['detached']);
   });
 
+  it('leaves the transaction it was opened inside alone while it is open, as an unawaited publish needs', async () => {
+    const outer = orm.em.transactional(async () => {
+      await orm.em.persist(new Note('outer-before')).flush();
+      const detached = await manager.detached().startTransaction();
+      await orm.em.persist(new Note('outer-while-detached')).flush();
+      await write(detached, 'detached');
+      await detached.commit();
+      throw new Error('the outer transaction rolls back');
+    });
+
+    await expect(outer).rejects.toThrow('the outer transaction rolls back');
+    expect(await notes()).toEqual(['detached']);
+  });
+
   it('opens the transaction in the tenant the message names, when none is open to join', async () => {
     const opened: string[] = [];
     const tenants = {

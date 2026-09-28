@@ -4,7 +4,7 @@ import { Reflector } from '@nestjs/core';
 import type { BetterAuth } from '@nestposts/auth/infrastructure/better-auth/init-auth';
 import { BETTER_AUTH } from '@nestposts/auth/infrastructure/better-auth/tokens';
 import { HeaderTenantResolver, Tenant } from '@nestposts/database';
-import { CredentialId } from '@nestposts/users/domain/user/vo/credential-id';
+import { UserId } from '@nestposts/users/domain/user/vo/user-id';
 import {
   MemberHasPermission,
   RequireActiveOrg,
@@ -140,7 +140,7 @@ export class TenantMembershipGuard implements CanActivate {
       return false;
     }
     const organizations = await this.organizations.findAllOf(
-      CredentialId.parse(userId),
+      UserId.parse(userId),
     );
     return organizations.some((organization) =>
       organization.isAddressedBy(tenant),

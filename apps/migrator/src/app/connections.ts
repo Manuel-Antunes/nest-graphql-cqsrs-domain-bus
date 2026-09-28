@@ -8,7 +8,6 @@ import { eventsEntities } from '@nestposts/events/infrastructure/events-infrastr
 import { notificationsEntities } from '@nestposts/notifications/infrastructure/notifications-infrastructure.module';
 import { OrganizationEntities } from '@nestposts/organizations/infrastructure/persistence/organization-entities';
 import { outboxEntities } from '@nestposts/outbox-mikro-orm/outbox.entities';
-import { SoftDeleteSubscriber } from '@nestposts/platform/infrastructure/persistence/soft-delete/soft-delete.subscriber';
 import { postsEntities } from '@nestposts/posts/infrastructure/posts-infrastructure.module';
 import { usersEntities } from '@nestposts/users/infrastructure/users-infrastructure.module';
 
@@ -49,7 +48,6 @@ export const systemConnection = (
     debug,
     preferTs: false,
     entities: [...migratorTables()],
-    subscribers: [new SoftDeleteSubscriber()],
     extensions: [Migrator, SeedManager],
     migrations: migrationFiles('system'),
     seeder: {

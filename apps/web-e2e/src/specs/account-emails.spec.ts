@@ -176,12 +176,13 @@ test.describe('the emails authentication sends', () => {
     await authentication.signIn(account);
 
     await accountLifecycle.requestDeletion();
-    expect(await credentialRecords.exists(account.credentialId)).toBe(true);
+    expect(await credentialRecords.isActive(account.credentialId)).toBe(true);
 
     await accountLifecycle.confirmDeletion(account.email);
 
     await expect
-      .poll(() => credentialRecords.exists(account.credentialId))
+      .poll(() => credentialRecords.isActive(account.credentialId))
       .toBe(false);
+    expect(await credentialRecords.isDeleted(account.credentialId)).toBe(true);
   });
 });

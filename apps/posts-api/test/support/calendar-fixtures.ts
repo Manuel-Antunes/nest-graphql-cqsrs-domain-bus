@@ -25,9 +25,7 @@ import { TeamMemberEntitySchema } from '@nestposts/organizations/infrastructure/
 import { TeamEntitySchema } from '@nestposts/organizations/infrastructure/persistence/entities/team-orm.entity';
 import { MikroOrmTeamRepository } from '@nestposts/organizations/infrastructure/persistence/repositories/mikro-orm-team.repository';
 import { MikroOrmTeamMemberRepository } from '@nestposts/organizations/infrastructure/persistence/repositories/mikro-orm-team-member.repository';
-import { IdentityProvider } from '@nestposts/users/domain/user/identity.provider';
 import { User } from '@nestposts/users/domain/user/user.entity';
-import type { CredentialId } from '@nestposts/users/domain/user/vo/credential-id';
 import { Email } from '@nestposts/users/domain/user/vo/email';
 import { UserId } from '@nestposts/users/domain/user/vo/user-id';
 import { UserName } from '@nestposts/users/domain/user/vo/user-name';
@@ -36,7 +34,6 @@ import { CalendarAttendees } from '../../src/application/calendar-event/calendar
 import { TenantOrganizations } from '../../src/application/organization/tenant-organizations.service';
 import { UserProvisioning } from '../../src/application/user/user-provisioning.service';
 import { freshEm } from './cqrs-testing-module';
-import { FakeIdentityProvider } from './fake-identity-provider';
 import { T0 } from './post-fixtures';
 
 export const TENANT = 'acme';
@@ -58,7 +55,6 @@ export class StubTenantOrganizations {
 }
 
 export interface CalendarTesting {
-  readonly identities: FakeIdentityProvider;
   readonly providers: Provider[];
   readonly imports: [
     typeof EventsInfrastructureModule,
@@ -67,14 +63,11 @@ export interface CalendarTesting {
 }
 
 export const calendarTesting = (): CalendarTesting => {
-  const identities = new FakeIdentityProvider();
   return {
-    identities,
     providers: [
       CalendarAttendees,
       UserProvisioning,
       { provide: TenantOrganizations, useValue: new StubTenantOrganizations() },
-      { provide: IdentityProvider, useValue: identities },
       { provide: TeamRepository, useClass: MikroOrmTeamRepository },
       { provide: TeamMemberRepository, useClass: MikroOrmTeamMemberRepository },
     ],
@@ -92,7 +85,7 @@ export const calendarTesting = (): CalendarTesting => {
 
 export async function givenATeam(
   module: TestingModule,
-  members: readonly CredentialId[] = [],
+  members: readonly UserId[] = [],
   organization: Organization = anOrganization(),
 ): Promise<Team> {
   const em = freshEm(module);
@@ -108,10 +101,9 @@ export async function givenATeam(
     createdAt: T0,
   });
   em.persist(team);
-  for (const credentialId of members) {
+  for (const userId of members) {
     const user =
-      (await em.findOne(AuthUser, { id: credentialId })) ??
-      givenACredential(em, credentialId);
+      (await em.findOne(User, { id: userId })) ?? givenACredential(em, userId);
     em.persist(
       Object.assign(new TeamMember(), {
         id: TeamMemberId.parse(`team_member_${UserId.generate().value}`),
@@ -125,11 +117,27 @@ export async function givenATeam(
   return team;
 }
 
-function givenACredential(em: EntityManager, id: CredentialId): AuthUser {
+export async function givenAMember(
+  module: TestingModule,
+  email: string,
+  name: string,
+): Promise<AuthUser> {
+  const em = freshEm(module);
+  const member = givenACredential(em, UserId.generate(), email, name);
+  await em.flush();
+  return member;
+}
+
+function givenACredential(
+  em: EntityManager,
+  id: UserId,
+  email = `${id.value}@example.com`,
+  name = 'member',
+): AuthUser {
   const credential = Object.assign(new AuthUser(), {
     id,
-    name: UserName.parse('member'),
-    email: Email.parse(`${id.value}@example.com`),
+    name: UserName.parse(name),
+    email: Email.parse(email),
     emailVerified: true,
     createdAt: T0,
     updatedAt: T0,

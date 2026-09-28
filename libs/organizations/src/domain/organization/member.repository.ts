@@ -1,4 +1,4 @@
-import type { CredentialId } from '@nestposts/users/domain/user/vo/credential-id';
+import type { UserId } from '@nestposts/users/domain/user/vo/user-id';
 
 import type { Member } from './member.entity';
 import type { MemberId } from './vo/member-id';
@@ -9,10 +9,10 @@ export abstract class MemberRepository {
 
   abstract findIn(
     organizationId: OrganizationId,
-    credentialId: CredentialId,
+    userId: UserId,
   ): Promise<Member | null>;
 
   abstract findAllIn(organizationId: OrganizationId): Promise<Member[]>;
 
-  abstract findAllOf(credentialId: CredentialId): Promise<Member[]>;
+  abstract findAllOf(userId: UserId): Promise<Member[]>;
 }

@@ -267,8 +267,7 @@ describe('adapters do MikroORM', () => {
       const user = await givenAUser(module);
       const created = await inContext(async () => {
         const found = await users.findById(user.id);
-        found!.grantRole(AUTHOR_ROLE, new Date());
-        found!.uncommit();
+        found!.role = AUTHOR_ROLE;
         await users.save(found!);
         return authors.create(found!);
       });

@@ -6,10 +6,10 @@ extend type Query {
   runs, which is the `@PreAuthorize("isAuthenticated()")` of the Axon version. Note there is no
   argument: the target is always whoever is asking.
 
-  The first time a new credential shows up, the domain profile is created — or reattached to the one
-  that already exists, by email — without the client asking for anything: that is the *just-in-time*
-  provisioning of `UserProvisioning`. On the normal path this already happened at sign-up, through
-  the hook, and here it is only a read.
+  The user is the one the sign-up wrote, the same in every tenant. The first time an author asks in a
+  tenant, their authorship there is created without the client asking for anything: that is the
+  *just-in-time* provisioning of `UserProvisioning`. In the root tenant it already happened when the
+  role was granted, through the hook, and here it is only a read.
 
   Returns the **interface**: use a fragment to reach what only exists on `Author`.
 

@@ -139,6 +139,12 @@ export class MikroOrmTransactionManager {
    * transaction it would release after the transaction had committed — measured, `RELEASE SAVEPOINT
    * can only be used in transaction blocks`, from a provisioning that published inside
    * `UserRepository.exclusively`.
+   *
+   * It is opened on a fork of its own, never through the context's entity manager: MikroORM's
+   * `REQUIRES_NEW` suspends the caller's transaction by clearing it from the caller's fork until the new
+   * one ends, which is right for a caller that awaits it and wrong for one that does not. Measured, on
+   * the first request in a new tenant: the provisioning's `authors` row went out on another connection
+   * while the event of the `users` row was being stored, and violated `authors_id_foreign`.
    */
   detached(): MikroOrmTransactionManager {
     return new DetachedMikroOrmTransactionManager(this.em, this.tenants);
@@ -191,7 +197,8 @@ export class MikroOrmTransactionManager {
 
   /**
    * The entity manager the transaction is opened on: the context's when a transaction is open to join,
-   * the tenant's when the message names one, the request's otherwise.
+   * a fresh fork of the tenant's when the message names one, the request's otherwise — and a fresh
+   * fork of whichever for a detached one, so no transaction it is opened inside is suspended.
    */
   private async entityManagerFor(
     message: TransactionalMessage | undefined,
@@ -203,11 +210,13 @@ export class MikroOrmTransactionManager {
     }
     const tenant = message?.metadata[TENANT_HEADER];
     if (tenant && this.tenants) {
-      return this.tenants.createAndMigrateTenantEntityManager(
-        Tenant.normalize(tenant),
-      );
+      const tenantEntityManager =
+        await this.tenants.createAndMigrateTenantEntityManager(
+          Tenant.normalize(tenant),
+        );
+      return tenantEntityManager.fork({ clear: true });
     }
-    return this.em;
+    return detached ? this.em.fork({ clear: true }) : this.em;
   }
 }
 

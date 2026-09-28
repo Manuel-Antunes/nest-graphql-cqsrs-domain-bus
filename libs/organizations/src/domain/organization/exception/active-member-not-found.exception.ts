@@ -1,14 +1,14 @@
-import type { CredentialId } from '@nestposts/users/domain/user/vo/credential-id';
+import type { UserId } from '@nestposts/users/domain/user/vo/user-id';
 
 import type { OrganizationId } from '../vo/organization-id';
 
 export class ActiveMemberNotFoundException extends Error {
   constructor(
-    readonly credentialId: CredentialId,
+    readonly userId: UserId,
     readonly organizationId: OrganizationId,
   ) {
     super(
-      `credential ${credentialId} holds no membership in organization ${organizationId}`,
+      `user ${userId} holds no membership in organization ${organizationId}`,
     );
     this.name = 'ActiveMemberNotFoundException';
   }

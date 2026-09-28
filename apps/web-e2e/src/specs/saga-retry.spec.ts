@@ -47,6 +47,7 @@ test.describe
     });
 
     test('gives up at the policy ceiling: the post stays pre-created and nothing is remembered', async ({
+      environment,
       accounts,
       authentication,
       publishing,
@@ -75,8 +76,10 @@ test.describe
       expect(await postRecords.find(postId)).toMatchObject({ version: 1 });
       expect(
         await eventLog.streamOf(postId),
-        'the ingested event is rolled back with the decision that failed',
-      ).toEqual([]);
+        'the ingested event is rolled back with the decision that failed; in feed, posts-api stored the birth itself',
+      ).toEqual(
+        environment.postsSubscriptionSource === 'feed' ? [PRE_CREATED] : [],
+      );
       expect(
         await inbox.countOf('tagging', PRE_CREATED),
         'a message that was never acted on is not remembered as done',

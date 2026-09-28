@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { DatabaseModule } from '@nestposts/database';
+import { SoftDeleteModule } from '@nestposts/platform/infrastructure/persistence/soft-delete/soft-delete.module';
 
 import { PostRepository } from '../domain/post/post.repository';
 import { TagRepository } from '../domain/tag/tag.repository';
@@ -34,7 +35,7 @@ export const postsEntities = [PostEntitySchema, TagSchema];
  * inject a repository.
  */
 @Module({
-  imports: [DatabaseModule.forFeature(postsEntities)],
+  imports: [DatabaseModule.forFeature(postsEntities), SoftDeleteModule],
   providers: [
     { provide: PostRepository, useClass: MikroOrmPostRepository },
     { provide: TagRepository, useClass: MikroOrmTagRepository },

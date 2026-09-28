@@ -6,72 +6,70 @@ import {
 } from '@nestposts/users/domain/user/author.entity';
 import { AuthorRepository } from '@nestposts/users/domain/user/author.repository';
 import { UnknownIdentityException } from '@nestposts/users/domain/user/exception/unknown-identity.exception';
-import { IdentityProvider } from '@nestposts/users/domain/user/identity.provider';
 import { User } from '@nestposts/users/domain/user/user.entity';
-import type { CredentialId } from '@nestposts/users/domain/user/vo/credential-id';
-import { Email } from '@nestposts/users/domain/user/vo/email';
+import { UserId } from '@nestposts/users/domain/user/vo/user-id';
 
 import {
   createCqrsTestingModule,
   freshEm,
   inRequestContext,
 } from '../../../test/support/cqrs-testing-module';
-import { FakeIdentityProvider } from '../../../test/support/fake-identity-provider';
+import { T0 } from '../../../test/support/post-fixtures';
 import { UserProvisioning } from './user-provisioning.service';
 
 describe('UserProvisioning', () => {
   let module: TestingModule;
   let provisioning: UserProvisioning;
   let authors: AuthorRepository;
-  let identities: FakeIdentityProvider;
-  let credentialId: CredentialId;
+  let userId: UserId;
 
   const EMAIL = 'manuel@example.com';
 
-  const signUp = (role: string | null = null) => {
-    credentialId = identities.signUp(EMAIL, 'Manuel', role);
-    return credentialId;
+  const signUp = async (role: string | null = null) => {
+    const user = User.register(
+      UserId.generate(),
+      { email: EMAIL, name: 'Manuel' },
+      [],
+      T0,
+    );
+    user.role = role;
+    user.uncommit();
+    await freshEm(module).persist(user).flush();
+    userId = user.id;
+    return user;
   };
 
-  const provision = (id: CredentialId = credentialId) =>
+  const authenticationSetsRole = (role: string) =>
+    freshEm(module).nativeUpdate(User, { id: userId }, { role });
+
+  const provision = (id: UserId = userId) =>
     inRequestContext(module, () => provisioning.provision(id));
 
   const countAuthorships = () => freshEm(module).count(Authorship);
 
   beforeEach(async () => {
-    identities = new FakeIdentityProvider();
-    module = await createCqrsTestingModule([
-      UserProvisioning,
-      { provide: IdentityProvider, useValue: identities },
-    ]);
+    module = await createCqrsTestingModule([UserProvisioning]);
     provisioning = module.get(UserProvisioning);
     authors = module.get(AuthorRepository);
-    signUp();
   });
 
   afterEach(() => module.close());
 
-  it('the first access creates the domain profile', async () => {
+  it('a reader is the user authentication wrote, and nothing is created for them', async () => {
+    await signUp();
+
     const user = await provision();
 
     expect(user).toBeInstanceOf(User);
+    expect(user.id.equals(userId)).toBe(true);
     expect(user.email.value).toBe(EMAIL);
     expect(user.roles).toEqual([]);
     expect(await freshEm(module).count(User)).toBe(1);
     expect(await countAuthorships()).toBe(0);
   });
 
-  it('the second access reuses the profile instead of creating another', async () => {
-    const first = await provision();
-
-    const second = await provision();
-
-    expect(second.id.equals(first.id)).toBe(true);
-    expect(await freshEm(module).count(User)).toBe(1);
-  });
-
-  it('whoever arrives already as an author gets the role and the authorship row', async () => {
-    signUp(AUTHOR_ROLE);
+  it('an author gets the authorship row of this tenant', async () => {
+    await signUp(AUTHOR_ROLE);
 
     const user = await provision();
 
@@ -80,9 +78,8 @@ describe('UserProvisioning', () => {
     expect(await freshEm(module).count(User)).toBe(1);
   });
 
-  it('a credential holding several roles, the way Better Auth stores them, gets each one', async () => {
-    signUp('user');
-    await identities.addRole(credentialId, AUTHOR_ROLE);
+  it('a user holding several roles, the way Better Auth stores them, is an author too', async () => {
+    await signUp(`user,${AUTHOR_ROLE}`);
 
     const user = await provision();
 
@@ -90,24 +87,25 @@ describe('UserProvisioning', () => {
     expect(await countAuthorships()).toBe(1);
   });
 
-  it('a credential the provider does not know does not become a profile', async () => {
-    identities.forget(credentialId);
-
-    await expect(provision()).rejects.toBeInstanceOf(UnknownIdentityException);
-    expect(await freshEm(module).count(User)).toBe(0);
+  it('a session whose user does not exist is refused', async () => {
+    await expect(provision(UserId.generate())).rejects.toBeInstanceOf(
+      UnknownIdentityException,
+    );
+    expect(await countAuthorships()).toBe(0);
   });
 
-  it('another credential with the same email reuses the profile that already exists', async () => {
+  it('provisioning again changes nothing', async () => {
+    await signUp(AUTHOR_ROLE);
     const first = await provision();
 
-    const other = identities.signUp(EMAIL, 'Manuel');
-    const same = await provision(other);
+    const again = await provision();
 
-    expect(same.id.equals(first.id)).toBe(true);
+    expect(again.id.equals(first.id)).toBe(true);
     expect(await freshEm(module).count(User)).toBe(1);
+    expect(await countAuthorships()).toBe(1);
   });
 
-  describe('requests that meet the credential at once', () => {
+  describe('requests that meet an author at once', () => {
     const AT_ONCE = 4;
 
     const atOnce = () =>
@@ -121,48 +119,35 @@ describe('UserProvisioning', () => {
       );
     });
 
-    it('create one profile between them', async () => {
-      const users = await atOnce();
-
-      expect(new Set(users.map((user) => user.id.value)).size).toBe(1);
-      expect(await freshEm(module).count(User)).toBe(1);
-    });
-
-    it('give an author one authorship between them', async () => {
-      signUp(AUTHOR_ROLE);
+    it('give them one authorship between them', async () => {
+      await signUp(AUTHOR_ROLE);
 
       const users = await atOnce();
 
       expect(users.every((user) => user.hasRole(AUTHOR_ROLE))).toBe(true);
-      expect(await freshEm(module).count(User)).toBe(1);
       expect(await countAuthorships()).toBe(1);
     });
 
-    it('promote an existing profile once', async () => {
+    it('promote a reader once', async () => {
+      await signUp();
       await provision();
-      await identities.grantRole(credentialId, AUTHOR_ROLE);
+      await authenticationSetsRole(AUTHOR_ROLE);
 
       const users = await atOnce();
 
       expect(users.every((user) => user.hasRole(AUTHOR_ROLE))).toBe(true);
       expect(await countAuthorships()).toBe(1);
-      expect(
-        (
-          await freshEm(module).findOneOrFail(User, {
-            email: Email.parse(EMAIL),
-          })
-        ).version,
-      ).toBe(2);
     });
   });
 
   describe('promotion is a row, not a second identity', () => {
     const promote = async () => {
-      await identities.grantRole(credentialId, AUTHOR_ROLE);
+      await authenticationSetsRole(AUTHOR_ROLE);
       return provision();
     };
 
-    it('promoting keeps the very same user id and adds one authorship', async () => {
+    it('promoting keeps the very same user and adds one authorship', async () => {
+      await signUp();
       const before = await provision();
 
       const after = await promote();
@@ -174,6 +159,7 @@ describe('UserProvisioning', () => {
     });
 
     it('the promoted user reads back as an Author, cast over the row that was just created', async () => {
+      await signUp();
       await provision();
       const promoted = await promote();
 
@@ -184,27 +170,6 @@ describe('UserProvisioning', () => {
       expect(author).toBeInstanceOf(Author);
       expect(author?.authorship.id.equals(promoted.id)).toBe(true);
       expect(author?.hasRole(AUTHOR_ROLE)).toBe(true);
-    });
-
-    it('provisioning again after the promotion changes nothing', async () => {
-      await provision();
-      const promoted = await promote();
-
-      const again = await provision();
-
-      expect(again.id.equals(promoted.id)).toBe(true);
-      expect(again.roles).toEqual([AUTHOR_ROLE]);
-      expect(await freshEm(module).count(User)).toBe(1);
-      expect(await countAuthorships()).toBe(1);
-    });
-
-    it('the version tells the promotion happened on the same stream', async () => {
-      const before = await provision();
-      expect(before.version).toBe(1);
-
-      const after = await promote();
-
-      expect(after.version).toBe(2);
     });
   });
 });

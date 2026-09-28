@@ -4,6 +4,7 @@ import type { DatabaseEntities } from '@nestposts/database';
 import { DatabaseModule } from '@nestposts/database';
 import { OnDemandNotifications } from '@nestposts/notifications/domain/notification/on-demand-notifications';
 import { LoggingOnDemandNotifications } from '@nestposts/notifications/infrastructure/on-demand/logging-on-demand-notifications';
+import { SoftDeleteModule } from '@nestposts/platform/infrastructure/persistence/soft-delete/soft-delete.module';
 import { IdentityProvider } from '@nestposts/users/domain/user/identity.provider';
 
 import { AuthService } from '../../domain/auth/auth.service';
@@ -77,7 +78,11 @@ export class BetterAuthModule {
        * second set of plugins, a second JWKS, and sessions one half issues that the other rejects.
        */
       global: true,
-      imports: [...imports, DatabaseModule.forFeature(entities)],
+      imports: [
+        ...imports,
+        DatabaseModule.forFeature(entities),
+        SoftDeleteModule,
+      ],
       providers: [
         BetterAuthConfigFactory.from(options.config),
         BetterAuthAdapterFactory,

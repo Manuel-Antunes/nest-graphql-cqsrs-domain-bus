@@ -6,6 +6,7 @@ import { EventBus } from '@nestjs/cqrs';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { FastifyAdapter } from '@nestjs/platform-fastify';
 import { Test } from '@nestjs/testing';
+import { AuthUser } from '@nestposts/auth/domain/auth/auth-user.entity';
 import { SubscriptionBus } from '@nestposts/cqsrs';
 import { ROOT_TENANT_SCHEMA, TENANT_MIGRATIONS } from '@nestposts/database';
 import { migrate } from '@nestposts/migrator/main';
@@ -17,8 +18,8 @@ import {
 } from '@nestposts/users/domain/user/author.entity';
 import { IdentityProvider } from '@nestposts/users/domain/user/identity.provider';
 import { User } from '@nestposts/users/domain/user/user.entity';
-import { CredentialId } from '@nestposts/users/domain/user/vo/credential-id';
 import { Email } from '@nestposts/users/domain/user/vo/email';
+import { UserId } from '@nestposts/users/domain/user/vo/user-id';
 
 import { AppModule } from '../src/app.module';
 import { PostRequest } from '../src/application/shared/post-request';
@@ -30,7 +31,7 @@ describe('posts (e2e)', () => {
   let client: GraphqlClient;
   let eventBus: EventBus;
   let identities: IdentityProvider;
-  let credentialId: string;
+  let userId: string;
   const rootEm = () =>
     app.get(MikroORM).em.fork({ schema: ROOT_TENANT_SCHEMA });
   const profileCount = () =>
@@ -112,10 +113,10 @@ describe('posts (e2e)', () => {
     );
     await app.listen(0, '127.0.0.1');
     client = await GraphqlClient.for(app);
-    credentialId = await client.signUp('manuel@example.com', 'manuel');
+    userId = await client.signUp('manuel@example.com', 'manuel');
     profilesAfterSignUp = await profileCount();
     identities = app.get(IdentityProvider);
-    await identities.grantRole(CredentialId.parse(credentialId), AUTHOR_ROLE);
+    await identities.grantRole(UserId.parse(userId), AUTHOR_ROLE);
     eventBus = app.get(EventBus);
     eventBus.subscribe((event) => published.push(event));
     app
@@ -145,14 +146,14 @@ describe('posts (e2e)', () => {
       expect(await profileCount()).toBe(profilesAfterSignUp);
     });
 
-    it('a identidade que a porta devolve é a mesma que a sessão carrega', async () => {
-      const identity = await identities.findById(
-        CredentialId.parse(credentialId),
-      );
+    it('the user the session names is the very row the sign-up wrote', async () => {
+      const user = await rootEm().findOneOrFail(User, {
+        id: UserId.parse(userId),
+      });
 
-      expect(identity).not.toBeNull();
-      expect(identity!.email.value).toBe('manuel@example.com');
-      expect(identity!.role).toBe(AUTHOR_ROLE);
+      expect(user).toBeInstanceOf(AuthUser);
+      expect(user.email.value).toBe('manuel@example.com');
+      expect(user.role).toBe(AUTHOR_ROLE);
     });
   });
 
@@ -869,8 +870,9 @@ describe('posts (e2e)', () => {
 
     it('a new organization is a tenant: its schema is made and migrated when the organization is', async () => {
       expect(await tablesOf(TENANT_SCHEMA)).toEqual(
-        expect.arrayContaining(['posts', 'tags', 'users', 'notifications']),
+        expect.arrayContaining(['posts', 'tags', 'authors', 'notifications']),
       );
+      expect(await tablesOf(TENANT_SCHEMA)).not.toContain('users');
     });
 
     it('what is written in a tenant is read in that tenant, and nowhere else', async () => {

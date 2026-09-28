@@ -13,7 +13,6 @@ import { AUTHOR_ROLE } from './author.entity';
 import { UserDeletedEvent } from './event/user-deleted.event';
 import { UserRegisteredEvent } from './event/user-registered.event';
 import { UserRestoredEvent } from './event/user-restored.event';
-import { UserRoleGrantedEvent } from './event/user-role-granted.event';
 import { InvalidUserException } from './exception/invalid-user.exception';
 import { USER_NOTIFIABLE_TYPE, User } from './user.entity';
 import { Email } from './vo/email';
@@ -121,37 +120,28 @@ describe('User', () => {
     });
   });
 
-  describe('granting a role is an event on the same stream', () => {
-    it('grantRole raises UserRoleGranted and keeps the identity', () => {
+  describe('the roles are the role column, which authentication manages', () => {
+    it('reads a comma-separated role as the roles held', () => {
       const user = register();
-      user.uncommit();
 
-      user.grantRole(AUTHOR_ROLE, later);
+      user.role = ` user , ${AUTHOR_ROLE} `;
 
-      expect(user.id.equals(id)).toBe(true);
-      expect(user.roles).toEqual([AUTHOR_ROLE]);
-      expect(user.version).toBe(2);
-      expect(user.getUncommittedEvents()).toEqual([
-        new UserRoleGrantedEvent(id.value, AUTHOR_ROLE, later),
-      ]);
+      expect(user.roles).toEqual(['user', AUTHOR_ROLE]);
+      expect(user.hasRole(AUTHOR_ROLE)).toBe(true);
     });
 
-    it('granting the same role twice is refused', () => {
-      const user = register([AUTHOR_ROLE]);
+    it('holds no role when the column is empty', () => {
+      const user = register();
 
-      expect(() => user.grantRole(AUTHOR_ROLE, later)).toThrow(
-        /já tem o papel/,
-      );
+      user.role = null;
+
+      expect(user.roles).toEqual([]);
+      expect(user.hasRole(AUTHOR_ROLE)).toBe(false);
     });
 
-    it('replaying the grant lands on the same roles', () => {
-      const user = register();
-      user.grantRole(AUTHOR_ROLE, later);
-
-      const sourced = new User();
-      sourced.loadFromHistory(user.getUncommittedEvents());
-
-      expect(stateOf(sourced)).toEqual(stateOf(user));
+    it('registering with roles writes them in that same shape', () => {
+      expect(register(['user', AUTHOR_ROLE]).role).toBe(`user,${AUTHOR_ROLE}`);
+      expect(register().role).toBeNull();
     });
   });
 
@@ -195,14 +185,13 @@ describe('User', () => {
     const user = register();
     expect(user.version).toBe(1);
 
-    user.grantRole(AUTHOR_ROLE, later);
     user.softDelete(later);
     user.restore(later);
 
-    expect(user.version).toBe(4);
+    expect(user.version).toBe(3);
     const sourced = new User();
     sourced.loadFromHistory(user.getUncommittedEvents());
-    expect(sourced.version).toBe(4);
+    expect(sourced.version).toBe(3);
   });
 
   describe('a user is notifiable', () => {

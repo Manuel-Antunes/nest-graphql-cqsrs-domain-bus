@@ -1,4 +1,4 @@
-import type { CredentialId } from '@nestposts/users/domain/user/vo/credential-id';
+import type { UserId } from '@nestposts/users/domain/user/vo/user-id';
 
 import type { Session } from './session';
 
@@ -16,7 +16,7 @@ export interface NewCredential extends PasswordCredentials {
 /** What signing in produced: the session that now exists, whoever is holding the cookie for it. */
 export interface SignedIn {
   readonly token: string;
-  readonly credentialId: CredentialId;
+  readonly userId: UserId;
 }
 
 /**

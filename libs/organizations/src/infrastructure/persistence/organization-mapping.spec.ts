@@ -9,7 +9,7 @@ import type { AnyMikroORM } from '@nestposts/database/testing';
 import { closeTestDatabase, testDatabase } from '@nestposts/database/testing';
 import { OnDemandNotifications } from '@nestposts/notifications/domain/notification/on-demand-notifications';
 import { LoggingOnDemandNotifications } from '@nestposts/notifications/infrastructure/on-demand/logging-on-demand-notifications';
-import { CredentialId } from '@nestposts/users/domain/user/vo/credential-id';
+import { UserId } from '@nestposts/users/domain/user/vo/user-id';
 import { mikroOrmAdapter } from 'better-auth-mikro-orm';
 
 import { Member } from '../../domain/organization/member.entity';
@@ -174,7 +174,7 @@ describe('better-auth writing through the organization entities', () => {
     ]);
 
     expect(member.belongsTo(OrganizationId.parse('org_2'))).toBe(true);
-    expect(member.identifies(CredentialId.parse('cred_2'))).toBe(true);
+    expect(member.identifies(UserId.parse('cred_2'))).toBe(true);
     expect(member.isOwner()).toBe(true);
     expect(member.organization.getEntity().slug.value).toBe('soylent');
     expect(member.user.getEntity()).toBeInstanceOf(AuthUser);
@@ -245,7 +245,7 @@ describe('better-auth writing through the organization entities', () => {
     expect(team.belongsTo(OrganizationId.parse('org_5'))).toBe(true);
     expect(team.belongsTo(OrganizationId.parse('org_1'))).toBe(false);
     expect(team.organization.getEntity().slug.value).toBe('globex');
-    expect(member.identifies(CredentialId.parse('cred_5'))).toBe(true);
+    expect(member.identifies(UserId.parse('cred_5'))).toBe(true);
     expect(member.team.getEntity().name.value).toBe('Design');
     expect(member.user.getEntity()).toBeInstanceOf(AuthUser);
   });

@@ -11,6 +11,7 @@ import type { User } from '@nestposts/users/domain/user/user.entity';
 import type { CalendarTesting } from '../../../../test/support/calendar-fixtures';
 import {
   calendarTesting,
+  givenAMember,
   givenAnEvent,
   givenATeam,
   TENANT,
@@ -21,7 +22,6 @@ import {
   inRequestContext,
   RecordingEvents,
 } from '../../../../test/support/cqrs-testing-module';
-import { givenAUser } from '../../../../test/support/post-fixtures';
 import { CalendarEventRequest } from '../calendar-event-request';
 import { UpdateCalendarEventCommand } from './update-calendar-event.command';
 
@@ -59,9 +59,9 @@ describe('UpdateCalendarEventCommand.Handler', () => {
       calendar.imports,
     );
     commands = module.get(CommandBus);
-    ana = await givenAUser(module, 'ana@example.com', 'ana');
-    rui = await givenAUser(module, 'rui@example.com', 'rui');
-    lia = await givenAUser(module, 'lia@example.com', 'lia');
+    ana = await givenAMember(module, 'ana@example.com', 'ana');
+    rui = await givenAMember(module, 'rui@example.com', 'rui');
+    lia = await givenAMember(module, 'lia@example.com', 'lia');
     events = new RecordingEvents(module);
   });
 
@@ -132,9 +132,7 @@ describe('UpdateCalendarEventCommand.Handler', () => {
 
   it('assigns a team on top of the participants it had, and null takes it away again', async () => {
     const event = await givenAnEvent(module, ana, [rui]);
-    const team = await givenATeam(module, [
-      calendar.identities.signUp('lia@example.com', 'lia'),
-    ]);
+    const team = await givenATeam(module, [lia.id]);
 
     await execute(event.id, { teamId: team.id });
     const assigned = await saved(event.id);

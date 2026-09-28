@@ -308,9 +308,11 @@ libs/database            the one door to MikroORM: the connection, DatabaseModul
                          inRequestContext, what a driver exception means (see below), and TENANCY:
                          the tenant's schema, migrated on its first request (see Tenancy)
 libs/users               domain/user + its ORM mapping and repositories, wired by
-                         UsersInfrastructureModule. It knows nothing about Better Auth
+                         UsersInfrastructureModule: THE user, one row in public.users for every
+                         tenant, and the per-tenant authorship. It knows nothing about Better Auth
 libs/auth                authentication: the Better Auth server instance and its CORE plugin
-                         registry, auth_user and the tables Better Auth generates, the AuthService
+                         registry, AuthUser (a kind of User, on the same public.users — see its
+                         README) and the tables Better Auth generates, the AuthService
                          port and the IdentityProvider adapter — and every email authentication
                          sends, as a notification (BetterAuthEmails). Knows nothing about
                          organizations
@@ -392,10 +394,13 @@ libs/ui                  the design system: shadcn base-nova primitives (Base UI
                          components built on them, the hooks and the theme. A SOURCE package — Next
                          compiles it with apps/web (transpilePackages); it has a README
 libs/billing             billing through Polar, contributed to the Better Auth instance like the
-                         organization plugin: the catalog (Polar products as plans), a customer's
-                         state and portal, Polar's checkout, and its subscription webhooks handed to
-                         the listeners a composition root registers — apps/web's email the change
-                         and grant or remove `author`. Off without POLAR_ACCESS_TOKEN. It has a README
+                         organization plugin: @polar-sh/better-auth's own checkout, portal and
+                         usage (with the referenceId and missing-customer checks it lacks), the
+                         catalog (Polar products as plans), a request-scoped BillingService over
+                         auth.api, and its subscription webhooks emitted on @nestjs/event-emitter
+                         to its own listeners, which email the change and grant or remove
+                         `author`. A plain module that owns its config (see Configuration). Off
+                         without POLAR_ACCESS_TOKEN. It has a README
 libs/tanstack-query-graphql  GraphQL over TanStack Query, with Apollo's InMemoryCache as the
                          normalized store underneath: GqlRpc (option builders keyed
                          ['graph', document, variables]), GraphQueryCache/GraphMutationCache and
@@ -489,9 +494,17 @@ else. `apps/tagging/src/config` is the reference shape:
   client); each application's `aws.config.ts` and `inngest.config.ts` decide it, LocalStack's
   credential fallback included, and so is `libs/asset`: posts-api's `storage.config.ts` reads the
   bucket and `BucketDisks` builds the drivers. Libraries with a parser of their own —
-  `AuthConfiguration`, `firebasePushOptionsFromEnv`, `BillingConfiguration` — keep it, and
-  the application's config calls it with `process.env`: one rule, shared by every process that must
-  agree on it, read where the application says.
+  `AuthConfiguration`, `firebasePushOptionsFromEnv` — keep it, and the application's config calls it
+  with `process.env`: one rule, shared by every process that must agree on it, read where the
+  application says.
+- **A domain module of THIS application owns its configuration, and is a plain module.** The rule
+  above is for `libs/core/*` — general-purpose libraries a caller configures. A module that is part of
+  this system's domain is as simple as it can be instead: `libs/billing` keeps a `config/` folder with
+  its `registerAs` (`billingConfig`, reading `process.env` itself), registers it with
+  `ConfigModule.forFeature` inside `BillingInfrastructureModule` and exports it, and its services
+  inject `billingConfig.KEY`. No `forRoot(config)`, no option objects, no string tokens for the
+  config: the application imports the module and loads nothing. Where a value is needed before the
+  container exists — which Better Auth plugins to register — the module calls `billingConfig()`.
 - **Clients are providers of `AppModule`, and DI tokens are classes**: the Inngest client is
   `provide: Inngest` (one per process, the same object the proxy sends on and the strategy serves
   from), a `ClientProxy` is provided under the class that builds it (`provide: PostEventsClient`).
@@ -508,7 +521,11 @@ else. `apps/tagging/src/config` is the reference shape:
   of parsing `process.env`. The schemas are **Zod and literals only** — `env.mjs` reaches the browser
   bundle, so a schema importing `@nestposts/database` for a default would ship MikroORM to it. Reading
   a server variable from a client component throws, which is the point. `emptyStringAsUndefined`
-  makes `POLAR_ACCESS_TOKEN=''` (how `apps/web-e2e` turns billing off) read as unset.
+  makes an empty variable read as unset. Billing's schema comes from `libs/billing` itself
+  (`config/billing-env.schema.ts`, Zod alone — importing it from `billing.config.ts` would pull
+  `@nestjs/config`, whose `dotenv` asks for `fs`, into the browser bundle and fail `next build`), and
+  the library's `registerAs` treats `POLAR_ACCESS_TOKEN=''` — how `apps/web-e2e` turns billing off —
+  as unset the same way.
   `lib/endpoints.ts` holds what is not environment: the tenant header, the proxy paths, the derived
   posts-subgraph URL.
 
@@ -592,8 +609,15 @@ the storage engine and the tenant resolver are the application's. The essentials
   `AFTER_COMMIT`, outside the transaction's scope. `detached()` is a transaction of its own even inside
   another (`REQUIRES_NEW`), for a publish nobody awaits — as a savepoint of the caller's transaction it
   would release after that transaction committed (measured: `RELEASE SAVEPOINT can only be used in
-  transaction blocks`, from `UserProvisioning` publishing inside `UserRepository.exclusively`).
-  MikroORM's is one connection, so it answers `requiresSequentialInvocation` and every phase runs its
+  transaction blocks`, from `UserProvisioning` publishing inside `UserRepository.exclusively`). It is
+  opened on a **fork of its own**, never through the context's entity manager: MikroORM's
+  `REQUIRES_NEW` suspends the caller's transaction by clearing it from the caller's fork until the new
+  one ends — right for a caller that awaits it, wrong for an unawaited `commit()`. Measured on AWS,
+  where posts-api stores its events (`POSTS_SUBSCRIPTION_SOURCE=feed`) and so every publish writes:
+  the first request in a new tenant provisioned the author, the `authors` row went out on another
+  connection while `UserRegistered` was being stored, and violated `authors_id_foreign` — which the
+  exception filter reported as `o autor informado não existe`. A tenant's transaction is a fresh fork
+  of the tenant's entity manager too, so no identity map is shared across units. MikroORM's is one connection, so it answers `requiresSequentialInvocation` and every phase runs its
   actions one at a time.
 - **Publishing is staging, and `PREPARE_COMMIT` writes and tells.** `TransportEventBusService` is Axon
   5's `EventSink`/`SimpleEventBus`: inside a unit, every publish becomes an `EventMessage` and is staged,
@@ -905,13 +929,12 @@ ProjectPostCompletion        ◀──  posts.PostCreated.<postId>      ◀─�
   throws fails the ingestion, and the transport's retry (`@RetryPolicy`) delivers only what did not
   go out. The notification id is derived from its key and its notifiable, so a retried `notify` is the
   same notification.
-- **The notification tables are tenant tables, beside the users they are for.** They are written by
-  the notificator's delivery and read and written by its subgraph (`notifications`,
+- **The notification tables are tenant tables; the users they are for are the system's.** They are
+  written by the notificator's delivery and read and written by its subgraph (`notifications`,
   `unreadNotificationCount`, `markNotificationAsRead`, `markAllNotificationsAsRead`,
   `deleteNotification`, `registerDevice`, `removeDevice`), and the subgraph finds the caller's `User`
-  by the session's email — in the tenant the request names, like every other read. It never
-  provisions a profile: a session whose user posts-api has not provisioned yet reads no notifications
-  and a count of zero, rather than an error the bell would show on every page. Its inbox is
+  in `public.users` by the session's email, and their notifications in the tenant the request names,
+  like every other read. A user nobody notified reads an empty list and a count of zero. Its inbox is
   `@nestjs/outbox`'s `transport.outbox_inbox`, shared with every service and keyed by
   `(consumer, message)`, so two services binding the same event each keep their own memory of it.
 - **The notifications subgraph contributes to `IUser`, and only to its owner.** `IUser` is an
@@ -982,9 +1005,9 @@ are three kinds:
 
 | pin | where | what |
 |---|---|---|
-| `SYSTEM_SCHEMA` (`public`) | `public` | Better Auth's tables and the organizations' — `libs/auth`, `libs/organizations` |
+| `SYSTEM_SCHEMA` (`public`) | `public` | the users (`libs/users`' `User`, which Better Auth writes as `AuthUser`), Better Auth's tables and the organizations' — `libs/users`, `libs/auth`, `libs/organizations` |
 | `TRANSPORT_SCHEMA` (`libs/database`) | `transport` | the messaging's bookkeeping: the outbox and the inbox (`libs/core/outbox-mikro-orm`) and the event store's `event_log` (`libs/core/event-store-mikro-orm`) |
-| `TENANT_SCHEMA` (`*`, MikroORM's wildcard) | `tenant_<name>` | everything else: posts, tags, users, notifications, devices |
+| `TENANT_SCHEMA` (`*`, MikroORM's wildcard) | `tenant_<name>` | everything else: posts, tags, authors, calendar events, notifications, devices |
 
 A wildcard table exists once per tenant, and which copy a query reaches is the schema of the entity
 manager it runs on. `tenant_root` is the root tenant's — whoever names no tenant, the visitor who never
@@ -1028,15 +1051,16 @@ signed in included. An organization is a tenant: `tenant_<slug>`. `libs/database
   `x-tenant` of its metadata — an event read back from the event store says it there, the store being
   one table for every tenant whose engine fills the tenant in from the row when the metadata does not —
   or `Tenant.of(event)`.
-- **A sign-up provisions its profile in the root tenant**; any other tenant provisions the caller's
-  profile on its first request there, through the session pipe, as before. A screen asks several root
-  fields at once (`me`, `members`, `events`), so those first requests arrive together: whatever
-  provisioning has to WRITE runs under `UserRepository.exclusively(email)`, a transaction holding
-  `pg_advisory_xact_lock` on the schema and the address, and decides again inside it. Without it each
-  request found no profile and made its own — measured, four requests, four profiles. The path that
-  finds everything in place takes no lock. `user-provisioning.service.spec` opens the pool's
-  connections before racing, because on a cold pool only the first request has one and the race
-  never happens.
+- **A user is one row for every tenant; what a tenant provisions is the authorship.** The row a
+  sign-up writes in `public.users` is the `User` of every tenant, so a tenant keeps no profile of its
+  own. What it keeps is the `authors` row that makes an author an `Author` there, which the posts
+  reference: `UserProvisioning` creates it on the caller's first request in the tenant, through the
+  session pipe (and in the root tenant at once, from Better Auth's hooks). A screen asks several root
+  fields at once (`me`, `members`, `events`), so those first requests arrive together: the write runs
+  under `UserRepository.exclusively(email)`, a transaction holding `pg_advisory_xact_lock` on the
+  schema and the address, and decides again inside it. The path that finds everything in place takes
+  no lock. `user-provisioning.service.spec` opens the pool's connections before racing, because on a
+  cold pool only the first request has one and the race never happens.
 
 The tenant then **rides the request the whole way**, and that path is worth following because it is the
 same one everything else takes:
@@ -1212,6 +1236,9 @@ libs/platform/src/domain/shared/soft-delete/           ← the rule
 libs/platform/src/infrastructure/persistence/soft-delete/   ← the mechanism
   soft-delete-orm.entity.ts             → activeFilter, softDeleteProperty, softDeleteIndex
   soft-delete.subscriber.ts             → swaps DELETE for UPDATE deleted_at
+  soft-delete.module.ts                 → SoftDeleteModule: the subscriber registers itself on
+                                          the ORM, imported by every module that maps a
+                                          soft-deletable table — no connection config lists it
 ```
 
 The ports are **abstract classes** in `libs/*/src/domain/*/*.repository.ts` (they double as DI tokens)
@@ -1521,7 +1548,13 @@ because it is the default, then RabbitMQ — and nothing is skipped in either. W
 where a claim is checked, which `infrastructure/messaging/wire.ts` is: a queue bound to `posts.#` and drained
 through the management API, or the dev server's own `/v1/events`. A test that could only be written
 against one of them would be a test of the transport rather than of the system, which is what that
-port exists to prevent.
+port exists to prevent. One more thing differs, on purpose: **the Inngest run is the serverless
+shape**, so there posts-api reads its subscriptions from the event store
+(`POSTS_SUBSCRIPTION_SOURCE=feed`, `RunEnvironment.postsSubscriptionSource`), as it does on AWS — and as it would on
+Vercel, where Inngest is the transport. In `feed` every publish writes, an unawaited one included, and
+the `authors_id_foreign` failure described under `MikroOrmTransactionManager`'s detached transaction
+reached AWS because no suite ran posts-api in that mode. The RabbitMQ run keeps a long-lived
+process's `local`.
 
 It provisions everything itself, through **Testcontainers**: Postgres, MinIO (the bucket and its
 policies included), Mailpit (where `notifications.spec` reads the author's email), the broker or the
@@ -1850,7 +1883,8 @@ DTOs count.
   string, so the first `me` of such an account failed with `name não pode ser vazio`, and only
   through the flows the sign-up form does not cover. `UserName.from(given, email)` names it after the
   email's local part; `init-auth`'s `databaseHooks.user.create.before` applies it to every new user,
-  and `BetterAuthIdentityProvider` to the rows that already exist.
+  and `Migration20260928130000_users` did the same, in SQL, to the rows that already existed — a row
+  is hydrated as a `User` now, and an empty name would fail the read itself.
 - **A schema-first subgraph's SDL is its files MERGED, not concatenated.** posts-api declares
   `type Mutation` in more than one file; Nest merges them (`mergeTypeDefs`) and composition, handed
   the text, reports `There can be only one type named "Mutation"`. `readSubgraphSdl` merges the way
@@ -1895,7 +1929,9 @@ DTOs count.
   from `.env.test`, never as a bare `POLAR_ACCESS_TOKEN`** (`TestEnvironment`): the root `.env`'s
   token is a PRODUCTION one, and a suite reading it would create products and webhooks there.
 - **A Polar webhook is delivered at least once, and not in order.** A listener that throws answers
-  `400` and Polar retries, so a `subscription.active` can arrive again after the `revoked`. That is
+  `400` and Polar retries — which needs `@OnEvent(..., { suppressErrors: false })`, because
+  `@nestjs/event-emitter` otherwise logs the error and the delivery answers `200` for a change nobody
+  applied — so a `subscription.active` can arrive again after the `revoked`. That is
   why `SubscriptionAuthorship` grants `author` by `BillingAccounts.isSubscribed` — Polar's state —
   and not by the event it was told, and why the subscription email is keyed by
   `<subscription>:<event>`, so the delivery ledger sends it once.
@@ -1905,8 +1941,9 @@ DTOs count.
   No matching signature found` and nothing reacted. `libs/billing` serves `/polar/webhooks` itself
   (`PolarWebhooks`, over `standardwebhooks`), accepting either form.
 - **A Better Auth role is a comma-separated list.** `addRole` writes `user,author`; posts-api's
-  `UserProvisioning` read `identity.role` as ONE role, so a subscriber the web had made an author was
-  refused by the domain (`não é autor`) while the guard let them through. It splits now.
+  `UserProvisioning` once read it as ONE role, so a subscriber the web had made an author was refused
+  by the domain (`não é autor`) while the guard let them through. `User.roles` splits it, and the
+  domain only reads it: roles are granted and removed through Better Auth, never by the aggregate.
 - **`apps/web`'s `build` did not depend on the libraries' sources.** Its inputs were `production`
   alone, so a change in `libs/*` was a cache HIT and `test-e2e` ran a stale `.next` — it served the
   old Polar webhook endpoint after the fix had passed every other check. `^production` is in its
@@ -1920,11 +1957,19 @@ DTOs count.
   factory with NO arguments to discover the driver, the destructuring throws, the error is swallowed,
   and the driver-specific `EntityManager` is never registered — one `console.warn` is all it says.
   `DatabaseModule.forRootAsync` passes `PostgreSqlDriver`.
-- **`@polar-sh/better-auth`'s `portal()` lists ANY organization's subscriptions.**
-  `/customer/subscriptions/list?referenceId=…` calls `polar.subscriptions.list` with the
-  organization's access token and no membership check, for any signed-in user. `libs/billing`
-  registers neither `portal()` nor `usage()` and serves the state and the portal itself; turning on
-  organization billing means writing that check first.
+- **`@polar-sh/better-auth` passes a `referenceId` straight through, and 500s for a user it does
+  not know** (checked in 1.8.4, the latest). `/customer/subscriptions/list?referenceId=…` lists any
+  organization's subscriptions with the organization's access token, for any signed-in user, and
+  `/checkout` stamps any `referenceId` on anybody's checkout; every `portal()`/`usage()` endpoint
+  throws a generic `INTERNAL_SERVER_ERROR` for a user with no Polar customer. `libs/billing`
+  registers the plugin anyway and closes both with `hooks.before` of its own plugin: Better Auth's
+  `requireOrgRole` on a `referenceId` (a member reads, an `owner`/`admin` buys), and
+  `BillingAccounts.ensureCustomer` before `/customer/*` and `/usage/*`, which makes the customer when
+  the user first uses billing. `createCustomerOnSignUp` stays OFF: with it, the plugin creates the
+  customer inside the sign-up, and Polar refusing an address (`example.com does not accept email`,
+  the e2e's global setup) or being down makes the sign-up itself a `500`. The webhook endpoint stays
+  this library's: `@polar-sh/sdk`'s
+  `validateEvent` still base64-encodes a `whsec_` secret's text in 0.49.0.
 
 ## `apps/web` holds its own Better Auth, in a Nest container
 
