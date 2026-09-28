@@ -169,14 +169,16 @@ They hide controls; the API is what refuses.
 `/settings/billing` is better-auth-ui's billing view (`components/auth/billing`, copied from its
 registry like every other auth screen), over Polar through `libs/billing` — see its README. It
 exists only when `POLAR_ACCESS_TOKEN` is set: `WebAuth.billingEnabled()` decides, in the layout, whether
-`billingPlugin` joins the plugins `AuthProvider` gets, and the settings route answers 404 for
-`billing` otherwise. The user menu links to it when it is there.
+`billingPlugin` joins the plugins `AuthProvider` gets, and the settings and organization routes
+answer 404 for `billing` otherwise. The user menu links to it when it is there, and each
+organization's settings have the same view for the organization (`/organization/billing`).
 
-The adapter (`lib/auth/billing-adapter.ts`) is better-auth-ui's Polar adapter with three operations
-swapped for `libs/billing`'s endpoints: the plans come from the Polar catalog rather than a list
-written here, the state of a user Polar has never seen is "no subscription" rather than an error,
-and the portal creates the customer it opens. Checkout is the Polar plugin's, by product id. Only
-personal billing is on — organization billing needs an authorization check the Polar plugin lacks.
+The adapter (`lib/auth/billing-adapter.ts`) is better-auth-ui's Polar adapter as it comes, talking
+to `@polar-sh/better-auth`'s own `checkout`, `portal` and `usage` endpoints, with one operation
+swapped: the plans come from `libs/billing`'s catalog (`/billing/plans`) rather than a list written
+here. Both scopes are on — personal and organization — because `libs/billing` checks every
+`referenceId` the Polar plugin would otherwise take on trust. On the server, `WebAuth.billing()`
+resolves the request-scoped `BillingService`, the same endpoints through `auth.api`.
 
 ## Federação
 

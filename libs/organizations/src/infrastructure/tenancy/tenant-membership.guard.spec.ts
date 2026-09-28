@@ -2,7 +2,7 @@ import type { ExecutionContext } from '@nestjs/common';
 import { ForbiddenException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import type { BetterAuth } from '@nestposts/auth/infrastructure/better-auth/init-auth';
-import type { CredentialId } from '@nestposts/users/domain/user/vo/credential-id';
+import type { UserId } from '@nestposts/users/domain/user/vo/user-id';
 import {
   MemberHasPermission,
   OrgRoles,
@@ -59,7 +59,7 @@ const organizationCalled = (slug: string): Organization => {
 
 describe('a tenant is an organization, and only its members work in it', () => {
   let sessionsAsked: number;
-  let membershipsAsked: CredentialId[];
+  let membershipsAsked: UserId[];
 
   const guard = (session: Session | null = null) => {
     const auth = {
@@ -71,9 +71,9 @@ describe('a tenant is an organization, and only its members work in it', () => {
       },
     } as unknown as BetterAuth;
     const organizations = {
-      findAllOf: async (credentialId: CredentialId) => {
-        membershipsAsked.push(credentialId);
-        return credentialId.value === 'ana'
+      findAllOf: async (userId: UserId) => {
+        membershipsAsked.push(userId);
+        return userId.value === 'ana'
           ? [organizationCalled('acme'), organizationCalled('initech')]
           : [];
       },

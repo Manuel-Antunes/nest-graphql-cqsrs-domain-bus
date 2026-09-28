@@ -1,7 +1,7 @@
 import type { Ref } from '@mikro-orm/core';
 import { BaseEntity } from '@mikro-orm/core';
 import type { AuthUser } from '@nestposts/auth/domain/auth/auth-user.entity';
-import type { CredentialId } from '@nestposts/users/domain/user/vo/credential-id';
+import type { UserId } from '@nestposts/users/domain/user/vo/user-id';
 
 import type { Organization } from './organization.entity';
 import {
@@ -39,7 +39,7 @@ export class Member extends BaseEntity {
     return this.organization.id.equals(organizationId);
   }
 
-  identifies(credentialId: CredentialId | string): boolean {
-    return this.user.id.equals(credentialId);
+  identifies(userId: UserId | string): boolean {
+    return this.user.id.equals(userId);
   }
 }

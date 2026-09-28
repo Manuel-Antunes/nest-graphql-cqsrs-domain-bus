@@ -1,1 +1,1 @@
-export { AuthUserEntitySchema, CredentialIdType } from './auth-user-orm.entity';
+export { AuthUserEntitySchema } from './auth-user-orm.entity';

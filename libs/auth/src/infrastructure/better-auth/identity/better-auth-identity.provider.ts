@@ -1,11 +1,8 @@
 import { MikroORM } from '@mikro-orm/core';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { inRequestContext } from '@nestposts/database';
-import type { Identity } from '@nestposts/users/domain/user/identity.provider';
 import { IdentityProvider } from '@nestposts/users/domain/user/identity.provider';
-import { CredentialId } from '@nestposts/users/domain/user/vo/credential-id';
-import { Email } from '@nestposts/users/domain/user/vo/email';
-import { UserName } from '@nestposts/users/domain/user/vo/user-name';
+import type { UserId } from '@nestposts/users/domain/user/vo/user-id';
 
 import type { BetterAuth } from '../init-auth';
 import { BETTER_AUTH } from '../tokens';
@@ -13,8 +10,6 @@ import { AuthRoles } from './auth-roles';
 
 interface AuthUserRow {
   id: string;
-  email: string;
-  name: string;
   role?: string | string[] | null;
 }
 
@@ -29,78 +24,46 @@ export class BetterAuthIdentityProvider extends IdentityProvider {
     super();
   }
 
-  async findById(credentialId: CredentialId): Promise<Identity | null> {
-    const user = await this.onIdentityStore<AuthUserRow | null>((adapter) =>
-      adapter.findUserById(credentialId.value),
-    );
-    return user ? BetterAuthIdentityProvider.toIdentity(user) : null;
-  }
-
-  async grantRole(credentialId: CredentialId, role: string): Promise<Identity> {
-    this.logger.log(`granting the role ${role} to credential ${credentialId}`);
-    const updated = await this.onIdentityStore<AuthUserRow>((adapter) =>
-      adapter.updateUser(credentialId.value, { role }),
-    );
-    return BetterAuthIdentityProvider.toIdentity(updated);
-  }
-
-  addRole(credentialId: CredentialId, role: string): Promise<Identity> {
-    this.logger.log(`adding the role ${role} to credential ${credentialId}`);
-    return this.changeRoles(credentialId, (stored) =>
-      AuthRoles.adding(stored, role),
+  async grantRole(userId: UserId, role: string): Promise<void> {
+    this.logger.log(`granting the role ${role} to user ${userId}`);
+    await this.onIdentityStore((adapter) =>
+      adapter.updateUser(userId.value, { role }),
     );
   }
 
-  removeRole(credentialId: CredentialId, role: string): Promise<Identity> {
-    this.logger.log(
-      `removing the role ${role} from credential ${credentialId}`,
-    );
-    return this.changeRoles(credentialId, (stored) =>
+  addRole(userId: UserId, role: string): Promise<void> {
+    this.logger.log(`adding the role ${role} to user ${userId}`);
+    return this.changeRoles(userId, (stored) => AuthRoles.adding(stored, role));
+  }
+
+  removeRole(userId: UserId, role: string): Promise<void> {
+    this.logger.log(`removing the role ${role} from user ${userId}`);
+    return this.changeRoles(userId, (stored) =>
       AuthRoles.removing(stored, role),
     );
   }
 
   private async changeRoles(
-    credentialId: CredentialId,
+    userId: UserId,
     change: (stored: AuthUserRow['role']) => string,
-  ): Promise<Identity> {
-    const updated = await this.onIdentityStore<AuthUserRow>(async (adapter) => {
+  ): Promise<void> {
+    await this.onIdentityStore(async (adapter) => {
       const user = (await adapter.findUserById(
-        credentialId.value,
+        userId.value,
       )) as AuthUserRow | null;
       if (!user) {
-        throw new Error(`no credential ${credentialId}`);
+        throw new Error(`no user ${userId}`);
       }
-      return adapter.updateUser(credentialId.value, {
-        role: change(user.role),
-      });
+      return adapter.updateUser(userId.value, { role: change(user.role) });
     });
-    return BetterAuthIdentityProvider.toIdentity(updated);
   }
 
-  private onIdentityStore<T>(
+  private onIdentityStore(
     work: (adapter: any) => Promise<unknown>,
-  ): Promise<T> {
+  ): Promise<unknown> {
     return inRequestContext(this.orm, async () => {
       const context = await this.auth.$context;
-      return (await work(context.internalAdapter)) as T;
+      return work(context.internalAdapter);
     });
-  }
-
-  private static toIdentity(user: AuthUserRow): Identity {
-    const email = Email.parse(user.email);
-    return {
-      credentialId: CredentialId.parse(user.id),
-      email,
-      name: UserName.from(user.name, email),
-      role: BetterAuthIdentityProvider.firstRole(user.role),
-    };
-  }
-
-  private static firstRole(role: AuthUserRow['role']): string | null {
-    if (Array.isArray(role)) {
-      return role[0] ?? null;
-    }
-    return role ?? null;
   }
 }

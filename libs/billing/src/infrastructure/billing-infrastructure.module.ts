@@ -1,69 +1,59 @@
-import type { DynamicModule, Type } from '@nestjs/common';
 import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
+import { UsersInfrastructureModule } from '@nestposts/users/infrastructure/users-infrastructure.module';
 import { Polar } from '@polar-sh/sdk';
 
+import type { BillingConfig } from '../config/billing.config';
+import { billingConfig } from '../config/billing.config';
 import { BillingAccounts } from '../domain/billing/billing-accounts';
 import { BillingCatalog } from '../domain/billing/billing-catalog';
-import type { SubscriptionListener } from '../domain/billing/subscription-listener';
+import { BillingService } from './better-auth/billing.service';
 import { BillingBetterAuthPluginProvider } from './better-auth/billing-better-auth.plugin';
 import { PolarBetterAuthPluginProvider } from './better-auth/polar-better-auth.plugin';
 import { PolarWebhooksBetterAuthPluginProvider } from './better-auth/polar-webhooks-better-auth.plugin';
-import type { BillingConfig } from './billing.config';
+import { BillingEventService } from './events/billing-event.service';
+import { SubscriptionAuthorship } from './listeners/subscription-authorship.listener';
+import { SubscriptionEmails } from './listeners/subscription-emails.listener';
 import { PolarBillingAccounts } from './polar/polar-billing-accounts';
 import { PolarBillingCatalog } from './polar/polar-billing-catalog';
-import { BILLING_CONFIG, SUBSCRIPTION_LISTENERS } from './tokens';
 
-export interface BillingModuleOptions {
-  listeners?: readonly Type<SubscriptionListener>[];
-}
+const billingConfiguration = ConfigModule.forFeature(billingConfig);
 
-@Module({})
+@Module({
+  imports: [billingConfiguration, UsersInfrastructureModule],
+  providers: [
+    {
+      provide: Polar,
+      useFactory: ({ polar }: BillingConfig) =>
+        new Polar({ accessToken: polar?.accessToken, server: polar?.server }),
+      inject: [billingConfig.KEY],
+    },
+    { provide: BillingCatalog, useClass: PolarBillingCatalog },
+    { provide: BillingAccounts, useClass: PolarBillingAccounts },
+    BillingEventService,
+    BillingService,
+    SubscriptionAuthorship,
+    SubscriptionEmails,
+  ],
+  exports: [
+    billingConfiguration,
+    Polar,
+    BillingCatalog,
+    BillingAccounts,
+    BillingEventService,
+    BillingService,
+  ],
+})
 export class BillingInfrastructureModule {
-  static forRoot(
-    config: BillingConfig | null,
-    { listeners = [] }: BillingModuleOptions = {},
-  ): DynamicModule {
-    if (!config) {
-      return { module: BillingInfrastructureModule };
-    }
-
-    return {
-      module: BillingInfrastructureModule,
-      providers: [
-        { provide: BILLING_CONFIG, useValue: config },
-        {
-          provide: Polar,
-          useFactory: ({ accessToken, server }: BillingConfig) =>
-            new Polar({ accessToken, server }),
-          inject: [BILLING_CONFIG],
-        },
-        { provide: BillingCatalog, useClass: PolarBillingCatalog },
-        { provide: BillingAccounts, useClass: PolarBillingAccounts },
-        ...listeners,
-        {
-          provide: SUBSCRIPTION_LISTENERS,
-          useFactory: (...registered: SubscriptionListener[]) => registered,
-          inject: [...listeners],
-        },
-      ],
-      exports: [
-        BILLING_CONFIG,
-        Polar,
-        BillingCatalog,
-        BillingAccounts,
-        SUBSCRIPTION_LISTENERS,
-      ],
-    };
-  }
-
-  static authPlugins(config: BillingConfig | null) {
-    if (!config) {
+  static authPlugins() {
+    const { polar } = billingConfig();
+    if (!polar) {
       return [];
     }
     return [
       BillingBetterAuthPluginProvider,
       PolarBetterAuthPluginProvider,
-      ...(config.webhookSecret ? [PolarWebhooksBetterAuthPluginProvider] : []),
+      ...(polar.webhookSecret ? [PolarWebhooksBetterAuthPluginProvider] : []),
     ];
   }
 }

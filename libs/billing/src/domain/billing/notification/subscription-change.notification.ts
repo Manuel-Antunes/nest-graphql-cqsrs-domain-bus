@@ -7,7 +7,7 @@ import { NotificationType } from '@nestposts/notifications/domain/notification/n
 import { SubscriptionChangeMail } from '../../../mail/subscription-change.mail';
 import type { SubscriptionChangeNotificationData } from '../schemas/subscription-change-notification.schema';
 import { SubscriptionChangeNotificationSchema } from '../schemas/subscription-change-notification.schema';
-import type { SubscriptionChange } from '../subscription-listener';
+import type { SubscriptionChange } from '../subscription-change';
 
 export const SUBSCRIPTION_CHANGE_NOTIFICATION = 'billing.SubscriptionChange';
 

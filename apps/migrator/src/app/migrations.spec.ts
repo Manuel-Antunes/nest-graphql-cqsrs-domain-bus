@@ -30,12 +30,12 @@ describe('migrating the system, then every tenant', () => {
     await context.app.close();
   });
 
-  it('keeps the system tables — Better Auth’s and the organizations’ — in public, and nothing else', async () => {
+  it('keeps the system tables — the users, Better Auth’s and the organizations’ — in public, and nothing else', async () => {
     const tables = await tablesOf('public');
 
     expect(tables).toEqual(
       expect.arrayContaining([
-        'auth_user',
+        'users',
         'session',
         'organization',
         'member',
@@ -44,6 +44,7 @@ describe('migrating the system, then every tenant', () => {
         'mikro_orm_migrations',
       ]),
     );
+    expect(tables).not.toContain('auth_user');
     expect(tables).not.toContain('posts');
     expect(tables).not.toContain('event_log');
   });
@@ -63,7 +64,6 @@ describe('migrating the system, then every tenant', () => {
         'posts',
         'tags',
         'posts_tags',
-        'users',
         'authors',
         'notifications',
         'notification_deliveries',
@@ -74,6 +74,7 @@ describe('migrating the system, then every tenant', () => {
       ]),
     );
     expect(await tablesOf('tenant_root')).not.toContain('event_log');
+    expect(await tablesOf('tenant_root')).not.toContain('users');
     expect(
       await query(context.orm, 'select id, name from tenant_root.tags'),
     ).toEqual([
@@ -97,6 +98,7 @@ describe('migrating the system, then every tenant', () => {
       { name: 'Migration20260924124450_default_tag' },
       { name: 'Migration20260925012004_calendar_events' },
       { name: 'Migration20260926174755_calendar_event_sequence' },
+      { name: 'Migration20260928130001_users' },
     ]);
   });
 
@@ -108,7 +110,7 @@ describe('migrating the system, then every tenant', () => {
         context.orm,
         'select count(*)::int as applied from tenant_root.mikro_orm_migrations',
       ),
-    ).toEqual([{ applied: 4 }]);
+    ).toEqual([{ applied: 5 }]);
   });
 
   it('forgets what the inbox processed longer ago than its retention, and remembers the rest', async () => {

@@ -1,8 +1,8 @@
-import type { CredentialId } from '../vo/credential-id';
+import type { UserId } from '../vo/user-id';
 
 export class UnknownIdentityException extends Error {
-  constructor(readonly credentialId: CredentialId) {
-    super(`o provedor de identidade não conhece a credencial ${credentialId}`);
+  constructor(readonly userId: UserId) {
+    super(`no user ${userId} stands behind the session`);
     this.name = 'UnknownIdentityException';
   }
 }

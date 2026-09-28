@@ -12,7 +12,9 @@ import { PolarPage } from './polar-page';
  * the first one is retried until the page has hydrated enough to save at all.
  *
  * The email must be deliverable: Polar refuses `example.com`, so a buyer's account is on a domain
- * that exists — which changes nothing here, where every email lands in Mailpit anyway.
+ * that exists — which changes nothing here, where every email lands in Mailpit anyway. A buyer Polar
+ * already has as a customer — made when they opened the billing screen — finds the field locked to
+ * their own address, and there is nothing to type.
  */
 export class PolarCheckout extends PolarPage {
   static readonly TEST_CARD = {
@@ -72,6 +74,10 @@ export class PolarCheckout extends PolarPage {
   private async enterEmail(email: string): Promise<void> {
     const field = this.page.locator('input[name="customer_email"]');
     await expect(async () => {
+      if (await field.isDisabled()) {
+        await expect(field).toHaveValue(email);
+        return;
+      }
       await field.clear();
       await field.fill(email);
       await this.saving(() => this.page.keyboard.press('Tab'));

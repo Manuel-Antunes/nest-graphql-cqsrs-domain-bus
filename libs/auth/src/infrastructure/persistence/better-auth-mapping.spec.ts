@@ -3,8 +3,11 @@ import type { AnyMikroORM } from '@nestposts/database/testing';
 import { closeTestDatabase, testDatabase } from '@nestposts/database/testing';
 import { OnDemandNotifications } from '@nestposts/notifications/domain/notification/on-demand-notifications';
 import { LoggingOnDemandNotifications } from '@nestposts/notifications/infrastructure/on-demand/logging-on-demand-notifications';
-import { CredentialId } from '@nestposts/users/domain/user/vo/credential-id';
+import { SoftDeleteSubscriber } from '@nestposts/platform/infrastructure/persistence/soft-delete/soft-delete.subscriber';
+import { AUTHOR_ROLE } from '@nestposts/users/domain/user/author.entity';
+import { User } from '@nestposts/users/domain/user/user.entity';
 import { Email } from '@nestposts/users/domain/user/vo/email';
+import { UserId } from '@nestposts/users/domain/user/vo/user-id';
 import { UserName } from '@nestposts/users/domain/user/vo/user-name';
 import { mikroOrmAdapter } from 'better-auth-mikro-orm';
 
@@ -32,7 +35,10 @@ describe('better-auth writing through the entities this module maps', () => {
     inContext(() => orm.em.fork().findOneOrFail(entity, where) as Promise<T>);
 
   beforeAll(async () => {
-    orm = await testDatabase({ entities: authEntities }, 'auth');
+    orm = await testDatabase(
+      { entities: authEntities, subscribers: [new SoftDeleteSubscriber()] },
+      'auth',
+    );
     const config = AuthConfiguration.fromEnvironment();
     const emails = BetterAuthEmails.unsent();
     adapter = mikroOrmAdapter(orm)(
@@ -75,7 +81,17 @@ describe('better-auth writing through the entities this module maps', () => {
     const metadata = orm.getMetadata();
 
     expect(metadata.getByClassName('AuthUser').class).toBe(AuthUser);
-    expect(metadata.getByClassName('AuthUser').tableName).toBe('auth_user');
+    expect(metadata.getByClassName('AuthUser').tableName).toBe('users');
+  });
+
+  it('maps the credential as a kind of User, on the one users table', () => {
+    const metadata = orm.getMetadata();
+
+    expect(metadata.getByClassName('AuthUser').root.class).toBe(User);
+    expect(metadata.getByClassName('User').tableName).toBe('users');
+    expect(metadata.getByClassName('AuthUser').schema).toBe(
+      metadata.getByClassName('User').schema,
+    );
   });
 
   it('generates the tables it does NOT map by hand, and only those', () => {
@@ -106,12 +122,73 @@ describe('better-auth writing through the entities this module maps', () => {
   it('a row better-auth wrote comes back as the domain entity, value objects included', async () => {
     await givenACredential('cred_1', 'manuel@example.com');
 
-    const user = await found(AuthUser, { id: CredentialId.parse('cred_1') });
+    const user = await found(AuthUser, { id: UserId.parse('cred_1') });
 
     expect(user.email).toBeInstanceOf(Email);
     expect(user.email.value).toBe('manuel@example.com');
     expect(user.name).toBeInstanceOf(UserName);
-    expect(user.id).toBeInstanceOf(CredentialId);
+    expect(user.id).toBeInstanceOf(UserId);
+  });
+
+  it('the same row is the User every other module reads, born at version 1 and alive', async () => {
+    await givenACredential('cred_4', 'bia@example.com');
+
+    const user = await found(User, { id: UserId.parse('cred_4') });
+
+    expect(user).toBeInstanceOf(AuthUser);
+    expect(user.version).toBe(1);
+    expect(user.isDeleted()).toBe(false);
+    expect(user.roles).toEqual([]);
+  });
+
+  it('the roles better-auth keeps are the roles the User answers for', async () => {
+    await givenACredential('cred_5', 'teo@example.com');
+
+    await inContext(() =>
+      adapter.update({
+        model: 'user',
+        where: [{ field: 'id', value: 'cred_5' }],
+        update: { role: `user,${AUTHOR_ROLE}` },
+      }),
+    );
+
+    const user = await found(User, { id: UserId.parse('cred_5') });
+
+    expect(user.roles).toEqual(['user', AUTHOR_ROLE]);
+    expect(user.hasRole(AUTHOR_ROLE)).toBe(true);
+  });
+
+  it('deleting the account keeps the user, deleted, and frees the address for a new one', async () => {
+    await givenACredential('cred_6', 'lia@example.com');
+
+    await inContext(() =>
+      adapter.delete({
+        model: 'user',
+        where: [{ field: 'id', value: 'cred_6' }],
+      }),
+    );
+
+    const gone = await inContext(() =>
+      adapter.findOne({
+        model: 'user',
+        where: [{ field: 'email', value: 'lia@example.com' }],
+      }),
+    );
+    const kept: User = await inContext(() =>
+      orm.em
+        .fork()
+        .findOneOrFail(
+          User,
+          { id: UserId.parse('cred_6') },
+          { filters: false },
+        ),
+    );
+
+    expect(gone).toBeNull();
+    expect(kept.isDeleted()).toBe(true);
+    await expect(givenACredential('cred_7', 'lia@example.com')).resolves.toBe(
+      'cred_7',
+    );
   });
 
   it('and better-auth reads it back flat, as the id it wrote', async () => {
@@ -142,7 +219,7 @@ describe('better-auth writing through the entities this module maps', () => {
       }),
     );
 
-    const user = await found(AuthUser, { id: CredentialId.parse('cred_3') });
+    const user = await found(AuthUser, { id: UserId.parse('cred_3') });
 
     expect(user.name.value).toBe('Rui');
   });

@@ -9,7 +9,3 @@ export interface SubscriptionChange {
   planName: string;
   endsAt: Date | null;
 }
-
-export abstract class SubscriptionListener {
-  abstract onChange(change: SubscriptionChange): Promise<void>;
-}

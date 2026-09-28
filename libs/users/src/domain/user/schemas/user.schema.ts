@@ -9,7 +9,7 @@ export const UserSchema = z
     id: UserId.field(),
     email: Email.field(),
     name: UserName.field(),
-    roles: z.array(z.string().min(1, 'role não pode ser vazio')),
+    role: z.string().nullable(),
     createdAt: z.date(),
     updatedAt: z.date(),
     version: z.number().int().min(1),

@@ -1,7 +1,7 @@
 import type { PipeTransform } from '@nestjs/common';
 import { Injectable } from '@nestjs/common';
 import type { User } from '@nestposts/users/domain/user/user.entity';
-import { CredentialId } from '@nestposts/users/domain/user/vo/credential-id';
+import { UserId } from '@nestposts/users/domain/user/vo/user-id';
 import type { UserSession } from '@thallesp/nestjs-better-auth';
 
 import { UserProvisioning } from '../../application/user/user-provisioning.service';
@@ -17,6 +17,6 @@ export class SessionUserPipe
   ): Promise<User> {
     const session = await maybeSession;
     const { id } = session.user as { id: string };
-    return this.provisioning.provision(CredentialId.parse(id));
+    return this.provisioning.provision(UserId.parse(id));
   }
 }

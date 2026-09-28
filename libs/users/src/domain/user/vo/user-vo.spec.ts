@@ -40,7 +40,7 @@ describe('value objects do User', () => {
   });
 
   describe('UserId', () => {
-    it('generate produz um uuid novo a cada chamada', () => {
+    it('generate produces a new id on every call', () => {
       const id = UserId.generate();
 
       expect(UserId.safeParse(id.value).success).toBe(true);
@@ -52,7 +52,13 @@ describe('value objects do User', () => {
 
       expect(UserId.parse(uuid).equals(UserId.parse(uuid))).toBe(true);
       expect(String(UserId.parse(uuid))).toBe(uuid);
-      expect(UserId.safeParse('9f1d1f36').success).toBe(false);
+    });
+
+    it('is whatever authentication generated: trimmed, never empty, at most 64 characters', () => {
+      expect(UserId.parse('  xKq2VdA9sBn3  ').value).toBe('xKq2VdA9sBn3');
+      expect(UserId.safeParse('   ').success).toBe(false);
+      expect(UserId.safeParse('x'.repeat(65)).success).toBe(false);
+      expect(UserId.parse('x'.repeat(64)).value).toHaveLength(64);
     });
   });
 

@@ -1,13 +1,12 @@
 import type { Subscription } from '@polar-sh/sdk/models/components/subscription.js';
 
+import { BillingEvent } from '../../domain/billing/billing-event';
 import type { SubscriptionEvent } from '../../domain/billing/schemas/subscription-change-notification.schema';
-import type {
-  SubscriptionChange,
-  SubscriptionListener,
-} from '../../domain/billing/subscription-listener';
+import type { SubscriptionChange } from '../../domain/billing/subscription-change';
+import type { BillingEventService } from '../events/billing-event.service';
 
 export class PolarSubscriptionChanges {
-  constructor(private readonly listeners: readonly SubscriptionListener[]) {}
+  constructor(private readonly events: BillingEventService) {}
 
   static changeOf(
     event: SubscriptionEvent,
@@ -36,9 +35,7 @@ export class PolarSubscriptionChanges {
     if (!change) {
       return;
     }
-    await Promise.all(
-      this.listeners.map((listener) => listener.onChange(change)),
-    );
+    await this.events.emit(BillingEvent.SUBSCRIPTION_CHANGED, change);
   }
 
   private static endOf(

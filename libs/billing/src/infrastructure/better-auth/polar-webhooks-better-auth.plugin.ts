@@ -4,15 +4,12 @@ import type { BetterAuthPlugin } from 'better-auth';
 import { APIError, createAuthEndpoint } from 'better-auth/api';
 import { WebhookVerificationError } from 'standardwebhooks';
 
-import type { SubscriptionListener } from '../../domain/billing/subscription-listener';
-import type { BillingConfig } from '../billing.config';
+import type { BillingConfig } from '../../config/billing.config';
+import { billingConfig } from '../../config/billing.config';
+import { BillingEventService } from '../events/billing-event.service';
 import { PolarSubscriptionChanges } from '../polar/polar-subscription-changes';
 import { PolarWebhooks } from '../polar/polar-webhooks';
-import {
-  BILLING_CONFIG,
-  POLAR_WEBHOOKS_BETTER_AUTH_PLUGIN,
-  SUBSCRIPTION_LISTENERS,
-} from '../tokens';
+import { POLAR_WEBHOOKS_BETTER_AUTH_PLUGIN } from '../tokens';
 
 const headersOf = (request: Request) => ({
   'webhook-id': request.headers.get('webhook-id') ?? '',
@@ -21,16 +18,16 @@ const headersOf = (request: Request) => ({
 });
 
 export const polarWebhooksBetterAuthPlugin = (
-  config: BillingConfig,
-  listeners: readonly SubscriptionListener[],
+  { polar }: BillingConfig,
+  events: BillingEventService,
 ) => {
-  if (!config.webhookSecret) {
+  if (!polar?.webhookSecret) {
     throw new Error('Polar webhooks need POLAR_WEBHOOK_SECRET');
   }
   const logger = new Logger(POLAR_WEBHOOKS_BETTER_AUTH_PLUGIN);
   const webhooks = new PolarWebhooks(
-    config.webhookSecret,
-    new PolarSubscriptionChanges(listeners),
+    polar.webhookSecret,
+    new PolarSubscriptionChanges(events),
   );
 
   return {
@@ -69,5 +66,5 @@ export const polarWebhooksBetterAuthPlugin = (
 export const PolarWebhooksBetterAuthPluginProvider = {
   provide: POLAR_WEBHOOKS_BETTER_AUTH_PLUGIN,
   useFactory: polarWebhooksBetterAuthPlugin,
-  inject: [BILLING_CONFIG, SUBSCRIPTION_LISTENERS],
+  inject: [billingConfig.KEY, BillingEventService],
 } satisfies FactoryProvider;

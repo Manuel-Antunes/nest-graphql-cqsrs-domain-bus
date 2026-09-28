@@ -9,7 +9,7 @@ export class CredentialRecords {
    * It is the only thing this suite does around the application's own doors, and it is deliberate:
    * granting a role is not an operation of this service (the identity port does it, in code), and
    * opening an endpoint for it would be production surface existing because of a test. The domain
-   * profile is promoted by the application itself on the next request.
+   * authorship is created by the application itself on the next request.
    */
   promoteToAuthor(credentialId: string): Promise<void> {
     return this.promote(credentialId, 'author');
@@ -17,7 +17,7 @@ export class CredentialRecords {
 
   promote(credentialId: string, role: string): Promise<void> {
     return this.database.execute(
-      'update auth_user set role = ? where id = ?',
+      'update users set role = ? where id = ?',
       role,
       credentialId,
     );
@@ -25,15 +25,23 @@ export class CredentialRecords {
 
   async emailOf(credentialId: string): Promise<string | undefined> {
     const [row] = await this.database.query<{ email: string }>(
-      'select email from auth_user where id = ?',
+      'select email from users where id = ?',
       credentialId,
     );
     return row?.email;
   }
 
-  async exists(credentialId: string): Promise<boolean> {
+  async isActive(credentialId: string): Promise<boolean> {
     const rows = await this.database.query(
-      'select id from auth_user where id = ?',
+      'select id from users where id = ? and deleted_at is null',
+      credentialId,
+    );
+    return rows.length > 0;
+  }
+
+  async isDeleted(credentialId: string): Promise<boolean> {
+    const rows = await this.database.query(
+      'select id from users where id = ? and deleted_at is not null',
       credentialId,
     );
     return rows.length > 0;

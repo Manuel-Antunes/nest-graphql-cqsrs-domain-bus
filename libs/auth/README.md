@@ -65,12 +65,12 @@ has to name it.
 everything that authenticates needs it. Registering it twice would build a SECOND one — a second set
 of plugins, a second JWKS, and sessions one half issues that the other rejects.
 
-## The tables: the credential mapped by hand, the rest generated
+## The tables: the user mapped by hand, the rest generated
 
 Better Auth describes its own schema (`getAuthTables`). `schema.ts` turns that description into
 MikroORM `EntitySchema`s, which is drift-free and is how every table used to be mapped.
 
-`auth_user` is mapped by hand instead, and so are the three tables `@nestposts/organizations` owns.
+The user is mapped by hand instead, and so are the three tables `@nestposts/organizations` owns.
 They follow the same rules as `Post` and `User`: a domain class with value-object properties and
 `Ref` relations in `domain/`, and a `defineEntity` mapping in
 `infrastructure/persistence/entities/`. `betterAuthEntities({ mapped })` skips whatever a module says
@@ -88,9 +88,35 @@ columns, so `Member.organization` is a `Ref<Organization>` on our side and an id
 `better-auth-mapping.spec.ts` drives that round trip against a real schema — including that a row
 Better Auth wrote comes back with `Email` and `OrganizationSlug` instances on it.
 
-**The user model is `authUser` on purpose.** Left as `user` it would map to a class named `User`,
-which `@nestposts/users` already owns. `auth_user` is the credential; `users` is the profile; they are
-joined by email, by `UserProvisioning` in `apps/posts-api`.
+**A user is one row, and `AuthUser` is a kind of `User`.** Better Auth's user model is `authUser`, so
+the adapter looks it up as the class `AuthUser` — and `AuthUser extends User`, the aggregate
+`@nestposts/users` owns. `User` is mapped by that package on `public.users`, and `AuthUser` adds only
+what Better Auth keeps about a credential (`emailVerified`, `image`, the bans, `twoFactorEnabled`) as a
+**single-table inheritance** child of it. There is no second table and no profile per tenant: the row
+a sign-up writes is the `User` every module reads, in every tenant. What a tenant still keeps of its
+own is the `authors` row that makes that user an `Author` there — see `UserProvisioning` in
+`apps/posts-api`.
+
+- **The roles are Better Auth's.** `role` is the admin plugin's comma-separated column, mapped on
+  `User` so the domain can read it (`user.roles`, `user.hasRole`); nothing in the domain writes it.
+  It changes through Better Auth — the admin screens, or `IdentityProvider.addRole`/`removeRole`,
+  which go through the internal adapter so its hooks and its session cache see the change.
+- **The `User` mapping is abstract, and that is not taste.** MikroORM 7 joins a relation that targets
+  an STI entity with `kind = <that entity's discriminator value>` — the value alone, not its
+  subclasses — so with a concrete `User` every join to it (the `active` filter's auto-join included)
+  would have dropped each row written as an `AuthUser`: an event with no responsible, a post with no
+  author. An abstract root has no value of its own, so nothing is added. Every row is of the one
+  concrete kind, and `kind` defaults to it in the database, so a `User` the domain persists by itself
+  (a spec's fixture) is the same row a sign-up writes.
+- **The child names its schema.** An STI child inherits its root's table name and NOT its schema, so
+  without `schema: SYSTEM_SCHEMA` on `AuthUser` Better Auth read `tenant_root.users` in any tenant's
+  entity manager — and every spec passed, because a spec rewrites every table onto its own schema.
+- **Deleting an account is a soft delete.** `User` is soft-deletable, and the adapter deletes through
+  `em.remove`, which `SoftDeleteSubscriber` turns into `deleted_at` — so what the user wrote keeps its
+  author. The row then leaves every query through the `active` filter, Better Auth's included, and
+  the address is free again: the email is unique only among the rows that are not deleted. The
+  adapter loads the row with its id alone before removing it, which is why `WithSoftDelete` replaces
+  the embeddable instead of writing into one that a partial load left undefined.
 
 **A Better Auth array is a TEXT column.** The adapter does not declare array support, so Better Auth
 writes a `string[]` field — the OAuth client's `redirectUris`, its `scopes` — as a JSON string and
@@ -106,7 +132,7 @@ there.
 
 | plugin | what it gives | its emails |
 |---|---|---|
-| `admin` | roles on `auth_user`, bans, impersonation — what `@Roles([...])` reads | — |
+| `admin` | roles on `users.role`, bans, impersonation — what `@Roles([...])` reads | — |
 | `jwt` | the JWKS the OAuth tokens are signed with (ES256), under one `issuer` (`AUTH_ISSUER`) for every instance | — |
 | `@better-auth/oauth-provider` | this system as an OAuth 2.1 / OIDC provider: authorize, consent, token, userinfo. Only a system `admin` creates, edits or deletes clients (`clientPrivileges`) | — |
 | `openAPI` | the reference at `/api/auth/reference` | — |
@@ -163,7 +189,7 @@ answer to the plugin, which throws a message-less `UNAUTHORIZED` — a 401 — a
 every 401 to "Please sign in again to continue". A signed-in non-admin creating a client got exactly
 that, on AWS, with a valid session. It now answers `403 OAUTH_CLIENT_ADMIN_REQUIRED` with
 "Only an admin can create an OAuth client", which the UI shows as a permission error. Nothing seeds an
-`admin`: the deployed stages have one only when somebody sets `auth_user.role` by hand, the way
+`admin`: the deployed stages have one only when somebody sets `users.role` by hand, the way
 `apps/web-e2e` does for its own.
 
 ## Every email is a notification
@@ -208,7 +234,7 @@ they are copied rather than imported.
 Gone to `@nestposts/organizations`, along with the `organization` plugin provider, the organization
 access control, the invitation email and the tenant-schema trigger. What stayed here is the *system*
 access control in `access.ts` — the roles the `admin` plugin checks (`admin`, `author`, `user`),
-which is what `@Roles([AUTHOR_ROLE])` reads off `auth_user.role`.
+which is what `@Roles([AUTHOR_ROLE])` reads off `users.role`.
 
 
 ## Configuration

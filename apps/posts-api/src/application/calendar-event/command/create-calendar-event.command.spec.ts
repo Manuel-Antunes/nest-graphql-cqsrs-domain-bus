@@ -15,6 +15,7 @@ import type { CalendarTesting } from '../../../../test/support/calendar-fixtures
 import {
   anOrganization,
   calendarTesting,
+  givenAMember,
   givenATeam,
   TENANT,
 } from '../../../../test/support/calendar-fixtures';
@@ -24,7 +25,6 @@ import {
   inRequestContext,
   RecordingEvents,
 } from '../../../../test/support/cqrs-testing-module';
-import { givenAUser } from '../../../../test/support/post-fixtures';
 import { CalendarEventRequest } from '../calendar-event-request';
 import { CreateCalendarEventCommand } from './create-calendar-event.command';
 
@@ -81,8 +81,8 @@ describe('CreateCalendarEventCommand.Handler', () => {
       calendar.imports,
     );
     commands = module.get(CommandBus);
-    ana = await givenAUser(module, 'ana@example.com', 'ana');
-    rui = await givenAUser(module, 'rui@example.com', 'rui');
+    ana = await givenAMember(module, 'ana@example.com', 'ana');
+    rui = await givenAMember(module, 'rui@example.com', 'rui');
     events = new RecordingEvents(module);
   });
 
@@ -115,15 +115,9 @@ describe('CreateCalendarEventCommand.Handler', () => {
     expect(event?.participants.getIdentifiers()).toEqual([rui.id]);
   });
 
-  it('adds the members of the team to the participants, provisioning whoever had no profile here', async () => {
-    const lia = calendar.identities.signUp('lia@example.com', 'lia');
-    const ruisCredential = calendar.identities.signUp('rui@example.com', 'rui');
-    const anasCredential = calendar.identities.signUp('ana@example.com', 'ana');
-    const team = await givenATeam(module, [
-      lia,
-      ruisCredential,
-      anasCredential,
-    ]);
+  it('adds the members of the team to the participants, leaving out the responsible', async () => {
+    const lia = await givenAMember(module, 'lia@example.com', 'lia');
+    const team = await givenATeam(module, [lia.id, rui.id, ana.id]);
     const id = CalendarEventId.generate();
 
     await execute(aCommand({ teamId: team.id }, id));

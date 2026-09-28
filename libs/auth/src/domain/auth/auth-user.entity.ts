@@ -1,20 +1,9 @@
-import { BaseEntity } from '@nestposts/platform/domain/shared/base-entity';
-import { CredentialId } from '@nestposts/users/domain/user/vo/credential-id';
-import { Email } from '@nestposts/users/domain/user/vo/email';
-import { UserName } from '@nestposts/users/domain/user/vo/user-name';
+import { User } from '@nestposts/users/domain/user/user.entity';
 
-export class AuthUser extends BaseEntity {
-  id!: CredentialId;
-
-  name!: UserName;
-
-  email!: Email;
-
+export class AuthUser extends User {
   emailVerified = false;
 
   image: string | null = null;
-
-  role: string | null = null;
 
   banned: boolean | null = null;
 
@@ -23,17 +12,6 @@ export class AuthUser extends BaseEntity {
   banExpires: Date | null = null;
 
   twoFactorEnabled: boolean | null = false;
-
-  roles(): string[] {
-    return (this.role ?? '')
-      .split(',')
-      .map((role) => role.trim())
-      .filter((role) => role.length > 0);
-  }
-
-  hasRole(role: string): boolean {
-    return this.roles().includes(role);
-  }
 
   isBanned(now: Date): boolean {
     if (!this.banned) {

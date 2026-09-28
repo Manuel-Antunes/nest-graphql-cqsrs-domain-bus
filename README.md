@@ -107,7 +107,7 @@ wrong: import everything, or redeclare the event on the other side.
 | `libs/platform` | the shared domain (aggregate root, soft delete, delegation, `@EventType`) and the ORM half of the rules it owns |
 | `libs/database` | the one door to MikroORM: the connection, `DatabaseModule`, `valueObjectType`, `inRequestContext`, what a driver exception means |
 | `libs/users` | the user aggregate, its ORM mapping and its repositories. It knows nothing about Better Auth |
-| `libs/auth` | authentication: the Better Auth instance and its **core** plugin registry, `auth_user` and the tables Better Auth generates, `AuthService` and the `IdentityProvider` adapter. It names no organization |
+| `libs/auth` | authentication: the Better Auth instance and its **core** plugin registry, `AuthUser` (a kind of `User`, on the same `public.users` row) and the tables Better Auth generates, `AuthService` and the `IdentityProvider` adapter. It names no organization |
 | `libs/organizations` | organizations, members and invitations: the three tables, their domain and repositories, `OrganizationService`, and the `organization` plugin it **contributes** to the instance `libs/auth` builds. Both have READMEs |
 | `libs/posts` | the post and tag aggregates, their ORM mappings and repositories |
 | `libs/core/cqsrs` | CQSRS: the third CQRS message. Knows nothing about GraphQL |
@@ -192,7 +192,7 @@ libs/auth/src                                        # the only place that knows
 │   ├── plugins/registry                             #   registry (one Nest provider per plugin, folded back
 │   ├── factories/                                   #   into an ordered tuple), initAuth, BETTER_AUTH,
 │   └── identity/                                    #   BetterAuthService and the IdentityProvider adapter
-├── infrastructure/persistence                       # auth_user mapped BY HAND, the rest generated from
+├── infrastructure/persistence                       # AuthUser mapped BY HAND onto users, the rest generated from
 │                                                    #   better-auth's own description of its schema
 └── standalone.ts                                    # the same instance outside Nest
 
@@ -221,7 +221,7 @@ apps/posts-api/src
 │   ├── shared/post-request                          # PostRequest extends AsyncContext: the key (the PostId)
 │   │   post-request-context.codec                   #   and how it crosses the wire
 │   ├── tag/command/create-tag, user/query/find-author
-│   └── user/user-provisioning                       # the domain profile, born at sign-up
+│   └── user/user-provisioning                       # the tenant's authorship of a user, made on arrival
 ├── infrastructure
 │   ├── persistence/mikro-orm.config                 # só a CONEXÃO: cada tabela chega pelo
 │   │                                                #   módulo que a possui (DatabaseModule.forFeature)
@@ -892,7 +892,7 @@ pnpm test:all    # as suites unitárias, e depois os dois níveis de e2e
 - `observable-to-async-iterable.spec` — o helper: entrega em ordem, `return()` cancela a inscrição **mesmo com um `next()` pendente**, erro propaga.
 - `domain-exception.filter.spec` — a tabela exceção → `extensions.code`.
 - `author.pipe.spec` / `session-user.pipe.spec` — a guarda da borda agora que ela é um pipe: o cast devolve o mesmo objeto já como `Author` e recusa nomeando o usuário quem não tem o papel — ou quem tem o papel e **não** tem a linha delegada, que é o caso que só um cast de verdade distingue; e a tradução da sessão aceita a entrada **ainda como Promise**, que é como o Nest a entrega ao primeiro pipe. O pipe entrega hoje um **id de credencial**, e não mais email/nome/papel copiados do cookie.
-- `user-provisioning.hooks.spec` — a borda por onde o Better Auth chama para dentro: o id cru vira `CredentialId`, um id inválido não chega ao serviço, e uma falha ao provisionar **não** derruba o sign-up — o que é a regra que sustenta o desenho (autenticar é do provedor, provisionar é nosso).
+- `user-provisioning.hooks.spec` — a borda por onde o Better Auth chama para dentro: o id cru vira `UserId`, um id inválido não chega ao serviço, e uma falha ao provisionar **não** derruba o sign-up — o que é a regra que sustenta o desenho (autenticar é do provedor, provisionar é nosso).
 - `mikro-orm-exception.filter.spec` — a outra tabela, a de violação de integridade → erro de usuário: FK vira `BAD_USER_INPUT` com mensagem **vaga** (distinguir "não existe" de "é leitor" seria um oráculo), unique vira `CONFLICT`, e nenhuma mensagem de driver vaza.
 - `posts.e2e-spec` — o smoke test como teste: sobe o `AppModule` num banco próprio (`database: 'own'` no `vitest.e2e.config.mts`, migrado pelo `migrate()` de verdade do migrator — `public`, `transport` e `tenant_root`), fala HTTP para queries/mutations e SSE para subscriptions — o mesmo endereço, com `accept: text/event-stream`. Confere a ordem command → evento → entrega, que o `createPost` responde **pré-criado** (v1, sem tag) e que o post **completo** (v2, com a tag) chega por `onPostCreated`, o filtro por tópico (o assinante filtrado vê só o seu post; o global vê tudo), os erros com código, as duas connections — que desassinar tira o assinante do `EventBus` na hora, contando os `observers` do `Subject`, e que **dois assinantes do mesmo tópico compartilham um stream só**: o `EventBus` não passa de um assinante, os dois recebem o mesmo payload, e a fonte só cai quando o segundo sai. E, pendurado no `EventBus`, que a `PostRequest` criada no resolver sobrevive ao caminho de verdade (Fastify → Yoga → `CommandBus` → saga): todos os eventos daquela mutation carregam o mesmo objeto. O `author` de toda selection deste ficheiro é o `type Author` (`author { id name email }`), subscriptions incluídas — então a resolução do campo está exercitada por todos os testes, e o bloco `Post.author` acrescenta o que só ela permite: navegar `post → author → posts → author` e fechar o ciclo, o autor de um post ser o **mesmo** que o `me` devolve, a resolução funcionar dentro do stream da subscription (sem o contexto aberto no adapter o cliente receberia `data: null`), e uma leitura anónima alcançar o autor. O bloco `me` é o polimorfismo ponta a ponta, com três clientes HTTP de verdade: o autor casa com `... on Author` e pagina os posts dele (Posts completos, `tags` aninhadas inclusive), um segundo cliente que fez sign-up **sem papel** vem como `User` e a resposta sai sem `posts` — não com `posts` vazio —, pedir `posts` num `User` é erro de schema, e um terceiro que nunca autenticou leva `UNAUTHENTICATED` do guard global, antes de o resolver existir.
 
@@ -1190,13 +1190,22 @@ O efeito que este README chamava de indireto passou a ser verdade junto: apagar 
 
 É a composição do próprio Nest — um parâmetro aceita vários pipes, aplicados em ordem, e a saída de um alimenta o seguinte (`sessão → User → Author`). Um pipe, e não o corpo de um `createParamDecorator`, porque a factory de um param decorator recebe só o `ExecutionContext` e não participa da injeção de dependência: ela nunca alcançaria o `UserProvisioning`. Cada peça faz uma coisa e é testável sozinha — o que antes era um `requireAuthor` privado, testável só subindo um resolver, virou duas classes com spec próprio.
 
-**O provedor de identidade entrou por uma porta.** O `UserProvisioning` não conhece o Better Auth: ele conhece o `IdentityProvider`, uma `abstract class` em `domain/user` com dois métodos — `findById(credentialId)` e `grantRole(credentialId, role)`. Quem sabe o nome do provedor é um adapter só, o `BetterAuthIdentityProvider`, e trocar o Better Auth por Keycloak (que é de onde este projeto veio) é escrever outro adapter e mudar uma linha do `BetterAuthModule` (em `libs/auth`). Nada em `application/` muda — e o `user-provisioning.service.spec` inteiro roda contra um `FakeIdentityProvider` que cabe em 50 linhas, sem subir servidor de autenticação nenhum.
+**The identity provider comes in through a port, and all it does now is manage roles.** `IdentityProvider` is an `abstract class` in `domain/user` with `grantRole`, `addRole` and `removeRole`; the one adapter that knows the provider's name is `BetterAuthIdentityProvider`, and replacing Better Auth with Keycloak (where this project came from) is another adapter and one line of `BetterAuthModule` (in `libs/auth`). It used to have a `findById` as well, which `UserProvisioning` called to learn who a credential was — that question is gone with the second table: the credential and the user are one row (see *One user, in `public`* below), read through `UserRepository` like any other aggregate.
 
 O adapter fala com o `internalAdapter` do `auth.$context`, e não com o `auth.api`. Não é conveniência: o `auth.api` é a superfície **HTTP**, e os endpoints de administração (`setRole`) exigem uma sessão de admin — aqui quem chama é o servidor, sobre si mesmo. O `internalAdapter` é a camada que aqueles endpoints usam por dentro, e tem a propriedade que decide a escolha: `updateUser` passa pelo `updateWithHooks`, então **conceder um papel dispara o hook de `user.update`**. O caminho da promoção é um só, venha ela da API ou de dentro.
 
 **O que o provisionamento parou de perguntar: conta.** A versão Java tem um `Account` no domínio, com tabela própria, ligando credencial a perfil. Aqui não tem, e é de propósito: o Better Auth já faz isso — `account.accountLinking` prende a credencial nova do Google à identidade de quem já tinha senha, e o que chega à porta é **uma** identidade, com **um** email. Espelhar aquelas linhas criaria uma segunda verdade para manter em sincronia sem responder nada que o email já não respondesse; é o mesmo motivo pelo qual não existe um `PostEntity` ao lado do `Post`. A separação entre *user* e *account* continua existindo — ela mora inteira do lado de lá.
 
 **Provisionar deixou de ser efeito colateral de uma query.** Enquanto o perfil nascia no `SessionUserPipe`, "existir no domínio" era consequência de ler um post: quem se registrasse e nunca fizesse uma query simplesmente não existia. Agora o gatilho é o fato: `@AfterCreate('user')` provisiona no sign-up, `@AfterUpdate('user')` promove quando o papel muda. São *database hooks* do Better Auth, descobertos pelo `@DatabaseHook()` do @thallesp/nestjs-better-auth, e moram em `interfaces/auth` porque são a mesma natureza de um resolver — algo de fora chamando a aplicação, só que com uma linha gravada no lugar de uma query.
+
+**One user, in `public`: `AuthUser extends User`.** The credential (`auth_user`, in `public`) and the profile (`users`, once per tenant) used to be two rows joined by email, and every tenant kept a copy of the same person with an id of its own. They are one row now. `User` — the aggregate `libs/users` owns — is mapped on `public.users`, and `AuthUser` is Better Auth's view of the same row: a single-table-inheritance child that adds only what Better Auth keeps about a credential. Better Auth writes through `AuthUser`, the domain reads `User`, and it is the same object. The consequences, each deliberate:
+
+- **The id is Better Auth's.** `UserId` absorbed `CredentialId`: a non-empty string of at most 64 characters, whatever the provider generated.
+- **The roles are Better Auth's too.** `role` is the admin plugin's comma-separated column; `User` reads it (`roles`, `hasRole`) and never writes it — there is no `grantRole` and no `UserRoleGranted` any more. A role changes through Better Auth, and the next request sees it.
+- **A tenant keeps the authorship, not the user.** `authors` is still a tenant table — the posts reference it — and `UserProvisioning` creates a user's row there on their first request in the tenant, when they hold the author role. That is all "provisioning" means now.
+- **Deleting an account is a soft delete.** Better Auth deletes through `em.remove`, and the `SoftDeleteSubscriber` turns that into `deleted_at`: what the person wrote keeps its author, and the address is free for a new account, because the email is unique only among the rows that are not deleted.
+- **MikroORM forced two details**, both in `libs/auth/README.md`: the `User` mapping is abstract (a join to a concrete STI root filters on the root's own discriminator value and drops every `AuthUser`), and the child names its schema (an STI child inherits the table name, not the schema).
+- **The data moved, it was not recreated.** `Migration20260928130000_users` renames `auth_user`; `Migration20260928130001_users` points every tenant reference at the `public.users` row of the same email and drops the tenant's table — `apps/migrator/README.md` has why that one had to be written by hand.
 
 Duas armadilhas, as duas custaram teste:
 
@@ -1413,7 +1422,7 @@ not an HTTP one, does not.
 
 **Four tables are mapped by hand; the rest are still generated.** Better Auth describes its own
 schema, and turning that description into `EntitySchema`s is drift-free — it is how every table used
-to be mapped and how most still are. But `auth_user`, `organization`, `member` and `invitation` are
+to be mapped and how most still are. But the user, `organization`, `member` and `invitation` are
 the ones this system has something to say about, so they follow the same rules as `Post`: a domain
 class carrying value objects and `Ref` relations, a `defineEntity` mapping beside it, a repository
 port. Better Auth finds them anyway, because it looks a model up by the name its naming strategy

@@ -12,8 +12,11 @@
     }
   },
   "dependencies": {
+    "@nestposts/auth": "workspace:*",
     "@nestposts/mail": "workspace:*",
     "@nestposts/notifications": "workspace:*",
+    "@nestposts/organizations": "workspace:*",
+    "@nestposts/users": "workspace:*",
     "@polar-sh/better-auth": "catalog:",
     "@polar-sh/sdk": "catalog:",
     "react": "catalog:",

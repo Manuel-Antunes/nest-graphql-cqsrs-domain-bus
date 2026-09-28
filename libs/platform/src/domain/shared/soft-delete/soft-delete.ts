@@ -50,11 +50,11 @@ export function WithSoftDelete<
     deleted: SoftDeletion = SoftDeletion.alive();
 
     isDeleted(): boolean {
-      return this.deleted.isDeleted;
+      return this.deleted?.isDeleted ?? false;
     }
 
     get deletedAt(): Date | null {
-      return this.deleted.at();
+      return this.deleted?.at() ?? null;
     }
 
     softDelete(now: Date): void {
@@ -72,11 +72,11 @@ export function WithSoftDelete<
     }
 
     applyDeletion(at: Date): void {
-      this.deleted.deletedAt = at;
+      this.deleted = new SoftDeletion({ deletedAt: at });
     }
 
     applyRestoration(): void {
-      this.deleted.deletedAt = null;
+      this.deleted = SoftDeletion.alive();
     }
   }
 

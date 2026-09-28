@@ -47,7 +47,7 @@ const pluginsWithBilling = [
   billingPlugin({
     adapter: billingAdapter,
     user: true,
-    organization: false,
+    organization: true,
     path: BILLING_SETTINGS_PATH,
   }),
 ];

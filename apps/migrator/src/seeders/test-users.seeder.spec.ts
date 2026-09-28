@@ -32,7 +32,7 @@ describe('seeding the users the system should have', () => {
         }[]
       >(
         `select u.email, u.role, a.provider_id, a.password
-         from public.auth_user u
+         from public.users u
          join public.account a on a.user_id = u.id
         order by u.email`,
       );

@@ -6,6 +6,8 @@ import type { AuthServer } from '@better-auth-ui/core/server';
 import type { PermissionRequest } from '@nestposts/auth/domain/auth/auth.service';
 import { AuthService } from '@nestposts/auth/domain/auth/auth.service';
 import { BETTER_AUTH } from '@nestposts/auth/infrastructure/better-auth/tokens';
+import { billingConfig } from '@nestposts/billing/config/billing.config';
+import { BillingService } from '@nestposts/billing/infrastructure/better-auth/billing.service';
 import type { OrganizationPermissionRequest } from '@nestposts/organizations/domain/organization/organization.service';
 import { OrganizationService } from '@nestposts/organizations/domain/organization/organization.service';
 import type { OrganizationRole } from '@nestposts/organizations/domain/organization/schemas/member-role.schema';
@@ -13,7 +15,6 @@ import { OrganizationId } from '@nestposts/organizations/domain/organization/vo/
 
 import { env } from '@/env.mjs';
 import { Endpoints } from '@/lib/endpoints';
-import { billingConfig } from '@/nest/config/billing.config';
 import { Nest } from '@/nest/container';
 
 import type { SystemRole } from './roles';
@@ -39,6 +40,10 @@ export class WebAuth {
 
   static organizations(): Promise<OrganizationService> {
     return Nest.resolve(OrganizationService);
+  }
+
+  static billing(): Promise<BillingService> {
+    return Nest.resolve(BillingService);
   }
 
   /**
@@ -111,7 +116,7 @@ export class WebAuth {
       expiresAt: found.expiresAt.getTime(),
       activeOrganizationId: found.activeOrganizationId,
       user: {
-        id: found.user.credentialId.value,
+        id: found.user.id.value,
         email: found.user.email.value,
         name: found.user.name.value,
         role: found.user.roles.join(',') || null,

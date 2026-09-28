@@ -34,7 +34,7 @@ export class BetterAuthOrganizationService extends OrganizationService {
 
   async organizations(): Promise<Organization[]> {
     const session = await this.auth.requireSession();
-    return this.organizationRepository.findAllOf(session.user.credentialId);
+    return this.organizationRepository.findAllOf(session.user.id);
   }
 
   async activeOrganizationId(): Promise<OrganizationId | null> {
@@ -68,7 +68,7 @@ export class BetterAuthOrganizationService extends OrganizationService {
     }
     return this.memberRepository.findIn(
       OrganizationId.parse(session.activeOrganizationId),
-      session.user.credentialId,
+      session.user.id,
     );
   }
 
@@ -86,13 +86,10 @@ export class BetterAuthOrganizationService extends OrganizationService {
     const organizationId = OrganizationId.parse(session.activeOrganizationId);
     const member = await this.memberRepository.findIn(
       organizationId,
-      session.user.credentialId,
+      session.user.id,
     );
     if (!member) {
-      throw new ActiveMemberNotFoundException(
-        session.user.credentialId,
-        organizationId,
-      );
+      throw new ActiveMemberNotFoundException(session.user.id, organizationId);
     }
     return member;
   }

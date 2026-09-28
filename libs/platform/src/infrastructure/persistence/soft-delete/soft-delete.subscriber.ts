@@ -1,9 +1,18 @@
 import type { EventSubscriber, FlushEventArgs } from '@mikro-orm/core';
-import { ChangeSetType } from '@mikro-orm/core';
+import { ChangeSetType, MikroORM } from '@mikro-orm/core';
+import type { OnModuleInit } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 
 import { SoftDeletion } from '../../../domain/shared/soft-delete/soft-delete';
 
-export class SoftDeleteSubscriber implements EventSubscriber {
+@Injectable()
+export class SoftDeleteSubscriber implements EventSubscriber, OnModuleInit {
+  constructor(@Optional() @Inject(MikroORM) private readonly orm?: MikroORM) {}
+
+  onModuleInit(): void {
+    this.orm?.em.getEventManager().registerSubscriber(this);
+  }
+
   onFlush(args: FlushEventArgs): void {
     for (const changeSet of args.uow.getChangeSets()) {
       const isDelete =

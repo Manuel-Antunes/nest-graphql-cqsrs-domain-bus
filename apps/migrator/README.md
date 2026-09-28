@@ -11,9 +11,9 @@ entity that maps it (`defineEntity({ schema })`):
 
 | pin | schema | tables | migrations |
 |---|---|---|---|
-| `SYSTEM_SCHEMA` | `public` | Better Auth's (`auth_user`, `session`, `account`, the OAuth ones…) and the organizations' (`organization`, `member`, `invitation`, `team`…) | `src/migrations/system` |
+| `SYSTEM_SCHEMA` | `public` | the users (`users`, which Better Auth writes as `AuthUser`), Better Auth's (`session`, `account`, the OAuth ones…) and the organizations' (`organization`, `member`, `invitation`, `team`…) | `src/migrations/system` |
 | `TRANSPORT_SCHEMA` | `transport` | the outbox, dead letters and inbox (`libs/core/outbox-mikro-orm`) and the event store's `event_log` (`libs/core/event-store-mikro-orm`) | `src/migrations/system` |
-| `TENANT_SCHEMA` (`*`) | `tenant_<name>` | posts, tags, users, authors, notifications, deliveries, devices | `src/migrations/tenant` |
+| `TENANT_SCHEMA` (`*`) | `tenant_<name>` | posts, tags, authors, calendar events, notifications, deliveries, devices | `src/migrations/tenant` |
 
 `tenant_root` is the root tenant — whoever names none. An organization is a tenant, `tenant_<slug>`:
 the trigger on its row creates the schema and drops it `cascade`, and the applications migrate it
@@ -34,6 +34,14 @@ read at run time from the connection the migration runs on — **quoted**, becau
 dash and `tenant_acme-corp` is no identifier unquoted — and a reference to a system table is pointed
 at the system schema. One file therefore migrates `tenant_root`, `tenant_acme` and every tenant after
 them.
+
+**The system tables are skipped by NAME**, so a tenant table that shares its name with a system one is
+invisible to the tenant diff. That is how the tenant `users` left: once `User` moved to `public.users`
+the diff proposed nothing for `tenant_<x>.users` at all, and `Migration20260928130001_users` is written
+by hand — it points `authors`, `posts`, the calendar events, the notifications and the devices at the
+`public.users` row of the same email, keeps a profile no credential stands behind as a deleted user
+(its posts keep their author), and only then drops the table. `Migration20260928130000_users` is the
+system half: `auth_user` renamed, not recreated, so every credential keeps its id.
 
 `ignoreSchema` is enumerated from the live connection on every run: a development database
 accumulates tenants, and a diff that saw them would emit DDL for somebody else's leftovers.

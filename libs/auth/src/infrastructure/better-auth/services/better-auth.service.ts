@@ -1,7 +1,7 @@
 import { Inject, Injectable, Scope } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
-import { CredentialId } from '@nestposts/users/domain/user/vo/credential-id';
 import { Email } from '@nestposts/users/domain/user/vo/email';
+import { UserId } from '@nestposts/users/domain/user/vo/user-id';
 import { UserName } from '@nestposts/users/domain/user/vo/user-name';
 
 import type {
@@ -33,7 +33,7 @@ export class BetterAuthService extends AuthService {
     this.headers = RequestHeaders.from(request);
   }
 
-  /** `auth_user.role` is one column, and a caller may hold more than one role in it. */
+  /** `users.role` is one column, and a caller may hold more than one role in it. */
   private static rolesOf(role: string | null | undefined): string[] {
     return (role ?? '')
       .split(',')
@@ -60,7 +60,7 @@ export class BetterAuthService extends AuthService {
       OrganizationAwareSessionRow;
     return {
       user: {
-        credentialId: CredentialId.parse(found.user.id),
+        id: UserId.parse(found.user.id),
         email: Email.parse(found.user.email),
         name: UserName.parse(found.user.name),
         roles: BetterAuthService.rolesOf(found.user.role),
@@ -89,7 +89,7 @@ export class BetterAuthService extends AuthService {
     });
     return {
       token: signed.token ?? '',
-      credentialId: CredentialId.parse(signed.user.id),
+      userId: UserId.parse(signed.user.id),
     };
   }
 
@@ -104,7 +104,7 @@ export class BetterAuthService extends AuthService {
     });
     return {
       token: signed.token ?? '',
-      credentialId: CredentialId.parse(signed.user.id),
+      userId: UserId.parse(signed.user.id),
     };
   }
 

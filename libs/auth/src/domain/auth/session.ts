@@ -1,9 +1,9 @@
-import type { CredentialId } from '@nestposts/users/domain/user/vo/credential-id';
 import type { Email } from '@nestposts/users/domain/user/vo/email';
+import type { UserId } from '@nestposts/users/domain/user/vo/user-id';
 import type { UserName } from '@nestposts/users/domain/user/vo/user-name';
 
 export interface SessionUser {
-  readonly credentialId: CredentialId;
+  readonly id: UserId;
   readonly email: Email;
   readonly name: UserName;
   readonly roles: readonly string[];
