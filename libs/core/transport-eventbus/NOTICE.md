@@ -89,10 +89,31 @@ twice. It forwarded to a publisher, then staged into this repository's unit of w
   are what Axon 5's `PooledStreamingEventProcessor` gets from its token store.
 - **The wire is the `OutboxEnvelope`** — `id`, `topic`, `key`, `headers`, `createdAt`, `payload` — in
   Nest's own `{ pattern, data }` packet, and each transport's placement is `ClientProxyTransport`'s
-  `toPacket` (`OutboxPackets`): an `RmqRecord` with the headers as AMQP headers, an `SnsRecord` with
-  the routing facts as message attributes and the message's `key` as FIFO group, an `InngestRecord`
-  with the message id as idempotency key. The per-transport `EventEnvelopeSerializer`/`Deserializer` pairs this
-  repository had written are gone: the transports' default serializers and deserializers carry it.
+  `toPacket`. The per-transport `EventEnvelopeSerializer`/`Deserializer` pairs this repository had
+  written are gone: the transports' default serializers and deserializers carry it.
+- **The packets are the applications', not this library's.** They lived here for a while, as
+  `OutboxPackets` in `outbound/` — an `RmqRecord` with the headers as AMQP headers and the id as
+  `messageId`, an `SnsRecord` with the routing facts as message attributes, the message's `key` as FIFO
+  group and the id as deduplication id, an `InngestRecord` with the id as idempotency key and the
+  correlation id as the `correlation_id` session, `OutboxPackets.for(kind)` to pick one, and
+  `OutboxPackets.inProcess` for a suite's client. They moved out because how a message goes on a
+  broker is an implementation the deployment decides, not a semantics the library defines, and a
+  library that owned it had to depend on every broker package it placed a record for. `libs/platform`,
+  where shared application code would otherwise go, was not an option: this library depends on it —
+  for `@EventType`, the aggregate root and the rest — and a packet built from `EventAddress` there
+  would close a cycle. So each publishing application carries its own copy, identical and
+  comment-free: `apps/posts-api` and `apps/tagging` in `infrastructure/transport/outbox-packets.ts`,
+  each with the spec that was this library's beside it, and `apps/web` in `src/nest/outbox-packets.ts`,
+  exercised by `apps/web-e2e` (every email the web sends is published through it, on Inngest and on
+  RabbitMQ) rather than by a spec, because the web's Vitest runs in jsdom without the libraries'
+  source aliases. The module constant `CORRELATION_SESSION` became
+  `OutboxPackets.CORRELATION_SESSION`. What stays here is what a packet is built from —
+  `EventAddress.ofMessage`, `routingAttributesOf` and the `AWS_*_ATTRIBUTE` names (shared with
+  `SnsFilterPolicy`), the header names and `MessageOriginProvider.CORRELATION_ID` — and the one packet
+  this library's own suites need, `InProcessPacket.of` in `/testing`: the envelope itself under the
+  routing key, which replaced `OutboxPackets.inProcess`. The dependency on
+  `@nestposts/microservices-aws` went with the SNS packet; `-inngest` remains, for `inngestTriggers`,
+  and `-memory`, for `startInProcessService`.
 - **The inbox is `@nestjs/outbox`'s `OutboxInbox`**, keyed by `(consumer, message)` — the consuming
   service's name and the envelope's id — so two services ingesting the same event each keep their own
   memory of it, which the table keyed by the message alone could not.
@@ -186,8 +207,9 @@ and `unit-of-work/`, none of which upstream has:
   group;
 - **an address the event answers for itself** (`EventAddress`): the message type, the tags, the
   qualified name that is the outbox message's topic, and a routing key of
-  `namespace.Name.sequence`, which each broker's packet reads back off the message
-  (`EventAddress.ofMessage`), so a consumer binds to the slice it wants (`EventAddress.everyEventOf`);
+  `namespace.Name.sequence`, which each broker's packet — the application's — reads back off the
+  message (`EventAddress.ofMessage`), so a consumer binds to the slice it wants
+  (`EventAddress.everyEventOf`);
 - **a route that knows the process is a destination too** (`OutboxRoute`): a namespace the outbox has
   a transport for goes through it, and a streaming group's message goes to `@nestjs/outbox`'s own
   `local` transport, where `StreamingGroupDelivery` receives it. A destination message the route would
@@ -220,8 +242,10 @@ and `unit-of-work/`, none of which upstream has:
 - **a trace across the hop** (`tracing.ts`): the trace an event was dispatched in is written into its
   metadata, and a consumer span wraps the whole unit of a delivery;
 - the **doubles** that make all of the above testable with nothing running: `startInProcessService`
-  (on a `TopicMemoryServer`), `RecordingClient` and `publishedEnvelope`;
+  (on a `TopicMemoryServer`), `RecordingClient`, `publishedEnvelope` and `InProcessPacket`;
 - **the AWS and Inngest transports**, in `@nestposts/microservices-aws` and
   `@nestposts/microservices-inngest`: client proxies, strategies, contexts and record builders, which
   know nothing of this library. What stays here is what needs `@EventType`: the SNS filter policy built
-  from a binding (`SnsFilterPolicy`) and `inngestTriggers`.
+  from a binding (`SnsFilterPolicy`), the routing attributes it selects on (`routingAttributesOf`),
+  and `inngestTriggers`. The records placed on those transports are the applications' (see
+  **What `@nestjs/outbox` does here**).

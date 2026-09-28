@@ -40,8 +40,8 @@ export interface TransportOutboxSettings {
  *
  * The outbox itself is `@nestjs/outbox`'s, declared once at the application's root and global: its
  * `transports` — one `ClientProxyTransport` per namespace, around the application's client and with
- * the packet of its transport ({@link OutboxPackets}) — its `route` ({@link OutboxRoute}), relay and
- * retry. This library writes to it and never configures it. The streaming processing groups
+ * the application's own `toPacket` for its broker, built from {@link EventAddress.ofMessage} and the
+ * message's headers — its `route` ({@link OutboxRoute}), relay and retry. This library writes to it and never configures it. The streaming processing groups
  * (`processingGroups`) are delivered through the same outbox, on its `local` transport.
  *
  * ```ts

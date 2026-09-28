@@ -67,7 +67,8 @@ export class EventAddress {
    * **The pattern a broker's binding is matched against** — RabbitMQ's routing key, SNS's
    * `routingKey` attribute, and what a `TopicMemoryServer` matches its bindings against. It is not the
    * outbox's topic, which names the event and not the instance ({@link qualifiedName}): each
-   * transport's packet reads it off the message it publishes ({@link OutboxPackets}).
+   * transport's packet — the application's `toPacket` — reads it off the message it publishes
+   * ({@link EventAddress.ofMessage}).
    *
    * ## Three segments: `namespace.localName.orderingKey`
    * Because a topic exchange's routing key serves two things that pull against each other:
@@ -85,8 +86,8 @@ export class EventAddress {
    * goes out routed already, because the key is derived from metadata the event already carries.
    *
    * ## A transport that addresses differently
-   * Does it in its own `toPacket` ({@link OutboxPackets}), which receives the message and answers the
-   * pattern the transporter sends under — Inngest's qualified name, a Kafka topic. That is the one
+   * Does it in its own `toPacket` — the application's, one per broker — which receives the message and
+   * answers the pattern the transporter sends under — Inngest's qualified name, a Kafka topic. That is the one
    * place that already knows the protocol, and it is why this is a property and not an abstraction.
    */
   get routingKey(): string {

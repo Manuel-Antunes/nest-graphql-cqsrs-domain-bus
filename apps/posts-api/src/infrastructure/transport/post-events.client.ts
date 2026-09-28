@@ -8,7 +8,7 @@ import { InngestClientProxy } from '@nestposts/microservices-inngest';
 import { NOTIFICATIONS_NAMESPACE } from '@nestposts/notifications/domain/notifications.namespace';
 import { POSTS_NAMESPACE } from '@nestposts/posts/domain/post/event/posts.namespace';
 import type { OutboxRouteFunction } from '@nestposts/transport-eventbus';
-import { OutboxPackets, OutboxRoute } from '@nestposts/transport-eventbus';
+import { OutboxRoute } from '@nestposts/transport-eventbus';
 import { Inngest } from 'inngest';
 
 import type { AppConfig } from '../../config/app.config';
@@ -17,6 +17,7 @@ import type { AwsConfig } from '../../config/aws.config';
 import { awsConfig } from '../../config/aws.config';
 import type { RabbitmqConfig } from '../../config/rabbitmq.config';
 import { rabbitmqConfig } from '../../config/rabbitmq.config';
+import { OutboxPackets } from './outbox-packets';
 
 export class PostEventsClient {
   static readonly inject = [

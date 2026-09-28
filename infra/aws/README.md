@@ -53,15 +53,18 @@ It is not a new design. It is `nestposts.events`, piece by piece:
 |---|---|---|
 | topic exchange `nestposts.events` | SNS FIFO topic | `messaging/topic.ts` |
 | a queue's binding | a subscription's **filter policy** | `messaging/routing.ts` |
-| routing key `posts.PostCreated.<id>` | the `routingKey` message attribute, and `pattern` in the body | `OutboxPackets.aws` |
+| routing key `posts.PostCreated.<id>` | the `routingKey` message attribute, and `pattern` in the body | each publishing app's `OutboxPackets.aws` (`infrastructure/transport/outbox-packets.ts` in posts-api and tagging, `src/nest/outbox-packets.ts` in the web) |
 | one queue per consuming service | one SQS FIFO queue per consuming service | `messaging/queues.ts` |
 | `@EventPattern(...)` on a controller | **the same `@EventPattern`** | unchanged |
 | `outbox.destinations`, keyed by namespace | **the same destinations**, around an `SnsClientProxy` | unchanged |
 
 Switching transports cost **one branch in each application's transport factories** —
 `InboundTransport`, and the client its `PostEventsClient` builds, with the packet it is wrapped in
-(`OutboxPackets.for(app.transport)`) — which is what keeping the destination out of the event and the
-wire format in one `toPacket` bought: the code says *what* goes out, the configuration says *where*.
+(`OutboxPackets.for(app.transport)`, the application's own, beside the client) — which is what keeping
+the destination out of the event and the wire format in one `toPacket` bought: the code says *what*
+goes out, the configuration says *where*. The SNS packet lifts into message attributes the routing
+facts `routingAttributesOf` names (`@nestposts/transport-eventbus`), the same list the filter policies
+below select on, so the two cannot drift apart.
 
 The filter policies are not written here twice, either — `messaging/routing.ts` imports
 `SnsFilterPolicy` and `POSTS_NAMESPACE` from the workspace, so a namespace renamed in `@EventType`

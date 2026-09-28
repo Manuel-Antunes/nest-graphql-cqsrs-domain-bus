@@ -22,7 +22,7 @@ it is.
 | | |
 |---|---|
 | the unit of work | every command, every ingested message and every streaming delivery runs in one: Axon 5's `UnitOfWork`, its phases (`PRE_INVOCATION` … `AFTER_COMMIT`) and its `ProcessingContext`, in the transaction the application's `TransactionManager` opens |
-| publishing | `TransportEventBusService` (an `IEventBus`, Axon's `EventSink`) stages each event as an `EventMessage` → `PREPARE_COMMIT`: the event store appends, `EventOutbox` writes the outbox rows, `LocalEventDelivery` tells the subscribing handlers → `COMMIT` → the outbox's relay → the namespace's `ClientProxyTransport` → your `ClientProxy`, carrying the transport's own record (`OutboxPackets`) |
+| publishing | `TransportEventBusService` (an `IEventBus`, Axon's `EventSink`) stages each event as an `EventMessage` → `PREPARE_COMMIT`: the event store appends, `EventOutbox` writes the outbox rows, `LocalEventDelivery` tells the subscribing handlers → `COMMIT` → the outbox's relay → the namespace's `ClientProxyTransport` → your `ClientProxy`, carrying the broker's own record, which **your** `toPacket` builds from what the library exposes for it (`EventAddress.ofMessage`, `routingAttributesOf`, the header names) |
 | receiving | the transport's own deserializer → your `@EventPattern` controller, `@Payload() envelope: OutboxEnvelope` → `EventIngestion.ingest(envelope)` → one unit of work: the `OutboxInbox` row, then the event staged like any other |
 | event processing | processing groups, **subscribing** (told in `PREPARE_COMMIT`, inside the transaction; a failure fails the unit) or **streaming** (a message of the group's own in the outbox, delivered after the commit in a unit of its own, retried and dead-lettered by `@nestjs/outbox`) |
 | the event store | tags instead of streams, and a decision appended on condition that nothing it read has changed — Axon 5's dynamic consistency boundary, on the application's `EventStorageEngine` |
@@ -35,6 +35,13 @@ the tenant resolver are the application's — `@nestposts/outbox-mikro-orm`,
 none of them: `@nestposts/database` is a development dependency, for its specs, and nothing else.
 What the library needs from the application it asks for as options, and a port it defines
 (`TransactionManager`, `EventStorageEngine`) is satisfied by its shape.
+
+**Nor does it know how a message sits on a broker.** The envelope and its addresses are the
+library's; the packet each broker is sent — an AMQP record, SNS attributes and a FIFO group, an
+Inngest idempotency key — is the application's `toPacket` (**3. Declare where the events go out**),
+which is why the library depends on no broker package but two: `@nestposts/microservices-inngest`,
+whose triggers it resolves from `@EventType` (`inngestTriggers`), and
+`@nestposts/microservices-memory`, the in-process server its doubles start.
 
 ---
 
@@ -249,11 +256,26 @@ Six things to know:
 ### 3. Declare where the events go out
 
 A destination is `@nestjs/outbox`'s own `ClientProxyTransport` around a client, keyed by the namespace
-whose events it carries, with the packet of its transport. The client declares its namespaces once:
-`destinations()` is what the root `OutboxModule` takes as `transports`, and `namespaces` is what the
-bus is told as `outbox.destinations`:
+whose events it carries, with the packet of its transport — a `toPacket` that is **the
+application's**, not this library's. How a message sits on a broker — which properties an AMQP
+record sets, which facts SNS lifts into message attributes and what it groups a FIFO topic by, what
+Inngest takes as idempotency key — is an implementation decided with the deployment, so the library
+supplies what a packet is built from and leaves the packet to whoever runs the broker:
+`EventAddress.ofMessage(message)` (the routing key, the qualified name and the ordering key, read off
+the message's headers), `routingAttributesOf` and the `AWS_*_ATTRIBUTE` names (the routing facts SNS
+can filter on, the same names `SnsFilterPolicy` selects by), the header names (`TRANSPORT_*`,
+`LEGACY_CORRELATION_ID`) and `MessageOriginProvider.CORRELATION_ID`.
+`apps/posts-api/src/infrastructure/transport/outbox-packets.ts` is the worked example: an
+`OutboxPackets` class with one static `toPacket` per broker this repository uses — `rabbitmq`, `aws`,
+`inngest` — and `OutboxPackets.for(kind)` to pick one; `apps/tagging` and `apps/web` carry the same
+file. **What a message looks like**, below, is the placement it chose on each wire.
+
+The client declares its namespaces once: `destinations()` is what the root `OutboxModule` takes as
+`transports`, and `namespaces` is what the bus is told as `outbox.destinations`:
 
 ```ts
+import { OutboxPackets } from './outbox-packets';     // the application's own, beside the client
+
 export class PostEventsClient {
   static readonly namespaces = [POSTS_NAMESPACE, NOTIFICATIONS_NAMESPACE];
 
@@ -262,7 +284,7 @@ export class PostEventsClient {
       return {};                                        // no broker: nothing leaves the process
     }
     const transport = ClientProxyTransport(PostEventsClient, {
-      toPacket: OutboxPackets.for(app.transport),       // 'rabbitmq' | 'aws' | 'inngest'
+      toPacket: OutboxPackets.for(app.transport),       // the application's: 'rabbitmq' | 'aws' | 'inngest'
     });
     return Object.fromEntries(
       PostEventsClient.namespaces.map((namespace) => [namespace, transport]),
@@ -1653,8 +1675,10 @@ await consuming.server.emit(pattern, envelope);
 
 **Two services in one suite** are two of those, and the broker between them is a client in this
 process: a `RecordingClient` whose emits are delivered to the other side's server, wrapped as each
-publishing namespace's `ClientProxyTransport` with `OutboxPackets.inProcess`. The outbox's relay, its
-packets and its route are then the production ones, end to end:
+publishing namespace's `ClientProxyTransport` with `InProcessPacket.of` (`/testing`) — the envelope
+itself, under the routing key a `TopicMemoryServer` matches its bindings against, which is what a
+broker's record carries as its body. The outbox's relay and its route are then the production ones,
+end to end:
 
 ```ts
 class Wire extends RecordingClient {
@@ -1666,7 +1690,7 @@ class Wire extends RecordingClient {
   }
 }
 
-const transports = { posts: ClientProxyTransport(ToConsuming, { toPacket: OutboxPackets.inProcess }) };
+const transports = { posts: ClientProxyTransport(ToConsuming, { toPacket: InProcessPacket.of }) };
 
 OutboxModule.forRoot({ imports: [WireModule], transports, route: OutboxRoute.over(transports), relay: { enabled: false } }),
 MikroOrmOutboxModule.forRoot({ producer: 'publishing-service' }),
@@ -1695,9 +1719,11 @@ const tagging = await startInProcessService(
 tagging.app.get<RecordingClient>(PostEventsClient).sent;   // [{ pattern, data }]
 ```
 
-The doubles — `startInProcessService`, `RecordingClient`, `publishedEnvelope` — are behind
-`@nestposts/transport-eventbus/testing` and not in the main barrel, because a production bundle must
-not carry `@nestjs/testing`. There is no client for the memory transport: nothing publishes to a server
+The doubles — `startInProcessService`, `RecordingClient`, `publishedEnvelope`, `InProcessPacket` —
+are behind `@nestposts/transport-eventbus/testing` and not in the main barrel, because a production
+bundle must not carry `@nestjs/testing`. `InProcessPacket` is the only packet the library carries at
+all: a broker's is the application's, and is tested where it lives — posts-api's and tagging's
+`outbox-packets.spec.ts`. There is no client for the memory transport: nothing publishes to a server
 in its own process except a suite.
 
 The worked examples, by what they prove:
@@ -1727,7 +1753,12 @@ The worked examples, by what they prove:
 
 ## What a message looks like
 
-On RabbitMQ (`OutboxPackets.rabbitmq`, an `RmqRecord`):
+The envelope is this library's; how it sits on each broker is the application's `toPacket`. What
+follows is the placement this repository's applications chose — `OutboxPackets`, in
+`apps/posts-api/src/infrastructure/transport/outbox-packets.ts` and its copies in `apps/tagging` and
+`apps/web` — built from `EventAddress.ofMessage` and, on SNS, `routingAttributesOf`.
+
+On RabbitMQ (posts-api's `OutboxPackets.rabbitmq`, an `RmqRecord`):
 
 ```
 routing key  posts.PostCreated.9f1d1f36-7c2e-4a0a-9b7d-2f5c1a3e4b60
@@ -1764,9 +1795,9 @@ or a dead-letter queue expects to find routing facts without anybody decoding a 
 The one thing the payload still encodes is a `Date`: `{"@date":"…"}` goes out and a `Date` comes back,
 because JSON has no date type and JavaScript has no field types at runtime to guess one.
 
-To a client in this process (`OutboxPackets.inProcess`, a suite's `RecordingClient`) the data is the
-envelope itself. On SNS the routing facts are lifted into message attributes, and on Inngest the
-envelope is the event's `data`: see the next two sections.
+To a client in this process (`InProcessPacket.of` from `/testing`, a suite's `RecordingClient`) the
+data is the envelope itself. On SNS the routing facts are lifted into message attributes, and on
+Inngest the envelope is the event's `data`: see the next two sections.
 
 ---
 
@@ -1775,10 +1806,14 @@ envelope is the event's `data`: see the next two sections.
 The transport itself — `SnsClientProxy`, `SqsClientProxy`, `SqsStrategy`, `SqsContext`,
 `processSqsEvent`, the record builders — is **`@nestposts/microservices-aws`**, a package that knows
 nothing about envelopes, CQRS or this library, the way `@nestjs/microservices` does not. What stays
-here is what needs `@EventType`: the packet (`OutboxPackets.aws`) and the binding (`SnsFilterPolicy`).
-Inngest is split the same way, into **`@nestposts/microservices-inngest`**, with
-`OutboxPackets.inngest` and `inngestTriggers` (the `@EventType` registry as the strategy's `triggers`)
-staying here.
+here is what needs `@EventType`: the binding (`SnsFilterPolicy`) and the routing facts a packet lifts
+into message attributes (`routingAttributesOf` and the `AWS_*_ATTRIBUTE` names, one list shared by
+both, so what the packet writes is what the policy selects on). The packet itself — the `SnsRecord` —
+is the application's (posts-api's and tagging's `OutboxPackets.aws`), and this library does not
+depend on `@nestposts/microservices-aws` at all. Inngest is split the same way, into
+**`@nestposts/microservices-inngest`**, with `inngestTriggers` (the `@EventType` registry as the
+strategy's `triggers`) staying here and the `InngestRecord` built by the application's
+`OutboxPackets.inngest`.
 
 Nothing in a controller, a handler or an event changes. What changes is the bootstrap, and the
 mapping is close enough to read straight across:
@@ -1803,19 +1838,20 @@ mapping is close enough to read straight across:
 }
 ```
 
-and the destination wraps it with `OutboxPackets.for('aws')`. The client takes no serializer: its
-default is Nest's `IdentitySerializer`, so what goes on the wire is exactly the packet the outbox built
-— an `SnsRecord` whose body is `{ pattern, data: envelope }`, whose message attributes are the routing
-facts, and whose FIFO fields are set. A default wire format is a decision, and here the decision is
-the destination's (`toPacket`), not the client's.
+and the destination wraps it with the application's packet for SNS — `OutboxPackets.for('aws')` in
+posts-api and tagging. The client takes no serializer: its default is Nest's `IdentitySerializer`, so
+what goes on the wire is exactly the packet the outbox built — an `SnsRecord` whose body is
+`{ pattern, data: envelope }`, whose message attributes are the routing facts (`routingAttributesOf`),
+and whose FIFO fields are set. A default wire format is a decision, and here the decision is the
+destination's (`toPacket`, the application's), not the client's.
 
-On a **FIFO** topic `MessageGroupId` is the outbox message's `key` — `posts/9f1d…`, the namespace and
-the sequence its policy put the event in — so one post's events are ordered against each other while
-different posts proceed in parallel, and the order SNS keeps is the order the outbox published. It
-falls back to the routing key's last segment for a message with no key. `MessageDeduplicationId` is
-the envelope's id — so a relay that publishes the same message twice, a retry after a timeout or a
-lease that ran out, is deduplicated by AWS before the far side's inbox has to. That is why
-content-based deduplication stays off.
+On a **FIFO** topic the packet sets `MessageGroupId` to the outbox message's `key` — `posts/9f1d…`,
+the namespace and the sequence its policy put the event in — so one post's events are ordered against
+each other while different posts proceed in parallel, and the order SNS keeps is the order the outbox
+published. It falls back to the routing key's last segment, the address's `orderingKey`, for a
+message with no key. `MessageDeduplicationId` is the envelope's id — so a relay that publishes the
+same message twice, a retry after a timeout or a lease that ran out, is deduplicated by AWS before the
+far side's inbox has to. That is why content-based deduplication stays off.
 
 `SqsClientProxy` writes the same body, so a queue fed both ways — subscribed to the topic and written
 to directly — needs one consumer. Use it for what is not a fact: a command sent to one worker, a
@@ -1865,7 +1901,9 @@ sees an exception.
 A queue has no bindings, so the selection happens twice and in two places: the **subscription**
 decides what reaches the queue, and the **strategy** matches the routing key against the handlers'
 patterns once it is there. `SnsFilterPolicy` is the first half, built from the same namespace or
-event class `@EventPattern` takes:
+event class `@EventPattern` takes. It selects on the attributes `routingAttributesOf` produces, so
+whatever packet an application sends to SNS has to lift those into message attributes — posts-api's
+`OutboxPackets.aws` does, and a packet that did not would reach no queue:
 
 ```ts
 SnsFilterPolicy.everyEventOf(POSTS_NAMESPACE)      // { namespace: ['posts'] }         ← posts.#
@@ -1883,6 +1921,8 @@ notification any more: the body is not `{ pattern, data }`, and `SqsStrategy` fa
 `SQS message … carries no pattern` until the redrive policy moves it to the dead-letter queue.
 
 ### What a message looks like
+
+As posts-api's `OutboxPackets.aws` places it:
 
 ```
 message attributes  namespace      posts                        ← what the filter policy reads
@@ -1933,14 +1973,15 @@ deployment.
 
 ## On Inngest: the event is the message, and the function is the binding
 
-`OutboxPackets.inngest` makes an `InngestRecord`:
+The application's packet for Inngest — posts-api's `OutboxPackets.inngest` — makes an
+`InngestRecord`:
 
 | | |
 |---|---|
-| the event's `name` | the **qualified** name, `posts.PostCreated` — not the routing key: Inngest matches a trigger by exact name and has no wildcards, so a name carrying the entity would mint one event name per post |
+| the event's `name` | the **qualified** name, `posts.PostCreated` (`EventAddress.ofMessage(message).qualifiedName`) — not the routing key: Inngest matches a trigger by exact name and has no wildcards, so a name carrying the entity would mint one event name per post |
 | the event's `data` | the envelope, exactly as every other transport carries it |
 | the event's `id` | the envelope's id, as idempotency key: a relay that publishes the same message twice sends one event as far as Inngest is concerned |
-| `meta.sessions.correlation_id` | the message's `correlationId` — or the legacy `cqrs-transport-correlation-id` of an older row — Inngest's own grouping, which it propagates to every event a run sends |
+| `meta.sessions.correlation_id` (`OutboxPackets.CORRELATION_SESSION`) | the message's `correlationId` (`MessageOriginProvider.CORRELATION_ID`) — or the legacy `cqrs-transport-correlation-id` of an older row (`LEGACY_CORRELATION_ID`) — Inngest's own grouping, which it propagates to every event a run sends |
 
 On the receiving side `InngestStrategy` takes no deserializer either: Nest's default hands the handler
 the event's `data`, which is the envelope. `inngestTriggers` turns each binding into the triggers a
@@ -2044,10 +2085,10 @@ not because anything is broken.
 
 ## Adding a transport
 
-**One function on the way out, and nothing of this library on the way in.** A transport is a Nest
-`ClientProxy` and a Nest server; what this library adds is how an outbox message becomes that client's
-packet — a `toPacket` for `ClientProxyTransport`, answering `{ pattern, data }`, with the transport's
-own record as `data` when it has headers or keys of its own:
+**One function of the application's on the way out, and nothing of this library either way.** A
+transport is a Nest `ClientProxy` and a Nest server, and how an outbox message becomes that client's
+packet is the application's decision — a `toPacket` for `ClientProxyTransport`, answering
+`{ pattern, data }`, with the transport's own record as `data` when it has headers or keys of its own:
 
 ```ts
 const kafka = ClientProxyTransport(KafkaEventsClient, {
@@ -2058,16 +2099,21 @@ const kafka = ClientProxyTransport(KafkaEventsClient, {
 });
 ```
 
-The qualified name arrives as `message.topic`, which Inngest uses as it is; a broker that binds by
+The qualified name arrives as `message.topic`, which is all Inngest needs; a broker that binds by
 entity — RabbitMQ, SNS — is sent `EventAddress.ofMessage(message).routingKey` instead, which is the
-only place that has a reason to know. `OutboxPackets` holds the three brokers this repository uses, and
-`OutboxPackets.for(kind)` is how a destination picks one.
+only place that has a reason to know, and the same address answers the `orderingKey` a FIFO group or a
+partition wants. What else a packet may need is exported beside it: `routingAttributesOf` for a broker
+that filters on attributes, the header names for one that carries headers of its own. In this
+repository the three brokers it uses are `OutboxPackets.rabbitmq`, `.aws` and `.inngest`, in each
+publishing application's `outbox-packets.ts`, and `OutboxPackets.for(kind)` is how its client picks
+one — so a fourth broker is one more static there, and a release of this library is not part of it.
 
 On the way in, whatever the transport's server hands `@Payload()` has to be the envelope — its default
 deserializer, usually, since the envelope is plain JSON. If it is not, `EventIngestion` refuses the
 message by name instead of ingesting nothing.
 
-Nothing else changes — not the outbox, not the relay, not the envelope, not the ingestion.
+Nothing else changes — not the outbox, not the relay, not the envelope, not the ingestion, and not
+this library.
 
 ---
 
@@ -2110,7 +2156,7 @@ lines of the application that needs it, and the two `AppendCondition` methods ha
 | `AppendEventsTransactionRejectedException` | `AppendEventsTransactionRejectedError` | |
 | `EventSourcingRepository`, `@EventSourcedEntity(tagKey)` | `EventSourcingRepository`, `eventStore.entities: [{ entity, tagKey }]` | declared at the root, because the entity's library knows nothing of this one; no `@EntityCreator` — a replay starts from `new Entity()` |
 | `@EventSourcingHandler` | the aggregate's `on<Event>` methods, through `loadFromHistory` | `@nestjs/cqrs`'s |
-| Axon Server, as the transport | the brokers, through `@nestjs/outbox` | the envelope on each wire (`OutboxPackets`), the origin mark, and `EventIngestion`, where a delivery becomes a unit of work |
+| Axon Server, as the transport | the brokers, through `@nestjs/outbox` | the envelope and the addresses each wire's packet is built from (`EventAddress.ofMessage`, `routingAttributesOf`; the packet, `toPacket`, is the application's), the origin mark, and `EventIngestion`, where a delivery becomes a unit of work |
 
 ---
 
@@ -2138,7 +2184,8 @@ For whoever knew this library before; `NOTICE.md` has the reasons.
 | `startInProcessService` creating the spec's schema itself (`createSchema`) | `startInProcessService(module, { onStart, onClose })`, and `testSchemaLifecycle` |
 | `@Publisher(namespace)`, `EVERY_NAMESPACE`, `ITransportPublisherEventBus` | the root `OutboxModule`'s `transports`, and `outbox.destinations` naming the same namespaces |
 | `EventForwarder` (a direct emit) | nothing: `EventOutbox` writes, the relay sends |
-| `EventEnvelope` / `EventEnvelopeFactory`, every `*EventEnvelopeSerializer` / `*Deserializer` | `@nestjs/outbox`'s `OutboxEnvelope`, `OutboxPackets` out, the transports' default deserializers in |
+| `EventEnvelope` / `EventEnvelopeFactory`, every `*EventEnvelopeSerializer` / `*Deserializer` | `@nestjs/outbox`'s `OutboxEnvelope`, the application's `toPacket` out (posts-api's `OutboxPackets`), the transports' default deserializers in |
+| `OutboxPackets` in this library, `OutboxPackets.inProcess` | a `toPacket` per broker in each publishing application (`OutboxPackets`, a copy in posts-api, tagging and the web), and `InProcessPacket.of` in `/testing` |
 | `@TransportEvent()` / `TransportEventPipe` | `@Payload() envelope: OutboxEnvelope`, and `EventIngestion.ingest(envelope)` |
 | `MessageInbox` / `MikroOrmMessageInbox`, `transport.transport_message_inbox` | `@nestjs/outbox`'s `OutboxInbox` over `MikroOrmOutboxStore`, `transport.outbox_inbox` |
 | `MemoryClient` as a destination | no transport, and a suite delivers on `TopicMemoryServer.emit` |
@@ -2189,8 +2236,7 @@ options turned on.
 | `EventStore` / `EventStorageEngine` / `EventSourcingRepository` | the event store, its engine, and an entity loaded from its events |
 | `Tag` / `TagResolver` / `EventCriteria` / `ConsistencyMarker` / `AppendCondition` / `AppendEventsTransactionRejectedError` | the dynamic consistency boundary |
 | `MikroOrmEventStoreModule` / `MikroOrmEventStorageEngine` / `eventStoreEntities` (`@nestposts/event-store-mikro-orm`) | the engine on MikroORM and PostgreSQL, and its table |
-| `ClientProxyTransport(Client, { toPacket })` (`@nestjs/outbox`) | a destination: the client, and how a message becomes its packet |
-| `OutboxPackets.for('rabbitmq' \| 'aws' \| 'inngest')` | the packet of each broker; `OutboxPackets.inProcess` is the envelope, for a suite's client |
+| `ClientProxyTransport(Client, { toPacket })` (`@nestjs/outbox`) | a destination: the client, and how a message becomes its packet — the application's `toPacket` |
 | `OutboxRoute.over(transports)` | the outbox's route: a streaming group's message and a namespace with no transport go `local` |
 | `EventMessages` | what an event becomes on the wire — a destination's message, a group's — and what an envelope becomes back (`read`) |
 | `EventOutbox` | where the events a unit staged are written, and what happens after its commit |
@@ -2203,7 +2249,8 @@ options turned on.
 | `IncomingRequest` | the request a message belongs to — `from(envelope)` in a controller, `of(context)` in a guard, an interceptor or a filter, `traceOf` for the trace |
 | `MessageTenantResolver` (`@nestposts/database`) | the tenant a message names, read off the envelope for `TenancyModule` |
 | `EventAddress.everyEventOf(namespace)` / `.everyEventOf(EventClass)` | the binding: `posts.#`, or `posts.PostCreated.*` |
-| `EventAddress` | what an event says about itself — its message type, its tags and its `routingKey`; `ofMessage` reads the same back off an outbox message |
+| `EventAddress` | what an event says about itself — its message type, its tags and its `routingKey`; `ofMessage` reads the same back off an outbox message, which is what an application's `toPacket` addresses a broker with |
+| `routingAttributesOf` / `AWS_*_ATTRIBUTE` | the routing facts an SNS packet lifts into message attributes, under the names `SnsFilterPolicy` selects on |
 | `SnsClientProxy` / `SqsClientProxy` (`@nestposts/microservices-aws`) | a topic for a fact, a queue for a message addressed to one service |
 | `SqsStrategy` / `processSqsEvent` (`@nestposts/microservices-aws`) | the consumer: a polling loop, or a Lambda invocation |
 | `SnsFilterPolicy.everyEventOf(...)` / `.exceptFrom(...)` | the binding, for a subscription |
@@ -2212,6 +2259,7 @@ options turned on.
 | `EventSourcedEventBus` | the `EventBus` whose observable side is the event store |
 | `isIngested` / `originOf` / `identifierOf` | what an event says about where it came from |
 | `startInProcessService` / `RecordingClient` / `publishedEnvelope` (`/testing`) | the doubles |
+| `InProcessPacket.of` (`/testing`) | the `toPacket` of a suite's client: the envelope itself, under the routing key |
 | `TopicMemoryServer` (`@nestposts/microservices-memory`) | the memory transport's server: a routing key matched against every binding, each delivery a JSON copy |
 
 ### Environment

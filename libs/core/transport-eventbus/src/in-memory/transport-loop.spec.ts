@@ -31,7 +31,6 @@ import { EventIngestion } from '../inbound/event-ingestion';
 import { EventMessage } from '../messaging/event-message';
 import { EventMessages } from '../outbound/event-messages';
 import { TRANSPORT_ORIGIN } from '../outbound/message-headers';
-import { OutboxPackets } from '../outbound/outbox-packets';
 import { OutboxRoute } from '../outbound/outbox-route';
 import { identifierOf } from '../outbound/transport-metadata';
 import {
@@ -40,6 +39,7 @@ import {
 } from '../request-context';
 import type { InProcessService } from '../testing';
 import { RecordingClient, startInProcessService } from '../testing';
+import { InProcessPacket } from '../testing/in-process-packet';
 import { TransportEventBusModule } from '../transport-event-bus.module';
 import { TransportEventBusService } from '../transport-event-bus.service';
 import { TransportIdentity } from '../transport-identity';
@@ -111,13 +111,13 @@ class WireModule {}
 
 const publishingTransports = {
   [POSTS]: ClientProxyTransport(ToConsuming, {
-    toPacket: OutboxPackets.inProcess,
+    toPacket: InProcessPacket.of,
   }),
 };
 
 const consumingTransports = {
   [POSTS]: ClientProxyTransport(ToPublishing, {
-    toPacket: OutboxPackets.inProcess,
+    toPacket: InProcessPacket.of,
   }),
 };
 

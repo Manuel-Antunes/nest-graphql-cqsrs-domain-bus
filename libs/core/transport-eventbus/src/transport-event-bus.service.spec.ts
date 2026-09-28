@@ -32,8 +32,8 @@ import {
   TRANSPORT_MESSAGE_TYPE,
   TRANSPORT_ORIGIN,
 } from './outbound/message-headers';
-import { OutboxPackets } from './outbound/outbox-packets';
 import { OutboxRoute } from './outbound/outbox-route';
+import { InProcessPacket } from './testing/in-process-packet';
 import { RecordingClient } from './testing/recording-client';
 import { TransportEventBusModule } from './transport-event-bus.module';
 import { TransportEventBusService } from './transport-event-bus.service';
@@ -254,7 +254,7 @@ class RabbitModule {}
 
 const transports = {
   [SHOP]: ClientProxyTransport(Rabbit, {
-    toPacket: OutboxPackets.inProcess,
+    toPacket: InProcessPacket.of,
   }),
 };
 

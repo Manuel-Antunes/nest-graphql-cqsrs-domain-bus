@@ -40,13 +40,13 @@ import { InboxDescriptions } from './inbound/inbox-descriptions';
 import { IncomingRequest } from './inbound/incoming-request';
 import { EventMessage } from './messaging/event-message';
 import type { Message } from './messaging/message';
-import { OutboxPackets } from './outbound/outbox-packets';
 import { OutboxRoute } from './outbound/outbox-route';
 import { EventOutbox } from './outbox/event-outbox';
 import {
   DefaultRequestContextCodec,
   RequestContextCodec,
 } from './request-context';
+import { InProcessPacket } from './testing/in-process-packet';
 import { RecordingClient } from './testing/recording-client';
 import { TransportEventBusModule } from './transport-event-bus.module';
 import { TransportEventBusService } from './transport-event-bus.service';
@@ -108,7 +108,7 @@ const persistence = () => [
 /** The application's outbox, declared at its root the way an application declares it. */
 const transports = {
   things: ClientProxyTransport(ThingsClient, {
-    toPacket: OutboxPackets.inProcess,
+    toPacket: InProcessPacket.of,
   }),
 };
 

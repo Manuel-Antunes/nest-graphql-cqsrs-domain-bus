@@ -349,9 +349,11 @@ libs/core/transport-eventbus  Axon Framework 5's messaging on @nestjs/cqrs and @
                          delivery runs in, messages and correlation, subscribing and streaming
                          processing groups, the event store with dynamic consistency boundaries —
                          and the CQRS event bus over Nest's microservice transports, RabbitMQ /
-                         SNS+SQS / Inngest, the envelope's wire on each. It USES @nestjs/cqrs and
-                         @nestjs/outbox, which the application declares, and knows no database: the
-                         TransactionManager and the EventStorageEngine are ports. README and NOTICE
+                         SNS+SQS / Inngest — the envelope and what a broker's packet is built from;
+                         the packet itself (`toPacket`) is each application's. It USES
+                         @nestjs/cqrs and @nestjs/outbox, which the application declares, and knows
+                         no database: the TransactionManager and the EventStorageEngine are ports.
+                         README and NOTICE
 libs/core/outbox-mikro-orm  @nestjs/outbox on MikroORM: MikroOrmOutboxModule (the store for the
                          messages, dead letters and inbox, and their three tables),
                          MikroOrmTransactionManager (a unit of work's transaction: savepoints,
@@ -709,11 +711,16 @@ the storage engine and the tenant resolver are the application's. The essentials
   by the lease owner) and passes `@nestjs/outbox/testing`'s contract suites with `concurrent: true` —
   `mikro-orm-outbox.store.spec.ts`.
 - **The wire is the `OutboxEnvelope`** — `id`, `topic`, `key`, `headers`, `createdAt`, `payload` — in
-  Nest's own `{ pattern, data }` packet, and each transport's placement is `toPacket`
-  (`OutboxPackets`): an `RmqRecord` (the headers as AMQP headers, the id as `messageId`), an
-  `SnsRecord` (the routing facts as message attributes — SNS allows ten and a filter policy reads
+  Nest's own `{ pattern, data }` packet, and each transport's placement is `toPacket`, which is the
+  **application's**, not the library's: `OutboxPackets`, one copy in each publishing app
+  (`apps/posts-api` and `apps/tagging`'s `infrastructure/transport/outbox-packets.ts`, the web's
+  `src/nest/outbox-packets.ts`) — an `RmqRecord` (the headers as AMQP headers, the id as `messageId`),
+  an `SnsRecord` (the routing facts as message attributes — SNS allows ten and a filter policy reads
   nothing else — the message's `key` as FIFO group, the id as deduplication id), an `InngestRecord` (the
-  id as idempotency key, the correlation id as session). The headers are the message's metadata plus
+  id as idempotency key, the correlation id as session). The library only supplies what a packet is
+  built from — `EventAddress.ofMessage`, `routingAttributesOf` and the header names — and keeps
+  `InProcessPacket` (`/testing`) for its own suites; it could not live in `libs/platform`, which the
+  library depends on, without a cycle. The headers are the message's metadata plus
   the framework's facts: `cqrs-transport-message-type`, `-timestamp`, `-origin`, `-tags`, `-event-id`
   and, for a group's message, `-processing-group`. The clients use their **default** serializers, and
   the strategies their default deserializers: nothing in `libs/core/microservices-aws` or `-inngest`

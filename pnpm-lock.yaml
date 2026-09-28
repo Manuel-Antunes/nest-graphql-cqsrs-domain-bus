@@ -1398,9 +1398,6 @@ importers:
 
   libs/core/transport-eventbus:
     dependencies:
-      '@nestposts/microservices-aws':
-        specifier: workspace:*
-        version: link:../microservices-aws
       '@nestposts/microservices-inngest':
         specifier: workspace:*
         version: link:../microservices-inngest

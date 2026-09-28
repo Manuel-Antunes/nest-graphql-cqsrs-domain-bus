@@ -31,9 +31,9 @@ import {
 import { EventType } from '@nestposts/platform/domain/shared/event-type';
 
 import { TRANSPORT_EVENT_BUS_PUBLISHER } from '../constants';
-import { OutboxPackets } from '../outbound/outbox-packets';
 import { OutboxRoute } from '../outbound/outbox-route';
 import { identifierOf } from '../outbound/transport-metadata';
+import { InProcessPacket } from '../testing/in-process-packet';
 import { RecordingClient } from '../testing/recording-client';
 import { TransportEventBusModule } from '../transport-event-bus.module';
 import type { OutboxRelayMode } from './transport-outbox.options';
@@ -111,7 +111,7 @@ const broker = new Broker();
 class BrokerModule {}
 
 const transports = {
-  things: ClientProxyTransport(Broker, { toPacket: OutboxPackets.inProcess }),
+  things: ClientProxyTransport(Broker, { toPacket: InProcessPacket.of }),
 };
 
 @Injectable()

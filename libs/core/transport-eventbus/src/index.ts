@@ -22,9 +22,10 @@
  * | `EventStore`, `EventStorageEngine`, `Tag`, `EventCriteria`, `AppendCondition` | the same names |
  * | `EventSourcingRepository` | {@link EventSourcingRepository} |
  *
- * And what Axon does not have, because Axon Server is its transport: the envelope on the wire of each
- * broker ({@link OutboxPackets}), the origin mark that keeps a service from ingesting its own echo,
- * and {@link EventIngestion}, where a broker's delivery becomes a unit of work.
+ * And what Axon does not have, because Axon Server is its transport: the envelope and the addresses a
+ * broker's packet is built from ({@link EventAddress}, `routingAttributesOf`, the header names —
+ * the packet itself, `toPacket`, is the application's), the origin mark that keeps a service from
+ * ingesting its own echo, and {@link EventIngestion}, where a broker's delivery becomes a unit of work.
  */
 
 export * from './aws/aws-message';
@@ -59,7 +60,6 @@ export * from './messaging/message-type';
 export * from './outbound/event-address';
 export * from './outbound/event-messages';
 export * from './outbound/message-headers';
-export * from './outbound/outbox-packets';
 export * from './outbound/outbox-route';
 export * from './outbound/transport-metadata';
 export * from './outbox/event-outbox';

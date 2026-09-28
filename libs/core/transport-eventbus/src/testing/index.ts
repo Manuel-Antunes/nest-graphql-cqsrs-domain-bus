@@ -6,6 +6,7 @@
  * `dockerode` and `ssh2` along, which on Lambda announced itself as
  * `Runtime.ImportModuleError: Cannot find module 'ssh2'`. A spec now hands it the schema's lifecycle.
  */
+export * from './in-process-packet';
 export * from './in-process-service';
 export * from './published-envelope';
 export * from './recording-client';

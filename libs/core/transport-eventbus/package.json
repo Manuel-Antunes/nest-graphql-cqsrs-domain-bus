@@ -26,7 +26,6 @@
     }
   },
   "dependencies": {
-    "@nestposts/microservices-aws": "workspace:*",
     "@nestposts/microservices-inngest": "workspace:*",
     "@nestposts/microservices-memory": "workspace:*",
     "@nestposts/platform": "workspace:*"

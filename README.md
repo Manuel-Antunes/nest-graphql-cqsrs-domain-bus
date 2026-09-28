@@ -227,7 +227,8 @@ apps/posts-api/src
 │   │                                                #   módulo que a possui (DatabaseModule.forFeature)
 │   └── transport/inbound-transport,                 # what arrives, and the client the outbox publishes
 │       post-events.client,                          #   through: its destinations (`posts` and
-│       post-events-client.module                    #   `notifications`), built from the injected config
+│       post-events-client.module,                   #   `notifications`), built from the injected config,
+│       outbox-packets                               #   and the packet each broker is sent — its own
 ├── lambda/http, sqs                                 # the function handlers: the Function URL and the queue
 └── interfaces
     ├── graphql/*.resolver                           # one resolver per schema file
@@ -245,8 +246,9 @@ apps/tagging/src
 │   └── complete-post-with-default-tag.command       # decides, on the real Post aggregate
 ├── infrastructure
 │   └── transport/inbound-transport,                 # idem: its one destination is the `posts` namespace —
-│       post-events.client,                          #   the fact is the Post's, and this service decided it.
-│       post-events-client.module,                   #   The framework's event store comes in through
+│       post-events.client,                          #   the fact is the Post's, and this service decided it,
+│       post-events-client.module,                   #   sent in packets of its own (outbox-packets, the same
+│       outbox-packets,                              #   copy as posts-api's). The framework's event store comes in through
 │       exception-producers                          #   `eventStore: { entities: [{ entity: Post, … }] }` in the AppModule
 ├── lambda/sqs                                       # the queue's handler, its one way in on AWS
 └── interfaces/messaging
@@ -366,8 +368,21 @@ the exchange, the protocol — is configuration: each application's `config/` re
 (`app.config.ts` for the routing, `aws.config.ts`, `rabbitmq.config.ts`, `inngest.config.ts` for each
 technology, `outbox.config.ts` for the relay), and `infrastructure/transport/` builds the client, its
 module and the inbound strategy from it. Neither side names a serializer: the packet the outbox hands
-the client is already the transport's own record (`OutboxPackets`), and the transports' default
-deserializers read it back.
+the client is already the transport's own record, built by the application's `toPacket`
+(`OutboxPackets`, in `infrastructure/transport/outbox-packets.ts` beside the client), and the
+transports' default deserializers read it back.
+
+**The packet is the application's, and not the transport library's.** How a message sits on a broker
+— which AMQP properties, which SNS attributes and FIFO group, which Inngest idempotency key — is an
+implementation, decided with the deployment; the library's semantics need none of it, so
+`libs/core/transport-eventbus` exposes what a packet is built from (`EventAddress.ofMessage`,
+`routingAttributesOf`, the header names) and no packet of its own but the in-process one its suites
+use (`InProcessPacket`, in `/testing`). Nor could the packet move to `libs/platform`, where shared
+application code would otherwise go: the transport library depends on `libs/platform`, and a packet
+built from `EventAddress` there would close a cycle. So every publishing application carries the same
+`OutboxPackets` — `apps/posts-api` and `apps/tagging` in `infrastructure/transport/`, each with its
+spec, and `apps/web` in `src/nest/` — a copy that is three files to keep in step, and a price paid on
+purpose for keeping a deployment detail out of a reusable library.
 
 An event whose namespace has no destination stays in the process, which is the right default for the
 events a domain is mostly made of — a `tags` event in a service that publishes `posts` is an internal
@@ -434,8 +449,9 @@ headers are written when the event is **staged**, because the relay publishes la
 all — and on RabbitMQ they go out twice, inside the envelope, which
 is what the consumer reads on every transport alike, and as AMQP headers, where a management UI, a
 shovel or a dead-letter queue expects routing facts to be. What decides this per transport is one
-function, the destination's `toPacket` (`OutboxPackets`): an `RmqRecord` here, an `SnsRecord` on AWS, an
-`InngestRecord` on Inngest, the envelope itself in process.
+function, the destination's `toPacket` — the application's `OutboxPackets`: an `RmqRecord` here, an
+`SnsRecord` on AWS, an `InngestRecord` on Inngest — and, in a suite's process, the transport
+library's `InProcessPacket`, the envelope itself.
 
 On the receiving side the controller's parameter **is** the envelope — `@Payload() envelope:
 OutboxEnvelope`, `@nestjs/outbox`'s own consumer pattern — and `EventIngestion.ingest(envelope)`
@@ -458,7 +474,8 @@ one back.
 ### Four transports, and the applications cannot tell which
 
 The bus speaks through `@nestjs/microservices`, so a transport is a client and a server, plus the one
-function that turns an outbox message into that client's packet (`OutboxPackets`). There are three
+function of the application's that turns an outbox message into that client's packet
+(`OutboxPackets`, a static per broker). There are three
 brokers and the process itself, and a controller, a handler and an event are identical on all of them:
 
 | | RabbitMQ | AWS | Inngest | in process |
@@ -608,7 +625,7 @@ with.
 | | where | what it proves |
 |---|---|---|
 | unit / slice | every project, beside the code | the rule, the handler, the mapping |
-| integration | `libs/core/transport-eventbus/src/**`, `apps/posts-api/test/persistence` | the message (a `Date` that survives the wire), each transport's packet, the outbox committing with the work and publishing after it, the outbox store against `@nestjs/outbox`'s own contract suites, the inbox rolling back with a failed reaction, the ORM mapping |
+| integration | `libs/core/transport-eventbus/src/**`, `apps/posts-api/test/persistence`, `outbox-packets.spec` in posts-api and tagging | the message (a `Date` that survives the wire), each transport's packet, the outbox committing with the work and publishing after it, the outbox store against `@nestjs/outbox`'s own contract suites, the inbox rolling back with a failed reaction, the ORM mapping |
 | one hop, in process | `libs/core/transport-eventbus/src/in-memory/transport-loop.spec.ts` | two services with no broker, each publishing through a client in the process that emits on the other's `TopicMemoryServer`: the real class arrives, the request is restored, one correlation id per request, a redelivery reaches nobody, the loop is cut |
 | the whole system, in a browser | `pnpm test:web` (`apps/web-e2e`, **Playwright**) | **three processes over real RabbitMQ**, driven through Chromium: signing in and being refused, the three states of `/posts/new`, the polymorphic `me`, a post read by somebody who never signed in — and, in the same tests, what a browser cannot see: each service's durable state, both inboxes, idempotency through the broker's management API, the replica channel, **one correlation id for the whole saga**, and the `x-tenant` **of the browser** on the headers of both messages, each published by a different process |
 
@@ -903,10 +920,17 @@ And the suites that came with the monorepo and the transport:
   going on the wire as the event and not as a wrapper around it, the tags flattened for a header
   (separators and all), and the one thing JSON loses — a `Date` comes back a `Date`, including nested
   in an array, while a string that merely *looks* like a date stays a string.
-- `outbox-packets.spec` — an outbox message on each transport: RabbitMQ's record with the envelope as
-  body and its headers as AMQP headers, SNS's routing facts as message attributes with the aggregate as
-  FIFO group and the message id as deduplication id, Inngest's qualified name, the envelope as the
-  event's data and the message id as the event id, and the envelope itself in process.
+- `outbox-packets.spec` — in `apps/posts-api` and `apps/tagging`, beside each one's
+  `infrastructure/transport/outbox-packets.ts`, the same spec over the same copy — an outbox message
+  on each transport: RabbitMQ's record with the envelope as body and its headers as AMQP headers,
+  SNS's routing facts as message attributes with the aggregate as FIFO group and the message id as
+  deduplication id, Inngest's qualified name, the envelope as the event's data, the message id as the
+  event id and the correlation id as the session (the legacy key included), the routing key read off
+  the headers whatever the topic says, and `OutboxPackets.for` picking by transport. The web's copy
+  has no spec of its own — its Vitest runs in jsdom without the libraries' source aliases — and is
+  exercised by `apps/web-e2e`, which publishes every email through it on both transports.
+- `in-process-packet.spec` — the transport library's one packet, for a suite's client: the envelope
+  itself, under the routing key read off its headers.
 - `event-address.spec` — what the event says about where it goes, read off the event: the namespace,
   the three-segment ordering key, the sentinel for an event with no tag, the warning for an event with
   two, one identifier per instance (so a retry is a redelivery and not a new fact), and the class name

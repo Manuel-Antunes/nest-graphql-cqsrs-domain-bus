@@ -3,21 +3,19 @@ import { RmqRecord } from '@nestjs/microservices';
 import type { OutboxEnvelope, OutboxMessage } from '@nestjs/outbox';
 import { SnsClientProxy } from '@nestposts/microservices-aws';
 import { InngestClientProxy } from '@nestposts/microservices-inngest';
-
 import {
   AWS_MESSAGE_TYPE_ATTRIBUTE,
   AWS_NAMESPACE_ATTRIBUTE,
   AWS_ORIGIN_ATTRIBUTE,
   AWS_QUALIFIED_NAME_ATTRIBUTE,
   AWS_ROUTING_KEY_ATTRIBUTE,
-} from '../aws/aws-message';
-import {
   LEGACY_CORRELATION_ID,
   TRANSPORT_MESSAGE_TYPE,
   TRANSPORT_ORIGIN,
   TRANSPORT_TAGS,
-} from './message-headers';
-import { CORRELATION_SESSION, OutboxPackets } from './outbox-packets';
+} from '@nestposts/transport-eventbus';
+
+import { OutboxPackets } from './outbox-packets';
 
 const TOPIC = 'posts.PostCreated';
 
@@ -47,6 +45,11 @@ const message = {
   attempts: 0,
   lastError: null,
 } as OutboxMessage;
+
+const dispatched = (proxy: object, packet: object): Promise<void> =>
+  (proxy as { dispatchEvent: (packet: object) => Promise<void> }).dispatchEvent(
+    packet,
+  );
 
 describe('an outbox message on each transport', () => {
   describe('RabbitMQ', () => {
@@ -89,12 +92,7 @@ describe('an outbox message on each transport', () => {
         topicArn: 'arn:aws:sns:us-east-1:000000000000:events.fifo',
         client,
       });
-      const { pattern, data } = OutboxPackets.aws(message, envelope);
-      await (
-        proxy as unknown as {
-          dispatchEvent: (packet: object) => Promise<void>;
-        }
-      ).dispatchEvent({ pattern, data });
+      await dispatched(proxy, OutboxPackets.aws(message, envelope));
     });
 
     it('carries the envelope in the body, under the pattern a queue reads it back by', () => {
@@ -132,21 +130,20 @@ describe('an outbox message on each transport', () => {
 
   describe('Inngest', () => {
     const sent: Record<string, unknown>[] = [];
-
-    beforeAll(async () => {
-      const proxy = new InngestClientProxy({
+    const proxyRecordingInto = (into: Record<string, unknown>[]) =>
+      new InngestClientProxy({
         inngest: {
           send: async (payload: Record<string, unknown>) => {
-            sent.push(payload);
+            into.push(payload);
           },
         } as never,
       });
-      const { pattern, data } = OutboxPackets.inngest(message, envelope);
-      await (
-        proxy as unknown as {
-          dispatchEvent: (packet: object) => Promise<void>;
-        }
-      ).dispatchEvent({ pattern, data });
+
+    beforeAll(async () => {
+      await dispatched(
+        proxyRecordingInto(sent),
+        OutboxPackets.inngest(message, envelope),
+      );
     });
 
     it('names the event by its QUALIFIED name, because a trigger has no wildcards', () => {
@@ -163,19 +160,14 @@ describe('an outbox message on each transport', () => {
 
     it('groups the whole request under one session, from the correlation id', () => {
       expect(sent[0]).toMatchObject({
-        meta: { sessions: { [CORRELATION_SESSION]: 'corr-1' } },
+        meta: {
+          sessions: { [OutboxPackets.CORRELATION_SESSION]: 'corr-1' },
+        },
       });
     });
 
     it('still groups a message a producer staged under the old correlation key', async () => {
       const legacy: Record<string, unknown>[] = [];
-      const proxy = new InngestClientProxy({
-        inngest: {
-          send: async (payload: Record<string, unknown>) => {
-            legacy.push(payload);
-          },
-        } as never,
-      });
       const old = {
         ...envelope,
         headers: {
@@ -183,26 +175,17 @@ describe('an outbox message on each transport', () => {
           [LEGACY_CORRELATION_ID]: 'corr-old',
         },
       };
-      const { pattern, data } = OutboxPackets.inngest(
-        { ...message, headers: old.headers },
-        old,
+
+      await dispatched(
+        proxyRecordingInto(legacy),
+        OutboxPackets.inngest({ ...message, headers: old.headers }, old),
       );
-      await (
-        proxy as unknown as {
-          dispatchEvent: (packet: object) => Promise<void>;
-        }
-      ).dispatchEvent({ pattern, data });
 
       expect(legacy[0]).toMatchObject({
-        meta: { sessions: { [CORRELATION_SESSION]: 'corr-old' } },
+        meta: {
+          sessions: { [OutboxPackets.CORRELATION_SESSION]: 'corr-old' },
+        },
       });
-    });
-  });
-
-  it('goes to a client in this process as the envelope itself, under the routing key', () => {
-    expect(OutboxPackets.inProcess(message, envelope)).toEqual({
-      pattern: ROUTING_KEY,
-      data: envelope,
     });
   });
 
@@ -216,5 +199,6 @@ describe('an outbox message on each transport', () => {
   it('is picked by the kind of transport a client is', () => {
     expect(OutboxPackets.for('aws')).toBe(OutboxPackets.aws);
     expect(OutboxPackets.for('rabbitmq')).toBe(OutboxPackets.rabbitmq);
+    expect(OutboxPackets.for('inngest')).toBe(OutboxPackets.inngest);
   });
 });
