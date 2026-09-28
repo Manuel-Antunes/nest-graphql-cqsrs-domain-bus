@@ -3,7 +3,18 @@
   "$schema": "../node_modules/nx/schemas/project-schema.json",
   "projectType": "application",
   "sourceRoot": "infra/aws",
+  "implicitDependencies": [
+    "@nestposts/gateway",
+    "@nestposts/posts-api",
+    "@nestposts/tagging",
+    "@nestposts/notificator",
+    "@nestposts/migrator"
+  ],
   "targets": {
+    "build-functions": {
+      "executor": "nx:noop",
+      "dependsOn": ["^prune"]
+    },
     "deploy": {
       "executor": "nx:run-commands",
       "options": {
@@ -18,7 +29,7 @@
           "command": "pnpm sst deploy --stage dev"
         }
       },
-      "dependsOn": ["^build"]
+      "dependsOn": ["build-functions"]
     },
     "dev": {
       "executor": "nx:run-commands",

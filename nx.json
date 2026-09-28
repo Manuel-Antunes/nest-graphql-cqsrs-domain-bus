@@ -64,6 +64,32 @@
   "targetDefaults": {
     "test": {
       "dependsOn": ["^build"]
+    },
+    "prune-lockfile": {
+      "executor": "@nx/js:prune-lockfile",
+      "cache": true,
+      "dependsOn": ["build"],
+      "outputs": [
+        "{projectRoot}/dist/package.json",
+        "{projectRoot}/dist/pnpm-lock.yaml",
+        "{projectRoot}/dist/pnpm-workspace.yaml"
+      ],
+      "options": {
+        "buildTarget": "build"
+      }
+    },
+    "copy-workspace-modules": {
+      "executor": "@nx/js:copy-workspace-modules",
+      "cache": true,
+      "dependsOn": ["build", "^build"],
+      "outputs": ["{projectRoot}/dist/workspace_modules"],
+      "options": {
+        "buildTarget": "build"
+      }
+    },
+    "prune": {
+      "executor": "nx:noop",
+      "dependsOn": ["prune-lockfile", "copy-workspace-modules"]
     }
   }
 }

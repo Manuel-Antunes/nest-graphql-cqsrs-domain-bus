@@ -17,6 +17,7 @@
     "@mikro-orm/postgresql": "^7.2.1",
     "@nestjs/common": "^12.1.0",
     "@nestjs/core": "^12.1.0",
+    "@nestposts/asset": "workspace:*",
     "@nestposts/auth": "workspace:*",
     "@nestposts/billing": "workspace:*",
     "@nestposts/cqsrs": "workspace:*",

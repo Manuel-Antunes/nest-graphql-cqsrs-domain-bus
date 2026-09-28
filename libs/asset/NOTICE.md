@@ -29,7 +29,8 @@ MikroORM. A copy of the package was read as the reference; none of it is vendore
 
 ## What this library adds
 
-The ambient `AttachmentContext` a strategy reads; `TestDisks`; and a legacy reader for columns this library
+The ambient `AttachmentContext` a strategy reads; `TestDisks`; `UploadArea`, the staging area a
+browser uploads to before `fromDisk` takes the object; and a legacy reader for columns this library
 wrote before `path` existed.
 
 ## What upstream had and this does not

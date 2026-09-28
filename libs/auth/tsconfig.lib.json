@@ -27,6 +27,9 @@
     },
     {
       "path": "../database/tsconfig.lib.json"
+    },
+    {
+      "path": "../asset/tsconfig.lib.json"
     }
   ]
 }

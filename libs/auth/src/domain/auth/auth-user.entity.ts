@@ -1,9 +1,10 @@
+import type { Attachment } from '@nestposts/asset/domain/asset/attachment';
 import { User } from '@nestposts/users/domain/user/user.entity';
 
 export class AuthUser extends User {
   emailVerified = false;
 
-  image: string | null = null;
+  image: Attachment | null = null;
 
   banned: boolean | null = null;
 

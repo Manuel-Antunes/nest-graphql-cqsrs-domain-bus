@@ -3,6 +3,7 @@ import { join } from 'node:path';
 
 import type { Endpoints } from '../environment/run-environment';
 import { RunEnvironment } from '../environment/run-environment';
+import { Storage } from '../infrastructure/storage/storage';
 import { BillingStack } from './billing-stack';
 import { ContainerStack } from './container-stack';
 import { FreePort } from './free-port';
@@ -97,6 +98,12 @@ export class Stack {
         PORT: String(environment.webPort),
         MIKRO_ORM_DEBUG: 'false',
         AUTH_RATE_LIMIT: 'false',
+        DRIVE_BUCKET: Storage.BUCKET,
+        DRIVE_AWS_REGION: Storage.REGION,
+        DRIVE_AWS_ACCESS_KEY_ID: Storage.USER,
+        DRIVE_AWS_SECRET_ACCESS_KEY: Storage.PASSWORD,
+        DRIVE_S3_ENDPOINT: endpoints.storageUrl,
+        DRIVE_S3_FORCE_PATH_STYLE: 'true',
         POLAR_ACCESS_TOKEN: '',
         ...this.billing?.webEnvironment(),
         WEB_TRANSPORT: environment.transport,

@@ -3,6 +3,8 @@
 import { errorReporting } from '../../sentry';
 import { streaming } from '../compute';
 import {
+  authGoogleId,
+  authGoogleSecret,
   authSecret,
   gatewayUrl,
   polarAccessToken,
@@ -13,6 +15,7 @@ import {
 import { router } from '../edge';
 import { postEvents } from '../messaging';
 import { vpc } from '../network';
+import { bucket, filesUrl } from '../storage';
 import { COLLECTOR_CONFIG, COLLECTOR_LAYER } from '../support';
 
 /**
@@ -66,6 +69,10 @@ export const web = new sst.aws.Nextjs('Web', {
     AUTH_URL: router.url,
     WEB_URL: router.url,
     AUTH_TRUSTED_ORIGINS: router.url,
+    AUTH_GOOGLE_ID: authGoogleId.value,
+    AUTH_GOOGLE_SECRET: authGoogleSecret.value,
+    DRIVE_BUCKET: bucket.name,
+    DRIVE_CDN_URL: filesUrl,
     NEXT_PUBLIC_API_URL: router.url,
     NEXT_PUBLIC_GATEWAY_URL: gatewayUrl,
     POSTS_SUBGRAPH_URL: streaming.url.apply(

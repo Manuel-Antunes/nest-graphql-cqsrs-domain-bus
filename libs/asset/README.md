@@ -148,7 +148,16 @@ Each tells what the file is — by its bytes (`file-type`), or by its name (`mim
 **pending** attachment. Nothing is stored until the entity holding it is flushed. `fromDisk` is how a
 browser uploads without the bytes crossing the service: it `PUT`s to a URL from
 `storage.disk().signedUpload(key, { contentType })`, and hands the key back. Storing it TAKES the object, so the
-service must check the key is one it issued to that caller first — `apps/posts-api`'s `UploadArea`.
+service must check the key is one it issued to that caller first, which is what `UploadArea` is:
+
+```ts
+const key = UploadArea.keyFor(userId);            // tmp/<userId>/<time>-<uuid> — sign a PUT to it
+post.cover = UploadArea.stage(upload, userId);    // Attachment.fromDisk, if the key is the user's
+```
+
+`upload` is what the browser hands back — `{ name: key, size, extname, mimeType }`, `AssetUpload`.
+Whoever uploads before having an identity — a sign-up — uploads as `UploadArea.ANONYMOUS`, and the
+key's randomness is all that keeps it theirs.
 
 Outside any entity, `AttachmentManager.store(await Asset.fromBuffer(pdf, 'report.pdf'), { folder:
 'reports' })` stores at once.

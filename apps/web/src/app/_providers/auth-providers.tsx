@@ -8,6 +8,7 @@ import type { DehydratedState } from '@tanstack/react-query';
 import { HydrationBoundary, QueryClientProvider } from '@tanstack/react-query';
 
 import { AuthProvider } from '@/components/auth/auth-provider';
+import { useUploadFile } from '@/hooks/use-upload-file';
 import { adminPlugin } from '@/lib/auth/admin-plugin';
 import { billingAdapter } from '@/lib/auth/billing-adapter';
 import { billingPlugin } from '@/lib/auth/billing-plugin';
@@ -63,26 +64,46 @@ export function AuthProviders({
   dehydratedState: DehydratedState;
   children: React.ReactNode;
 }) {
-  const router = useRouter();
-
   return (
     <QueryClientProvider client={getQueryClient()}>
-      <AuthProvider
-        authClient={authClient}
-        redirectTo={AFTER_SIGN_IN}
-        socialProviders={socialProviders}
-        emailAndPassword={{ requireEmailVerification: true }}
-        avatar={{ enabled: false }}
-        navigate={({ to, replace }) =>
-          replace ? router.replace(to) : router.push(to)
-        }
-        plugins={billing ? pluginsWithBilling : plugins}
-        Link={Link}
-      >
+      <AppAuthProvider socialProviders={socialProviders} billing={billing}>
         <HydrationBoundary state={dehydratedState}>
           <TooltipProvider>{children}</TooltipProvider>
         </HydrationBoundary>
-      </AuthProvider>
+      </AppAuthProvider>
     </QueryClientProvider>
+  );
+}
+
+function AppAuthProvider({
+  socialProviders,
+  billing,
+  children,
+}: {
+  socialProviders: AuthSocialProvider[];
+  billing: boolean;
+  children: React.ReactNode;
+}) {
+  const router = useRouter();
+  const uploadFile = useUploadFile();
+
+  return (
+    <AuthProvider
+      authClient={authClient}
+      redirectTo={AFTER_SIGN_IN}
+      socialProviders={socialProviders}
+      emailAndPassword={{ requireEmailVerification: true }}
+      avatar={{
+        enabled: true,
+        upload: async (file) => JSON.stringify(await uploadFile(file)),
+      }}
+      navigate={({ to, replace }) =>
+        replace ? router.replace(to) : router.push(to)
+      }
+      plugins={billing ? pluginsWithBilling : plugins}
+      Link={Link}
+    >
+      {children}
+    </AuthProvider>
   );
 }

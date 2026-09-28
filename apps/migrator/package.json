@@ -51,6 +51,9 @@
           "command": "rm -rf dist && tsc -p tsconfig.build.json"
         }
       },
+      "prune-lockfile": {},
+      "copy-workspace-modules": {},
+      "prune": {},
       "migrate": {
         "executor": "nx:run-commands",
         "dependsOn": [

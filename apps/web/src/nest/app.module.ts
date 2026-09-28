@@ -4,7 +4,9 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { OutboxModule } from '@nestjs/outbox';
-import { BetterAuthModule } from '@nestposts/auth/infrastructure/better-auth/better-auth.module';
+import { StorageModule } from '@nestjs/storage';
+import { AttachmentModule } from '@nestposts/asset/infrastructure/attachment.module';
+import { AuthInfrastructureModule } from '@nestposts/auth/infrastructure/auth-infrastructure.module';
 import { BillingInfrastructureModule } from '@nestposts/billing/infrastructure/billing-infrastructure.module';
 import { CqsrsModule } from '@nestposts/cqsrs';
 import {
@@ -38,7 +40,9 @@ import { outboxConfig } from './config/outbox.config';
 import type { PostgresConfig } from './config/postgres.config';
 import { postgresConfig } from './config/postgres.config';
 import { rabbitmqConfig } from './config/rabbitmq.config';
+import { storageConfig } from './config/storage.config';
 import { NextCookiesBetterAuthPluginProvider } from './next-cookies.plugin';
+import { BucketDisks } from './storage/bucket-disks';
 import { WebEventsClient } from './web-events.client';
 import { WebEventsClientModule } from './web-events-client.module';
 
@@ -47,10 +51,10 @@ import { WebEventsClientModule } from './web-events-client.module';
  *
  * It exists so this application wires Better Auth **the same way `apps/posts-api` does**, through the
  * same modules, instead of a second assembly that has to be kept in step. What it leaves out is the
- * HTTP surface: `AuthInfrastructureModule` installs the `/api/auth/*` catch-all and the global guard
- * through `@thallesp/nestjs-better-auth`, which needs an adapter this context does not have — so it
- * imports `BetterAuthModule` directly, which is exactly the providers and nothing else. Next serves
- * the routes itself.
+ * HTTP surface: `AuthInfrastructureModule` comes with `routes: false` and `guard: false` — no
+ * `/api/auth/*` catch-all and no global guard, which need an adapter this context does not have —
+ * and keeps what `@thallesp/nestjs-better-auth` does besides: attaching every `@DatabaseHook`
+ * provider to the instance. Next serves the routes itself.
  *
  * `baseUrl` is overridden to this origin: the session cookie has to belong to the origin the browser
  * is talking to. The SECRET and the database are the posts-api's, which is what makes the cookie this
@@ -77,6 +81,7 @@ import { WebEventsClientModule } from './web-events-client.module';
         outboxConfig,
         postgresConfig,
         rabbitmqConfig,
+        storageConfig,
       ],
     }),
     EventEmitterModule.forRoot(),
@@ -90,6 +95,8 @@ import { WebEventsClientModule } from './web-events-client.module';
       http: false,
       migrations: { migrationsList: tenantMigrations },
     }),
+    StorageModule.forRootAsync({ useClass: BucketDisks }),
+    AttachmentModule.forRoot({}),
     OutboxModule.forRootAsync({
       imports: [WebEventsClientModule],
       transports: WebEventsClient.destinations(appConfig()),
@@ -118,7 +125,9 @@ import { WebEventsClientModule } from './web-events-client.module';
         }),
       },
     }),
-    BetterAuthModule.forRoot({
+    AuthInfrastructureModule.forRoot({
+      routes: false,
+      guard: false,
       plugins: [
         ...organizationAuthPluginProviders,
         ...BillingInfrastructureModule.authPlugins(),

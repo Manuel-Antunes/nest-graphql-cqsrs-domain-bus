@@ -9,6 +9,7 @@ import { IdentityProvider } from '@nestposts/users/domain/user/identity.provider
 
 import { AuthService } from '../../domain/auth/auth.service';
 import { authEntities } from '../persistence/auth-entities';
+import { AvatarImages } from './avatar/avatar-images';
 import type { AuthConfig } from './config';
 import { BetterAuthEmails } from './emails/better-auth-emails';
 import {
@@ -17,6 +18,7 @@ import {
   BetterAuthFactory,
   BetterAuthPluginsFactory,
 } from './factories';
+import { UserDatabaseHooks } from './hooks/user-database.hooks';
 import { BetterAuthIdentityProvider } from './identity/better-auth-identity.provider';
 import type { BetterAuthPluginProvider } from './plugins/registry';
 import { BetterAuthPlugins } from './plugins/registry';
@@ -97,6 +99,8 @@ export class BetterAuthModule {
           scope: Scope.REQUEST,
         },
         { provide: IdentityProvider, useClass: BetterAuthIdentityProvider },
+        AvatarImages,
+        UserDatabaseHooks,
       ],
       exports: [
         BETTER_AUTH,

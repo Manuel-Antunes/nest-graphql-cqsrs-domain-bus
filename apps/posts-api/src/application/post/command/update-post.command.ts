@@ -3,14 +3,13 @@ import { Inject, Scope } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
 import type { AsyncContext, ICommandHandler } from '@nestjs/cqrs';
 import { Command, CommandHandler, EventPublisher } from '@nestjs/cqrs';
+import type { AssetUpload } from '@nestposts/asset/domain/asset/schemas/asset-upload.schema';
+import { UploadArea } from '@nestposts/asset/domain/asset/upload-area';
 import { InvalidPostException } from '@nestposts/posts/domain/post/exception/invalid-post.exception';
 import { PostNotFoundException } from '@nestposts/posts/domain/post/exception/post-not-found.exception';
 import { PostRepository } from '@nestposts/posts/domain/post/post.repository';
 import { PostId } from '@nestposts/posts/domain/post/vo/post-id';
 import { UserId } from '@nestposts/users/domain/user/vo/user-id';
-
-import type { AssetUpload } from '../../asset/upload-area';
-import { UploadArea } from '../../asset/upload-area';
 
 export namespace UpdatePostCommand {
   export class UpdatePost extends Command<void> {
@@ -76,7 +75,7 @@ export namespace UpdatePostCommand {
           'replacing an attachment needs to know who uploaded it',
         );
       }
-      return UploadArea.stage(command.asset, command.editorId);
+      return UploadArea.stage(command.asset, command.editorId.value);
     }
   }
 }

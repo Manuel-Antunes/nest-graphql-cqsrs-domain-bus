@@ -24,12 +24,19 @@ export interface AuthInfrastructureModuleOptions
    * reads the session through the same Better Auth instance either way.
    */
   readonly routes?: boolean;
+  /**
+   * Whether the global guard is installed. On by default; a runtime that is no Nest server — the
+   * web's container, the migrator — turns it off, along with `routes`, and keeps what the module
+   * does besides: attaching every `@Hook` and `@DatabaseHook` provider to the instance.
+   */
+  readonly guard?: boolean;
 }
 
 @Module({})
 export class AuthInfrastructureModule {
   static forRoot({
     routes = true,
+    guard = true,
     ...options
   }: AuthInfrastructureModuleOptions = {}): DynamicModule {
     const betterAuth = BetterAuthModule.forRoot(options);
@@ -40,6 +47,7 @@ export class AuthInfrastructureModule {
         betterAuth,
         NestBetterAuthModule.forRootAsync({
           disableControllers: !routes,
+          disableGlobalAuthGuard: !guard,
           imports: [betterAuth],
           inject: [BETTER_AUTH, MikroORM],
           useFactory: (auth: BetterAuth, orm: MikroORM) => ({

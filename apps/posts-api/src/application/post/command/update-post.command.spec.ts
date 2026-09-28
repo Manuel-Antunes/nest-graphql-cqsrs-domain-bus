@@ -1,5 +1,9 @@
 import { CommandBus } from '@nestjs/cqrs';
 import type { TestingModule } from '@nestjs/testing';
+import {
+  UploadArea,
+  UploadNotOwnedException,
+} from '@nestposts/asset/domain/asset/upload-area';
 import { PostUpdatedEvent } from '@nestposts/posts/domain/post/event/post-updated.event';
 import { InvalidPostException } from '@nestposts/posts/domain/post/exception/invalid-post.exception';
 import { PostNotFoundException } from '@nestposts/posts/domain/post/exception/post-not-found.exception';
@@ -27,7 +31,6 @@ import {
   givenATag,
   T0,
 } from '../../../../test/support/post-fixtures';
-import { UploadArea, UploadNotOwnedException } from '../../asset/upload-area';
 import { PostRequest } from '../../shared/post-request';
 import { UpdatePostCommand } from './update-post.command';
 
@@ -142,7 +145,7 @@ describe('UpdatePostCommand.Handler, with an attachment', () => {
     const upload = await givenAnUpload(module, author.id, 'first');
     const post = await givenAPost(module, {
       author,
-      asset: UploadArea.stage(upload, author.id),
+      asset: UploadArea.stage(upload, author.id.value),
     });
     return { author, post, stored: post.asset?.path as string };
   };

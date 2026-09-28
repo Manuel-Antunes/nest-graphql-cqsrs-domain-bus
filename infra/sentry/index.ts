@@ -5,6 +5,7 @@ import { execSync } from 'node:child_process';
 import {
   SENTRY_ORGANIZATION as ORGANIZATION,
   SENTRY_OWNER_STAGE,
+  SENTRY_TOKEN,
   SENTRY_WEB_URL,
 } from './config';
 import type { AlertRecipient } from './providers/alert';
@@ -18,6 +19,21 @@ import { GlitchtipAlert } from './providers/alert';
  */
 
 const TEAM_SLUG = 'vaz-test';
+
+/**
+ * GlitchTip keeps a team's slug and nothing else: it answers every read with `name: ""`, so the
+ * provider sees `name` drift on every deploy and `PUT`s the team again — work that changes nothing,
+ * and one more call that fails wherever the token does.
+ */
+const TEAM_FIELDS_GLITCHTIP_DOES_NOT_KEEP = ['name'];
+
+if (!SENTRY_TOKEN) {
+  throw new Error(
+    'SENTRY_TOKEN is not set. It comes from the .env at the root of the repository locally and from ' +
+      'the SENTRY_TOKEN secret in GitHub Actions. Without it every call to GlitchTip is anonymous, ' +
+      'and GlitchTip answers a write with "403 CSRF check Failed".',
+  );
+}
 
 /**
  * The key every application reports with. **Named** — left to Pulumi, the name gets a random suffix
@@ -132,7 +148,10 @@ const owned = (): Record<ProjectSlug, ProjectKey> => {
   const team = new sentry.SentryTeam(
     'SentryTeamVaz',
     { organization: ORGANIZATION, name: TEAM_SLUG, slug: TEAM_SLUG },
-    { retainOnDelete: true },
+    {
+      retainOnDelete: true,
+      ignoreChanges: TEAM_FIELDS_GLITCHTIP_DOES_NOT_KEEP,
+    },
   );
 
   return Object.fromEntries(

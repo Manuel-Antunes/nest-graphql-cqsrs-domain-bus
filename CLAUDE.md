@@ -277,8 +277,9 @@ a session, and the resource the migrator registers. `AUTH_ISSUER` (default `WEB_
 `iss` they all sign and verify with. The notificator now reads `AUTH_SECRET`, `AUTH_URL` and
 `WEB_URL` as well: it authenticates the callers of its subgraph.
 
-`apps/web` takes the auth and database variables of the posts-api (it holds the same Better Auth) and
-**billing** when `POLAR_ACCESS_TOKEN` is set (`POLAR_ENVIRONMENT`, sandbox by default, and
+`apps/web` takes the auth and database variables of the posts-api (it holds the same Better Auth), the
+**storage** ones (`DRIVE_*`, `src/nest/config/storage.config.ts` — its Better Auth stores avatars, see
+`libs/auth/README.md`) and **billing** when `POLAR_ACCESS_TOKEN` is set (`POLAR_ENVIRONMENT`, sandbox by default, and
 `POLAR_WEBHOOK_SECRET` — see `libs/billing/README.md`), and a transport of its own, because it
 **publishes** the emails its Better Auth asks for:
 `WEB_TRANSPORT` = `inngest` (default) \| `rabbitmq` \| `memory` \| `aws`, with `INNGEST_BASE_URL`,
@@ -1986,10 +1987,11 @@ service Next resolves is the same object, built the same way, that a resolver in
 side. A server action reads `await (await WebAuth.auth()).signInWithPassword(...)` and the cookie
 plugin writes the cookie.
 
-- It imports `BetterAuthModule`, **not** `AuthInfrastructureModule`: the latter installs the
-  `/api/auth/*` catch-all and the global guard through `@thallesp/nestjs-better-auth`, which needs an
-  HTTP adapter an application context does not have. Next serves those routes itself, through
-  `app/api/auth/[...all]/route.ts`.
+- It imports `AuthInfrastructureModule.forRoot({ routes: false, guard: false })`: no `/api/auth/*`
+  catch-all and no global guard — `@thallesp/nestjs-better-auth` needs an HTTP adapter for those,
+  which an application context does not have, and Next serves the routes itself through
+  `app/api/auth/[...all]/route.ts` — but that library's `AuthModule` all the same, because it is
+  what attaches the `@DatabaseHook` providers (`libs/auth`'s `UserDatabaseHooks`) to the instance.
 - `nextCookies()` is registered as a **trailing** plugin: Better Auth requires cookie plugins last.
 - `baseUrl` is overridden to this origin, so the cookie belongs to the origin the browser is talking
   to. The secret and the database are the API's, which is what makes the cookie one the API resolves.
@@ -2012,7 +2014,9 @@ default external list. Three more things follow from bundling:
   `serverMinification` is webpack's switch and does nothing here.
 - **`resolveAlias` points `@nestjs/websockets/socket-module.js` at an empty module.** `@nestjs/core`
   loads it through an optional `import()` that it catches at runtime, but Turbopack fails the build
-  on any literal import it cannot resolve.
+  on any literal import it cannot resolve. **`@nestjs/graphql` too**: `@thallesp/nestjs-better-auth`
+  `import()`s it only for a GraphQL execution context, which this container never has, and bundled
+  it fails on `@apollo/subgraph/dist/directives` and `class-transformer/storage`.
 - **One container per server LAYER.** Server Components and Route Handlers each get their own copy
   of the bundle, so a container booted by one holds that layer's classes as tokens and the other
   layer's `MikroORM` is not one of them: `Nest could not find MikroORM element`, on whichever
@@ -2040,6 +2044,12 @@ default external list. Three more things follow from bundling:
   database context) and hydrates it, and `SessionProvider` derives this application's `Session`
   from that query — so signing in, out or into another account in better-auth-ui's screens is seen by
   the header and the pages at once, with no server action in between.
+- **The container stores avatars.** A user's `image` is an attachment (`libs/auth`'s
+  `UserDatabaseHooks`, a `@DatabaseHook` provider), and locally the sign-up, the profile's `update-user` and the Google callback are all
+  served by this Better Auth — so it imports `StorageModule` (its own `BucketDisks`) and
+  `AttachmentModule`, as posts-api does. The browser uploads through `useUploadFile`, the same
+  `generatePresignedUrl` a post's file goes through — which any caller may ask for, under its own
+  `tmp/<user>/` or `tmp/anonymous/` — and writes the upload as `image`.
 - **The container publishes.** `WebAppModule` imports `CqsrsModule` and a publish-only
   `TransportEventBusModule` (identity `web`, an outbox whose one destination is
   `NOTIFICATIONS_NAMESPACE`, relayed in `drain` mode, `transactionManager: MikroOrmTransactionManager`, no inbox, no event store) and binds `PublishingOnDemandNotifications` into `BetterAuthModule`, so a verification

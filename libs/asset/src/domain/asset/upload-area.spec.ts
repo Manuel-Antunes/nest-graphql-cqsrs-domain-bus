@@ -1,10 +1,10 @@
-import { Attachment } from '@nestposts/asset/domain/asset/attachment';
-import { UserId } from '@nestposts/users/domain/user/vo/user-id';
+import { randomUUID } from 'node:crypto';
 
+import { Attachment } from './attachment';
 import { UploadArea, UploadNotOwnedException } from './upload-area';
 
 describe('UploadArea', () => {
-  const uploader = UserId.generate();
+  const uploader = randomUUID();
   const upload = (name: string) => ({
     name,
     size: 4,
@@ -19,9 +19,7 @@ describe('UploadArea', () => {
 
     expect(keys.size).toBe(5);
     for (const key of keys) {
-      expect(key).toMatch(
-        new RegExp(`^tmp/${uploader.value}/\\d+-[0-9a-f-]{36}$`),
-      );
+      expect(key).toMatch(new RegExp(`^tmp/${uploader}/\\d+-[0-9a-f-]{36}$`));
     }
   });
 
@@ -36,16 +34,23 @@ describe('UploadArea', () => {
   });
 
   it('refuses a key somebody else uploaded, or that is not an upload at all', () => {
-    const somebodyElse = UploadArea.keyFor(UserId.generate());
-
     for (const key of [
-      somebodyElse,
+      UploadArea.keyFor(randomUUID()),
+      UploadArea.keyFor(UploadArea.ANONYMOUS),
       'assets/0a1b.png',
-      `tmp/${uploader.value}/../${UserId.generate().value}/file`,
+      `tmp/${uploader}/../${randomUUID()}/file`,
     ]) {
+      expect(UploadArea.owns(uploader, key)).toBe(false);
       expect(() => UploadArea.stage(upload(key), uploader)).toThrow(
         UploadNotOwnedException,
       );
     }
+  });
+
+  it('keeps what nobody signed in uploaded apart from every uploader', () => {
+    const key = UploadArea.keyFor(UploadArea.ANONYMOUS);
+
+    expect(UploadArea.owns(UploadArea.ANONYMOUS, key)).toBe(true);
+    expect(UploadArea.owns(uploader, key)).toBe(false);
   });
 });

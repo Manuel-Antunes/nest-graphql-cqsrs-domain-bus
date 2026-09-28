@@ -9,6 +9,7 @@ import { InngestEnvSchema } from './nest/config/schemas/inngest-env.schema';
 import { OutboxEnvSchema } from './nest/config/schemas/outbox-env.schema';
 import { PostgresEnvSchema } from './nest/config/schemas/postgres-env.schema';
 import { RabbitmqEnvSchema } from './nest/config/schemas/rabbitmq-env.schema';
+import { StorageEnvSchema } from './nest/config/schemas/storage-env.schema';
 
 export const env = createEnv({
   server: {
@@ -20,6 +21,7 @@ export const env = createEnv({
     ...OutboxEnvSchema.shape,
     ...PostgresEnvSchema.shape,
     ...RabbitmqEnvSchema.shape,
+    ...StorageEnvSchema.shape,
     POSTS_SUBGRAPH_URL: z.string().optional(),
   },
   client: {

@@ -35,6 +35,7 @@ const nextConfig: NextConfig = {
     resolveAlias: Object.fromEntries(
       [
         '@nestjs/websockets/socket-module.js',
+        '@nestjs/graphql',
         '@nats-io/transport-node',
         'ioredis',
         'kafkajs',

@@ -19,6 +19,9 @@ import { BASE_NODE_OPTIONS } from '../support';
  */
 export const authSecret = new sst.Secret('AuthSecret');
 
+export const authGoogleId = new sst.Secret('AuthGoogleId', '');
+export const authGoogleSecret = new sst.Secret('AuthGoogleSecret', '');
+
 export const polarAccessToken = new sst.Secret('PolarAccessToken', '');
 export const polarEnvironment = new sst.Secret('PolarEnvironment', 'sandbox');
 export const polarWebhookSecret = new sst.Secret('PolarWebhookSecret', '');
@@ -125,6 +128,8 @@ export const postsEnvironment = {
   AUTH_URL: router.url,
   WEB_URL: router.url,
   AUTH_TRUSTED_ORIGINS: router.url,
+  AUTH_GOOGLE_ID: authGoogleId.value,
+  AUTH_GOOGLE_SECRET: authGoogleSecret.value,
   GATEWAY_URL: gatewayUrl,
   DRIVE_BUCKET: bucket.name,
   DRIVE_CDN_URL: filesUrl,

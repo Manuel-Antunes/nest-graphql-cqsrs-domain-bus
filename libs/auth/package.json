@@ -12,6 +12,7 @@
     }
   },
   "dependencies": {
+    "@nestposts/asset": "workspace:*",
     "@nestposts/database": "workspace:*",
     "@nestposts/mail": "workspace:*",
     "@nestposts/notifications": "workspace:*",

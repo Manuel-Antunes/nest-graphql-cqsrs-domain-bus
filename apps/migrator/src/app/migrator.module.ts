@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { BetterAuthModule } from '@nestposts/auth/infrastructure/better-auth/better-auth.module';
+import { AuthInfrastructureModule } from '@nestposts/auth/infrastructure/auth-infrastructure.module';
 import { DatabaseModule } from '@nestposts/database';
 import { eventStoreEntities } from '@nestposts/event-store-mikro-orm/event-store.entities';
 import { NotificationsInfrastructureModule } from '@nestposts/notifications/infrastructure/notifications-infrastructure.module';
@@ -37,7 +37,9 @@ import { systemConnection } from './connections';
     PostsInfrastructureModule,
     UsersInfrastructureModule,
     NotificationsInfrastructureModule,
-    BetterAuthModule.forRoot({
+    AuthInfrastructureModule.forRoot({
+      routes: false,
+      guard: false,
       config: authConfig.KEY,
       plugins: organizationAuthPluginProviders,
       entities: OrganizationEntities.withAuth(),

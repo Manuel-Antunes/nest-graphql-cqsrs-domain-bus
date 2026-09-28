@@ -57,6 +57,9 @@
           }
         }
       },
+      "prune-lockfile": {},
+      "copy-workspace-modules": {},
+      "prune": {},
       "serve": {
         "continuous": true,
         "executor": "@nx/js:node",

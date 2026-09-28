@@ -1,5 +1,3 @@
-import { Email } from '@nestposts/users/domain/user/vo/email';
-import { UserName } from '@nestposts/users/domain/user/vo/user-name';
 import type { BetterAuthOptions, BetterAuthPlugin } from 'better-auth';
 import { betterAuth } from 'better-auth';
 
@@ -52,6 +50,7 @@ class SocialProviders {
             google: {
               clientId: config.googleClientId,
               clientSecret: config.googleClientSecret,
+              prompt: 'select_account' as const,
             },
           }
         : {}),
@@ -125,18 +124,7 @@ export class BetterAuthInstance {
           trustedProviders: ['credential', 'google', 'github'],
         },
       },
-      databaseHooks: {
-        user: {
-          create: {
-            before: async (user) => ({
-              data: {
-                ...user,
-                name: UserName.from(user.name, Email.parse(user.email)).value,
-              },
-            }),
-          },
-        },
-      },
+      databaseHooks: {},
       socialProviders: SocialProviders.of(config),
       plugins: [...plugins],
       advanced: {

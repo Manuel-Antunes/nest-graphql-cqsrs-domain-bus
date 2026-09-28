@@ -1005,6 +1005,9 @@ importers:
       '@nestjs/core':
         specifier: ^12.1.0
         version: 12.1.0(@nestjs/common@12.1.0(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/microservices@12.1.0)(@nestjs/platform-express@12.0.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)
+      '@nestposts/asset':
+        specifier: workspace:*
+        version: link:../../libs/asset
       '@nestposts/auth':
         specifier: workspace:*
         version: link:../../libs/auth
@@ -1250,6 +1253,9 @@ importers:
 
   libs/auth:
     dependencies:
+      '@nestposts/asset':
+        specifier: workspace:*
+        version: link:../asset
       '@nestposts/database':
         specifier: workspace:*
         version: link:../database

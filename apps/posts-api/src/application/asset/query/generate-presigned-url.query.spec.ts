@@ -2,6 +2,7 @@ import { CqrsModule, QueryBus } from '@nestjs/cqrs';
 import { Storage, StorageModule } from '@nestjs/storage';
 import type { TestingModule } from '@nestjs/testing';
 import { Test } from '@nestjs/testing';
+import { UploadArea } from '@nestposts/asset/domain/asset/upload-area';
 import { UserId } from '@nestposts/users/domain/user/vo/user-id';
 
 import type { MinioStorage } from '../../../../test/support/minio-storage';
@@ -14,11 +15,11 @@ describe('GeneratePresignedUrlQuery.Handler', () => {
   let module: TestingModule;
   const uploader = UserId.generate();
 
-  const generate = (mimeType = 'text/plain') =>
+  const generate = (mimeType = 'text/plain', by: UserId | null = uploader) =>
     module
       .get(QueryBus)
       .execute(
-        new GeneratePresignedUrlQuery.GeneratePresignedUrl(uploader, mimeType),
+        new GeneratePresignedUrlQuery.GeneratePresignedUrl(by, mimeType),
       );
 
   beforeAll(async () => {
@@ -46,6 +47,12 @@ describe('GeneratePresignedUrlQuery.Handler', () => {
 
     expect(key).toMatch(new RegExp(`^tmp/${uploader.value}/`));
     expect(url).toContain('X-Amz-Signature');
+  });
+
+  it('signs a key in the anonymous staging area for whoever is not signed in', async () => {
+    const { key } = await generate('image/png', null);
+
+    expect(key).toMatch(new RegExp(`^tmp/${UploadArea.ANONYMOUS}/`));
   });
 
   it('is a URL the storage accepts the file on, landing at the key it answered with', async () => {

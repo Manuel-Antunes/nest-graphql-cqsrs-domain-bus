@@ -11,6 +11,10 @@ export class AppHeader {
     return this.page.getByRole('link', { name: 'Sign in' });
   }
 
+  avatar(name: string): Locator {
+    return this.accountButton.getByRole('img', { name });
+  }
+
   identity(email: string): Locator {
     return this.page.getByText(email).first();
   }

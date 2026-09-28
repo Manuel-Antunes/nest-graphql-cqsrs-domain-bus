@@ -204,6 +204,13 @@ router's origin and no other. What is uploaded waits under `tmp/`, which the lif
 after a day, until a post takes it; the API only accepts a key it issued to the same user, because
 taking it MOVES the object.
 
+A user's avatar takes the same road: the browser uploads through `generatePresignedUrl` — signed in,
+under its own `tmp/<user>/`; signing up, under `tmp/anonymous/` — and hands the upload to Better Auth
+as `image`, which `/api/auth` routes to the API, whose Better Auth stores it under `avatars/`. A Google
+sign-in's picture is downloaded there too. The web gets `DRIVE_BUCKET` and `DRIVE_CDN_URL` and no
+link: it never writes to the bucket here, it only builds the URL of an avatar its own Better Auth
+reads.
+
 `e2e.sh` step 9 walks a file through all of it, and asks S3 itself — with `object-exists.mjs`, since
 the CDN would keep serving a deleted object from its cache — whether the replaced and the deleted
 files are really gone.
@@ -368,6 +375,15 @@ npx sst secret set PolarWebhookSecret whsec_… --stage dev      # '' by default
   `<router>/api/auth/polar/webhooks`** — Polar generates it when the endpoint is created. Without it
   checkout and the portal still work and nothing reacts to a subscription: no `author` role, no email.
 - They reach `apps/web` only: it is the one process holding the billing plugins.
+
+Sign in with Google is two more, optional the same way — both empty, the provider is absent and no
+button is offered. The OAuth client's authorized redirect URI is `<router>/api/auth/callback/google`,
+and both the API (which `/api/auth` routes to) and the web (which draws the button) get them:
+
+```bash
+npx sst secret set AuthGoogleId <client id> --stage dev
+npx sst secret set AuthGoogleSecret <client secret> --stage dev
+```
 
 And the telemetry destination, which is **not** a secret but the `.env` at the root — `sst deploy`
 loads it by itself, and `.env.example` is the template:

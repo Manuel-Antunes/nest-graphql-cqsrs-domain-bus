@@ -147,7 +147,8 @@ services:
       /usr/bin/mc alias set minio http://minio:9000 ${MINIO_ROOT_USER:-sail} ${MINIO_ROOT_PASSWORD:-password} &&
       /usr/bin/mc mb --ignore-existing minio/${DRIVE_BUCKET:-local} &&
       /usr/bin/mc anonymous set download minio/${DRIVE_BUCKET:-local}/tmp &&
-      /usr/bin/mc anonymous set download minio/${DRIVE_BUCKET:-local}/assets
+      /usr/bin/mc anonymous set download minio/${DRIVE_BUCKET:-local}/assets &&
+      /usr/bin/mc anonymous set download minio/${DRIVE_BUCKET:-local}/avatars
       "
     restart: "no"
 

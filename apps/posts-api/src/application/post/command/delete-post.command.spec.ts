@@ -1,5 +1,6 @@
 import { CommandBus } from '@nestjs/cqrs';
 import type { TestingModule } from '@nestjs/testing';
+import { UploadArea } from '@nestposts/asset/domain/asset/upload-area';
 import { ACTIVE_FILTER } from '@nestposts/platform/infrastructure/persistence/soft-delete/soft-delete-orm.entity';
 import { PostDeletedEvent } from '@nestposts/posts/domain/post/event/post-deleted.event';
 import { PostNotFoundException } from '@nestposts/posts/domain/post/exception/post-not-found.exception';
@@ -21,7 +22,6 @@ import {
   givenAnAuthor,
   givenAPost,
 } from '../../../../test/support/post-fixtures';
-import { UploadArea } from '../../asset/upload-area';
 import { PostRequest } from '../../shared/post-request';
 import { DeletePostCommand } from './delete-post.command';
 
@@ -68,7 +68,7 @@ describe('DeletePostCommand.Handler', () => {
     const upload = await givenAnUpload(module, author.id);
     const post = await givenAPost(module, {
       author,
-      asset: UploadArea.stage(upload, author.id),
+      asset: UploadArea.stage(upload, author.id.value),
     });
     const stored = post.asset?.path as string;
     await expect(storedIn(module, stored)).resolves.toBe(true);

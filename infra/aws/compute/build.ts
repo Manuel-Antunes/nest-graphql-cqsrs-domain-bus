@@ -14,23 +14,23 @@
  * every deploy and letting `nx` decide is one line here and a cache hit in about a second when
  * nothing moved; a fingerprint would be thirty lines that are wrong the first time somebody adds a
  * directory to the workspace.
- */
-const APPLICATIONS = [
-  '@nestposts/gateway',
-  '@nestposts/posts-api',
-  '@nestposts/tagging',
-  '@nestposts/notificator',
-  '@nestposts/migrator',
-];
-
-/**
- * **The applications the functions point at, and not the whole workspace.**
  *
- * `pnpm build` would build `apps/web` too — and OpenNext builds it again, itself, from inside the
- * app. Two `next build` runs against one `.next` is a race, and it announces itself as
- * `ENOENT: mkdir .next/export` from whichever one lost. Naming them keeps this resource to what
- * it is for: the `dist` the Lambda handlers are bundled from. The Nest applications bundle the
- * libraries from source; the migrator still builds the ones it depends on, through `^build`.
+ * ## What it runs: `@nestposts/infra:build-functions`, which is `^prune`
+ * The applications the functions point at are `@nestposts/infra`'s `implicitDependencies`, and
+ * that is the only place they are listed. `build-functions` asks each of them for its `prune` —
+ * Nx's own deploy step: the application's `dist`, its pruned `package.json` and lockfile, and the
+ * workspace modules it declares copied into `dist/workspace_modules`, built. Each `prune` waits for
+ * its application's `build`, and the gateway's for its `supergraph` as well.
+ *
+ * A second list already drifted twice. `tools/github/deploy-sst` has to run the same thing BEFORE
+ * `sst deploy`: SST reads every `copyFiles` source while it evaluates the program, before this
+ * resource has run, so a runner's clean checkout failed with
+ * `ENOENT: stat 'apps/gateway/dist/subgraphs'` the day the gateway was added to this resource's
+ * list and not to that one. Both now run the target, and the second run is a cache hit.
+ *
+ * Not `pnpm build`: it would build `apps/web` too — and OpenNext builds it again, itself, from
+ * inside the app. Two `next build` runs against one `.next` is a race, and it announces itself as
+ * `ENOENT: mkdir .next/export` from whichever one lost.
  *
  * ## And the supergraph, which is not a build output any more
  * OpenNext runs the web's `build` script — `graphql-codegen && next build` — and not its Nx target,
@@ -41,7 +41,7 @@ const APPLICATIONS = [
  * as a supergraph from some earlier run happened to be left behind. The web's builder waits for this
  * resource already: its environment names the functions' URLs, and the functions depend on it.
  */
-const buildCommand = `npx nx run-many --targets=build,supergraph --projects=${APPLICATIONS.join(',')}`;
+const buildCommand = 'npx nx run @nestposts/infra:build-functions';
 
 export const build = new command.local.Command('Build', {
   create: buildCommand,

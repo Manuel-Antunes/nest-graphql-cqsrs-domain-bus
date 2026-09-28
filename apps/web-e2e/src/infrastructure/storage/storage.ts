@@ -14,6 +14,7 @@ export class Storage {
   static readonly USER = 'nestposts';
   static readonly PASSWORD = 'nestposts-secret';
   static readonly ATTACHMENTS_PREFIX = 'assets/';
+  static readonly AVATARS_PREFIX = 'avatars/';
   static readonly STAGING_PREFIX = 'tmp/';
 
   private readonly client: S3Client;
@@ -44,6 +45,7 @@ export class Storage {
               Action: ['s3:GetObject'],
               Resource: [
                 `arn:aws:s3:::${Storage.BUCKET}/${Storage.ATTACHMENTS_PREFIX}*`,
+                `arn:aws:s3:::${Storage.BUCKET}/${Storage.AVATARS_PREFIX}*`,
               ],
             },
           ],

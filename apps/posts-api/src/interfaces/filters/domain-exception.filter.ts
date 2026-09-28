@@ -1,6 +1,7 @@
 import { MapMemberError } from '@automapper/core';
 import type { ArgumentsHost, ExceptionFilter } from '@nestjs/common';
 import { Catch } from '@nestjs/common';
+import { UploadNotOwnedException } from '@nestposts/asset/domain/asset/upload-area';
 import { CalendarEventNotFoundException } from '@nestposts/events/domain/calendar-event/exception/calendar-event-not-found.exception';
 import { InvalidCalendarEventException } from '@nestposts/events/domain/calendar-event/exception/invalid-calendar-event.exception';
 import { TeamNotFoundException } from '@nestposts/organizations/domain/organization/exception/team-not-found.exception';
@@ -15,8 +16,6 @@ import { TagNotFoundException } from '@nestposts/posts/domain/tag/exception/tag-
 import { UserNotFoundException } from '@nestposts/users/domain/user/exception/user-not-found.exception';
 import { GraphQLError } from 'graphql';
 import { ZodError, z } from 'zod';
-
-import { UploadNotOwnedException } from '../../application/asset/upload-area';
 
 @Catch(
   InvalidPostException,

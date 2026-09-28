@@ -25,6 +25,13 @@ inputs:
   better-stack-api-key:
     description: 'From `secrets.BETTER_STACK_API_KEY`. Same story.'
     required: true
+  sentry-token:
+    description: >
+      From `secrets.SENTRY_TOKEN`: the GlitchTip token `infra/sentry` manages the team, the projects,
+      the keys and the alerts with (organization-scoped `project:write` and `team:write`). The deploy
+      fails without it — every call would be anonymous, and GlitchTip answers an anonymous write with
+      `403 CSRF check Failed`. On a machine it comes from the root `.env`.
+    required: true
   mail-sender:
     description: >
       From `secrets.MAIL_SENDER`: the address, or the domain, `apps/notificator` sends email as through
@@ -58,16 +65,18 @@ runs:
         aws-secret-access-key: ${{ inputs.aws-secret-access-key }}
         aws-region: ${{ inputs.aws-region }}
 
-    - name: Export the telemetry destination and the mail sender
+    - name: Export the telemetry destination, the error tracker's token and the mail sender
       run: |
         echo "BETTER_STACK_URL=$BETTER_STACK_URL" >> "$GITHUB_ENV"
         echo "BETTER_STACK_API_KEY=$BETTER_STACK_API_KEY" >> "$GITHUB_ENV"
+        echo "SENTRY_TOKEN=$SENTRY_TOKEN" >> "$GITHUB_ENV"
         echo "MAIL_SENDER=$MAIL_SENDER" >> "$GITHUB_ENV"
         echo "MAIL_SENDER_EXISTING=$MAIL_SENDER_EXISTING" >> "$GITHUB_ENV"
       shell: bash
       env:
         BETTER_STACK_URL: ${{ inputs.better-stack-url }}
         BETTER_STACK_API_KEY: ${{ inputs.better-stack-api-key }}
+        SENTRY_TOKEN: ${{ inputs.sentry-token }}
         MAIL_SENDER: ${{ inputs.mail-sender }}
         MAIL_SENDER_EXISTING: ${{ inputs.mail-sender-existing }}
 

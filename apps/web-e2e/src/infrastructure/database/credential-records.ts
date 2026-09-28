@@ -1,4 +1,7 @@
 import type { Database } from './database';
+import type { StoredAttachment } from './post-records';
+
+export type StoredAvatar = NonNullable<StoredAttachment['asset']>;
 
 export class CredentialRecords {
   constructor(private readonly database: Database) {}
@@ -29,6 +32,14 @@ export class CredentialRecords {
       credentialId,
     );
     return row?.email;
+  }
+
+  async avatarOf(email: string): Promise<StoredAvatar | null> {
+    const [row] = await this.database.query<{ image: StoredAvatar | null }>(
+      'select image from users where email = ?',
+      email,
+    );
+    return row?.image ?? null;
   }
 
   async isActive(credentialId: string): Promise<boolean> {

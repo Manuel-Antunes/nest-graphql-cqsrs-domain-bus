@@ -3,6 +3,8 @@ import { Inject, Scope } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
 import type { AsyncContext, ICommandHandler } from '@nestjs/cqrs';
 import { Command, CommandHandler, EventPublisher } from '@nestjs/cqrs';
+import type { AssetUpload } from '@nestposts/asset/domain/asset/schemas/asset-upload.schema';
+import { UploadArea } from '@nestposts/asset/domain/asset/upload-area';
 import { delegateRef } from '@nestposts/platform/domain/shared/delegation/delegate';
 import { PostAlreadyExistsException } from '@nestposts/posts/domain/post/exception/post-already-exists.exception';
 import { Post } from '@nestposts/posts/domain/post/post.entity';
@@ -11,9 +13,6 @@ import { PostId } from '@nestposts/posts/domain/post/vo/post-id';
 import { Author } from '@nestposts/users/domain/user/author.entity';
 import { UserId } from '@nestposts/users/domain/user/vo/user-id';
 import { UserName } from '@nestposts/users/domain/user/vo/user-name';
-
-import type { AssetUpload } from '../../asset/upload-area';
-import { UploadArea } from '../../asset/upload-area';
 
 export namespace CreatePostCommand {
   export class CreatePost extends Command<PostId> {
@@ -70,7 +69,7 @@ export namespace CreatePostCommand {
         this.request,
       );
       if (command.asset) {
-        post.asset = UploadArea.stage(command.asset, command.authorId);
+        post.asset = UploadArea.stage(command.asset, command.authorId.value);
       }
       await this.posts.save(post);
       post.commit();

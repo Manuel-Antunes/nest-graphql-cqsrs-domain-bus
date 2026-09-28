@@ -150,6 +150,56 @@ The screens for all of them are better-auth-ui's, copied into `apps/web` from it
 `loginPage`, `consentPage`, `signup.page` and `selectAccount.page` of the OAuth provider point at
 those screens (`/auth/sign-in`, `/auth/oauth-consent`, …), on `WEB_URL`.
 
+## The avatar is an attachment
+
+Better Auth's `image` is a string, and the row keeps an `Attachment` of `@nestposts/asset` —
+`attachment({ disk: 'public', folder: 'avatars', preComputeUrl: true })` on `AuthUser`, a `json`
+column. The two meet in two places, and nowhere else:
+
+- **Writing, in the user's database hooks** — `UserDatabaseHooks`, so every path that writes a user
+  goes through them, whatever endpoint it is. `AvatarImages` makes the attachment with
+  `Attachment`'s own static constructors:
+
+  | `image` written | what the row keeps |
+  |---|---|
+  | `undefined` | nothing changes — a name-only `update-user` keeps the avatar |
+  | `null`, `''` | no avatar; the flush deletes the one there was |
+  | what `generatePresignedUrl` staged, as JSON — `{ name, size, extname, mimeType }` | `UploadArea.stage`, i.e. `Attachment.fromDisk` — the user's own `tmp/<id>/` on `update-user`, `tmp/anonymous/` on a sign-up |
+  | a URL, on a social sign-in (`/callback/:id`, `/sign-in/social`) | `Attachment.fromUrl`: the provider's picture, downloaded and stored as ours |
+  | anything else, an image type other than png, jpeg, webp, gif or avif included | refused, `400 AVATAR_NOT_UPLOADED` |
+
+  A provider's picture that cannot be downloaded, or is not an image, leaves the user without one and
+  never fails the sign-in.
+- **Reading, in the column's serializer** — the adapter reads a row back through MikroORM's
+  `serialize()`, and the property's `serializer` answers the attachment's URL. Better Auth, the
+  session, the cookie cache and the browser only ever see a string.
+
+The attachment subscriber does the rest, as for any column: it moves the staged object into
+`avatars/` when the row is flushed, and deletes the avatar a new one replaces or a `null` clears.
+
+**Only a process with `AttachmentModule` takes an avatar** — posts-api and the web. `AvatarImages`
+injects `AttachmentManager` as optional; without one (the notificator, the migrator) an upload is
+refused with `501 AVATARS_NOT_STORED` and a provider's picture is dropped, instead of writing a
+pending attachment nothing would ever store.
+
+## Database hooks are `@DatabaseHook` providers
+
+What happens to a row before or after Better Auth writes it is a provider of the module that owns the
+concern, decorated with `@thallesp/nestjs-better-auth`'s `@DatabaseHook()` and `@BeforeCreate`,
+`@AfterUpdate`, … — `UserDatabaseHooks` here (a user is born with a name; its `image` is an
+attachment), `UserProvisioningHooks` in posts-api. That library's `AuthModule` finds them when the
+application starts and attaches them to the instance's `databaseHooks`, which is why
+`BetterAuthInstance` passes an empty `databaseHooks: {}`: the library refuses to start without one.
+
+- **Every process installs that `AuthModule`**, through `AuthInfrastructureModule` — the web's
+  container and the migrator with `routes: false, guard: false` — or a hook would run in one process
+  and not in another. Locally the sign-up, the profile and the Google callback are served by the web.
+- **One provider per model, operation and moment.** The library attaches a second one by awaiting
+  the first and answering with the second's result alone, each given the original data: a
+  `@BeforeCreate('user')` elsewhere would silently drop `UserDatabaseHooks`'s answer — and with it
+  the name a magic-link sign-up needs. A new concern for the same moment goes into the provider that
+  already holds it. `after` hooks answer nothing, so any number of them compose.
+
 ## An OAuth access token is a session
 
 A client that went through the consent screen holds an access token, and the services behind the
@@ -249,7 +299,7 @@ which is what `@Roles([AUTHOR_ROLE])` reads off `users.role`.
 | `WEB_URL` | where the login/consent screens live, and a trusted origin by default |
 | `AUTH_TRUSTED_ORIGINS` | replaces that default, comma-separated |
 | `AUTH_COOKIE_DOMAIN` | the cross-subdomain cookie domain, applied only on a real deployment |
-| `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET`, `AUTH_GITHUB_*` | a provider is configured or it is absent |
+| `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET`, `AUTH_GITHUB_*` | a provider is configured or it is absent. Google asks which account (`prompt: select_account`); its client's redirect URI is `<AUTH_URL or WEB_URL>/api/auth/callback/google` — the web's locally, the router's on AWS |
 | `AUTH_REQUIRE_EMAIL_VERIFICATION` | `false` lets an unverified address sign in; the verification email is sent either way |
 | `AUTH_RATE_LIMIT` | `false` turns Better Auth's rate limiter off. It is on in production by default, and a browser suite signing dozens of people up from one address is exactly what it refuses |
 | `AUTH_ISSUER` | the `iss` every access token is signed with and verified against (default `WEB_URL`) |
@@ -258,7 +308,8 @@ which is what `@Roles([AUTHOR_ROLE])` reads off `users.role`.
 
 `AuthInfrastructureModule.forRoot({ routes: false })` keeps the global guard and does not serve
 `/api/auth/*` — what a subgraph behind the gateway wants: it authenticates every caller and signs
-nobody in.
+nobody in. `guard: false` as well is a runtime that is no Nest server — the web's container, the
+migrator: no routes, no guard, and the `@Hook`/`@DatabaseHook` providers attached all the same.
 
 `cookieSecurity` decides `Secure` and `Domain` from **the URL and `NODE_ENV` together**, not from
 `NODE_ENV` alone: a production build served on `localhost` would otherwise issue
@@ -281,9 +332,10 @@ second assembly would have to reproduce how a request reaches them, and would dr
 service a resolver injects on the other side. `apps/web/src/nest/` is the worked example; the root
 `CLAUDE.md` has the rest of that story.
 
-Such a container imports `BetterAuthModule` and **not** `AuthInfrastructureModule`: the second
-installs the `/api/auth/*` catch-all and the global guard through `@thallesp/nestjs-better-auth`,
-which needs an HTTP adapter a container does not have. It serves those routes itself.
+Such a container imports `AuthInfrastructureModule.forRoot({ routes: false, guard: false })`: the
+`/api/auth/*` catch-all and the global guard need an HTTP adapter a container does not have — it
+serves those routes itself — and what the module does besides, attaching the database hooks, it
+needs like any other process.
 
 Two things it has to take care of, because there is no request pipeline to do them:
 `inRequestContext` around each call, since `allowGlobalContext` is off and the alternative is one

@@ -40,6 +40,7 @@ import {
 } from '@nestposts/ui/components/ui/input-group';
 import { useIsMutating } from '@tanstack/react-query';
 import { Eye, EyeOff } from 'lucide-react';
+import { toast } from 'sonner';
 
 import { cn } from '@/lib/utils';
 
@@ -50,6 +51,7 @@ import {
 } from './auth-form';
 import { PasswordStrengthMeter } from './password-strength-meter';
 import { ProviderButtons, type SocialLayout } from './provider-buttons';
+import { SignUpAvatar } from './sign-up-avatar';
 
 export type SignUpProps = {
   className?: string;
@@ -67,6 +69,7 @@ export function SignUp({
   const {
     additionalFields,
     authClient,
+    avatar,
     basePaths,
     emailAndPassword,
     localization,
@@ -124,6 +127,7 @@ export function SignUp({
     useState(false);
 
   const [isCompromised, setIsCompromised] = useState(false);
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const signUpFields = useMemo(
     () => additionalFields?.filter((field) => field.signUp) ?? [],
     [additionalFields],
@@ -137,11 +141,27 @@ export function SignUp({
       password: '',
     },
     onSubmit: async ({ value }) => {
+      let image: string | undefined;
+      if (avatarFile) {
+        try {
+          const resized =
+            (await avatar.resize?.(
+              avatarFile,
+              avatar.size,
+              avatar.extension,
+            )) || avatarFile;
+          image = await avatar.upload?.(resized);
+        } catch {
+          toast.error(localization.errors.imageUploadFailed);
+          return;
+        }
+      }
       try {
         await signUpEmail({
           name: emailAndPassword?.name === false ? '' : value.name,
           email: value.email.trim(),
           password: value.password,
+          image,
           ...getAdditionalFieldSubmitValues(
             signUpFields,
             value.additionalFields,
@@ -227,6 +247,14 @@ export function SignUp({
                         );
                       }}
                     </form.AppField>
+                  )}
+
+                  {avatar.enabled && (
+                    <SignUpAvatar
+                      file={avatarFile}
+                      onChange={setAvatarFile}
+                      disabled={isPending}
+                    />
                   )}
 
                   <form.AppField

@@ -1,3 +1,4 @@
+import { attachment } from '@nestposts/asset/infrastructure/database/attachment.type';
 import { defineEntity, p, SYSTEM_SCHEMA } from '@nestposts/database';
 import {
   USER_KIND,
@@ -14,7 +15,13 @@ export const AuthUserEntitySchema = defineEntity({
   forceConstructor: true,
   properties: {
     emailVerified: p.boolean().default(false),
-    image: p.string().nullable(),
+    image: attachment({
+      disk: 'public',
+      folder: 'avatars',
+      preComputeUrl: true,
+    })
+      .nullable()
+      .serializer((image) => image?.url ?? null),
     banned: p.boolean().nullable(),
     banReason: p.text().nullable(),
     banExpires: p.datetime().nullable(),

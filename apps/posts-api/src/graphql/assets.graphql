@@ -50,7 +50,7 @@ type PresignedUpload {
 
 type Mutation {
   """
-  A short-lived URL to upload one file to; nothing is stored until a post attaches it
+  A short-lived URL to upload one file to, signed in or not — in the caller's own staging area, or the anonymous one; nothing is stored until a post or an avatar attaches it
   """
   generatePresignedUrl(input: GeneratePresignedUrlInput!): PresignedUpload!
 }

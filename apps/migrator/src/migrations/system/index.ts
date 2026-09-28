@@ -6,6 +6,7 @@ import { Migration20260926152128_team_references } from './Migration202609261521
 import { Migration20260927000701_outbox } from './Migration20260927000701_outbox';
 import { Migration20260928120000_event_store_tags } from './Migration20260928120000_event_store_tags';
 import { Migration20260928130000_users } from './Migration20260928130000_users';
+import { Migration20260928140000_user_avatar } from './Migration20260928140000_user_avatar';
 
 export const systemMigrations: MigrationObject[] = [
   {
@@ -31,5 +32,9 @@ export const systemMigrations: MigrationObject[] = [
   {
     name: 'Migration20260928130000_users',
     class: Migration20260928130000_users,
+  },
+  {
+    name: 'Migration20260928140000_user_avatar',
+    class: Migration20260928140000_user_avatar,
   },
 ];
