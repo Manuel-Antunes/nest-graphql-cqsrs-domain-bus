@@ -1,10 +1,9 @@
 import type { IQueryHandler } from '@nestjs/cqrs';
 import { Query, QueryHandler } from '@nestjs/cqrs';
 import { MemberRepository } from '@nestposts/organizations/domain/organization/member.repository';
+import { TenantOrganizations } from '@nestposts/organizations/infrastructure/tenancy/tenant-organizations.service';
 import type { User } from '@nestposts/users/domain/user/user.entity';
-
-import { UserProvisioning } from '../../user/user-provisioning.service';
-import { TenantOrganizations } from '../tenant-organizations.service';
+import { UserProvisioning } from '@nestposts/users/infrastructure/provisioning/user-provisioning.service';
 
 export namespace FindMembersQuery {
   export class FindMembers extends Query<User[]> {

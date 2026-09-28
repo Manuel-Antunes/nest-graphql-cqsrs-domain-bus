@@ -1,8 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { Tenant } from '@nestposts/database';
-import type { Organization } from '@nestposts/organizations/domain/organization/organization.entity';
-import { OrganizationRepository } from '@nestposts/organizations/domain/organization/organization.repository';
-import { OrganizationSlug } from '@nestposts/organizations/domain/organization/vo/organization-slug';
+
+import type { Organization } from '../../domain/organization/organization.entity';
+import { OrganizationRepository } from '../../domain/organization/organization.repository';
+import { OrganizationSlug } from '../../domain/organization/vo/organization-slug';
 
 @Injectable()
 export class TenantOrganizations {

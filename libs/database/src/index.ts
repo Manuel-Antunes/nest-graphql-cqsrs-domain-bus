@@ -15,6 +15,7 @@
  */
 export * from './config/index';
 export * from './database.module';
+export * from './decorators/index';
 export * from './entities/index';
 export * from './filters/index';
 export * from './helpers/index';

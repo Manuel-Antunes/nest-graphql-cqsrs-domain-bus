@@ -10,6 +10,7 @@ import {
 } from './persistence/entities/user-orm.entity';
 import { MikroOrmAuthorRepository } from './persistence/repositories/mikro-orm-author.repository';
 import { MikroOrmUserRepository } from './persistence/repositories/mikro-orm-user.repository';
+import { UserProvisioning } from './provisioning/user-provisioning.service';
 
 /**
  * The tables this module owns: the user's row, in `public`, and the authorship that makes an Author
@@ -31,7 +32,8 @@ export const usersEntities = [UserEntitySchema, AuthorshipEntitySchema];
   providers: [
     { provide: UserRepository, useClass: MikroOrmUserRepository },
     { provide: AuthorRepository, useClass: MikroOrmAuthorRepository },
+    UserProvisioning,
   ],
-  exports: [UserRepository, AuthorRepository],
+  exports: [UserRepository, AuthorRepository, UserProvisioning],
 })
 export class UsersInfrastructureModule {}

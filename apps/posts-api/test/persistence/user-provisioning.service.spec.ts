@@ -8,14 +8,14 @@ import { AuthorRepository } from '@nestposts/users/domain/user/author.repository
 import { UnknownIdentityException } from '@nestposts/users/domain/user/exception/unknown-identity.exception';
 import { User } from '@nestposts/users/domain/user/user.entity';
 import { UserId } from '@nestposts/users/domain/user/vo/user-id';
+import { UserProvisioning } from '@nestposts/users/infrastructure/provisioning/user-provisioning.service';
 
 import {
   createCqrsTestingModule,
   freshEm,
   inRequestContext,
-} from '../../../test/support/cqrs-testing-module';
-import { T0 } from '../../../test/support/post-fixtures';
-import { UserProvisioning } from './user-provisioning.service';
+} from '../support/cqrs-testing-module';
+import { T0 } from '../support/post-fixtures';
 
 describe('UserProvisioning', () => {
   let module: TestingModule;
@@ -48,7 +48,7 @@ describe('UserProvisioning', () => {
   const countAuthorships = () => freshEm(module).count(Authorship);
 
   beforeEach(async () => {
-    module = await createCqrsTestingModule([UserProvisioning]);
+    module = await createCqrsTestingModule([]);
     provisioning = module.get(UserProvisioning);
     authors = module.get(AuthorRepository);
   });

@@ -2,14 +2,14 @@ import { MapInterceptor } from '@automapper/nestjs';
 import { UseInterceptors } from '@nestjs/common';
 import { QueryBus } from '@nestjs/cqrs';
 import { Query, Resolver } from '@nestjs/graphql';
+import { CurrentUser } from '@nestposts/auth/decorators/current-user.decorator';
+import { CurrentTenant } from '@nestposts/database';
 import { Team } from '@nestposts/organizations/domain/organization/team.entity';
 import type { User } from '@nestposts/users/domain/user/user.entity';
 
 import { FindMembersQuery } from '../../application/organization/query/find-members.query';
 import { FindTeamsQuery } from '../../application/organization/query/find-teams.query';
 import { TeamView } from '../../dto/graphql/team.view';
-import { CurrentTenant } from '../decorators/current-tenant.decorator';
-import { CurrentUser } from '../decorators/current-user.decorator';
 import { UserViewInterceptor } from '../interceptors/user-view.interceptor';
 
 @Resolver()

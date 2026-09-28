@@ -2,9 +2,8 @@ import type { PipeTransform } from '@nestjs/common';
 import { Injectable } from '@nestjs/common';
 import type { User } from '@nestposts/users/domain/user/user.entity';
 import { UserId } from '@nestposts/users/domain/user/vo/user-id';
+import { UserProvisioning } from '@nestposts/users/infrastructure/provisioning/user-provisioning.service';
 import type { UserSession } from '@thallesp/nestjs-better-auth';
-
-import { UserProvisioning } from '../../application/user/user-provisioning.service';
 
 @Injectable()
 export class SessionUserPipe

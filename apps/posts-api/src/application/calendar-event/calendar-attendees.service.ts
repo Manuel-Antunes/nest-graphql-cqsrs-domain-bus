@@ -4,13 +4,12 @@ import type { Team } from '@nestposts/organizations/domain/organization/team.ent
 import { TeamRepository } from '@nestposts/organizations/domain/organization/team.repository';
 import { TeamMemberRepository } from '@nestposts/organizations/domain/organization/team-member.repository';
 import type { TeamId } from '@nestposts/organizations/domain/organization/vo/team-id';
+import { TenantOrganizations } from '@nestposts/organizations/infrastructure/tenancy/tenant-organizations.service';
 import { UserNotFoundException } from '@nestposts/users/domain/user/exception/user-not-found.exception';
 import type { User } from '@nestposts/users/domain/user/user.entity';
 import { UserRepository } from '@nestposts/users/domain/user/user.repository';
 import type { UserId } from '@nestposts/users/domain/user/vo/user-id';
-
-import { TenantOrganizations } from '../organization/tenant-organizations.service';
-import { UserProvisioning } from '../user/user-provisioning.service';
+import { UserProvisioning } from '@nestposts/users/infrastructure/provisioning/user-provisioning.service';
 
 @Injectable()
 export class CalendarAttendees {

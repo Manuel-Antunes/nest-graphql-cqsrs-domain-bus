@@ -14,6 +14,7 @@ import { MikroOrmMemberRepository } from './persistence/repositories/mikro-orm-m
 import { MikroOrmOrganizationRepository } from './persistence/repositories/mikro-orm-organization.repository';
 import { MikroOrmTeamRepository } from './persistence/repositories/mikro-orm-team.repository';
 import { MikroOrmTeamMemberRepository } from './persistence/repositories/mikro-orm-team-member.repository';
+import { TenantOrganizations } from './tenancy/tenant-organizations.service';
 
 /**
  * **The organization module's adapters, bound to its ports.**
@@ -35,6 +36,7 @@ import { MikroOrmTeamMemberRepository } from './persistence/repositories/mikro-o
     { provide: TeamRepository, useClass: MikroOrmTeamRepository },
     { provide: TeamMemberRepository, useClass: MikroOrmTeamMemberRepository },
     { provide: OrganizationService, useClass: BetterAuthOrganizationService },
+    TenantOrganizations,
   ],
   exports: [
     OrganizationRepository,
@@ -43,6 +45,7 @@ import { MikroOrmTeamMemberRepository } from './persistence/repositories/mikro-o
     TeamRepository,
     TeamMemberRepository,
     OrganizationService,
+    TenantOrganizations,
   ],
 })
 export class OrganizationsInfrastructureModule {}

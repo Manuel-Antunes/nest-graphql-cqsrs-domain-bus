@@ -5,13 +5,12 @@ import {
   TenantEntityManagerService,
 } from '@nestposts/database';
 import { UserId } from '@nestposts/users/domain/user/vo/user-id';
+import { UserProvisioning } from '@nestposts/users/infrastructure/provisioning/user-provisioning.service';
 import {
   AfterCreate,
   AfterUpdate,
   DatabaseHook,
 } from '@thallesp/nestjs-better-auth';
-
-import { UserProvisioning } from '../../application/user/user-provisioning.service';
 
 interface AuthUserRow {
   id: string;

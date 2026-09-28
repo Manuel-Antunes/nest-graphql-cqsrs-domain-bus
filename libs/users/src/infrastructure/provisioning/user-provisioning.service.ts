@@ -1,10 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { AUTHOR_ROLE } from '@nestposts/users/domain/user/author.entity';
-import { AuthorRepository } from '@nestposts/users/domain/user/author.repository';
-import { UnknownIdentityException } from '@nestposts/users/domain/user/exception/unknown-identity.exception';
-import type { User } from '@nestposts/users/domain/user/user.entity';
-import { UserRepository } from '@nestposts/users/domain/user/user.repository';
-import type { UserId } from '@nestposts/users/domain/user/vo/user-id';
+
+import { AUTHOR_ROLE } from '../../domain/user/author.entity';
+import { AuthorRepository } from '../../domain/user/author.repository';
+import { UnknownIdentityException } from '../../domain/user/exception/unknown-identity.exception';
+import type { User } from '../../domain/user/user.entity';
+import { UserRepository } from '../../domain/user/user.repository';
+import type { UserId } from '../../domain/user/vo/user-id';
 
 @Injectable()
 export class UserProvisioning {

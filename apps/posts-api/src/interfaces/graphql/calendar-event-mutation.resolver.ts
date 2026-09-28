@@ -3,9 +3,12 @@ import { InjectMapper, MapInterceptor } from '@automapper/nestjs';
 import { UseInterceptors } from '@nestjs/common';
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import { Args, Mutation, Resolver } from '@nestjs/graphql';
+import { CurrentUser } from '@nestposts/auth/decorators/current-user.decorator';
+import { CurrentTenant } from '@nestposts/database';
 import { CalendarEvent } from '@nestposts/events/domain/calendar-event/calendar-event.entity';
 import { CalendarEventNotFoundException } from '@nestposts/events/domain/calendar-event/exception/calendar-event-not-found.exception';
 import { CalendarEventId } from '@nestposts/events/domain/calendar-event/vo/calendar-event-id';
+import { MemberCan } from '@nestposts/organizations/decorators/org-roles.decorator';
 import { EVENT_RESOURCE } from '@nestposts/organizations/infrastructure/better-auth/access';
 import type { User } from '@nestposts/users/domain/user/user.entity';
 
@@ -20,9 +23,6 @@ import {
   UpdateEventInput,
 } from '../../dto/graphql/calendar-event.input';
 import { CalendarEventView } from '../../dto/graphql/calendar-event.view';
-import { CurrentTenant } from '../decorators/current-tenant.decorator';
-import { CurrentUser } from '../decorators/current-user.decorator';
-import { MemberCan } from '../decorators/roles.decorator';
 
 @Resolver('Event')
 export class CalendarEventMutationResolver {

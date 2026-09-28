@@ -166,6 +166,7 @@ libs/database/src                                    # everything ORM that needs
 ├── entities/value-object.type                       # the VO ↔ column bridge: a Type generated from the class
 ├── helpers/request-context                          # reuses the ORM's context, or opens one — what makes
 │                                                    #   Post.author resolve inside an SSE stream or a queue
+├── decorators/current-tenant                        # @CurrentTenant(): the x-tenant that enters the request
 └── filters/database-error                           # what a driver exception MEANS; the message is the edge's
 
 libs/posts/src
@@ -184,7 +185,9 @@ libs/posts/src
     └── repositories/mikro-orm-post, mikro-orm-tag   # the adapters (findByCursor and restore live here)
 
 libs/users/src                                       # the same shape: domain/user + its mapping and repositories.
-                                                     #   Nothing here names Better Auth any more
+│                                                    #   Nothing here names Better Auth any more
+├── infrastructure/provisioning/user-provisioning    # the tenant's authorship of a user, made on arrival
+└── pipes/author                                     # a User → the Author it is in this tenant, or refused
 
 libs/auth/src                                        # the only place that knows Better Auth exists
 ├── domain/auth                                      # AuthService (request-scoped port), Session, AuthUser
@@ -194,6 +197,8 @@ libs/auth/src                                        # the only place that knows
 │   └── identity/                                    #   BetterAuthService and the IdentityProvider adapter
 ├── infrastructure/persistence                       # AuthUser mapped BY HAND onto users, the rest generated from
 │                                                    #   better-auth's own description of its schema
+├── pipes/session-user                               # the session → its User, provisioned in the tenant
+├── decorators/current-user, roles                   # @CurrentUser()/@CurrentAuthor(), @Roles/@UserCan
 └── standalone.ts                                    # the same instance outside Nest
 
 libs/organizations/src                               # built ON libs/auth, never the other way round
@@ -203,6 +208,10 @@ libs/organizations/src                               # built ON libs/auth, never
 │                                                    #   it contributes, and OrganizationService over it
 ├── infrastructure/persistence                       # the three tables, and the ONE composition point for
 │                                                    #   "every table this system's auth owns"
+├── infrastructure/tenancy                           # the membership guard, and TenantOrganizations: the
+│                                                    #   organization a tenant names
+├── pipes/active-organization, -id, active-member    # what @ActiveOrganization()/-Id()/@ActiveMember() hand over
+├── decorators/active-organization, org-roles        # @Session() with one of those pipes; @OrgRoles/@MemberCan
 └── standalone.ts                                    # that composition outside Nest — what apps/web runs
 
 apps/posts-api/src
@@ -220,8 +229,7 @@ apps/posts-api/src
 │   ├── post/query/…, post/subscription/…            # idem, one file per slice
 │   ├── shared/post-request                          # PostRequest extends AsyncContext: the key (the PostId)
 │   │   post-request-context.codec                   #   and how it crosses the wire
-│   ├── tag/command/create-tag, user/query/find-author
-│   └── user/user-provisioning                       # the tenant's authorship of a user, made on arrival
+│   └── tag/command/create-tag, user/query/find-author
 ├── infrastructure
 │   ├── persistence/mikro-orm.config                 # só a CONEXÃO: cada tabela chega pelo
 │   │                                                #   módulo que a possui (DatabaseModule.forFeature)
@@ -233,9 +241,9 @@ apps/posts-api/src
 └── interfaces
     ├── graphql/*.resolver                           # one resolver per schema file
     ├── messaging/post-completion.controller         # the port of entry BY MESSAGE: @EventPattern → EventIngestion
-    ├── interceptors, pipes, filters, mapper         # the edge's machinery, unchanged
-    ├── auth/user-provisioning.hooks                 # the other edge: Better Auth calling inwards
-    └── decorators/current-tenant                    # @CurrentTenant(): the x-tenant that enters the PostRequest
+    ├── interceptors, filters, mapper                # the edge's machinery; its pipes and decorators are
+    │                                                #   the modules' own, under each library's pipes/ and decorators/
+    └── auth/user-provisioning.hooks                 # the other edge: Better Auth calling inwards
 
 apps/tagging/src
 ├── app.module, main                                 # NestFactory.createMicroservice: no HTTP anywhere

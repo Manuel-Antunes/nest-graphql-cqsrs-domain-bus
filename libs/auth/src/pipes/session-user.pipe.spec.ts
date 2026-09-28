@@ -1,8 +1,8 @@
 import type { User } from '@nestposts/users/domain/user/user.entity';
 import { UserId } from '@nestposts/users/domain/user/vo/user-id';
+import type { UserProvisioning } from '@nestposts/users/infrastructure/provisioning/user-provisioning.service';
 import type { UserSession } from '@thallesp/nestjs-better-auth';
 
-import type { UserProvisioning } from '../../application/user/user-provisioning.service';
 import { SessionUserPipe } from './session-user.pipe';
 
 describe('SessionUserPipe', () => {

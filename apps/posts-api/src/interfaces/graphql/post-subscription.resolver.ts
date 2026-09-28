@@ -1,6 +1,7 @@
 import { UseInterceptors } from '@nestjs/common';
 import { Args, Resolver, Subscription } from '@nestjs/graphql';
 import { SubscriptionBus, subscribeAsAsyncIterable } from '@nestposts/cqsrs';
+import { CurrentTenant } from '@nestposts/database';
 import { PostCreatedEvent } from '@nestposts/posts/domain/post/event/post-created.event';
 import { PostUpdatedEvent } from '@nestposts/posts/domain/post/event/post-updated.event';
 import { AllowAnonymous } from '@thallesp/nestjs-better-auth';
@@ -8,7 +9,6 @@ import { AllowAnonymous } from '@thallesp/nestjs-better-auth';
 import { OnPostCreatedSubscription } from '../../application/post/subscription/on-post-created.subscription';
 import { OnPostUpdatedSubscription } from '../../application/post/subscription/on-post-updated.subscription';
 import { PostView } from '../../dto/graphql/post.view';
-import { CurrentTenant } from '../decorators/current-tenant.decorator';
 import { MapSubscriptionInterceptor } from '../interceptors/map-subscription.interceptor';
 
 @AllowAnonymous()

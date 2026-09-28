@@ -18,7 +18,6 @@ import { FindCalendarEventsQuery } from './calendar-event/query/find-calendar-ev
 import { NotifyAttendeesOnCalendarEvent } from './calendar-event/saga/notify-attendees-on-calendar-event.saga';
 import { FindMembersQuery } from './organization/query/find-members.query';
 import { FindTeamsQuery } from './organization/query/find-teams.query';
-import { TenantOrganizations } from './organization/tenant-organizations.service';
 import { AssignTagToPostCommand } from './post/command/assign-tag-to-post.command';
 import { CompletePostCommand } from './post/command/complete-post.command';
 import { CreatePostCommand } from './post/command/create-post.command';
@@ -37,7 +36,6 @@ import { CreateTagCommand } from './tag/command/create-tag.command';
 import { FindTagQuery } from './tag/query/find-tag.query';
 import { FindAuthorQuery } from './user/query/find-author.query';
 import { FindUserQuery } from './user/query/find-user.query';
-import { UserProvisioning } from './user/user-provisioning.service';
 
 @Module({
   imports: [
@@ -70,8 +68,6 @@ import { UserProvisioning } from './user/user-provisioning.service';
     ProjectPostCompletion,
     OnPostCreatedSubscription.Handler,
     OnPostUpdatedSubscription.Handler,
-    UserProvisioning,
-    TenantOrganizations,
     FindMembersQuery.Handler,
     FindTeamsQuery.Handler,
     CalendarAttendees,
@@ -84,10 +80,6 @@ import { UserProvisioning } from './user/user-provisioning.service';
     FindCalendarEventQuery.Handler,
     FindCalendarEventsQuery.Handler,
   ],
-  exports: [
-    UserProvisioning,
-    TenantOrganizations,
-    OrganizationsInfrastructureModule,
-  ],
+  exports: [UsersInfrastructureModule, OrganizationsInfrastructureModule],
 })
 export class ApplicationModule {}

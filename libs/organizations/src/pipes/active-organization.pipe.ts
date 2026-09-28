@@ -1,8 +1,9 @@
 import type { PipeTransform } from '@nestjs/common';
 import { Injectable, Scope } from '@nestjs/common';
-import { OrganizationNotSelectedException } from '@nestposts/organizations/domain/organization/exception/organization-not-selected.exception';
-import type { Organization } from '@nestposts/organizations/domain/organization/organization.entity';
-import { OrganizationService } from '@nestposts/organizations/domain/organization/organization.service';
+
+import { OrganizationNotSelectedException } from '../domain/organization/exception/organization-not-selected.exception';
+import type { Organization } from '../domain/organization/organization.entity';
+import { OrganizationService } from '../domain/organization/organization.service';
 
 @Injectable({ scope: Scope.REQUEST })
 export class ActiveOrganizationPipe

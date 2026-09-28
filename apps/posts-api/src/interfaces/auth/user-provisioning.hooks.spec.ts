@@ -2,8 +2,8 @@ import type { Logger } from '@nestjs/common';
 import type { TenantEntityManagerService } from '@nestposts/database';
 import type { User } from '@nestposts/users/domain/user/user.entity';
 import { UserId } from '@nestposts/users/domain/user/vo/user-id';
+import type { UserProvisioning } from '@nestposts/users/infrastructure/provisioning/user-provisioning.service';
 
-import type { UserProvisioning } from '../../application/user/user-provisioning.service';
 import { UserProvisioningHooks } from './user-provisioning.hooks';
 
 describe('UserProvisioningHooks', () => {

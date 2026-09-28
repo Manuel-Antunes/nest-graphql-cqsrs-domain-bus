@@ -25,14 +25,14 @@ import { TeamMemberEntitySchema } from '@nestposts/organizations/infrastructure/
 import { TeamEntitySchema } from '@nestposts/organizations/infrastructure/persistence/entities/team-orm.entity';
 import { MikroOrmTeamRepository } from '@nestposts/organizations/infrastructure/persistence/repositories/mikro-orm-team.repository';
 import { MikroOrmTeamMemberRepository } from '@nestposts/organizations/infrastructure/persistence/repositories/mikro-orm-team-member.repository';
+import { TenantOrganizations } from '@nestposts/organizations/infrastructure/tenancy/tenant-organizations.service';
 import { User } from '@nestposts/users/domain/user/user.entity';
 import { Email } from '@nestposts/users/domain/user/vo/email';
 import { UserId } from '@nestposts/users/domain/user/vo/user-id';
 import { UserName } from '@nestposts/users/domain/user/vo/user-name';
+import { UserProvisioning } from '@nestposts/users/infrastructure/provisioning/user-provisioning.service';
 
 import { CalendarAttendees } from '../../src/application/calendar-event/calendar-attendees.service';
-import { TenantOrganizations } from '../../src/application/organization/tenant-organizations.service';
-import { UserProvisioning } from '../../src/application/user/user-provisioning.service';
 import { freshEm } from './cqrs-testing-module';
 import { T0 } from './post-fixtures';
 

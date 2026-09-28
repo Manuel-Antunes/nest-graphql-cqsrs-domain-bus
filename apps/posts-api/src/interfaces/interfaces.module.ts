@@ -1,5 +1,11 @@
 import { Module } from '@nestjs/common';
 import { APP_FILTER } from '@nestjs/core';
+import { SessionUserPipe } from '@nestposts/auth/pipes/session-user.pipe';
+import { SeesEveryEventPipe } from '@nestposts/events/pipes/sees-every-event.pipe';
+import { ActiveMemberPipe } from '@nestposts/organizations/pipes/active-member.pipe';
+import { ActiveOrganizationPipe } from '@nestposts/organizations/pipes/active-organization.pipe';
+import { ActiveOrganizationIdPipe } from '@nestposts/organizations/pipes/active-organization-id.pipe';
+import { AuthorPipe } from '@nestposts/users/pipes/author.pipe';
 
 import { ApplicationModule } from '../application/application.module';
 import { UserProvisioningHooks } from './auth/user-provisioning.hooks';
@@ -27,12 +33,6 @@ import { PostProfile } from './mapper/post.profile';
 import { TeamProfile } from './mapper/team.profile';
 import { UserProfile } from './mapper/user.profile';
 import { PostCompletionController } from './messaging/post-completion.controller';
-import { ActiveMemberPipe } from './pipes/active-member.pipe';
-import { ActiveOrganizationPipe } from './pipes/active-organization.pipe';
-import { ActiveOrganizationIdPipe } from './pipes/active-organization-id.pipe';
-import { AuthorPipe } from './pipes/author.pipe';
-import { SeesEveryEventPipe } from './pipes/sees-every-event.pipe';
-import { SessionUserPipe } from './pipes/session-user.pipe';
 
 @Module({
   imports: [ApplicationModule],

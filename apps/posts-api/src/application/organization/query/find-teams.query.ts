@@ -2,8 +2,7 @@ import type { IQueryHandler } from '@nestjs/cqrs';
 import { Query, QueryHandler } from '@nestjs/cqrs';
 import type { Team } from '@nestposts/organizations/domain/organization/team.entity';
 import { TeamRepository } from '@nestposts/organizations/domain/organization/team.repository';
-
-import { TenantOrganizations } from '../tenant-organizations.service';
+import { TenantOrganizations } from '@nestposts/organizations/infrastructure/tenancy/tenant-organizations.service';
 
 export namespace FindTeamsQuery {
   export class FindTeams extends Query<Team[]> {
