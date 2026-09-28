@@ -592,8 +592,15 @@ the storage engine and the tenant resolver are the application's. The essentials
   `AFTER_COMMIT`, outside the transaction's scope. `detached()` is a transaction of its own even inside
   another (`REQUIRES_NEW`), for a publish nobody awaits — as a savepoint of the caller's transaction it
   would release after that transaction committed (measured: `RELEASE SAVEPOINT can only be used in
-  transaction blocks`, from `UserProvisioning` publishing inside `UserRepository.exclusively`).
-  MikroORM's is one connection, so it answers `requiresSequentialInvocation` and every phase runs its
+  transaction blocks`, from `UserProvisioning` publishing inside `UserRepository.exclusively`). It is
+  opened on a **fork of its own**, never through the context's entity manager: MikroORM's
+  `REQUIRES_NEW` suspends the caller's transaction by clearing it from the caller's fork until the new
+  one ends — right for a caller that awaits it, wrong for an unawaited `commit()`. Measured on AWS,
+  where posts-api stores its events (`POSTS_SUBSCRIPTION_SOURCE=feed`) and so every publish writes:
+  the first request in a new tenant provisioned the author, the `authors` row went out on another
+  connection while `UserRegistered` was being stored, and violated `authors_id_foreign` — which the
+  exception filter reported as `o autor informado não existe`. A tenant's transaction is a fresh fork
+  of the tenant's entity manager too, so no identity map is shared across units. MikroORM's is one connection, so it answers `requiresSequentialInvocation` and every phase runs its
   actions one at a time.
 - **Publishing is staging, and `PREPARE_COMMIT` writes and tells.** `TransportEventBusService` is Axon
   5's `EventSink`/`SimpleEventBus`: inside a unit, every publish becomes an `EventMessage` and is staged,
@@ -1521,7 +1528,13 @@ because it is the default, then RabbitMQ — and nothing is skipped in either. W
 where a claim is checked, which `infrastructure/messaging/wire.ts` is: a queue bound to `posts.#` and drained
 through the management API, or the dev server's own `/v1/events`. A test that could only be written
 against one of them would be a test of the transport rather than of the system, which is what that
-port exists to prevent.
+port exists to prevent. One more thing differs, on purpose: **the Inngest run is the serverless
+shape**, so there posts-api reads its subscriptions from the event store
+(`POSTS_SUBSCRIPTION_SOURCE=feed`, `RunEnvironment.postsSubscriptionSource`), as it does on AWS — and as it would on
+Vercel, where Inngest is the transport. In `feed` every publish writes, an unawaited one included, and
+the `authors_id_foreign` failure described under `MikroOrmTransactionManager`'s detached transaction
+reached AWS because no suite ran posts-api in that mode. The RabbitMQ run keeps a long-lived
+process's `local`.
 
 It provisions everything itself, through **Testcontainers**: Postgres, MinIO (the bucket and its
 policies included), Mailpit (where `notifications.spec` reads the author's email), the broker or the

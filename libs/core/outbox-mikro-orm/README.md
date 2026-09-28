@@ -109,7 +109,12 @@ transaction that was already over — `Transaction is already committed`.
 **`detached()` is the same with `REQUIRES_NEW`**, for a publish that nobody awaits inside the caller's
 transaction: as a savepoint it would release after that transaction committed — measured, `RELEASE
 SAVEPOINT can only be used in transaction blocks`, from a provisioning that published inside
-`UserRepository.exclusively`.
+`UserRepository.exclusively`. It is opened on a fork of its own, never through the context's entity
+manager: MikroORM's `REQUIRES_NEW` suspends the caller's transaction by clearing it from the caller's
+fork until the new one ends, which is right for a caller that awaits it and wrong for an unawaited
+publish — measured, the provisioning's next write went out on another connection, outside the
+transaction that held the row it referenced (`authors_id_foreign`). A tenant's transaction is opened on
+a fresh fork of the tenant's entity manager as well, so no identity map outlives its unit.
 
 **In the tenant the message names.** The relay delivers a streaming group's messages outside any
 request, so nothing has opened the tenant a message belongs to. The manager is told the message the

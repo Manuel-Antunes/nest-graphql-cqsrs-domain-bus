@@ -19,6 +19,17 @@ through the management API, or the Inngest dev server's `/v1/events` — and
 `src/infrastructure/messaging/wire.ts` is the one place that knows which. A test that could only be
 written against one of them would be a test of the transport rather than of the system.
 
+**The Inngest run is the serverless shape, too.** Inngest is what a serverless deployment uses — a
+function the dev server invokes, on Vercel as on Lambda — so in that run posts-api reads its
+subscriptions from the event store (`POSTS_SUBSCRIPTION_SOURCE=feed`, `RunEnvironment.postsSubscriptionSource`), as it does on
+AWS, where it runs as many containers as it has concurrent requests; the RabbitMQ run keeps a
+long-lived process's `local`. That is not taste: in `feed` every publish writes, an unawaited one
+included, and a failure only that mode has — provisioning a profile on the first request in a new
+tenant, whose detached transaction suspended the provisioning's own — reached AWS because no suite
+here ever ran posts-api in `feed`. The one claim it changes is what the event store holds of a post
+tagging gave up on: in `feed` posts-api stored the post's birth itself, so `saga-retry.spec` expects
+`[PostPreCreated]` there and nothing in the other run.
+
 `E2E_KEEP_STACK=1` leaves everything running after the report, which is the only way to ask a broker,
 a dev server or a database what it thinks about a failure; with `TESTCONTAINERS_RYUK_DISABLED=true`
 beside it, the reaper leaves it alone too. Both are for a person at a keyboard: the stack they leave
