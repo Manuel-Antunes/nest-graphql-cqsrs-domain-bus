@@ -1,5 +1,5 @@
 import { MikroORM } from '@mikro-orm/core';
-import type { IEvent } from '@nestjs/cqrs';
+import type { EventPublisher, IEvent } from '@nestjs/cqrs';
 import { CommandBus, EventBus } from '@nestjs/cqrs';
 import type { TestingModule } from '@nestjs/testing';
 import { Test } from '@nestjs/testing';
@@ -13,11 +13,17 @@ import { PostId } from '@nestposts/posts/domain/post/vo/post-id';
 import {
   DEFAULT_TAG_ID,
   DEFAULT_TAG_NAME,
+  Tag as PostTag,
 } from '@nestposts/posts/domain/tag/tag.entity';
 import {
-  EventLog,
-  EventSourcedRepository,
+  AppendEventsTransactionRejectedError,
+  EventCriteria,
+  EventMessage,
+  EventSourcingRepository,
+  EventStore,
+  Tag,
   TRANSPORT_EVENT_BUS_PUBLISHER,
+  UnitOfWorkFactory,
 } from '@nestposts/transport-eventbus';
 import { UserId } from '@nestposts/users/domain/user/vo/user-id';
 
@@ -30,8 +36,8 @@ import { CompletePostWithDefaultTagCommand } from './complete-post-with-default-
 describe('CompletePostWithDefaultTagCommand.Handler', () => {
   let module: TestingModule;
   let commands: CommandBus;
-  let log: EventLog;
-  let posts: EventSourcedRepository<Post>;
+  let store: EventStore;
+  let posts: EventSourcingRepository<Post>;
   const published: IEvent[] = [];
 
   const postId = PostId.generate();
@@ -61,6 +67,31 @@ describe('CompletePostWithDefaultTagCommand.Handler', () => {
   const inContext = <T>(work: () => Promise<T>): Promise<T> =>
     inRequestContext(module.get(MikroORM).em, work);
 
+  const append = (...events: object[]) =>
+    inContext(() =>
+      store.append(
+        undefined,
+        events.map((event) => EventMessage.of(event)),
+      ),
+    );
+
+  const appendElsewhere = (...events: object[]) =>
+    module
+      .get(MikroORM)
+      .em.fork()
+      .transactional((em) =>
+        store.engine.appendEvents(
+          events.map((event) => store.storedOf(EventMessage.of(event))),
+          undefined,
+          em,
+        ),
+      );
+
+  const history = (id = postId) =>
+    inContext(() =>
+      store.source(EventCriteria.havingTags(new Tag('postId', id.value))),
+    ).then((messages) => messages.map((message) => message.payload));
+
   const complete = (id = postId) =>
     inContext(() =>
       commands.execute(
@@ -75,14 +106,14 @@ describe('CompletePostWithDefaultTagCommand.Handler', () => {
           aggregatePublisher: TRANSPORT_EVENT_BUS_PUBLISHER,
         }),
         ...persistenceTesting(),
-        transportTesting(),
+        ...transportTesting(),
       ],
       providers: [CompletePostWithDefaultTagCommand.Handler],
     }).compile();
     await module.init();
     commands = module.get(CommandBus);
-    log = module.get(EventLog);
-    posts = module.get(EventSourcedRepository);
+    store = module.get(EventStore);
+    posts = module.get(EventSourcingRepository);
     published.length = 0;
     module.get(EventBus).subscribe((event) => published.push(event));
   });
@@ -90,7 +121,7 @@ describe('CompletePostWithDefaultTagCommand.Handler', () => {
   afterEach(() => module.close());
 
   it('completes the post its stream describes, with the tag the domain decides', async () => {
-    await inContext(() => log.append([preCreated()]));
+    await append(preCreated());
 
     await complete();
 
@@ -101,7 +132,7 @@ describe('CompletePostWithDefaultTagCommand.Handler', () => {
   });
 
   it('publishes the decision as a fact of the Post aggregate', async () => {
-    await inContext(() => log.append([preCreated()]));
+    await append(preCreated());
 
     await complete();
 
@@ -115,24 +146,44 @@ describe('CompletePostWithDefaultTagCommand.Handler', () => {
   });
 
   it('appends its decision to the stream, so the next delivery reads it back', async () => {
-    await inContext(() => log.append([preCreated()]));
+    await append(preCreated());
 
     await complete();
 
-    const history = await inContext(() => log.readStream(postId.value));
-    expect(history.map((event) => event.constructor.name)).toEqual([
+    expect((await history()).map((event) => event.constructor.name)).toEqual([
       'PostPreCreatedEvent',
       'PostCreatedEvent',
     ]);
   });
 
   it('drops a decision the stream already carries: the aggregate is the last guard', async () => {
-    await inContext(() => log.append([preCreated(), alreadyComplete()]));
+    await append(preCreated(), alreadyComplete());
 
     await expect(complete()).resolves.toBeUndefined();
 
     expect(published).toHaveLength(0);
-    expect(await inContext(() => log.readStream(postId.value))).toHaveLength(2);
+    expect(await history()).toHaveLength(2);
+  });
+
+  it('refuses a decision on a history that changed after it was read: the post is the consistency boundary', async () => {
+    await append(preCreated());
+    const units = module.get(UnitOfWorkFactory);
+
+    const decided = units.create().executeWithResult(async () => {
+      const loaded = await posts.load(postId);
+      if (!loaded) {
+        throw new Error('the post was not sourced');
+      }
+      const post = module
+        .get<EventPublisher>(TRANSPORT_EVENT_BUS_PUBLISHER)
+        .mergeObjectContext(loaded);
+      await appendElsewhere(alreadyComplete());
+      post.complete([PostTag.default()], now);
+      post.commit();
+    });
+
+    await expect(decided).rejects.toThrow(AppendEventsTransactionRejectedError);
+    expect(await history()).toHaveLength(2);
   });
 
   it('refuses a post it has never heard of', async () => {

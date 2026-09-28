@@ -21,7 +21,7 @@ import {
 } from '@nestposts/database/testing';
 import {
   MikroOrmOutboxModule,
-  MikroOrmUnitOfWorkTransaction,
+  MikroOrmTransactionManager,
 } from '@nestposts/outbox-mikro-orm';
 import { EventType } from '@nestposts/platform/domain/shared/event-type';
 import type { Observable } from 'rxjs';
@@ -37,6 +37,7 @@ import { OutboxRoute } from './outbound/outbox-route';
 import { RecordingClient } from './testing/recording-client';
 import { TransportEventBusModule } from './transport-event-bus.module';
 import { TransportEventBusService } from './transport-event-bus.service';
+import { ProcessingContext } from './unit-of-work/processing-context';
 
 @Injectable()
 class Storage {
@@ -82,6 +83,14 @@ class InternalEvent {
   constructor(readonly message: string) {}
 }
 
+class ChainStarted {
+  constructor(readonly message: string) {}
+}
+
+class ChainContinued {
+  constructor(readonly message: string) {}
+}
+
 @EventsHandler(DefaultEvent)
 class DefaultEventHandler implements IEventHandler<DefaultEvent> {
   constructor(private readonly storage: Storage) {}
@@ -117,6 +126,63 @@ class TryAggregateRootEventHandler
 
   handle(event: TryAggregateRootEvent): void {
     this.storage.upsert('TryAggregateRootEvent', event.message);
+  }
+}
+
+@EventsHandler(ChainStarted)
+class ContinueTheChain implements IEventHandler<ChainStarted> {
+  constructor(private readonly bus: TransportEventBusService) {}
+
+  async handle(event: ChainStarted): Promise<void> {
+    await this.bus.publish(new ChainContinued(event.message));
+  }
+}
+
+@EventsHandler(ChainContinued)
+class EndTheChain implements IEventHandler<ChainContinued> {
+  constructor(private readonly storage: Storage) {}
+
+  handle(event: ChainContinued): void {
+    this.storage.upsert('ChainContinued', event.message);
+  }
+}
+
+class PublishThenRefuse {
+  constructor(readonly message: string) {}
+}
+
+@CommandHandler(PublishThenRefuse)
+class PublishThenRefuseHandler implements ICommandHandler<PublishThenRefuse> {
+  constructor(
+    @Inject(TRANSPORT_EVENT_BUS_PUBLISHER)
+    private readonly publisher: EventPublisher,
+  ) {}
+
+  async execute(command: PublishThenRefuse): Promise<void> {
+    const model = this.publisher.mergeObjectContext(new TestModel());
+    model.applyEvent(command.message);
+    model.commit();
+    throw new Error('the command refused after it had published');
+  }
+}
+
+class PublishTooLate {}
+
+@CommandHandler(PublishTooLate)
+class PublishTooLateHandler implements ICommandHandler<PublishTooLate> {
+  constructor(
+    private readonly bus: TransportEventBusService,
+    private readonly storage: Storage,
+  ) {}
+
+  async execute(): Promise<void> {
+    ProcessingContext.current()?.onAfterCommit(async () => {
+      try {
+        await this.bus.publish(new InternalEvent('too late'));
+      } catch (error) {
+        this.storage.upsert('refused', (error as Error).message);
+      }
+    });
   }
 }
 
@@ -219,7 +285,7 @@ describe('the transport event bus (the vendored base)', () => {
         MikroOrmOutboxModule.forRoot({ producer: 'the-suite' }),
         TransportEventBusModule.forRoot({
           identity: 'the-suite',
-          transaction: MikroOrmUnitOfWorkTransaction,
+          transactionManager: MikroOrmTransactionManager,
           outbox: {
             destinations: [SHOP],
             useFactory: () => ({ relay: 'drain' }),
@@ -236,6 +302,10 @@ describe('the transport event bus (the vendored base)', () => {
         TrySagaCommandHandler,
         TrySagaHandler,
         TryAggregateRootCommandHandler,
+        ContinueTheChain,
+        EndTheChain,
+        PublishThenRefuseHandler,
+        PublishTooLateHandler,
       ],
     }).compile();
     await module.init();
@@ -331,6 +401,37 @@ describe('the transport event bus (the vendored base)', () => {
         'TryAggregateRootEvent',
       );
       expect(rabbit.sent).toHaveLength(1);
+    });
+  });
+
+  describe('staged in the unit of work, told in its PREPARE_COMMIT', () => {
+    it('tells what a handler publishes while it is being told, in the same unit', async () => {
+      await eventBus.publish(new ChainStarted('one unit'));
+
+      expect(storage.get('ChainContinued')).toBe('one unit');
+    });
+
+    it('tells nobody and sends nothing when the command that published fails', async () => {
+      await expect(
+        commandBus.execute(new PublishThenRefuse('discarded')),
+      ).rejects.toThrow('the command refused after it had published');
+
+      expect(storage.get('TryAggregateRootEvent')).toBe(false);
+      expect(rabbit.sent).toHaveLength(0);
+    });
+
+    it('refuses a publish once the unit has written what it publishes, as Axon does', async () => {
+      await commandBus.execute(new PublishTooLate());
+
+      expect(storage.get('refused')).toMatch(
+        /published in AFTER_COMMIT, after its unit of work had written what it publishes/,
+      );
+    });
+
+    it('tells the handlers at once, with no unit, when nothing has to be written first', () => {
+      void eventBus.publish(new InternalEvent('synchronously'));
+
+      expect(storage.get('InternalEvent')).toBe('synchronously');
     });
   });
 });

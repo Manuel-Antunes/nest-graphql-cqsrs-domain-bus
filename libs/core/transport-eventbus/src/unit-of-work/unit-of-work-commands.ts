@@ -1,45 +1,43 @@
-import type { OnApplicationBootstrap, Type } from '@nestjs/common';
-import { Injectable, Logger, Optional } from '@nestjs/common';
-import { ModulesContainer } from '@nestjs/core/injector/modules-container';
-import { CommandBus } from '@nestjs/cqrs';
+import type { OnApplicationBootstrap } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
+import { AsyncContext, CommandBus } from '@nestjs/cqrs';
 
-import 'reflect-metadata';
+import { DeliveryScope } from '../eventhandling/delivery-scope';
+import { CommandMessage } from '../messaging/command-message';
+import { MessageInterceptors } from '../messaging/message-interceptors';
+import { RequestContextCodec } from '../request-context';
+import { ProcessingContext } from './processing-context';
+import { UnitOfWorkFactory } from './unit-of-work-factory';
 
-import { UnitOfWork, UnitOfWorkTransaction } from './unit-of-work';
-
-/**
- * The key `@EventsHandler` writes, copied rather than imported: it lives in
- * `@nestjs/cqrs/dist/decorators/constants`, which the package's `exports` map does not publish.
- */
-const EVENTS_HANDLER_METADATA = '__eventsHandler__';
-
-interface EventHandlerInstance {
-  handle(event: unknown): unknown;
-}
+const wrapped = new WeakSet<object>();
 
 /**
- * **Puts a unit of work around every command, and registers on it everything a publish sets off.**
+ * **Every command in a unit of work of its own** — what Axon 5's `SimpleCommandBus` does:
+ * `unitOfWorkFactory.create(command.identifier())` and `executeWithResult` around the handler, for
+ * every command, whoever dispatched it.
  *
- * Two wraps, both on the **instance**:
+ * ```
+ * commandBus.execute(command, request)
+ *   the command becomes a CommandMessage: what the request stands for, and — through the dispatch
+ *   interceptors — the correlation data of the message being handled where it was dispatched
+ *   a new unit of work, given that message, runs the handler behind the handler interceptors
+ *   PREPARE_COMMIT  what the handler published is appended, written to the outbox, told
+ *   COMMIT          the transaction commits — or, dispatched inside another unit's transaction, joins it
+ *   AFTER_COMMIT    the relay is woken
+ * execute resolves with the handler's answer, once all of that succeeded
+ * ```
  *
- * - `CommandBus.execute` — so a command answers only once its events are appended and published, and
- *   so a command dispatched from inside an open unit joins it instead of floating away. That is the
- *   saga's path.
- * - every `@EventsHandler`'s `handle` — so a projection registers what it returns, and the unit
- *   waits for it too.
+ * ## A command a saga sends is not part of the saga's unit
+ * It is a unit of its own, as in Axon 5: what crosses is correlation data — the command is caused by
+ * the event the saga reacted to — not the unit. What the delivery that set the saga off does is
+ * **wait** for it ({@link DeliveryScope}): `@nestjs/cqrs` dispatches a saga's commands into the void,
+ * and in a function the handler returning is the container freezing.
  *
- * ## Why instances, and why the handlers are found rather than intercepted
- * Replacing the `CommandBus` provider makes a **second** bus, and the symptom is silence:
- * `CqrsModule` registers every `@CommandHandler` on the instance it resolves and `EventBus` injects
- * that same instance, so binding the token to a subclass elsewhere leaves the handlers on one object
- * and the saga dispatching into the other — `CommandHandlerNotFoundException`, which a saga
- * swallows.
- *
- * Wrapping `EventBus.bind` would be the obvious way to reach the handlers and it is **too late**:
- * `CqrsModule`'s explorer calls it during ITS bootstrap, and a module is bootstrapped before the one
- * that imports it. So the handlers are discovered instead, the same way `@SubscriptionHandler`s are
- * — and it works after the fact because Nest's `bind` reads `handler.instance.handle` when the event
- * is published, not when it binds.
+ * ## Why the instance, and not a provider
+ * Replacing the `CommandBus` provider makes a **second** bus: `CqrsModule` registers every
+ * `@CommandHandler` on the instance it resolves, so a substitute elsewhere leaves the handlers on one
+ * object and the saga dispatching into the other — `CommandHandlerNotFoundException`, which a saga
+ * swallows. The instance is decorated instead.
  */
 @Injectable()
 export class UnitOfWorkCommands implements OnApplicationBootstrap {
@@ -47,81 +45,56 @@ export class UnitOfWorkCommands implements OnApplicationBootstrap {
 
   constructor(
     private readonly commandBus: CommandBus,
-    private readonly modulesContainer: ModulesContainer,
-    /**
-     * The application's {@link UnitOfWorkTransaction} — `TransportEventBusModule`'s `transaction`
-     * option. A service with none still runs every command in a unit, without a transaction.
-     */
-    @Optional() private readonly transaction?: UnitOfWorkTransaction,
+    private readonly units: UnitOfWorkFactory,
+    private readonly interceptors: MessageInterceptors,
+    private readonly codec: RequestContextCodec,
   ) {}
 
   onApplicationBootstrap(): void {
-    this.aroundCommands(this.commandBus, this.transaction);
-    const handlers = this.aroundHandlers();
-    this.logger.log(
-      `every command runs in a unit of work${this.transaction ? ' and its transaction' : ''}; ` +
-        `${handlers} event handler(s) register their work on it`,
-    );
-  }
-
-  private aroundCommands(
-    bus: CommandBus,
-    transaction: UnitOfWorkTransaction | undefined,
-  ): void {
-    if (wrapped.has(bus)) {
+    if (wrapped.has(this.commandBus)) {
       return;
     }
-    wrapped.add(bus);
-
-    const execute = bus.execute.bind(bus);
-    /**
-     * `context` is the `AsyncContext` the caller passed — the request, in this repository's terms.
-     * Handing it to the unit is what makes "one request, one unit" a rule rather than a hope: a
-     * command dispatched with the request that is already open joins it, and one carrying a
-     * different request gets a unit of its own.
-     */
-    bus.execute = ((command: never, context: never) =>
-      UnitOfWork.run(() => execute(command, context), context, {
-        transaction,
-      })) as typeof bus.execute;
+    wrapped.add(this.commandBus);
+    const execute = this.commandBus.execute.bind(this.commandBus);
+    this.commandBus.execute = ((command: object, request?: AsyncContext) =>
+      this.inUnitOfWork(
+        command,
+        request,
+        execute,
+      )) as typeof this.commandBus.execute;
+    this.logger.log('every command runs in a unit of work of its own');
   }
 
-  private aroundHandlers(): number {
-    let count = 0;
-    for (const moduleRef of this.modulesContainer.values()) {
-      for (const wrapper of moduleRef.providers.values()) {
-        const classRef = (wrapper.instance?.constructor ?? wrapper.metatype) as
-          | Type
-          | undefined;
-        const instance = wrapper.instance as EventHandlerInstance | undefined;
-        if (
-          !classRef ||
-          !Reflect.getMetadata(EVENTS_HANDLER_METADATA, classRef)
-        ) {
-          continue;
-        }
-        if (
-          !instance ||
-          typeof instance.handle !== 'function' ||
-          wrapped.has(instance)
-        ) {
-          continue;
-        }
-        wrapped.add(instance);
-        const handle = instance.handle.bind(instance);
-        instance.handle = (event: unknown) => {
-          const work = new Promise<unknown>((resolve) =>
-            resolve(handle(event)),
-          );
-          const unit = UnitOfWork.current();
-          return unit?.staging ? unit.track(work) : work;
-        };
-        count += 1;
-      }
+  private inUnitOfWork(
+    command: object,
+    request: AsyncContext | undefined,
+    execute: (command: never, request?: AsyncContext) => Promise<unknown>,
+  ): Promise<unknown> {
+    const dispatching = ProcessingContext.current();
+    const message = this.interceptors.dispatch(
+      CommandMessage.of(
+        command,
+        this.codec.toMetadata(request ?? AsyncContext.of(command)),
+      ),
+      dispatching,
+    );
+    const result = ProcessingContext.runOutside(() =>
+      this.units
+        .create({ identifier: message.identifier, message })
+        .executeWithResult((context) =>
+          this.interceptors.handle(message, context, (_handled, handling) =>
+            ProcessingContext.runIn(handling, () =>
+              execute(command as never, request),
+            ),
+          ),
+        ),
+    );
+
+    const group = DeliveryScope.groupOfCommand(command);
+    const scope = DeliveryScope.current(dispatching);
+    if (scope && group) {
+      scope.track(result, group);
     }
-    return count;
+    return result;
   }
 }
-
-/** One process can boot more than one application — a suite does. Each object is wrapped once. */
-const wrapped = new WeakSet<object>();

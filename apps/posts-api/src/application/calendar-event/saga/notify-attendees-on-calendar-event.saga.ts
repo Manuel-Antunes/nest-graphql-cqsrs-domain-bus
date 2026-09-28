@@ -6,6 +6,7 @@ import { CalendarEventRescheduledEvent } from '@nestposts/events/domain/calendar
 import { CalendarEventDetails } from '@nestposts/events/domain/calendar-event/vo/calendar-event-details';
 import { CalendarEventId } from '@nestposts/events/domain/calendar-event/vo/calendar-event-id';
 import { CalendarEventWindow } from '@nestposts/events/domain/calendar-event/vo/calendar-event-window';
+import { ProcessingGroup } from '@nestposts/transport-eventbus';
 import { UserId } from '@nestposts/users/domain/user/vo/user-id';
 import type { Observable } from 'rxjs';
 import { map } from 'rxjs';
@@ -14,6 +15,9 @@ import { NotifyCalendarEventRescheduledCommand } from '../command/notify-calenda
 import { NotifyCalendarEventScheduledCommand } from '../command/notify-calendar-event-scheduled.command';
 
 @Injectable()
+@ProcessingGroup('notifications', {
+  events: [CalendarEventCreatedEvent, CalendarEventRescheduledEvent],
+})
 export class NotifyAttendeesOnCalendarEvent {
   @Saga()
   inviteTheAttendees = (events$: Observable<IEvent>): Observable<ICommand> =>

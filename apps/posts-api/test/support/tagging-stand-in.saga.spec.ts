@@ -3,10 +3,7 @@ import { PostPreCreatedEvent } from '@nestposts/posts/domain/post/event/post-pre
 import { PostId } from '@nestposts/posts/domain/post/vo/post-id';
 import { DEFAULT_TAG_ID } from '@nestposts/posts/domain/tag/tag.entity';
 import { TagId } from '@nestposts/posts/domain/tag/vo/tag-id';
-import {
-  markIngested,
-  TRANSPORT_MESSAGE_TYPE,
-} from '@nestposts/transport-eventbus';
+import { markIngested } from '@nestposts/transport-eventbus';
 import { firstValueFrom, of, toArray } from 'rxjs';
 
 import { CompletePostCommand } from '../../src/application/post/command/complete-post.command';
@@ -92,13 +89,7 @@ describe('TaggingStandIn', () => {
 
   it('does not decide for a post another service pre-created: that decision is already on the wire', async () => {
     const event = preCreated();
-    markIngested(event, {
-      origin: 'tagging',
-      identifier: 'evt-1',
-      messageType: 'posts.PostPreCreated#1.0.0',
-      metadata: { [TRANSPORT_MESSAGE_TYPE]: 'posts.PostPreCreated#1.0.0' },
-      tags: [],
-    });
+    markIngested(event, 'tagging');
 
     await expect(commandsFor(event)).resolves.toEqual([]);
   });

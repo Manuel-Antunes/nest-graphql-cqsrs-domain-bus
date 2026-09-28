@@ -2,6 +2,7 @@ import { AsyncContext } from '@nestjs/cqrs';
 import { ROOT_TENANT, TENANT_HEADER, Tenant } from '@nestposts/database';
 import type { PostId } from '@nestposts/posts/domain/post/vo/post-id';
 import type { ContextAttributes } from '@nestposts/transport-eventbus';
+import { EventMessage } from '@nestposts/transport-eventbus';
 
 export const POST_ID_ATTRIBUTE = 'post-request-post-id';
 
@@ -20,8 +21,18 @@ export class PostRequest extends AsyncContext implements ContextAttributes {
     return context instanceof PostRequest ? context : undefined;
   }
 
+  /**
+   * The tenant an event belongs to: the request it was raised in, the tenant its metadata names — an
+   * event read back from the event store says it there — or the root.
+   */
   static tenantOf(event: object): string {
-    return PostRequest.of(event)?.tenantId ?? Tenant.of(event) ?? ROOT_TENANT;
+    const carried = EventMessage.attachedTo(event)?.metadata[TENANT_HEADER];
+    return (
+      PostRequest.of(event)?.tenantId ??
+      (carried ? Tenant.normalize(carried) : undefined) ??
+      Tenant.of(event) ??
+      ROOT_TENANT
+    );
   }
 
   toAttributes(): Record<string, string> {

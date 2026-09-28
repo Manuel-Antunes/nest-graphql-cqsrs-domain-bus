@@ -1,34 +1,61 @@
 /**
- * **transport-eventbus** — the CQRS event bus, speaking through Nest's microservice transports.
+ * **transport-eventbus** — Axon Framework 5's messaging, on `@nestjs/cqrs` and `@nestjs/outbox`.
  *
- * A vendored and adapted copy of
+ * It began as a vendored copy of
  * [nestjs-transport-eventbus](https://github.com/sergey-telpuk/nestjs-transport-eventbus) by Sergey
- * Telpuk (MIT), plus an integration layer. `NOTICE.md` says exactly what came from where and why each
- * adaptation was forced; `README.md` is how to use it.
+ * Telpuk (MIT); `NOTICE.md` says exactly what came from where and why each adaptation was forced, and
+ * `README.md` is how to use it.
  *
  * ## The shape of it
  *
- * | | outbound | inbound |
- * |---|---|---|
- * | the integration point | {@link TransportEventBusService}, an `IEventBus` | {@link EventIngestion}, called by the application's controllers |
- * | the declaration | `@EventType({ namespace })` on the event, and one `ClientProxyTransport` per namespace | `@EventPattern` in the application, taking the envelope with `@Payload()` |
- * | what crosses | `@nestjs/outbox`'s `OutboxEnvelope`, in each transport's own record ({@link OutboxPackets}) |
- * | what keeps it once | the origin mark, and the outbox's relay until a broker takes it | the origin mark, `@nestjs/outbox`'s inbox, and the aggregate |
- * | what commits it | the {@link UnitOfWork} of the command that raised it | the {@link UnitOfWork} of the message that carried it |
+ * | Axon 5 | here |
+ * |---|---|
+ * | `UnitOfWork`, `ProcessingContext`, `ProcessingLifecycle` | {@link UnitOfWork}, {@link ProcessingContext}, {@link DefaultPhases} |
+ * | `TransactionManager`, `UnitOfWorkFactory` | {@link TransactionManager}, {@link UnitOfWorkFactory} — the application names its ORM's manager |
+ * | `EventMessage`, `CommandMessage`, `MessageType`, `Metadata` | {@link EventMessage}, {@link CommandMessage}, {@link MessageType}, {@link Metadata} |
+ * | `CorrelationDataProvider`, `MessageOriginProvider` | {@link CorrelationDataProvider}, {@link MessageOriginProvider} |
+ * | `MessageDispatchInterceptor`, `MessageHandlerInterceptor` | the same names |
+ * | `EventSink` / `SimpleEventBus` | {@link TransportEventBusService}, `@nestjs/cqrs`'s `IEventBus` |
+ * | `SubscribingEventProcessor` | {@link LocalEventDelivery}, in `PREPARE_COMMIT` |
+ * | `PooledStreamingEventProcessor`, `TokenStore`, dead letters | {@link StreamingGroupDelivery}, on `@nestjs/outbox`'s relay, inbox and dead letters |
+ * | processing groups, `SequencingPolicy`, `ErrorHandler` | {@link ProcessingGroup}, {@link SequencingPolicy}, {@link ErrorHandler} |
+ * | `EventStore`, `EventStorageEngine`, `Tag`, `EventCriteria`, `AppendCondition` | the same names |
+ * | `EventSourcingRepository` | {@link EventSourcingRepository} |
  *
- * `@nestjs/cqrs` and `@nestjs/outbox` are the application's, declared at its root; so is the
- * transaction the units of work run in (`MikroOrmUnitOfWorkTransaction`, `@nestposts/outbox-mikro-orm`).
+ * And what Axon does not have, because Axon Server is its transport: the envelope on the wire of each
+ * broker ({@link OutboxPackets}), the origin mark that keeps a service from ingesting its own echo,
+ * and {@link EventIngestion}, where a broker's delivery becomes a unit of work.
  */
 
 export * from './aws/aws-message';
 export * from './aws/sns-filter-policy';
 export * from './constants';
+export * from './eventhandling/committed-events';
+export * from './eventhandling/delivery-scope';
+export * from './eventhandling/error-handler';
+export * from './eventhandling/event-handling-components';
+export * from './eventhandling/local-event-delivery';
+export * from './eventhandling/processing-group';
+export * from './eventhandling/processing-groups';
+export * from './eventhandling/sequencing-policy';
+export * from './eventsourcing/append-condition';
+export * from './eventsourcing/event-criteria';
+export * from './eventsourcing/event-sourcing.repository';
+export * from './eventsourcing/event-storage-engine';
+export * from './eventsourcing/event-store';
+export * from './eventsourcing/tag';
 export * from './inbound/event-ingestion';
 export * from './inbound/event-reconstruction';
 export * from './inbound/inbox-descriptions';
 export * from './inbound/incoming-request';
-export * from './inbound/transport-tenant.resolver';
 export * from './inngest/inngest-triggers';
+export * from './messaging/command-message';
+export * from './messaging/correlation';
+export * from './messaging/event-message';
+export * from './messaging/interception';
+export * from './messaging/message';
+export * from './messaging/message-interceptors';
+export * from './messaging/message-type';
 export * from './outbound/event-address';
 export * from './outbound/event-messages';
 export * from './outbound/message-headers';
@@ -36,11 +63,8 @@ export * from './outbound/outbox-packets';
 export * from './outbound/outbox-route';
 export * from './outbound/transport-metadata';
 export * from './outbox/event-outbox';
-export * from './outbox/local-delivery';
+export * from './outbox/streaming-group-delivery';
 export * from './outbox/transport-outbox.options';
-export * from './persistence/event-log/event-log';
-export * from './persistence/event-log/event-log.entity';
-export * from './persistence/event-log/event-sourced.repository';
 export * from './request-context';
 export * from './subscriptions/event-sourced-event-bus';
 export * from './tracing';
@@ -49,10 +73,16 @@ export * from './transport-event-bus.options';
 export * from './transport-event-bus.publisher';
 export * from './transport-event-bus.service';
 export * from './transport-identity';
+export * from './unit-of-work/phase';
+export * from './unit-of-work/processing-context';
+export * from './unit-of-work/processing-lifecycle';
+export * from './unit-of-work/resource-key';
+export * from './unit-of-work/transaction-manager';
 export * from './unit-of-work/unit-of-work';
 export * from './unit-of-work/unit-of-work-commands';
+export * from './unit-of-work/unit-of-work-factory';
 /**
  * The doubles are NOT here: they live behind `@nestposts/transport-eventbus/testing`, because
- * `startInProcessService` reaches Testcontainers and every production bundle would carry it — see
+ * a production bundle must not carry `@nestjs/testing` — see
  * that module's own note.
  */

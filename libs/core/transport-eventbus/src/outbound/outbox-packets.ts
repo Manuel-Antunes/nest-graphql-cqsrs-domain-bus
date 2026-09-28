@@ -11,9 +11,10 @@ import {
 import { InngestRecordBuilder } from '@nestposts/microservices-inngest';
 
 import { routingAttributesOf } from '../aws/aws-message';
-import { CORRELATION_ID } from '../request-context';
+import { MessageOriginProvider } from '../messaging/correlation';
 import { EventAddress } from './event-address';
 import type { MessageHeaders } from './message-headers';
+import { LEGACY_CORRELATION_ID } from './message-headers';
 
 /** What `ClientProxyTransport`'s `toPacket` answers: the pattern to emit under, and the data. */
 export type OutboxPacket = ReturnType<
@@ -45,7 +46,7 @@ export const CORRELATION_SESSION = 'correlation_id';
  * | | pattern | record |
  * |---|---|---|
  * | RabbitMQ | the routing key | `RmqRecord`: the headers as AMQP headers, the id as `messageId`, persistent |
- * | SNS | the routing key | `SnsRecord`: the routing facts as message attributes (a filter policy reads nothing else), the aggregate as FIFO group, the id as deduplication id |
+ * | SNS | the routing key | `SnsRecord`: the routing facts as message attributes (a filter policy reads nothing else), the message's sequence (its `key`) as FIFO group, the id as deduplication id |
  * | Inngest | the qualified name — a trigger has no wildcards | `InngestRecord`: the id as idempotency key, the correlation id as session |
  * | a client in this process | the routing key | the envelope itself |
  *
@@ -79,7 +80,7 @@ export class OutboxPackets {
             routingAttributesOf(address.routingKey, headersOf(envelope)),
           ),
         )
-        .setMessageGroupId(address.orderingKey)
+        .setMessageGroupId(message.key ?? address.orderingKey)
         .setMessageDeduplicationId(envelope.id)
         .build(),
     };
@@ -89,7 +90,10 @@ export class OutboxPackets {
     message: OutboxMessage,
     envelope: OutboxEnvelope,
   ): OutboxPacket {
-    const correlationId = headersOf(envelope)[CORRELATION_ID];
+    const headers = headersOf(envelope);
+    const correlationId =
+      headers[MessageOriginProvider.CORRELATION_ID] ??
+      headers[LEGACY_CORRELATION_ID];
     const record = new InngestRecordBuilder(envelope).setIdempotencyKey(
       envelope.id,
     );

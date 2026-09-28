@@ -92,6 +92,9 @@
     },
     {
       "path": "./libs/core/outbox-mikro-orm"
+    },
+    {
+      "path": "./libs/core/event-store-mikro-orm"
     }
   ]
 }

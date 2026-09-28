@@ -4,7 +4,9 @@ This library is a vendored and adapted copy of
 [**nestjs-transport-eventbus**](https://github.com/sergey-telpuk/nestjs-transport-eventbus) v1.0.24
 by Sergey Telpuk, MIT licensed (see `LICENSE`), with an integration layer built on top of it — and,
 since `@nestjs/outbox` was published, with that package doing the publishing and the remembering
-that upstream's destinations and this repository's inbox used to do.
+that upstream's destinations and this repository's inbox used to do. Its unit of work, its messages,
+its event processing and its event store have since been ported to **Axon Framework 5**'s semantics;
+**What the Axon 5 port changed**, below, is that account.
 
 ## What came from upstream, and is still here
 
@@ -18,7 +20,11 @@ The integration point, which is the reason this library is built on it rather th
 
 Its integration test suite is ported as `src/transport-event-bus.service.spec.ts`: what runs locally,
 what leaves, `publishAll`, a saga, a service injecting the bus, an aggregate committed through the
-publisher — now over the outbox.
+publisher — now over the outbox, and with the unit of work's staging rules beside it.
+
+`TransportEventBusService` is still upstream's class and upstream's idea; what it does inside changed
+twice. It forwarded to a publisher, then staged into this repository's unit of work, and is now Axon
+5's `EventSink`: a per-unit queue drained in `PREPARE_COMMIT`.
 
 ## What upstream had and is gone
 
@@ -70,17 +76,22 @@ publisher — now over the outbox.
   merely uses.
 - **Publishing is writing.** `TransportEventBusService` stages what an aggregate commits in the unit of
   work (`unit-of-work/`, which lived in `@nestposts/cqsrs` until it moved here, beside the bus it gives
-  a commit to), which runs in the transaction the application names (`UnitOfWorkTransaction`;
-  `MikroOrmUnitOfWorkTransaction` here); in its prepare phase `EventOutbox` turns each event whose
+  a commit to), which runs in the transaction the application's `TransactionManager` opens
+  (`MikroOrmTransactionManager` here); in its `PREPARE_COMMIT` `EventOutbox` turns each event whose
   namespace has a destination into one outbox message and writes it with `Outbox.add(tx, …)` through
   the unit's transaction handle — so the event commits with the writes that raised it, or neither
-  does. The relay publishes it afterwards, retries
-  it with backoff, and dead-letters it when it cannot. There is no direct emit any more.
+  does. The relay publishes it afterwards, retries it with backoff, and dead-letters it when it cannot.
+  There is no direct emit any more.
+- **The outbox is also a streaming processor's queue.** A streaming processing group is staged a
+  message of its own per event (`@processing-group`, the group in the headers), which the relay
+  delivers on its `local` transport to `StreamingGroupDelivery`: the relay's leases, order, retries and
+  dead letters, and the package's own `OutboxHandlerContext.processInTransaction` for the inbox record,
+  are what Axon 5's `PooledStreamingEventProcessor` gets from its token store.
 - **The wire is the `OutboxEnvelope`** — `id`, `topic`, `key`, `headers`, `createdAt`, `payload` — in
   Nest's own `{ pattern, data }` packet, and each transport's placement is `ClientProxyTransport`'s
   `toPacket` (`OutboxPackets`): an `RmqRecord` with the headers as AMQP headers, an `SnsRecord` with
-  the routing facts as message attributes and the aggregate as FIFO group, an `InngestRecord` with the
-  message id as idempotency key. The per-transport `EventEnvelopeSerializer`/`Deserializer` pairs this
+  the routing facts as message attributes and the message's `key` as FIFO group, an `InngestRecord`
+  with the message id as idempotency key. The per-transport `EventEnvelopeSerializer`/`Deserializer` pairs this
   repository had written are gone: the transports' default serializers and deserializers carry it.
 - **The inbox is `@nestjs/outbox`'s `OutboxInbox`**, keyed by `(consumer, message)` — the consuming
   service's name and the envelope's id — so two services ingesting the same event each keep their own
@@ -93,53 +104,121 @@ publisher — now over the outbox.
   what each admitted message was and who produced it — which this library asks for through
   `InboxDescriptions`, an optional port the application points at it.
 
+## What the Axon 5 port changed
+
+The unit of work this library had was Axon's in spirit and its own in the details: a unit was
+*joined* by any work carrying the same request, it waited for tracked work through a flag
+(`failOnTrackedFailure`), its phases were named `started`, `prepareCommit`, `commit`, `afterCommit`,
+`rollback` and `cleanup`, and the local handlers were told after the commit. It was ported to Axon
+Framework 5 — not 4 — because 5 is the version whose semantics fit a framework with no thread to bind
+a unit to: a `ProcessingContext` passed along rather than a thread-local `CurrentUnitOfWork`. What
+changed, and what forced each change:
+
+- **A unit per message, and nothing joins** (`unit-of-work/`). `UnitOfWork`, `ProcessingLifecycle`,
+  `ProcessingContext`, `DefaultPhases` (with Axon's orders), `ResourceKey`, `UnitOfWorkFactory` and
+  `TransactionalUnitOfWorkFactory` are Axon 5's, rule for rule: registration into a running or an
+  earlier phase throws, a failure finishes its phase and skips the rest, error and completion actions
+  never change the outcome. `UnitOfWorkCommands` gives every command a unit of its own, as
+  `SimpleCommandBus` does; joining by request is gone, and what crosses from a dispatcher to what it
+  dispatches is correlation data. The context travels in an `AsyncLocalStorage` because
+  `@nestjs/cqrs`'s `execute(command)` has no parameter for it — and only as a carrier.
+- **The transaction is a `TransactionManager`**, Axon 5's port, which the application implements for
+  its ORM (`MikroOrmTransactionManager`): begun in `PRE_INVOCATION`, committed in `COMMIT`, rolled
+  back on error. Two units may still share a database transaction — a saga's command inside an
+  ingestion joins it as a savepoint, as Axon's JPA manager joins the thread's — and a joined
+  transaction hands its after-commit work to the one that owns it (`afterCommit`/`runAfterCommit`).
+  Running that work inside the owning transaction's `commit()` was measured to fail —
+  `Transaction is already committed`, from a drain that delivered to another unit inside the committed
+  fork's MikroORM context — so it runs in the owning unit's `AFTER_COMMIT`, outside the transaction's
+  scope.
+- **Messages** (`messaging/`): `Message`, `EventMessage`, `CommandMessage`, `MessageType` and
+  `Metadata`, attached to their payload because `@nestjs/cqrs` hands handlers the payload; Axon 5's
+  correlation data providers and `CorrelationDataInterceptor`, and its dispatch and handler
+  interceptors. The correlation headers took Axon's names, `correlationId` and `causationId`; the
+  old `cqrs-transport-correlation-id` and `cqrs-transport-causation-id` are still read. The trace
+  travels in the metadata. `RequestContextCodec` shrank to what it is for — `@nestjs/cqrs`'s
+  `AsyncContext` and metadata, both ways — and `CorrelatedRequestContext` became
+  `DefaultRequestContextCodec`.
+- **Event processing** (`eventhandling/`): processing groups, `SubscribingEventProcessor`
+  (`LocalEventDelivery`) and `PooledStreamingEventProcessor` (`StreamingGroupDelivery`, on the
+  outbox), `ErrorHandler`, `SequencingPolicy` — which is the outbox message's `key`. The subscribing
+  handlers now run in `PREPARE_COMMIT`, inside the publishing transaction, as in Axon 5, where they
+  used to run after the commit; a subscribing handler that fails fails the unit. `CommittedEvents` keeps
+  what a GraphQL subscription hears to events that committed. `LocalDelivery`, which delivered every
+  destination message back to this process through the outbox's `local` transport in a service with no
+  broker, is gone: such a message is no longer written, and the process's handlers are told by the bus
+  like any other.
+- **The event store** (`eventsourcing/`): Axon 5's, with dynamic consistency boundaries — `Tag`,
+  `TagResolver`, `EventCriteria`, `ConsistencyMarker`, `AppendCondition`, an `EventStoreTransaction`
+  per unit, and `EventSourcingRepository`. It replaced the event log
+  (`persistence/event-log`: `EventLog`, `MikroOrmEventLog`, `EventSourcedRepository`, a stream per
+  aggregate keyed by `stream_id` and `sequence`), and its storage left this library:
+  `EventStorageEngine` is a port, and `MikroOrmEventStorageEngine` lives in
+  `libs/core/event-store-mikro-orm`. A system migration turned the log's rows into tagged ones.
+- **No database.** `TransportTenantResolver` became `MessageTenantResolver`, in `libs/database`,
+  reading the envelope by its shape; the tenant of a streaming delivery is the transaction manager's to
+  pick from the message's metadata; `startInProcessService` takes a schema's lifecycle as hooks
+  (`testSchemaLifecycle`). `@nestposts/database` is a development dependency of this library, for its
+  specs, and nothing else.
+
+What Axon 5 has and this does not, on purpose: Axon Server (the brokers and `@nestjs/outbox` are the
+transport), a streaming processor that replays from the store (a group's messages are written at
+publish time and deleted once handled), and snapshots. Nor the constructs that were ported with the
+rest and never used: `FullConcurrencyPolicy`, `MetadataSequencingPolicy`, `MetadataBasedTagResolver`,
+`MultiTagResolver`, `SimpleCorrelationDataProvider`, and `AppendCondition.withCriteria` and
+`orCriteria`. They were dropped because the port is of Axon 5's semantics, not of every class that
+carries them: nothing here named one, and each class is a subclass of `SequencingPolicy`,
+`TagResolver` or `CorrelationDataProvider` — a few lines — for an application that needs it, while the
+unit's `EventStoreTransaction` widens its criteria and builds its `AppendCondition` without either
+method.
+
 ## What this repository adds on top
 
-Everything under `outbound/`, `inbound/`, `outbox/`, `persistence/` and `unit-of-work/`, none of which
-upstream has:
+Everything under `outbound/`, `inbound/`, `outbox/`, `messaging/`, `eventhandling/`, `eventsourcing/`
+and `unit-of-work/`, none of which upstream has:
 
-- **headers of what an event is** (`message-headers.ts`, `EventMessages`): a stable message type, a
-  timestamp, the origin, the event's tags, the request and the trace — captured when the event is
-  staged, because the relay publishes later, in no request at all;
+- **Axon 5's messaging** — the unit of work, the transaction manager port, the message model,
+  correlation and interceptors, processing groups, and the event store — as described above;
+- **headers of what an event is** (`message-headers.ts`, `EventMessages`): the message's metadata key
+  for key — the request, the correlation, the trace, captured at dispatch because the relay publishes
+  later, in no request at all — and the framework's facts beside it: a stable message type, a
+  timestamp, the origin, the event's tags, its identifier and, for a streaming group's message, the
+  group;
 - **an address the event answers for itself** (`EventAddress`): the message type, the tags, the
   qualified name that is the outbox message's topic, and a routing key of
-  `namespace.Name.aggregateTag`, which each broker's packet reads back off the message
-  (`EventAddress.ofMessage`), so a consumer binds to the slice it wants (`EventAddress.everyEventOf`),
-  and the ordering key a message is published under;
-- **a route that knows the process is a destination too** (`OutboxRoute`, `LocalDelivery`): a namespace
-  the outbox has a transport for goes through it, and one it has none for goes to `@nestjs/outbox`'s
-  own `local` transport, where an `@OnOutboxMessage()` handler the module declares for every published
-  event restores it and tells it to the `EventBus` — which the unit of work's commit then does not,
-  because the bus is given the same route. That is where `@nestjs/outbox` and `@nestjs/cqrs` meet: an
-  event with no broker reaches its handlers through the outbox, after the commit, with its retries and
-  its inbox. It replaced a `MemoryClient` with no servers, which an application with no broker
-  published through to nobody, and the client itself is gone: a suite delivers on
-  `TopicMemoryServer.emit` (`@nestposts/microservices-memory`), which matches the bindings the way a
-  topic exchange does;
-- **one transaction per ingested message**: `EventIngestion` records the message in the inbox,
-  appends it to the event log and publishes it on the local bus inside one unit of work, whose
-  reactions — a projection, a saga's command — join it, and whose own events go to the outbox in the
-  same transaction. A reaction that fails rolls the inbox row back with everything else, so the
-  transport's redelivery is acted on; this replaced a "forget the inbox row after the fact" that a
-  crash in the middle could skip;
-- an **event log** (`persistence/event-log`): the stream of an aggregate, a generic
-  `EventSourcedRepository` that replays it — and does not save, because the bus appends what an
-  aggregate commits — and the log-backed `EventBus` subscriptions read across processes. It is not the
-  outbox's business: `@nestjs/outbox` deletes a message once a transport takes it, keeps only what
-  leaves, and its inbox only who processed which id;
+  `namespace.Name.sequence`, which each broker's packet reads back off the message
+  (`EventAddress.ofMessage`), so a consumer binds to the slice it wants (`EventAddress.everyEventOf`);
+- **a route that knows the process is a destination too** (`OutboxRoute`): a namespace the outbox has
+  a transport for goes through it, and a streaming group's message goes to `@nestjs/outbox`'s own
+  `local` transport, where `StreamingGroupDelivery` receives it. A destination message the route would
+  send `local` is not written, because nothing there receives it. It replaced a `MemoryClient` with no
+  servers, which an application with no broker published through to nobody, and the client itself is
+  gone: a suite delivers on `TopicMemoryServer.emit` (`@nestposts/microservices-memory`), which matches
+  the bindings the way a topic exchange does;
+- **one transaction per ingested message**: `EventIngestion` records the message in the inbox and
+  stages the event in one unit of work, whose `PREPARE_COMMIT` appends it, writes what the streaming
+  groups owe and tells the subscribing handlers — whose sagas' commands join the transaction and are
+  waited for. A reaction that fails rolls the inbox row back with everything else, so the transport's
+  redelivery is acted on; this replaced a "forget the inbox row after the fact" that a crash in the
+  middle could skip;
 - an **origin mark** on every message, which is what keeps "everything published locally leaves" and
   "everything received is published locally" from feeding each other forever;
 - **request-context propagation** across the hop (`RequestContextCodec`), and `IncomingRequest`,
   which hands that request to a guard, an interceptor or a controller so a command dispatched there
   runs in it;
-- **a unit of work** (`unit-of-work/`), Axon's: every command and every ingested message runs in one,
-  in the application's transaction, and answers only once its events are recorded and told;
 - **the relay's place in a process** (`OutboxRelayMode`): polling in a long-lived process, drained
-  before a unit of work answers in a function, and off in an API-only instance. What the package
-  leaves to the application beyond that — pruning the inbox, reporting the outbox's lag and its dead
-  letters, a `sweep()` a schedule runs — is `OutboxHousekeeping`, in `libs/core/outbox-mikro-orm`;
-- **a trace across the hop** (`tracing.ts`): the trace an event was published in is stamped on it and
-  written into its headers, and a consumer span wraps the whole ingestion;
+  after each unit of work that staged messages in a function, and off in an API-only instance. A
+  drain claims whatever of its service's messages is due, not only what its own unit staged, so what
+  one drain could not publish goes out with the next unit of the same service that commits messages
+  of its own; nothing comes back for it on a timer. That replaced a scheduled sweep:
+  `OutboxHousekeeping` (`libs/core/outbox-mikro-orm`), which pruned the inbox, warned on the outbox's
+  lag and dead letters and ran a `sweep()` that a relay function per service and the web's
+  `POST /api/outbox/sweep` called every minute on AWS, is gone with those functions and their crons.
+  The inbox's retention is `apps/migrator`'s now — `pruneInbox()`, at the end of every `migrate()` —
+  and a dead letter's one report is `DeadLetterReporting`'s, from `@nestjs/outbox`'s
+  `nestjs:outbox:dead-lettered` channel;
+- **a trace across the hop** (`tracing.ts`): the trace an event was dispatched in is written into its
+  metadata, and a consumer span wraps the whole unit of a delivery;
 - the **doubles** that make all of the above testable with nothing running: `startInProcessService`
   (on a `TopicMemoryServer`), `RecordingClient` and `publishedEnvelope`;
 - **the AWS and Inngest transports**, in `@nestposts/microservices-aws` and

@@ -16,22 +16,24 @@ import {
 import {
   MikroOrmOutboxModule,
   MikroOrmOutboxStore,
-  MikroOrmUnitOfWorkTransaction,
+  MikroOrmTransactionManager,
   outboxEntities,
 } from '@nestposts/outbox-mikro-orm';
 import { EventType } from '@nestposts/platform/domain/shared/event-type';
 
+import type { StoredEvent } from '../eventsourcing/event-storage-engine';
+import { EventStorageEngine } from '../eventsourcing/event-storage-engine';
 import {
   encodeData,
+  LEGACY_CORRELATION_ID,
   TRANSPORT_MESSAGE_TYPE,
   TRANSPORT_ORIGIN,
   TRANSPORT_TAGS,
   TRANSPORT_TIMESTAMP,
 } from '../outbound/message-headers';
-import { EventLog } from '../persistence/event-log/event-log';
+import { isIngested, originOf } from '../outbound/transport-metadata';
 import {
-  CORRELATION_ID,
-  CorrelatedRequestContext,
+  DefaultRequestContextCodec,
   TransportRequestContext,
 } from '../request-context';
 import { TransportEventBusModule } from '../transport-event-bus.module';
@@ -50,6 +52,7 @@ class PostCreatedEvent {
 class Received {
   readonly events: PostCreatedEvent[] = [];
   readonly contexts: (AsyncContext | undefined)[] = [];
+  readonly ingested: boolean[] = [];
   refusals = 0;
 }
 
@@ -64,6 +67,9 @@ class PostCreatedHandler implements IEventHandler<PostCreatedEvent> {
     }
     this.received.events.push(event);
     this.received.contexts.push(AsyncContext.of(event));
+    this.received.ingested.push(
+      isIngested(event) && originOf(event) === 'tagging',
+    );
   }
 }
 
@@ -95,6 +101,7 @@ const arrivingFrom = (
 
 const moduleWith = async (
   overrides: Provider[] = [],
+  eventStore?: { engine: typeof RecordingEngine },
 ): Promise<TestingModule> => {
   const module = await Test.createTestingModule({
     imports: [
@@ -109,10 +116,11 @@ const moduleWith = async (
       MikroOrmOutboxModule.forRoot({ producer: 'posts-api' }),
       TransportEventBusModule.forRoot({
         identity: TransportIdentity.silent('posts-api'),
-        requestContext: CorrelatedRequestContext,
-        transaction: MikroOrmUnitOfWorkTransaction,
+        requestContext: DefaultRequestContextCodec,
+        transactionManager: MikroOrmTransactionManager,
         inbox: { descriptions: MikroOrmOutboxStore },
-        providers: overrides,
+        eventStore,
+        providers: [...overrides, ...(eventStore ? [RecordingEngine] : [])],
       }),
     ],
     providers: [Received, PostCreatedHandler],
@@ -121,6 +129,34 @@ const moduleWith = async (
   await ensureTestSchema(module.get(MikroORM));
   return module;
 };
+
+@Injectable()
+class RecordingEngine extends EventStorageEngine {
+  static readonly appended: StoredEvent[] = [];
+  static readonly inTransaction: boolean[] = [];
+
+  async appendEvents(
+    events: readonly StoredEvent[],
+    _condition: unknown,
+    transaction?: unknown,
+  ) {
+    RecordingEngine.appended.push(...events);
+    RecordingEngine.inTransaction.push(transaction !== undefined);
+    return { rejected: false as const };
+  }
+
+  async source() {
+    return [];
+  }
+
+  async readAfter() {
+    return [];
+  }
+
+  async head() {
+    return '0';
+  }
+}
 
 const processed = (module: TestingModule) =>
   module.get(MikroOrmOutboxStore).processedBy('posts-api');
@@ -143,7 +179,7 @@ describe('EventIngestion', () => {
     await module.close();
   });
 
-  it('publishes the event the deserializer rebuilt, dates and all', async () => {
+  it('publishes the event rebuilt from the envelope, dates and all, marked as coming from its producer', async () => {
     await ingestion.ingest(arrivingFrom('tagging'));
     await settle();
 
@@ -151,6 +187,7 @@ describe('EventIngestion', () => {
     expect(received.events[0]).toBeInstanceOf(PostCreatedEvent);
     expect(received.events[0].postId).toBe('p-1');
     expect(received.events[0].occurredAt).toBeInstanceOf(Date);
+    expect(received.ingested).toEqual([true]);
   });
 
   it('ingests the same message once, however many times it is delivered', async () => {
@@ -216,15 +253,31 @@ describe('EventIngestion', () => {
 
   it('restores the request that crossed, so the handler runs in it', async () => {
     await ingestion.ingest(
-      arrivingFrom('tagging', 'evt-with-request', { [CORRELATION_ID]: 'c-1' }),
+      arrivingFrom('tagging', 'evt-with-request', {
+        correlationId: 'c-1',
+        'x-tenant': 'acme',
+      }),
     );
     await settle();
 
     const context = received.contexts[0];
     expect(context).toBeInstanceOf(TransportRequestContext);
-    expect(context).toMatchObject({
+    expect((context as TransportRequestContext).metadata).toEqual({
       correlationId: 'c-1',
-      causationId: 'evt-with-request',
+      'x-tenant': 'acme',
+    });
+  });
+
+  it('reads the correlation of a producer that still wrote the old key', async () => {
+    await ingestion.ingest(
+      arrivingFrom('tagging', 'evt-legacy', {
+        [LEGACY_CORRELATION_ID]: 'c-old',
+      }),
+    );
+    await settle();
+
+    expect((received.contexts[0] as TransportRequestContext).metadata).toEqual({
+      correlationId: 'c-old',
     });
   });
 
@@ -253,42 +306,25 @@ describe('EventIngestion', () => {
     ).rejects.toThrow(/not an OutboxEnvelope/);
   });
 
-  describe('the event log', () => {
-    @Injectable()
-    class RecordingLog extends EventLog {
-      static readonly appended: object[] = [];
-
-      async append(events: readonly object[]): Promise<void> {
-        RecordingLog.appended.push(...events);
-      }
-
-      async readStream(): Promise<object[]> {
-        return [];
-      }
-
-      async readAfter(): Promise<never[]> {
-        return [];
-      }
-
-      async head(): Promise<string> {
-        return '0';
-      }
-    }
-
-    it('is appended inside the transaction, before anything reacts', async () => {
-      const custom = await moduleWith([
-        { provide: EventLog, useClass: RecordingLog },
-      ]);
-      RecordingLog.appended.length = 0;
+  describe('the event store', () => {
+    it('appends what arrived inside the transaction, before anything reacts', async () => {
+      const custom = await moduleWith([], { engine: RecordingEngine });
+      RecordingEngine.appended.length = 0;
 
       try {
         await custom
           .get(EventIngestion)
-          .ingest(arrivingFrom('tagging', 'evt-log'));
+          .ingest(arrivingFrom('tagging', 'evt-store'));
         await settle();
 
-        expect(RecordingLog.appended).toHaveLength(1);
-        expect(RecordingLog.appended[0]).toBeInstanceOf(PostCreatedEvent);
+        expect(RecordingEngine.appended).toEqual([
+          expect.objectContaining({
+            identifier: 'evt-store',
+            type: 'posts.PostCreated#1.0.0',
+            tags: ['postId=p-1'],
+          }),
+        ]);
+        expect(RecordingEngine.inTransaction).toEqual([true]);
       } finally {
         await dropTestSchema(custom.get(MikroORM));
         await custom.close();

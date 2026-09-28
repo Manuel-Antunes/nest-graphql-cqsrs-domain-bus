@@ -4,17 +4,19 @@ import type { IEvent } from '@nestjs/cqrs';
 import { EventBus, ofType, Saga } from '@nestjs/cqrs';
 import { Tenant } from '@nestposts/database';
 import { closeTestDatabase, testDatabase } from '@nestposts/database/testing';
+import {
+  eventStoreEntities,
+  MikroOrmEventStorageEngine,
+  StoredEventEntitySchema,
+} from '@nestposts/event-store-mikro-orm';
 import { EventType } from '@nestposts/platform/domain/shared/event-type';
 import type { Observable } from 'rxjs';
 import { firstValueFrom, map, take, timeout, toArray } from 'rxjs';
 
-import { MikroOrmEventLog } from '../persistence/event-log/event-log';
-import {
-  eventLogEntities,
-  LoggedEvent,
-} from '../persistence/event-log/event-log.entity';
+import { EventStore } from '../eventsourcing/event-store';
+import { AnnotationBasedTagResolver } from '../eventsourcing/tag';
+import { EventMessage } from '../messaging/event-message';
 import { EventTrace } from '../tracing';
-import { TransportEventBusService } from '../transport-event-bus.service';
 import { EventSourcedEventBus } from './event-sourced-event-bus';
 
 @EventType({ namespace: 'feed', tags: ['postId'] })
@@ -31,12 +33,18 @@ class UserRegisteredEvent {
   constructor(readonly userId: string) {}
 }
 
-class HeadWatchingEventLog extends MikroOrmEventLog {
+const storeOn = (em: EntityManager) =>
+  new EventStore(
+    new MikroOrmEventStorageEngine(em),
+    new AnnotationBasedTagResolver(),
+  );
+
+class HeadWatchingEventStore extends EventStore {
   readonly reading: Promise<void>;
   private headRead: () => void = () => undefined;
 
   constructor(em: EntityManager) {
-    super(em);
+    super(new MikroOrmEventStorageEngine(em), new AnnotationBasedTagResolver());
     this.reading = new Promise((resolve) => {
       this.headRead = resolve;
     });
@@ -51,24 +59,24 @@ class HeadWatchingEventLog extends MikroOrmEventLog {
 
 describe('the EventBus, event sourced', () => {
   let orm: MikroORM;
-  let log: MikroOrmEventLog;
+  let log: EventStore;
 
   beforeAll(async () => {
-    orm = await testDatabase({ entities: [...eventLogEntities] });
-    log = new MikroOrmEventLog(orm.em);
+    orm = await testDatabase({ entities: [...eventStoreEntities] });
+    log = storeOn(orm.em);
   });
 
   afterAll(() => closeTestDatabase(orm));
 
   beforeEach(async () => {
-    await orm.em.fork().nativeDelete(LoggedEvent, {});
+    await orm.em.fork().nativeDelete(StoredEventEntitySchema as never, {});
   });
 
   /**
    * A container: the one `EventBus` there is, with the decorator pointed at it — the same two steps
    * `onApplicationBootstrap` takes, in the same order.
    */
-  const busOf = (reader: MikroOrmEventLog, sagas: unknown[] = []) => {
+  const busOf = (reader: EventStore, sagas: unknown[] = []) => {
     const commandBus = { execute: () => Promise.resolve() };
     const bus = new EventBus(
       commandBus as never,
@@ -76,23 +84,24 @@ describe('the EventBus, event sourced', () => {
       { publish: () => undefined } as never,
     );
     bus.registerSagas(sagas as never[]);
-    new EventSourcedEventBus({ get: () => bus } as never, reader, orm.em, {
+    new EventSourcedEventBus({ get: () => bus } as never, reader, {
       interval: 20,
     }).onApplicationBootstrap();
     return bus;
   };
 
-  const containerThatPublishes = () => {
-    const eventBus = new EventBus({} as never, {} as never, {} as never);
-    const bus = new TransportEventBusService(eventBus, log);
-    return {
-      eventBus: { publish: (event: object) => bus.publish(event) },
-      stop: () => undefined,
-    };
-  };
+  const containerThatPublishes = () => ({
+    eventBus: {
+      publish: (event: object) =>
+        RequestContext.create(orm.em.fork(), () =>
+          log.append(undefined, [EventMessage.of(event)]),
+        ),
+    },
+    stop: () => undefined,
+  });
 
   const containerThatSubscribes = () => {
-    const reader = new HeadWatchingEventLog(orm.em);
+    const reader = new HeadWatchingEventStore(orm.em);
     return { bus: busOf(reader), reading: reader.reading };
   };
 
@@ -220,7 +229,7 @@ describe('the EventBus, event sourced', () => {
           isDependencyTreeStatic: () => true,
         } as never,
       ]);
-      new EventSourcedEventBus({ get: () => bus } as never, log, orm.em, {
+      new EventSourcedEventBus({ get: () => bus } as never, log, {
         interval: 20,
       }).onApplicationBootstrap();
 
@@ -247,7 +256,11 @@ describe('the EventBus, event sourced', () => {
       await RequestContext.create(orm.em, async () => {
         em = RequestContext.getEntityManager() as EntityManager;
         await em.begin();
-        await new MikroOrmEventLog(em).append([event]);
+        await log.engine.appendEvents(
+          [log.storedOf(EventMessage.of(event))],
+          undefined,
+          em,
+        );
       });
       return em;
     };
@@ -280,8 +293,8 @@ describe('the EventBus, event sourced', () => {
     });
   });
 
-  describe('one log, every tenant', () => {
-    it('says which tenant each event was appended in', async () => {
+  describe('one store, every tenant', () => {
+    it('says which tenant each event was appended in, in its metadata', async () => {
       const subscribing = containerThatSubscribes();
       const arrived = firstValueFrom(
         subscribing.bus.pipe(
@@ -297,14 +310,19 @@ describe('the EventBus, event sourced', () => {
         await RequestContext.create(
           orm.em.fork({ schema: Tenant.schemaOf(tenant) }),
           () =>
-            log.append([
-              new PostCompletedEvent(`in-${tenant}`, 'Nest', new Date()),
+            log.append(undefined, [
+              EventMessage.of(
+                new PostCompletedEvent(`in-${tenant}`, 'Nest', new Date()),
+              ),
             ]),
         );
       }
 
       expect(
-        (await arrived).map((event) => [event.postId, Tenant.of(event)]),
+        (await arrived).map((event) => [
+          event.postId,
+          EventMessage.of(event).metadata['x-tenant'],
+        ]),
       ).toEqual([
         ['in-acme', 'acme'],
         ['in-globex', 'globex'],
@@ -320,12 +338,11 @@ describe('the EventBus, event sourced', () => {
       );
       await subscribing.reading;
 
+      const event = new PostCompletedEvent('p-1', 'Nest', new Date());
+      EventMessage.of(event);
+      EventTrace.stamp(event, { traceparent });
       await RequestContext.create(orm.em.fork(), () =>
-        log.append([
-          EventTrace.stamp(new PostCompletedEvent('p-1', 'Nest', new Date()), {
-            traceparent,
-          }),
-        ]),
+        log.append(undefined, [EventMessage.of(event)]),
       );
 
       expect(EventTrace.carrierOf(await arrived)).toEqual({ traceparent });

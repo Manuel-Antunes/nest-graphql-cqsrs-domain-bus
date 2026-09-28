@@ -1,11 +1,10 @@
 /**
  * **The doubles, behind a subpath of their own** — `@nestposts/transport-eventbus/testing`.
  *
- * They are not in the main barrel, and the reason is concrete: `startInProcessService` needs
- * `@nestposts/database/testing`, which needs Testcontainers, which needs `dockerode`, which needs
- * `ssh2`. Exported from the root, every production bundle dragged that along — and on Lambda it
- * announced itself as `Runtime.ImportModuleError: Cannot find module 'ssh2'`, from an application
- * that has nothing to do with Docker.
+ * They are not in the main barrel because a production bundle must not carry `@nestjs/testing` — and
+ * because, when `startInProcessService` still made a spec's schema itself, it dragged Testcontainers,
+ * `dockerode` and `ssh2` along, which on Lambda announced itself as
+ * `Runtime.ImportModuleError: Cannot find module 'ssh2'`. A spec now hands it the schema's lifecycle.
  */
 export * from './in-process-service';
 export * from './published-envelope';

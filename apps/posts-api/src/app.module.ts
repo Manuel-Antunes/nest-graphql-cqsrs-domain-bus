@@ -10,7 +10,15 @@ import { StorageModule } from '@nestjs/storage';
 import { AttachmentModule } from '@nestposts/asset/infrastructure/attachment.module';
 import { AuthInfrastructureModule } from '@nestposts/auth/infrastructure/auth-infrastructure.module';
 import { CqsrsModule } from '@nestposts/cqsrs';
-import { DatabaseModule, TenancyModule } from '@nestposts/database';
+import {
+  DatabaseModule,
+  MessageTenantResolver,
+  TenancyModule,
+} from '@nestposts/database';
+import {
+  MikroOrmEventStorageEngine,
+  MikroOrmEventStoreModule,
+} from '@nestposts/event-store-mikro-orm';
 import { PublishingOnDemandNotifications } from '@nestposts/notifications/infrastructure/on-demand/publishing-on-demand-notifications';
 import { loggingModuleAsync } from '@nestposts/observability';
 import { ErrorReportingModule } from '@nestposts/observability/error-reporting.module';
@@ -23,8 +31,7 @@ import { TenantMembershipModule } from '@nestposts/organizations/infrastructure/
 import {
   MikroOrmOutboxModule,
   MikroOrmOutboxStore,
-  MikroOrmUnitOfWorkTransaction,
-  OutboxHousekeepingModule,
+  MikroOrmTransactionManager,
 } from '@nestposts/outbox-mikro-orm';
 import {
   EventTrace,
@@ -32,7 +39,6 @@ import {
   TRANSPORT_EVENT_BUS_PUBLISHER,
   TransportEventBusModule,
   TransportIdentity,
-  TransportTenantResolver,
 } from '@nestposts/transport-eventbus';
 
 import { PostRequestContextCodec } from './application/shared/post-request-context.codec';
@@ -88,7 +94,7 @@ import { validatedDtoClasses } from './interfaces/mapper/validated-dto.strategy'
         MikroOrmConfiguration.connection(postgres),
     }),
     TenancyModule.forRoot({
-      resolver: TransportTenantResolver,
+      resolver: MessageTenantResolver,
       migrations: MikroOrmConfiguration.tenantMigrations(),
     }),
     AuthInfrastructureModule.forRoot({
@@ -140,18 +146,12 @@ import { validatedDtoClasses } from './interfaces/mapper/validated-dto.strategy'
       inject: [appConfig.KEY],
       useFactory: ({ name }: AppConfig) => ({ producer: name }),
     }),
-    OutboxHousekeepingModule.forRootAsync({
-      inject: [outboxConfig.KEY],
-      useFactory: ({ relay, inboxRetention }: OutboxConfig) => ({
-        interval: relay === 'poll' ? '1h' : false,
-        inboxRetention,
-      }),
-    }),
+    ...(appConfig().subscriptionsFromFeed ? [MikroOrmEventStoreModule] : []),
     TransportEventBusModule.forRootAsync({
       inject: [appConfig.KEY],
       useFactory: ({ name, publishes }: AppConfig) =>
         TransportIdentity.named(name, { publishes }),
-      transaction: MikroOrmUnitOfWorkTransaction,
+      transactionManager: MikroOrmTransactionManager,
       inbox: { descriptions: MikroOrmOutboxStore },
       outbox: {
         destinations: PostEventsClient.namespaces,
@@ -162,7 +162,13 @@ import { validatedDtoClasses } from './interfaces/mapper/validated-dto.strategy'
         }),
       },
       requestContext: PostRequestContextCodec,
-      subscriptions: appConfig().subscriptionsFromFeed,
+      processingGroups: { notifications: 'streaming' },
+      ...(appConfig().subscriptionsFromFeed
+        ? {
+            eventStore: { engine: MikroOrmEventStorageEngine },
+            subscriptions: true,
+          }
+        : {}),
     }),
     PostEventsClientModule,
     InterfacesModule,

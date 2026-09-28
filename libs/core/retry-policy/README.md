@@ -96,12 +96,17 @@ rounds up to the second), an `expiration` in milliseconds on RabbitMQ.
 ## A failure has to reach the handler to be retried
 
 The policy sees what the handler's promise rejects with. In this repository a controller calls
-`EventIngestion.ingest`, and the work an event sets off — a projection, a saga dispatching a command —
-runs inside that call's unit of work and its one transaction. `EventIngestion` opens the unit with
-`failOnTrackedFailure`, so a reaction that throws rejects the ingestion, and the transaction rolls
-back whole: the inbox row goes with the reactions' writes and the outbox rows they staged. The
-redelivery the policy asks for is therefore new work to the inbox, acted on instead of dropped as a
-duplicate — and giving up leaves nothing half-done behind.
+`EventIngestion.ingest`, and the work an event sets off in the **subscribing** processing groups — a
+projection, a saga dispatching a command — runs in that call's unit of work and its one transaction:
+the handlers are told in the unit's `PREPARE_COMMIT`, and a command a saga dispatches is a unit of its
+own that joins the transaction and is waited for. A handler or a saga's command that throws is its
+group's failure, and the default error handler (`PropagatingErrorHandler`) propagates it: the
+ingestion's unit fails, `ingest` rejects, and the transaction rolls back whole — the inbox row goes
+with the reactions' writes and the outbox rows they staged. The redelivery the policy asks for is
+therefore new work to the inbox, acted on instead of dropped as a duplicate — and giving up leaves
+nothing half-done behind. A group whose error handler logs instead (`LoggingErrorHandler`) does not
+fail the ingestion, and a **streaming** group is not part of it at all: its delivery is a unit of its
+own after the commit, retried by the outbox's relay rather than by this policy.
 
 This policy is the **inbound** retry, and only that. What a service publishes has a retry of its own,
 further upstream: `@nestjs/outbox`'s relay retries a publish with backoff until a broker takes it, and

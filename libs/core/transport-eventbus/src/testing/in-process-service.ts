@@ -1,10 +1,7 @@
-import { MikroORM } from '@mikro-orm/core';
 import type { INestMicroservice, ModuleMetadata } from '@nestjs/common';
 import type { MicroserviceOptions } from '@nestjs/microservices';
 import type { TestingModule } from '@nestjs/testing';
 import { Test } from '@nestjs/testing';
-import type { AnyMikroORM } from '@nestposts/database/testing';
-import { dropTestSchema, ensureTestSchema } from '@nestposts/database/testing';
 import { TopicMemoryServer } from '@nestposts/microservices-memory';
 
 /**
@@ -14,7 +11,7 @@ import { TopicMemoryServer } from '@nestposts/microservices-memory';
 export interface InProcessService {
   readonly app: INestMicroservice;
   readonly server: TopicMemoryServer;
-  /** Closes the application and drops the schema it was given, if it had one. */
+  /** Runs `onClose`, then closes the application. */
   readonly close: () => Promise<void>;
 }
 
@@ -39,15 +36,17 @@ export interface InProcessService {
  */
 export interface InProcessServiceOptions {
   /**
-   * Whether the service's schema is created from its entities on start and dropped on close. On by
-   * default, for a spec on a schema of its own; off for one whose tables the real migrations made.
+   * What runs once the service listens — a spec's schema made from its entities, say
+   * (`@nestposts/database/testing`'s `ensureTestSchema`). This library knows no database.
    */
-  readonly createSchema?: boolean;
+  readonly onStart?: (app: INestMicroservice) => Promise<void>;
+  /** What runs before it closes — the same schema dropped. */
+  readonly onClose?: (app: INestMicroservice) => Promise<void>;
 }
 
 export const startInProcessService = async (
   source: ModuleMetadata | TestingModule,
-  { createSchema = true }: InProcessServiceOptions = {},
+  { onStart, onClose }: InProcessServiceOptions = {},
 ): Promise<InProcessService> => {
   const server = new TopicMemoryServer();
   const module = isCompiled(source)
@@ -58,30 +57,16 @@ export const startInProcessService = async (
   });
 
   await app.listen();
-
-  const orm = createSchema ? ormOf(app) : undefined;
-  if (orm) {
-    await ensureTestSchema(orm);
-  }
+  await onStart?.(app);
 
   return {
     app,
     server,
     close: async () => {
-      if (orm) {
-        await dropTestSchema(orm);
-      }
+      await onClose?.(app);
       await app.close();
     },
   };
-};
-
-const ormOf = (app: INestMicroservice): AnyMikroORM | undefined => {
-  try {
-    return app.get(MikroORM, { strict: false });
-  } catch {
-    return undefined;
-  }
 };
 
 const isCompiled = (

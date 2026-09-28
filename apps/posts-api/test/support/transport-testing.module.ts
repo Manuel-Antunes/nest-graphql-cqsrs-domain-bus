@@ -8,7 +8,7 @@ import {
 import {
   MikroOrmOutboxModule,
   MikroOrmOutboxStore,
-  MikroOrmUnitOfWorkTransaction,
+  MikroOrmTransactionManager,
 } from '@nestposts/outbox-mikro-orm';
 import {
   TransportEventBusModule,
@@ -36,7 +36,7 @@ export const transportTesting = (): DynamicModule[] => [
   MikroOrmOutboxModule.forRoot({ producer: 'posts-api-spec' }),
   TransportEventBusModule.forRoot({
     identity: TransportIdentity.silent('posts-api-spec'),
-    transaction: MikroOrmUnitOfWorkTransaction,
+    transactionManager: MikroOrmTransactionManager,
     inbox: { descriptions: MikroOrmOutboxStore },
     requestContext: PostRequestContextCodec,
   }),

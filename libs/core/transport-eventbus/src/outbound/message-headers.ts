@@ -60,6 +60,24 @@ export const TRANSPORT_ORIGIN = 'cqrs-transport-origin';
 /** The event's tags, flattened — see {@link encodeTags}. */
 export const TRANSPORT_TAGS = 'cqrs-transport-tags';
 
+/**
+ * The event's own identifier, when it is not the envelope's: a message for a streaming processing
+ * group is one row per group, each with an id of its own, carrying the same event.
+ */
+export const TRANSPORT_EVENT_ID = 'cqrs-transport-event-id';
+
+/** The streaming processing group a message of the outbox's `local` transport is for. */
+export const TRANSPORT_PROCESSING_GROUP = 'cqrs-transport-processing-group';
+
+/**
+ * The correlation id as it travelled before it took Axon's name (`correlationId`). A message staged by
+ * a service that still wrote it is read as if it said `correlationId`.
+ */
+export const LEGACY_CORRELATION_ID = 'cqrs-transport-correlation-id';
+
+/** The causation id as it travelled before it took Axon's name (`causationId`). */
+export const LEGACY_CAUSATION_ID = 'cqrs-transport-causation-id';
+
 /** The key a `Date` travels under inside a payload — see {@link encodeData}. */
 const DATE = '@date';
 

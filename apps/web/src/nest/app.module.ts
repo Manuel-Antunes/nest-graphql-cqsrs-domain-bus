@@ -19,8 +19,7 @@ import { OrganizationsInfrastructureModule } from '@nestposts/organizations/infr
 import { OrganizationEntities } from '@nestposts/organizations/infrastructure/persistence/organization-entities';
 import {
   MikroOrmOutboxModule,
-  MikroOrmUnitOfWorkTransaction,
-  OutboxHousekeepingModule,
+  MikroOrmTransactionManager,
 } from '@nestposts/outbox-mikro-orm';
 import {
   TRANSPORT_EVENT_BUS_PUBLISHER,
@@ -109,17 +108,11 @@ const billing = billingConfig().polar;
       inject: [appConfig.KEY],
       useFactory: ({ name }: AppConfig) => ({ producer: name }),
     }),
-    OutboxHousekeepingModule.forRootAsync({
-      inject: [outboxConfig.KEY],
-      useFactory: ({ relay }: OutboxConfig) => ({
-        interval: relay === 'poll' ? '1h' : false,
-      }),
-    }),
     TransportEventBusModule.forRootAsync({
       inject: [appConfig.KEY],
       useFactory: ({ name, publishes }: AppConfig) =>
         TransportIdentity.named(name, { publishes }),
-      transaction: MikroOrmUnitOfWorkTransaction,
+      transactionManager: MikroOrmTransactionManager,
       outbox: {
         destinations: WebEventsClient.namespaces,
         inject: [appConfig.KEY, outboxConfig.KEY],

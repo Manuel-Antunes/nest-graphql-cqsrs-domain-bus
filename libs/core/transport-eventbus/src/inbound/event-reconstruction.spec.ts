@@ -3,15 +3,21 @@ import { EventsHandler } from '@nestjs/cqrs';
 import type { OutboxEnvelope } from '@nestjs/outbox';
 import { EventType } from '@nestposts/platform/domain/shared/event-type';
 
+import { EventMessages } from '../outbound/event-messages';
 import {
   encodeData,
+  LEGACY_CAUSATION_ID,
+  LEGACY_CORRELATION_ID,
+  TRANSPORT_EVENT_ID,
   TRANSPORT_MESSAGE_TYPE,
   TRANSPORT_ORIGIN,
   TRANSPORT_TAGS,
   TRANSPORT_TIMESTAMP,
 } from '../outbound/message-headers';
-import { ingestionOf, isIngested } from '../outbound/transport-metadata';
-import { envelopeOf, messageOf, reconstruct } from './event-reconstruction';
+import { envelopeOf } from './event-reconstruction';
+
+const reconstruct = (envelope: OutboxEnvelope): object =>
+  EventMessages.read(envelope).payload;
 
 @EventType({ namespace: 'posts', tags: ['postId'] })
 class PostCompletedEvent {
@@ -75,17 +81,40 @@ describe('reconstructing an event from a message', () => {
     expect(event.occurredAt).toBeInstanceOf(Date);
   });
 
-  it('marks it as ingested under the message id, which is what keeps it from being sent straight back out', () => {
-    const event = reconstruct(
-      envelope({ postId: 'p-1' }, { [TRANSPORT_ORIGIN]: 'tagging' }),
+  it('is the message it was published as: its identifier, its type, its instant, and the rest of its headers as metadata', () => {
+    const message = EventMessages.read(
+      envelope(
+        { postId: 'p-1' },
+        { [TRANSPORT_ORIGIN]: 'tagging', 'x-tenant': 'acme' },
+      ),
     );
 
-    expect(isIngested(event)).toBe(true);
-    expect(ingestionOf(event)).toMatchObject({
-      origin: 'tagging',
-      identifier: 'evt-1',
-      messageType: 'posts.PostCompleted#1.0.0',
-    });
+    expect(message.identifier).toBe('evt-1');
+    expect(message.type.toString()).toBe('posts.PostCompleted#1.0.0');
+    expect(message.timestamp).toEqual(new Date('2026-09-08T12:00:00.000Z'));
+    expect(message.metadata).toEqual({ 'x-tenant': 'acme' });
+    expect(
+      EventMessages.originOf(envelope({}, { [TRANSPORT_ORIGIN]: 'tagging' })),
+    ).toBe('tagging');
+  });
+
+  it('takes the identifier of the event, not of the envelope, when a message carries one of its own', () => {
+    expect(
+      EventMessages.read(
+        envelope({ postId: 'p-1' }, { [TRANSPORT_EVENT_ID]: 'evt-original' }),
+      ).identifier,
+    ).toBe('evt-original');
+  });
+
+  it('reads the correlation a producer still wrote under the old keys as the keys Axon names', () => {
+    expect(
+      EventMessages.read(
+        envelope(
+          { postId: 'p-1' },
+          { [LEGACY_CORRELATION_ID]: 'c-1', [LEGACY_CAUSATION_ID]: 'evt-0' },
+        ),
+      ).metadata,
+    ).toEqual({ correlationId: 'c-1', causationId: 'evt-0' });
   });
 
   it('resolves the class by qualified name when the version on the wire is another one', () => {
@@ -97,16 +126,6 @@ describe('reconstructing an event from a message', () => {
         ),
       ),
     ).toBeInstanceOf(PostCompletedEvent);
-  });
-
-  it('reads the message off the envelope, for the inbox to remember', () => {
-    expect(
-      messageOf(envelope({ postId: 'p-1' }, { [TRANSPORT_ORIGIN]: 'tagging' })),
-    ).toMatchObject({
-      identifier: 'evt-1',
-      origin: 'tagging',
-      tags: [{ key: 'postId', value: 'p-1' }],
-    });
   });
 
   it('refuses a payload that is not an envelope: the producer is not an outbox', () => {
@@ -125,7 +144,6 @@ describe('reconstructing an event from a message', () => {
 
     expect(event).not.toBeInstanceOf(PostCompletedEvent);
     expect(event.constructor.name).toBe('billing.InvoiceIssued#1.0.0');
-    expect(isIngested(event)).toBe(true);
   });
 
   it('takes the envelope as a string or a Buffer, as a transporter may hand it over', () => {

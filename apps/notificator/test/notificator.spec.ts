@@ -128,7 +128,6 @@ describe('the notificator service', () => {
         .overrideProvider(TENANT_MIGRATIONS)
         .useValue({ migrationsList: tenantMigrations })
         .compile(),
-      { createSchema: false },
     );
     mails = notificator.app.get<MailService, CapturingMailService>(MailService);
   });

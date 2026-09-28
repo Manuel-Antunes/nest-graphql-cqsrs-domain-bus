@@ -1,9 +1,7 @@
-import { EntityManager } from '@mikro-orm/core';
 import type { OnApplicationBootstrap } from '@nestjs/common';
 import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import { EventBus } from '@nestjs/cqrs';
-import { inRequestContext, Tenant } from '@nestposts/database';
 import type { Observable } from 'rxjs';
 import {
   concatMap,
@@ -16,9 +14,8 @@ import {
   tap,
 } from 'rxjs';
 
-import type { LoggedRecord } from '../persistence/event-log/event-log';
-import { EventLog } from '../persistence/event-log/event-log';
-import { EventTrace } from '../tracing';
+import type { StoredRecord } from '../eventsourcing/event-store';
+import { EventStore } from '../eventsourcing/event-store';
 
 /** How the log is read: how often, and how much at a time. */
 export const EVENT_LOG_OPTIONS = Symbol('EventLogOptions');
@@ -45,7 +42,7 @@ export const EVENT_LOG_OPTIONS = Symbol('EventLogOptions');
 const between = (
   cursor: string,
   highest: string,
-  records: readonly LoggedRecord[],
+  records: readonly StoredRecord[],
   maxGapOffset: bigint,
 ): string[] => {
   const arrived = new Set(records.map((record) => record.position));
@@ -143,10 +140,11 @@ const DEFAULT_MAX_GAP_OFFSET = 1_000;
  * subscription is the opposite — the container holding the stream open is usually not the one that
  * did the work, so it must see what the others did.
  *
- * ## One log, every tenant
- * The log is the transport's, in a schema of its own, and holds every tenant's events: each row says
- * which tenant it was written in, and every event read back is stamped with it (`Tenant.of(event)`),
- * which is the only way a subscription can tell one tenant's `PostCreated` from another's.
+ * ## One store, every tenant
+ * The store is the transport's, in a schema of its own, and holds every tenant's events. What an event
+ * is read back with is its metadata — the request it was published in, the tenant included — so a
+ * subscription tells one tenant's `PostCreated` from another's by `EventMessage.of(event).metadata`,
+ * which the storage engine fills in from where the row was written when the metadata does not say.
  */
 @Injectable()
 export class EventSourcedEventBus implements OnApplicationBootstrap {
@@ -159,8 +157,7 @@ export class EventSourcedEventBus implements OnApplicationBootstrap {
 
   constructor(
     private readonly moduleRef: ModuleRef,
-    private readonly log: EventLog,
-    private readonly em: EntityManager,
+    private readonly store: EventStore,
     @Optional() @Inject(EVENT_LOG_OPTIONS) logOptions?: EventLogOptions,
   ) {
     this.interval = logOptions?.interval ?? DEFAULT_INTERVAL_MS;
@@ -192,7 +189,7 @@ export class EventSourcedEventBus implements OnApplicationBootstrap {
     const bus = this.moduleRef.get(EventBus, { strict: false });
     bus.source = this.fromLog();
     this.journal.log(
-      'the EventBus now reads the event log for anything that pipes it',
+      'the EventBus now reads the event store for anything that pipes it',
     );
   }
 
@@ -209,29 +206,29 @@ export class EventSourcedEventBus implements OnApplicationBootstrap {
    * with the process: a subscriber that went away is not owed what it missed.
    */
   private read(): Observable<object> {
-    return defer(() => this.at(() => this.log.head())).pipe(
+    return defer(() => this.store.head()).pipe(
       switchMap((head) => {
         let cursor = head;
         const gaps = new Map<string, number>();
-        this.journal.log(`reading the event log from position ${cursor}`);
+        this.journal.log(`reading the event store from position ${cursor}`);
 
         return interval(this.interval).pipe(
           concatMap(() =>
-            this.at(() =>
-              this.log.readAfter(cursor, this.batch, [...gaps.keys()]),
-            ).catch((failure: unknown) => {
-              /**
-               * A read that fails must not end the stream. A subscriber is connected for as long as
-               * it wants to be, and the reasons a query fails here are transient by nature — a
-               * connection closed while the process was idle, a database restarting. The cursor does
-               * not move, so the next tick asks for the same thing again.
-               */
-              this.journal.error(
-                `could not read the event log past ${cursor}; retrying: ` +
-                  `${(failure as Error)?.message ?? String(failure)}`,
-              );
-              return [] as LoggedRecord[];
-            }),
+            this.store
+              .readAfter(cursor, this.batch, [...gaps.keys()])
+              .catch((failure: unknown) => {
+                /**
+                 * A read that fails must not end the stream. A subscriber is connected for as long as
+                 * it wants to be, and the reasons a query fails here are transient by nature — a
+                 * connection closed while the process was idle, a database restarting. The cursor does
+                 * not move, so the next tick asks for the same thing again.
+                 */
+                this.journal.error(
+                  `could not read the event store past ${cursor}; retrying: ` +
+                    `${(failure as Error)?.message ?? String(failure)}`,
+                );
+                return [] as StoredRecord[];
+              }),
           ),
           tap((records) => {
             expire(gaps, this.gapTimeout);
@@ -242,7 +239,7 @@ export class EventSourcedEventBus implements OnApplicationBootstrap {
             this.journal.debug(
               `log → ${records.length} event(s) past ${cursor}: ` +
                 records
-                  .map((record) => record.event.constructor.name)
+                  .map((record) => record.message.type.toString())
                   .join(', '),
             );
 
@@ -266,26 +263,10 @@ export class EventSourcedEventBus implements OnApplicationBootstrap {
             }
           }),
           mergeMap((records) =>
-            from(
-              records.map((record) => {
-                EventTrace.stamp(record.event, record.traceContext);
-                return record.tenant
-                  ? Tenant.stamp(record.event, record.tenant)
-                  : record.event;
-              }),
-            ),
+            from(records.map((record) => record.message.payload)),
           ),
         );
       }),
     );
-  }
-
-  /**
-   * Nothing here originates in an HTTP request, so there is no MikroORM context to inherit — the
-   * first query would be refused. `inRequestContext` opens one per read, which also keeps each tick's
-   * identity map to itself.
-   */
-  private at<T>(work: () => Promise<T>): Promise<T> {
-    return inRequestContext(this.em, work);
   }
 }

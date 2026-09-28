@@ -1,4 +1,5 @@
-import type { EntityMetadata, MikroORM } from '@mikro-orm/core';
+import type { EntityMetadata } from '@mikro-orm/core';
+import { MikroORM } from '@mikro-orm/core';
 import { MikroORM as PostgresMikroORM } from '@mikro-orm/postgresql';
 
 import type { PostgresOptions } from '../config/database.config';
@@ -66,6 +67,22 @@ export const dropTestSchema = async (orm: AnyMikroORM): Promise<void> => {
 };
 
 /** An ORM on a schema of its own, with the tables its entities map already there. */
+/**
+ * **A spec's schema, made when an application starts and dropped when it closes** — the hooks a
+ * test harness that boots an application of its own takes, such as
+ * `@nestposts/transport-eventbus/testing`'s `startInProcessService`, which knows no database:
+ *
+ * ```ts
+ * const service = await startInProcessService(module, testSchemaLifecycle);
+ * ```
+ */
+export const testSchemaLifecycle = {
+  onStart: (app: { get(token: unknown, options?: object): unknown }) =>
+    ensureTestSchema(app.get(MikroORM, { strict: false }) as AnyMikroORM),
+  onClose: (app: { get(token: unknown, options?: object): unknown }) =>
+    dropTestSchema(app.get(MikroORM, { strict: false }) as AnyMikroORM),
+};
+
 export async function testDatabase(
   options: PostgresOptions = {},
   prefix?: string,

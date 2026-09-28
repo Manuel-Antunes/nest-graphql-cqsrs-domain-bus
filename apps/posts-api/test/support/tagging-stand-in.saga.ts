@@ -5,7 +5,7 @@ import { PostPreCreatedEvent } from '@nestposts/posts/domain/post/event/post-pre
 import { PostId } from '@nestposts/posts/domain/post/vo/post-id';
 import { DEFAULT_TAG_ID } from '@nestposts/posts/domain/tag/tag.entity';
 import { TagId } from '@nestposts/posts/domain/tag/vo/tag-id';
-import { isIngested } from '@nestposts/transport-eventbus';
+import { isIngested, ProcessingGroup } from '@nestposts/transport-eventbus';
 import type { Observable } from 'rxjs';
 import { catchError, concatMap, EMPTY, map, of } from 'rxjs';
 
@@ -13,6 +13,10 @@ import { CompletePostCommand } from '../../src/application/post/command/complete
 import { PostRequest } from '../../src/application/shared/post-request';
 
 @Injectable()
+@ProcessingGroup('tagging-stand-in', {
+  processor: 'streaming',
+  events: [PostPreCreatedEvent],
+})
 export class TaggingStandIn {
   private readonly logger = new Logger(TaggingStandIn.name);
 

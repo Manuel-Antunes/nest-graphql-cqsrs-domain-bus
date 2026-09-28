@@ -1,15 +1,19 @@
 import type { MikroORM } from '@mikro-orm/postgresql';
 import type { Seeder } from '@mikro-orm/seeder';
+import { Logger } from '@nestjs/common';
 import {
   ROOT_TENANT,
   TENANT_SCHEMA_PREFIX,
   Tenant,
   TenantEntityManagerService,
 } from '@nestposts/database';
+import { OutboxInboxEntitySchema } from '@nestposts/outbox-mikro-orm/outbox.entities';
 
 import type { MigratorContext } from './app/bootstrap';
 import { liveSchemas, withMigrator } from './app/bootstrap';
 import { migrationFiles } from './app/connections';
+import type { OutboxConfig } from './config/outbox.config';
+import { outboxConfig } from './config/outbox.config';
 import { withSeederContainer } from './seeders/container';
 import { DatabaseSeeder } from './seeders/database.seeder';
 import { OAuthResourcesSeeder } from './seeders/oauth-resources.seeder';
@@ -38,15 +42,33 @@ const applyTenantMigrations = async ({ orm }: MigratorContext) => {
   }
 };
 
+const DAY_MS = 86_400_000;
+
+const forgetProcessedMessages = async ({ app, orm }: MigratorContext) => {
+  const { inboxRetentionDays } = app.get<OutboxConfig>(outboxConfig.KEY);
+  const forgotten = await orm.em.fork().nativeDelete(OutboxInboxEntitySchema, {
+    processedAt: { $lt: new Date(Date.now() - inboxRetentionDays * DAY_MS) },
+  });
+  Logger.log(
+    `inbox pruned: ${forgotten} message(s) processed more than ${inboxRetentionDays} day(s) ago forgotten`,
+    'Migrator',
+  );
+  return forgotten;
+};
+
 export const migrateSystem = (): Promise<void> =>
   withMigrator(applySystemMigrations);
 
 export const migrateTenants = (): Promise<void> =>
   withMigrator(applyTenantMigrations);
 
+export const pruneInbox = (): Promise<number> =>
+  withMigrator(forgetProcessedMessages);
+
 export async function migrate(): Promise<void> {
   await migrateSystem();
   await migrateTenants();
+  await pruneInbox();
 }
 
 export const seed = (
@@ -91,6 +113,7 @@ const commands: Record<string, () => Promise<unknown>> = {
   migrate,
   'migrate:system': migrateSystem,
   'migrate:tenants': migrateTenants,
+  'inbox:prune': pruneInbox,
   'seed': () => seed(),
   'seed:users': seedUsers,
   'seed:deployment': seedDeployment,

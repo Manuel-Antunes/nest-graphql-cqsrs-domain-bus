@@ -11,8 +11,8 @@ import {
   AWS_QUALIFIED_NAME_ATTRIBUTE,
   AWS_ROUTING_KEY_ATTRIBUTE,
 } from '../aws/aws-message';
-import { CORRELATION_ID } from '../request-context';
 import {
+  LEGACY_CORRELATION_ID,
   TRANSPORT_MESSAGE_TYPE,
   TRANSPORT_ORIGIN,
   TRANSPORT_TAGS,
@@ -32,7 +32,7 @@ const envelope: OutboxEnvelope = {
     [TRANSPORT_MESSAGE_TYPE]: 'posts.PostCreated#2.0.0',
     [TRANSPORT_ORIGIN]: 'tagging',
     [TRANSPORT_TAGS]: 'postId=p-1',
-    [CORRELATION_ID]: 'corr-1',
+    correlationId: 'corr-1',
     'x-tenant': 'acme',
   },
   payload: {
@@ -122,9 +122,9 @@ describe('an outbox message on each transport', () => {
       });
     });
 
-    it('orders by the aggregate and deduplicates by the message id on a FIFO topic', () => {
+    it('orders by the message sequence and deduplicates by the message id on a FIFO topic', () => {
       expect(first()).toMatchObject({
-        MessageGroupId: 'p-1',
+        MessageGroupId: 'posts/p-1',
         MessageDeduplicationId: 'evt-1',
       });
     });
@@ -164,6 +164,37 @@ describe('an outbox message on each transport', () => {
     it('groups the whole request under one session, from the correlation id', () => {
       expect(sent[0]).toMatchObject({
         meta: { sessions: { [CORRELATION_SESSION]: 'corr-1' } },
+      });
+    });
+
+    it('still groups a message a producer staged under the old correlation key', async () => {
+      const legacy: Record<string, unknown>[] = [];
+      const proxy = new InngestClientProxy({
+        inngest: {
+          send: async (payload: Record<string, unknown>) => {
+            legacy.push(payload);
+          },
+        } as never,
+      });
+      const old = {
+        ...envelope,
+        headers: {
+          [TRANSPORT_MESSAGE_TYPE]: 'posts.PostCreated#2.0.0',
+          [LEGACY_CORRELATION_ID]: 'corr-old',
+        },
+      };
+      const { pattern, data } = OutboxPackets.inngest(
+        { ...message, headers: old.headers },
+        old,
+      );
+      await (
+        proxy as unknown as {
+          dispatchEvent: (packet: object) => Promise<void>;
+        }
+      ).dispatchEvent({ pattern, data });
+
+      expect(legacy[0]).toMatchObject({
+        meta: { sessions: { [CORRELATION_SESSION]: 'corr-old' } },
       });
     });
   });

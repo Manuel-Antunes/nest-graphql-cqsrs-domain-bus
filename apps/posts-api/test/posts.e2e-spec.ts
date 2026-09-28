@@ -10,7 +10,7 @@ import { SubscriptionBus } from '@nestposts/cqsrs';
 import { ROOT_TENANT_SCHEMA, TENANT_MIGRATIONS } from '@nestposts/database';
 import { migrate } from '@nestposts/migrator/main';
 import { tenantMigrations } from '@nestposts/migrator/migrations/tenant/index';
-import { correlationIdOf } from '@nestposts/transport-eventbus';
+import { EventMessage } from '@nestposts/transport-eventbus';
 import {
   AUTHOR_ROLE,
   Authorship,
@@ -215,8 +215,8 @@ describe('posts (e2e)', () => {
       ]);
       expect(
         new Set(
-          chain().map((event) =>
-            correlationIdOf(requestOf(event) as PostRequest),
+          chain().map(
+            (event) => EventMessage.of(event as object).metadata.correlationId,
           ),
         ).size,
       ).toBe(1);

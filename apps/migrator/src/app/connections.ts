@@ -3,13 +3,13 @@ import { Migrator } from '@mikro-orm/migrations';
 import { SeedManager } from '@mikro-orm/seeder';
 import type { DatabaseEntities, PostgresOptions } from '@nestposts/database';
 import { postgresDatabase, SYSTEM_SCHEMA } from '@nestposts/database';
+import { eventStoreEntities } from '@nestposts/event-store-mikro-orm/event-store.entities';
 import { eventsEntities } from '@nestposts/events/infrastructure/events-infrastructure.module';
 import { notificationsEntities } from '@nestposts/notifications/infrastructure/notifications-infrastructure.module';
 import { OrganizationEntities } from '@nestposts/organizations/infrastructure/persistence/organization-entities';
 import { outboxEntities } from '@nestposts/outbox-mikro-orm/outbox.entities';
 import { SoftDeleteSubscriber } from '@nestposts/platform/infrastructure/persistence/soft-delete/soft-delete.subscriber';
 import { postsEntities } from '@nestposts/posts/infrastructure/posts-infrastructure.module';
-import { eventLogEntities } from '@nestposts/transport-eventbus/persistence/event-log/event-log.entity';
 import { usersEntities } from '@nestposts/users/infrastructure/users-infrastructure.module';
 
 import type { PostgresConfig } from '../config/postgres.config';
@@ -38,7 +38,7 @@ export const migratorTables = (): DatabaseEntities => [
   ...eventsEntities,
   ...notificationsEntities,
   ...outboxEntities,
-  ...eventLogEntities,
+  ...eventStoreEntities,
 ];
 
 export const systemConnection = (

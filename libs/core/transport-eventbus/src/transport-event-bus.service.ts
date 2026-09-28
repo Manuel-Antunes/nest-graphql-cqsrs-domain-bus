@@ -9,48 +9,91 @@ import type {
 } from '@nestjs/cqrs';
 import { AsyncContext, EventBus } from '@nestjs/cqrs';
 
+import { LocalEventDelivery } from './eventhandling/local-event-delivery';
+import { EventStore } from './eventsourcing/event-store';
+import { EventMessage } from './messaging/event-message';
+import { MessageInterceptors } from './messaging/message-interceptors';
 import { EventOutbox } from './outbox/event-outbox';
-import { EventLog } from './persistence/event-log/event-log';
-import { EventTrace } from './tracing';
-import { UnitOfWork } from './unit-of-work/unit-of-work';
+import { RequestContextCodec } from './request-context';
+import { DefaultPhases } from './unit-of-work/phase';
+import { ProcessingContext } from './unit-of-work/processing-context';
+import { ResourceKey } from './unit-of-work/resource-key';
+import { TransactionManager } from './unit-of-work/transaction-manager';
+import { UnitOfWorkFactory } from './unit-of-work/unit-of-work-factory';
+
+/** The events one unit of work staged, and whether its `PREPARE_COMMIT` still takes more. */
+class StagedEvents {
+  private readonly queue: EventMessage[] = [];
+  closed = false;
+
+  push(messages: readonly EventMessage[]): void {
+    this.queue.push(...messages);
+  }
+
+  get pending(): boolean {
+    return this.queue.length > 0;
+  }
+
+  take(): EventMessage[] {
+    return this.queue.splice(0);
+  }
+}
 
 /**
- * **The integration point: an `IEventBus` that publishes locally and through the outbox.**
+ * **The integration point: an `IEventBus` that is Axon 5's `EventSink`.**
  *
- * This is upstream's idea, and the reason this library is built on it rather than beside it. Nothing
- * that publishes has to know: a command handler, a saga, an aggregate's `commit()` — they all go
- * through the bus they already used, and the events whose namespace has a destination leave the
- * process as well.
+ * Nothing that publishes has to know: a command handler, a saga, an aggregate's `commit()` — they all
+ * go through the bus they already used (`EventPublisher` is bound to this, see
+ * `TRANSPORT_EVENT_BUS_PUBLISHER`), and what they publish becomes an {@link EventMessage}:
+ * identified, typed, stamped with the request it was raised under and, by the dispatch interceptors,
+ * with the correlation data of the message being handled and the trace it was published in.
  *
- * ## Why this, and not a subscription to the `EventBus`
- * Subscribing to the bus and forwarding whatever went by was the other option, and it is worse in
- * two ways that matter here:
- * - **it cannot be staged.** `EventBus` hands an event to its subscribers and returns; a subscriber
- *   has no unit of work to write the outbox in, and would record what the command had not committed;
- * - **it doubles the request context.** The real bus attaches the `AsyncContext` to the event as part
- *   of publishing; a subscriber sees the result and has to guess.
+ * ## Staged in the unit of work, written and told in `PREPARE_COMMIT`
+ * Inside a unit of work — every command, every ingested message, every streaming delivery — nothing
+ * is published at once. The first publish of a unit registers **one** `PREPARE_COMMIT` action, and
+ * it takes the staged events a batch at a time:
  *
- * ## The request context crosses here
- * `publish(event, asyncContext)` attaches the context exactly as `EventBus` does, which is what makes
- * `AsyncContext.of(event)` answer downstream — and {@link EventMessages} writes what that context
- * stands for into the message's headers. Together with `AsyncContext.merge(request, command)` in a
- * saga and `mergeObjectContext(aggregate, request)` in a command handler, one request stays one request
- * across services.
+ * ```
+ * PREPARE_COMMIT, inside the unit's transaction
+ *   ├ the event store appends the batch — on the unit's append condition, when it sourced anything
+ *   ├ the outbox writes what the batch owes: a destination's message, a streaming group's
+ *   └ the subscribing handlers are told, and the delivery waits for them and for what they dispatch
+ *   … and again for whatever those handlers published, until nothing is left
+ * COMMIT        the transaction commits
+ * AFTER_COMMIT  the outbox's relay is woken; the subscriptions hear the events
+ * ```
  *
- * ## Written down, never sent from here
- * What leaves is a message of `@nestjs/outbox`, written in the unit of work's own transaction
- * ({@link EventOutbox}) and published by the outbox's relay once that transaction has committed —
- * again and again until a broker takes it. This bus never talks to a broker: a service without an
- * outbox publishes to this process only.
+ * That is Axon 5's `SimpleEventBus` — a per-context queue drained in `PREPARE_COMMIT`, events
+ * published by subscribers during delivery drained in the same phase — with its event store's append
+ * and the outbox as the durable steps of the same action. A handler that fails fails the unit (its
+ * group's `ErrorHandler` decides), and a unit that fails publishes **nothing**: the staged events are
+ * discarded with the rest of its transaction.
+ *
+ * A publish once the unit is past `PREPARE_COMMIT` throws, as it does in Axon: its events would be
+ * told after the unit had already written what it publishes.
+ *
+ * ## Outside any unit of work
+ * An `aggregate.commit()` nobody wrapped in a unit — a request that provisions a profile, a script —
+ * is published in a unit of its **own**, on a detached transaction: nobody awaits it, and as part of
+ * whatever transaction the caller is in it could outlive that transaction. When there is nothing to
+ * write — no event store, nothing the outbox owes — it goes straight to the handlers, synchronously,
+ * as Axon's `SimpleEventBus.publish(null, events)` does.
  */
 @Injectable()
 export class TransportEventBusService implements IEventBus, OnModuleDestroy {
-  /** The units whose commit already hands the outbox to the relay. */
-  private readonly relayed = new WeakSet<UnitOfWork>();
+  private static readonly STAGED = new ResourceKey<StagedEvents>(
+    'StagedEvents',
+  );
+  private static readonly RELAY_WOKEN = new ResourceKey<boolean>('RelayWoken');
+  private static readonly MAX_ROUNDS = 10;
 
   constructor(
     private readonly eventBus: EventBus,
-    @Optional() private readonly log?: EventLog,
+    private readonly interceptors: MessageInterceptors,
+    private readonly codec: RequestContextCodec,
+    private readonly delivery: LocalEventDelivery,
+    private readonly units: UnitOfWorkFactory,
+    @Optional() private readonly store?: EventStore,
     @Optional() private readonly outbox?: EventOutbox,
   ) {}
 
@@ -87,170 +130,121 @@ export class TransportEventBusService implements IEventBus, OnModuleDestroy {
     dispatcherOrAsyncContext?: unknown,
     asyncContext?: AsyncContext,
   ): Promise<void> {
-    const [dispatcherContext, context] = normalize(
-      dispatcherOrAsyncContext,
-      asyncContext,
-    );
+    const request =
+      asyncContext ??
+      (dispatcherOrAsyncContext instanceof AsyncContext
+        ? dispatcherOrAsyncContext
+        : undefined);
+    const context = ProcessingContext.current();
     /**
      * **Copied, and that copy is load-bearing.** `AggregateRoot.commit()` hands `publishAll` its
-     * INTERNAL array and then calls `uncommit()`, which empties it. Publishing straight away never
-     * noticed; a unit of work holds the events until its commit phase, and by then the array it was
-     * given has been cleared — the command succeeds, appends nothing and tells nobody.
+     * INTERNAL array and then calls `uncommit()`, which empties it. A unit of work holds the events
+     * until its `PREPARE_COMMIT`, and by then the array it was given has been cleared — the command
+     * succeeds, appends nothing and tells nobody.
      */
-    const staged = [...(events ?? [])];
-    staged.forEach((event) => {
-      this.attach(event as object, context);
-      EventTrace.stamp(event as object);
-    });
+    const messages = [...(events ?? [])].map((event) =>
+      this.dispatched(event as object, request, context),
+    );
+    return this.stage(context, messages);
+  }
 
-    const unit = UnitOfWork.current();
-    if (unit?.staging) {
-      this.stageIn(unit, staged, dispatcherContext, context);
-      return Promise.resolve();
+  /**
+   * **Messages already made** — an ingested event, a restored one — staged in `context`'s unit of
+   * work, or published in a unit of their own when there is none. See the class note.
+   */
+  async stage(
+    context: ProcessingContext | undefined,
+    messages: readonly EventMessage[],
+  ): Promise<void> {
+    if (messages.length === 0) {
+      return;
     }
+    if (context) {
+      this.stageIn(context, messages);
+      return;
+    }
+    if (!this.store && !this.outbox?.concerns(messages)) {
+      this.delivery.immediately(messages);
+      return;
+    }
+    await this.units
+      .detached()
+      .create()
+      .executeWithResult((opened) => this.stageIn(opened, messages));
+  }
 
-    /**
-     * **With an outbox, an event that leaves is always published by a unit of work.** Its row has to
-     * be written in a transaction, and the only honest one for a publish that no unit opened is its
-     * own: recorded, committed, and only then told to this process — the same three steps a command
-     * takes. Its OWN, and not a savepoint of whatever transaction the caller is in: nobody awaits an
-     * `aggregate.commit()`, and a savepoint that outlived its transaction would fail to release. An
-     * event that stays here keeps the synchronous path below.
-     */
-    if (this.outbox?.leaves(staged)) {
-      const outbox = this.outbox;
-      return UnitOfWork.run(
-        async () => {
-          const opened = UnitOfWork.current();
-          if (opened) {
-            this.stageIn(opened, staged, dispatcherContext, context);
-          }
-        },
-        context,
-        { transaction: outbox.detached },
+  /**
+   * The message an event is published as: the one it already is, with what its request stands for
+   * and whatever the dispatch interceptors add — correlation data first, and it wins, as in Axon.
+   */
+  private dispatched(
+    event: object,
+    request: AsyncContext | undefined,
+    context: ProcessingContext | undefined,
+  ): EventMessage {
+    if (request && !AsyncContext.isAttached(event)) {
+      request.attachTo(event);
+    }
+    const message = EventMessage.of(event).andMetadata(
+      this.codec.toMetadata(AsyncContext.of(event)),
+    );
+    return this.interceptors.dispatch(message, context);
+  }
+
+  private stageIn(
+    context: ProcessingContext,
+    messages: readonly EventMessage[],
+  ): void {
+    const staged = context.getResource(TransportEventBusService.STAGED);
+    if (staged && !staged.closed) {
+      staged.push(messages);
+      return;
+    }
+    if (staged || !context.accepts(DefaultPhases.PREPARE_COMMIT)) {
+      throw new Error(
+        `an event was published in ${context.phase?.name ?? 'a finished unit of work'}, after its unit of ` +
+          `work had written what it publishes: ${messages.map((message) => message.type).join(', ')}. ` +
+          'Publish from a handler, or from a unit of work of its own.',
       );
     }
-
-    /**
-     * No unit of work — a message arriving on a queue, a projection reacting, a spec. The phases
-     * still happen, in the same order, one after the other: Axon's `AbstractEventBus` does exactly
-     * this when `CurrentUnitOfWork` is not started, and the ordering is the part that matters. What
-     * is recorded before it is told cannot be told without being recorded.
-     *
-     * A service with no log takes the branch above and publishes **synchronously**, exactly as it
-     * always did. Going through a resolved promise instead would delay every local handler by a
-     * microtask, which is invisible until a caller asserts right after an unawaited `commit()`.
-     */
-    if (!this.log) {
-      return this.dispatch(staged, dispatcherContext, context);
-    }
-    return this.record(staged).then(() =>
-      this.dispatch(staged, dispatcherContext, context),
-    );
+    const queue = new StagedEvents();
+    queue.push(messages);
+    context.putResource(TransportEventBusService.STAGED, queue);
+    context.onPrepareCommit((preparing) => this.prepare(preparing, queue));
   }
 
-  /**
-   * The three moments of a staged publish, on the unit that staged it: recorded while the unit's
-   * transaction is open, told to this process once it has committed, and — with an outbox — handed
-   * to the relay after that, once per unit however many publishes it staged. An event the outbox
-   * delivers `local` is not told at the commit: the relay tells this process about it, through
-   * `LocalDelivery`, and telling it here as well would run every handler twice.
-   */
-  private stageIn<TEvent extends IEvent>(
-    unit: UnitOfWork,
-    staged: TEvent[],
-    dispatcherContext: unknown,
-    context?: AsyncContext,
-  ): void {
-    unit.on('prepareCommit', (prepared) =>
-      this.record(staged, prepared.transactionHandle),
-    );
-    unit.on('commit', () =>
-      this.dispatch(this.toldAtCommit(staged), dispatcherContext, context),
-    );
-    if (this.outbox && !this.relayed.has(unit)) {
-      this.relayed.add(unit);
-      const outbox = this.outbox;
-      unit.on('afterCommit', () => outbox.committed());
-    }
-  }
-
-  /**
-   * **What publishing is, once the event is recorded**: the event reaches this process. Called
-   * straight away when no unit of work is open — a message arriving on a queue, a projection
-   * reacting — and at the unit's `commit` phase when one is: what leaves already left, as a message
-   * of the outbox, in the prepare phase.
-   */
-  private dispatch<TEvent extends IEvent>(
-    events: TEvent[],
-    dispatcherContext: unknown,
-    context?: AsyncContext,
+  private async prepare(
+    context: ProcessingContext,
+    queue: StagedEvents,
   ): Promise<void> {
-    for (const event of events) {
-      this.locally(event, dispatcherContext, context);
+    try {
+      for (let round = 0; queue.pending; round += 1) {
+        if (round >= TransportEventBusService.MAX_ROUNDS) {
+          throw new Error(
+            `a unit of work was still publishing after ${TransportEventBusService.MAX_ROUNDS} rounds of ` +
+              'PREPARE_COMMIT: a handler publishes again every time it is told',
+          );
+        }
+        const batch = queue.take();
+        await this.store?.append(context, batch);
+        if (await this.outbox?.stage(context, batch)) {
+          this.wakeRelayAfterCommit(context);
+        }
+        await this.delivery.deliver(context, batch);
+      }
+    } finally {
+      queue.closed = true;
     }
-    return Promise.resolve();
   }
 
-  /**
-   * What this process publishes, written where every container can read it — which is what makes a
-   * subscription on one container see what another decided — and, with an outbox, what it owes the
-   * transports. Appending an identifier the log already has is a no-op, so the same instance
-   * published twice is recorded once.
-   *
-   * It runs at the unit of work's **prepare** phase, inside its transaction and before anything is
-   * told: a failure here fails the command, which is the point. An event nobody could record is not a
-   * fact. `transaction` is that transaction's handle, which the outbox writes through.
-   */
-  private async record<TEvent extends IEvent>(
-    events: TEvent[],
-    transaction?: unknown,
-  ): Promise<void> {
-    if (events.length === 0) {
-      return;
-    }
-    await this.log?.append(events as object[]);
-    await this.outbox?.stage(events as object[], transaction);
-  }
-
-  private toldAtCommit<TEvent extends IEvent>(events: TEvent[]): TEvent[] {
+  private wakeRelayAfterCommit(context: ProcessingContext): void {
     const outbox = this.outbox;
-    return outbox
-      ? events.filter((event) => !outbox.deliversLocally(event as object))
-      : events;
-  }
-
-  private attach(event: object, context?: AsyncContext): void {
-    if (context && !AsyncContext.isAttached(event)) {
-      context.attachTo(event);
-    }
-  }
-
-  private locally<TEvent extends IEvent>(
-    event: TEvent,
-    dispatcherContext: unknown,
-    context?: AsyncContext,
-  ): void {
-    if (context) {
-      this.eventBus.publish(event, dispatcherContext, context);
+    if (
+      !outbox ||
+      context.putResourceIfAbsent(TransportEventBusService.RELAY_WOKEN, true)
+    ) {
       return;
     }
-    if (dispatcherContext !== undefined) {
-      this.eventBus.publish(event, dispatcherContext);
-      return;
-    }
-    this.eventBus.publish(event);
+    TransactionManager.afterCommit(context, () => outbox.committed());
   }
 }
-
-/**
- * `IEventBus.publish` takes either a dispatcher context or an `AsyncContext` in the second position,
- * and `EventBus` sorts them out by type. Doing the same here is what lets this bus stand in for it.
- */
-const normalize = (
-  dispatcherOrAsyncContext: unknown,
-  asyncContext: AsyncContext | undefined,
-): [unknown, AsyncContext | undefined] =>
-  !asyncContext && dispatcherOrAsyncContext instanceof AsyncContext
-    ? [undefined, dispatcherOrAsyncContext]
-    : [dispatcherOrAsyncContext, asyncContext];
