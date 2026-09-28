@@ -11,6 +11,12 @@ const CODES: Record<number, string> = {
   [HttpStatus.UNPROCESSABLE_ENTITY]: 'BAD_USER_INPUT',
 };
 
+/**
+ * **A Nest `HttpException` in GraphQL's words** — the global guard's refusals, mostly.
+ *
+ * `@nestjs/apollo` turned the status into `extensions.code` inside the driver; Yoga does not, so a
+ * subgraph that authenticates with this package says it here.
+ */
 @Catch(HttpException)
 export class HttpExceptionFilter implements ExceptionFilter {
   catch(exception: HttpException, _host: ArgumentsHost): GraphQLError {

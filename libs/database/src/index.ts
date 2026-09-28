@@ -6,12 +6,12 @@
  * What lives here is the ORM and nothing that has a rule of its own: the connection
  * ({@link postgresDatabase}), the module that assembles the entity list ({@link DatabaseModule}), how a
  * value object becomes a column ({@link valueObjectType}), how a path with no HTTP request gets a
- * context ({@link inRequestContext}) and what a driver exception means ({@link databaseErrorCode}).
+ * context ({@link inRequestContext}), what a driver exception means ({@link DatabaseError}) and how
+ * each context is told ({@link DatabaseExceptionFilter}, which {@link DatabaseModule} installs).
  *
  * Whatever needs a domain to be understood stays in the module that owns that domain — which is why
  * soft delete's ORM half is still in `@nestposts/platform`, next to the rule it implements, and why
- * this package translates a foreign key violation into a **code** and lets the interface layer decide
- * what to say about it.
+ * an application that knows what one of its foreign keys means says so with a filter of its own.
  */
 export * from './config/index';
 export * from './database.module';

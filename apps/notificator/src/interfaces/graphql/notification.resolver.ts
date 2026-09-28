@@ -1,9 +1,12 @@
 import { UseFilters } from '@nestjs/common';
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import { Args, Mutation, Query, Resolver } from '@nestjs/graphql';
+import { HttpExceptionFilter } from '@nestposts/auth/filters/http-exception.filter';
 import { NotificationNotFoundException } from '@nestposts/notifications/domain/notification/exception/notification-not-found.exception';
 import type { NotificationRecord } from '@nestposts/notifications/domain/notification/notification-record.entity';
 import { NotificationId } from '@nestposts/notifications/domain/notification/vo/notification-id';
+import { NotificationExceptionFilter } from '@nestposts/notifications/filters/notification-exception.filter';
+import { ValidationExceptionFilter } from '@nestposts/validated-dto/filters/validation-exception.filter';
 
 import { DeleteNotificationCommand } from '../../application/notification/command/delete-notification.command';
 import { MarkAllNotificationsAsReadCommand } from '../../application/notification/command/mark-all-notifications-as-read.command';
@@ -13,13 +16,15 @@ import { FindNotificationQuery } from '../../application/notification/query/find
 import { FindNotificationsQuery } from '../../application/notification/query/find-notifications.query';
 import { CurrentNotifiable } from '../auth/current-notifiable.decorator';
 import type { SessionNotifiable } from '../auth/session-notifiable.pipe';
-import { HttpExceptionFilter } from '../filters/http-exception.filter';
-import { NotificationExceptionFilter } from '../filters/notification-exception.filter';
 import type { NotificationView } from './views';
 import { notificationView } from './views';
 
 @Resolver('Notification')
-@UseFilters(HttpExceptionFilter, NotificationExceptionFilter)
+@UseFilters(
+  HttpExceptionFilter,
+  NotificationExceptionFilter,
+  ValidationExceptionFilter,
+)
 export class NotificationResolver {
   constructor(
     private readonly queryBus: QueryBus,

@@ -1250,13 +1250,13 @@ Better Auth hooks, tests — need `inRequestContext(em, work)` (`@nestposts/data
 first query is rejected.
 
 **`libs/database` is the one door to MikroORM**, and `libs/database/README.md` is its guide. It holds
-the connection (`postgresDatabase`), `DatabaseModule`, `valueObjectType`, `inRequestContext` and
-`databaseErrorCode`, and re-exports `@mikro-orm/core` whole plus the legacy decorators. The rule for
-what may live there is that it must be understandable **without a domain** — which is why soft
-delete's ORM half stayed in `libs/platform` (it maps the `SoftDeletion` embeddable, and
-`@nestposts/platform` is upstream of nothing here) and why the GraphQL exception filter stayed in
-`apps/posts-api`: the package says a foreign key violation is a `BAD_USER_INPUT`, and the interface
-layer says what to tell the client about it.
+the connection (`postgresDatabase`), `DatabaseModule`, `valueObjectType`, `inRequestContext`,
+`DatabaseError` and the global `DatabaseExceptionFilter`, and re-exports `@mikro-orm/core` whole plus
+the legacy decorators. The rule for what may live there is that it must be understandable **without a
+domain** — which is why soft delete's ORM half stayed in `libs/platform` (it maps the `SoftDeletion`
+embeddable, and `@nestposts/platform` is upstream of nothing here) and why a foreign key that means
+something in particular is said by the application: posts-api's `AuthorReferenceExceptionFilter`, on
+the post mutations, answers one as "the author does not exist", ahead of the global filter.
 
 ### The schema is `apps/migrator`'s, and so is the seed
 
@@ -1340,9 +1340,10 @@ layer says what to tell the client about it.
   `UnitOfWorkCommands`, `CommittedEvents` and `EventSourcedEventBus` all decorate what
   `moduleRef.get(...)` hands back.
 - **The GraphQL error codes are ours now.** `@nestjs/apollo` mapped a Nest `HttpException`'s status
-  to `extensions.code` inside the driver; Yoga does not, so `HttpExceptionFilter` does it explicitly
-  (`UNAUTHORIZED → UNAUTHENTICATED`, `UNPROCESSABLE_ENTITY → BAD_USER_INPUT`, …). It is better where
-  it is: a code a client branches on should not be a driver's implementation detail.
+  to `extensions.code` inside the driver; Yoga does not, so `HttpExceptionFilter` (`libs/auth`, shared
+  by posts-api and the notificator) does it explicitly (`UNAUTHORIZED → UNAUTHENTICATED`,
+  `UNPROCESSABLE_ENTITY → BAD_USER_INPUT`, …). It is better where it is: a code a client branches on
+  should not be a driver's implementation detail.
 - **Schema-first**: the SDL in `apps/posts-api/src/graphql/*.graphql` is the source; resolvers bind by
   name (`@Resolver('Post')`, `@Query('posts')`, `@ResolveField('tags')`). No DTO carries a GraphQL
   decorator. A new field means a `.graphql` file + a resolver + registration in `interfaces.module.ts`.
@@ -1368,16 +1369,36 @@ layer says what to tell the client about it.
   surface and the global guard — which requires a session, so post reads opt out with `@AllowAnonymous()`
   and writes use `@Roles([AUTHOR_ROLE])` + `@CurrentAuthor()`. Organization-scoped handlers use
   `@OrgRoles([...])` and `@ActiveOrganization()` / `@ActiveMember()` / `@ActiveOrganizationId()`, which are
-  `@Session()` with one pipe each; the pipes answer from `OrganizationService`. `AuthExceptionFilter` gives
-  the auth and organization domain errors their GraphQL codes.
+  `@Session()` with one pipe each; the pipes answer from `OrganizationService`. The auth, user and
+  organization errors get their GraphQL codes from those modules' own filters (see **Errors**).
 - **`AuthService` and `OrganizationService` are `Scope.REQUEST` and take no headers.** They receive
   Nest's `REQUEST` and turn it into a `Headers` in the constructor (`headersFrom`, which absorbs the
   Express request, the GraphQL context and a headerless microservice message). An instance belongs to
   one request, so nothing can pass the wrong one. Nest's scope bubbling is the cost: whatever injects
   them is request-scoped too, which is why a saga and an event handler use `PostRequest` instead.
-- **Errors**: `DomainExceptionFilter` (APP_FILTER) translates a domain exception into a `GraphQLError`
-  with `extensions.code`; `MikroOrmExceptionFilter` (on the mutation resolvers) translates an integrity
-  violation into `BAD_USER_INPUT`/`CONFLICT` without leaking driver messages.
+- **Errors: each module translates its own exceptions**, in a `filters/` folder at the root of the
+  library that raises them — `PostsExceptionFilter`, `CalendarEventExceptionFilter`,
+  `OrganizationsExceptionFilter`, `UsersExceptionFilter`, `AuthExceptionFilter` and
+  `HttpExceptionFilter`, `SoftDeleteExceptionFilter` (`libs/platform`), `AssetExceptionFilter`,
+  `NotificationExceptionFilter`, and `ValidationExceptionFilter` for a `ZodError`
+  (`libs/core/validated-dto`, outside its barrel: the value objects reach the browser). They answer
+  with a `GraphQLError` carrying `extensions.code`, and **the application registers them** — posts-api
+  as `APP_FILTER`s in `InterfacesModule`, the notificator with `@UseFilters` on its resolvers. What is
+  the application's own stays in its `interfaces/filters`: posts-api's `MapperExceptionFilter`
+  unwraps AutoMapper's `MapMemberError` and hands the cause to the module filter that catches it (read
+  off Nest's own `@Catch` metadata), and `AuthorReferenceExceptionFilter` reads a foreign key on a post
+  mutation as its author.
+- **A database failure is `libs/database`'s, globally.** `DatabaseModule.forRootAsync` installs
+  `DatabaseExceptionFilter` as an `APP_FILTER` in every application that holds a connection.
+  `DatabaseError` says what the failure means — a unique or exclusion violation or a delete still
+  referenced is `CONFLICT`, a reference to nothing, a missing or malformed value or a check is
+  `BAD_USER_INPUT`, `findOneOrFail` is `NOT_FOUND`, a deadlock, a lock timeout or a database out of
+  reach is retryable — from the driver's facts (`code`, `detail`, `column`, `constraint`), **never from
+  the message**, which MikroORM suffixes with the detail and so with the offending value. The filter
+  says it per context: a `GraphQLError` with the code (and `field`, `retryable`, `retryAfter`), an HTTP
+  status through Nest's own `BaseExceptionFilter`, and on a message the very same exception rethrown,
+  so the transport retries it. What the caller did not cause (a missing table, a syntax error) is
+  rethrown in GraphQL, where Yoga masks and reports it.
 
 ### Observability: what may not be bundled, and what has to load first
 

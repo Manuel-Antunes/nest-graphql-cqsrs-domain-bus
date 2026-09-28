@@ -20,7 +20,8 @@ is mechanical and belongs to whoever is already editing the file.
 | `database.module.ts` | `forRoot` (the connection) and `forFeature` (the tables a module owns), with the registry that makes the entity list lazy |
 | `entities/value-object.type.ts` | `valueObjectType(PostId, { columnType })` — how a value object becomes a column |
 | `helpers/request-context.ts` | `inRequestContext(em, work)` — a context for a path that did not start in an HTTP request |
-| `filters/database-error.ts` | what a driver exception **means**: `DATABASE_EXCEPTIONS` and `databaseErrorCode` |
+| `filters/database-error.ts` | what a driver exception **means**: `DatabaseError.of(exception)` — the code, the status, a message of its own, the field, whether to retry |
+| `filters/database-exception.filter.ts` | how each context is told: `DatabaseExceptionFilter`, which `DatabaseModule.forRootAsync` installs as a global `APP_FILTER` |
 
 The rule for what belongs here is that it must be understandable without a domain. That is why:
 
@@ -28,12 +29,37 @@ The rule for what belongs here is that it must be understandable without a domai
   `soft-delete.subscriber.ts` asks `SoftDeletion.isSoftDeletable(entity)` and
   `soft-delete-orm.entity.ts` maps the `SoftDeletion` embeddable — both need the platform's domain, and
   a package the platform depends on cannot depend on the platform back.
-- **the GraphQL filter stayed in `apps/posts-api`**. It answers a foreign key violation with "o autor
-  informado não existe ou não pode escrever", which is a sentence about *this* domain in *this*
-  protocol. What moved here is the classification — `databaseErrorCode` turns the driver exception into
-  `BAD_USER_INPUT` / `CONFLICT` / `NOT_FOUND` — and the filter decides what to say about it. Moving the
-  whole thing would have made this package depend on `@nestposts/users` and on `graphql`, and
-  `@nestposts/users` already depends on this one.
+- **what a particular foreign key means stays with the application.** The global filter says what
+  any violation means, in words that need no domain — "the referenced authors does not exist".
+  posts-api's post mutations say more, "o autor informado não existe ou não pode escrever", with a
+  filter of their own (`AuthorReferenceExceptionFilter`), which Nest prefers to a global one.
+
+## `DatabaseExceptionFilter`: one answer per context
+
+The port of `tmp/database`'s global filter, for PostgreSQL. `DatabaseError.of` reads the facts the
+driver reports — `code` (the SQLSTATE), `detail`, `column`, `constraint`, all copied onto
+`DriverException` from the `pg` error — and never the exception's message: MikroORM appends the
+`detail` to it, and the detail carries the offending value.
+
+| failure | code | status |
+|---|---|---|
+| unique (`23505`), exclusion (`23P01`), a delete still referenced (`23503` "still referenced", `23001`) | `CONFLICT` | 409 |
+| a reference to nothing (`23503`), a missing value (`23502`), a check (`23514`), a malformed or out-of-range value (class `22`) | `BAD_USER_INPUT` | 422 |
+| `findOneOrFail` (`NotFoundError`) | `NOT_FOUND` | 404 |
+| row-level security | `FORBIDDEN` | 403 |
+| deadlock or serialization (`40P01`, `40001`) | `CONFLICT`, retryable after 500 ms | 503 |
+| lock not granted in time, statement timeout (`55P03`, `57014`) | `TIMEOUT`, retryable after 1 s | 503 |
+| the database out of reach (`08…`, `57P0x`, `53300`, `ECONNREFUSED`…) | `SERVICE_UNAVAILABLE`, retryable | 503 |
+
+Anything else — a missing table, a syntax error, a privilege the connection lacks — is not the
+caller's to explain: `of` answers `undefined`. The filter then says it per context:
+
+- **GraphQL**: a `GraphQLError` with `extensions` `{ code, field?, retryable?, retryAfter? }`; what is
+  not the caller's is rethrown, and Yoga masks and reports it.
+- **HTTP**: the same body and status through Nest's own `BaseExceptionFilter`, so the reply is the
+  adapter's; what is not the caller's is a plain 500.
+- **A message**: the very same exception, rethrown. A transport retries a failed handler, and a filter
+  that answered would have acknowledged it.
 
 ## `postgresDatabase`: one connection, and the schema every table is pinned to
 

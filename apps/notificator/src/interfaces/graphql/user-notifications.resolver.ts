@@ -7,13 +7,13 @@ import {
   ResolveReference,
   Resolver,
 } from '@nestjs/graphql';
+import { HttpExceptionFilter } from '@nestposts/auth/filters/http-exception.filter';
 import { AllowAnonymous, OptionalAuth } from '@thallesp/nestjs-better-auth';
 
 import { CountUnreadNotificationsQuery } from '../../application/notification/query/count-unread-notifications.query';
 import { FindNotificationsQuery } from '../../application/notification/query/find-notifications.query';
 import { CurrentNotifiable } from '../auth/current-notifiable.decorator';
 import type { SessionNotifiable } from '../auth/session-notifiable.pipe';
-import { HttpExceptionFilter } from '../filters/http-exception.filter';
 import type { NotificationView } from './views';
 import { notificationView } from './views';
 

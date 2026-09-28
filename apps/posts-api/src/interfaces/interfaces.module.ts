@@ -1,17 +1,24 @@
 import { Module } from '@nestjs/common';
 import { APP_FILTER } from '@nestjs/core';
+import { AssetExceptionFilter } from '@nestposts/asset/filters/asset-exception.filter';
+import { AuthExceptionFilter } from '@nestposts/auth/filters/auth-exception.filter';
+import { HttpExceptionFilter } from '@nestposts/auth/filters/http-exception.filter';
 import { SessionUserPipe } from '@nestposts/auth/pipes/session-user.pipe';
+import { CalendarEventExceptionFilter } from '@nestposts/events/filters/calendar-event-exception.filter';
 import { SeesEveryEventPipe } from '@nestposts/events/pipes/sees-every-event.pipe';
+import { OrganizationsExceptionFilter } from '@nestposts/organizations/filters/organizations-exception.filter';
 import { ActiveMemberPipe } from '@nestposts/organizations/pipes/active-member.pipe';
 import { ActiveOrganizationPipe } from '@nestposts/organizations/pipes/active-organization.pipe';
 import { ActiveOrganizationIdPipe } from '@nestposts/organizations/pipes/active-organization-id.pipe';
+import { SoftDeleteExceptionFilter } from '@nestposts/platform/filters/soft-delete-exception.filter';
+import { PostsExceptionFilter } from '@nestposts/posts/filters/posts-exception.filter';
+import { UsersExceptionFilter } from '@nestposts/users/filters/users-exception.filter';
 import { AuthorPipe } from '@nestposts/users/pipes/author.pipe';
+import { ValidationExceptionFilter } from '@nestposts/validated-dto/filters/validation-exception.filter';
 
 import { ApplicationModule } from '../application/application.module';
 import { UserProvisioningHooks } from './auth/user-provisioning.hooks';
-import { AuthExceptionFilter } from './filters/auth-exception.filter';
-import { DomainExceptionFilter } from './filters/domain-exception.filter';
-import { HttpExceptionFilter } from './filters/http-exception.filter';
+import { MapperExceptionFilter } from './filters/mapper-exception.filter';
 import { AssetMutationResolver } from './graphql/asset-mutation.resolver';
 import { AuthorEntityResolver } from './graphql/author-entity.resolver';
 import { AuthorPostsResolver } from './graphql/author-posts.resolver';
@@ -67,7 +74,14 @@ import { PostCompletionController } from './messaging/post-completion.controller
     UserProvisioningHooks,
     { provide: APP_FILTER, useClass: HttpExceptionFilter },
     { provide: APP_FILTER, useClass: AuthExceptionFilter },
-    { provide: APP_FILTER, useClass: DomainExceptionFilter },
+    { provide: APP_FILTER, useClass: UsersExceptionFilter },
+    { provide: APP_FILTER, useClass: OrganizationsExceptionFilter },
+    { provide: APP_FILTER, useClass: PostsExceptionFilter },
+    { provide: APP_FILTER, useClass: CalendarEventExceptionFilter },
+    { provide: APP_FILTER, useClass: SoftDeleteExceptionFilter },
+    { provide: APP_FILTER, useClass: AssetExceptionFilter },
+    { provide: APP_FILTER, useClass: ValidationExceptionFilter },
+    { provide: APP_FILTER, useClass: MapperExceptionFilter },
   ],
 })
 export class InterfacesModule {}

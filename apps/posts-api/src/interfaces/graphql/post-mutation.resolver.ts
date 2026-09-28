@@ -20,10 +20,10 @@ import { PostRequest } from '../../application/shared/post-request';
 import { CreatePostInput } from '../../dto/graphql/create-post.input';
 import { PostView } from '../../dto/graphql/post.view';
 import { UpdatePostInput } from '../../dto/graphql/update-post.input';
-import { MikroOrmExceptionFilter } from '../filters/mikro-orm-exception.filter';
+import { AuthorReferenceExceptionFilter } from '../filters/author-reference-exception.filter';
 
 @Resolver('Post')
-@UseFilters(MikroOrmExceptionFilter)
+@UseFilters(AuthorReferenceExceptionFilter)
 export class PostMutationResolver {
   constructor(
     private readonly commandBus: CommandBus,

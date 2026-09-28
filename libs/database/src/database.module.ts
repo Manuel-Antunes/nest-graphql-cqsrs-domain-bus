@@ -9,6 +9,9 @@ import { MikroOrmModule } from '@mikro-orm/nestjs';
 import { PostgreSqlDriver } from '@mikro-orm/postgresql';
 import type { DynamicModule, InjectionToken } from '@nestjs/common';
 import { Module } from '@nestjs/common';
+import { APP_FILTER } from '@nestjs/core';
+
+import { DatabaseExceptionFilter } from './filters/database-exception.filter';
 
 /** What a module contributes: the schemas of the tables it owns — MikroORM's own entity list. */
 export type DatabaseEntities = readonly (
@@ -42,6 +45,9 @@ export class DatabaseModule {
    * `@mikro-orm/nestjs`'s own request-context middleware is turned off: the context is
    * `TenancyModule`'s to open, on the tenant's entity manager, and a second one opened on the global
    * manager would resolve every wildcard table to the connection's schema.
+   *
+   * It also installs {@link DatabaseExceptionFilter} globally: a database failure reaches every
+   * application that holds a connection, and each context answers it in its own words.
    */
   static forRoot(options: Connection): DynamicModule {
     return DatabaseModule.forRootAsync({ useFactory: () => options });
@@ -76,6 +82,7 @@ export class DatabaseModule {
           },
         }),
       ],
+      providers: [{ provide: APP_FILTER, useClass: DatabaseExceptionFilter }],
     };
   }
 

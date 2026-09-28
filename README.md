@@ -156,6 +156,7 @@ libs/platform/src
 ├── infrastructure/persistence
 │   ├── delegation/delegated-reference              # a Reference that serves a delegation
 │   └── soft-delete                                 # the property, the index, the `active` filter, the subscriber
+├── filters/soft-delete-exception                   # AlreadyDeleted/NotDeleted → BAD_USER_INPUT
 └── testing/invalid-input                           # issuesOf(...): what a rejected input complained about
 
 libs/database/src                                    # everything ORM that needs no domain to be understood
@@ -167,7 +168,9 @@ libs/database/src                                    # everything ORM that needs
 ├── helpers/request-context                          # reuses the ORM's context, or opens one — what makes
 │                                                    #   Post.author resolve inside an SSE stream or a queue
 ├── decorators/current-tenant                        # @CurrentTenant(): the x-tenant that enters the request
-└── filters/database-error                           # what a driver exception MEANS; the message is the edge's
+└── filters/database-error,                          # what a driver exception MEANS (DatabaseError), and the
+    database-exception.filter                        #   GLOBAL filter that says it per context — GraphQL, HTTP,
+                                                     #   or the same exception rethrown for a message
 
 libs/posts/src
 ├── domain/post
@@ -180,14 +183,16 @@ libs/posts/src
 │   └── event/post-pre-created, post-created,        # the two phases of a creation, plus the rest of the
 │       post-updated, post-deleted, post-restored    #   lifecycle. Every one carries @EventType
 ├── domain/tag                                       # Tag, its events, DEFAULT_TAG_ID/NAME (a domain fact)
-└── infrastructure/persistence
-    ├── entities/post-orm, tag-orm                   # THE MAPPING: defineEntity pointing at the domain class
-    └── repositories/mikro-orm-post, mikro-orm-tag   # the adapters (findByCursor and restore live here)
+├── infrastructure/persistence
+│   ├── entities/post-orm, tag-orm                   # THE MAPPING: defineEntity pointing at the domain class
+│   └── repositories/mikro-orm-post, mikro-orm-tag   # the adapters (findByCursor and restore live here)
+└── filters/posts-exception                          # the post's and the tag's exceptions, in GraphQL's codes
 
 libs/users/src                                       # the same shape: domain/user + its mapping and repositories.
 │                                                    #   Nothing here names Better Auth any more
 ├── infrastructure/provisioning/user-provisioning    # the tenant's authorship of a user, made on arrival
-└── pipes/author                                     # a User → the Author it is in this tenant, or refused
+├── pipes/author                                     # a User → the Author it is in this tenant, or refused
+└── filters/users-exception                          # UserNotFound, UnknownIdentity, NotAnAuthor
 
 libs/auth/src                                        # the only place that knows Better Auth exists
 ├── domain/auth                                      # AuthService (request-scoped port), Session, AuthUser
@@ -199,6 +204,8 @@ libs/auth/src                                        # the only place that knows
 │                                                    #   better-auth's own description of its schema
 ├── pipes/session-user                               # the session → its User, provisioned in the tenant
 ├── decorators/current-user, roles                   # @CurrentUser()/@CurrentAuthor(), @Roles/@UserCan
+├── filters/auth-exception, http-exception           # UNAUTHENTICATED, and a Nest HttpException's status as
+│                                                    #   GraphQL's code — Yoga does not map it
 └── standalone.ts                                    # the same instance outside Nest
 
 libs/organizations/src                               # built ON libs/auth, never the other way round
@@ -212,6 +219,7 @@ libs/organizations/src                               # built ON libs/auth, never
 │                                                    #   organization a tenant names
 ├── pipes/active-organization, -id, active-member    # what @ActiveOrganization()/-Id()/@ActiveMember() hand over
 ├── decorators/active-organization, org-roles        # @Session() with one of those pipes; @OrgRoles/@MemberCan
+├── filters/organizations-exception                  # not selected/not found are a prompt, not a member a refusal
 └── standalone.ts                                    # that composition outside Nest — what apps/web runs
 
 apps/posts-api/src
@@ -241,8 +249,12 @@ apps/posts-api/src
 └── interfaces
     ├── graphql/*.resolver                           # one resolver per schema file
     ├── messaging/post-completion.controller         # the port of entry BY MESSAGE: @EventPattern → EventIngestion
-    ├── interceptors, filters, mapper                # the edge's machinery; its pipes and decorators are
-    │                                                #   the modules' own, under each library's pipes/ and decorators/
+    ├── interceptors, mapper                         # the edge's machinery; its pipes, decorators and filters
+    │                                                #   are the modules' own, under each library's pipes/,
+    │                                                #   decorators/ and filters/
+    ├── filters/mapper-exception                     # AutoMapper's MapMemberError, unwrapped and handed to the
+    │                                                #   module filter that catches its cause
+    ├── filters/author-reference-exception           # a foreign key a post mutation breaks is its author
     └── auth/user-provisioning.hooks                 # the other edge: Better Auth calling inwards
 
 apps/tagging/src
@@ -681,7 +693,7 @@ channel per purpose buys and what a single "catch everything" queue would have c
 | `@PreAuthorize("isAuthenticated()")` no `me` | o guard global do `@thallesp/nestjs-better-auth`: exigir sessão é o **padrão**, e as leituras de post são a exceção que opta por fora com `@AllowAnonymous()` |
 | `Author.posts` por `@SchemaMapping` + DataLoader, recortado em memória | `@ResolveField('posts')` → `QueryBus` → `em.findByCursor` com `where: { author }`: a página é uma consulta com `limit`, não um recorte de tudo. Sem DataLoader porque `Post.author` é `String!`, então há **um** Author por resposta |
 | MapStruct | **AutoMapper 9** (`@automapper/core` + `classes` + `nestjs`): `@AutoMap()` nas próprias classes — e, nos DTOs gerados, no shape Zod pelo `DECORATOR_REGISTRY`, que é o mesmo gancho por onde qualquer outro decorator de campo entra —, dois perfis (`PostProfile`, `UserProfile`), cada um declarando os value objects que atravessa com um `valueObjectConverter(PostTitle, String)` que vale para todos os mapeamentos daquele perfil, nos dois sentidos. A saída nunca passa por um resolver: ela vem por **interceptor** (`MapInterceptor` e os três do projeto — connection, subscription e o despacho polimórfico do `me`, que é o único que um mapeador não decide sozinho). A entrada vem por `MapPipe` onde o input basta; no `createPost` ela é uma chamada explícita, porque o command precisa do autor da sessão e um pipe não enxerga o `ExecutionContext` |
-| Bean Validation na borda + VO no domínio | uma altura só: o domínio (Zod); o `DomainExceptionFilter` traduz para `BAD_USER_INPUT` |
+| Bean Validation na borda + VO no domínio | uma altura só: o domínio (Zod); o filter do módulo (`PostsExceptionFilter`, …) traduz para `BAD_USER_INPUT` |
 | `AppGraphQlExceptionHandler` | `APP_FILTER` com um `ExceptionFilter` que **devolve** um `GraphQLError` |
 
 ## The schema, the migrations and the seeders
@@ -1230,7 +1242,7 @@ O e2e é onde isso vira verificação: ele mede quantos perfis existem **entre**
 
 A checagem que saiu tinha ainda um segundo defeito, e é o que decide a questão: ela distinguia "não existe" de "é leitor", e isso é um **oráculo de quais usuários existem**. A FK não distingue, e a mensagem traduzida também não — `NotAnAuthorException` sem id diz apenas "o autor informado não existe ou não pode escrever". A versão com id existe e é usada só na borda, onde quem recebe a mensagem é o próprio dono da sessão.
 
-**Confiar na restrição exige traduzi-la.** Sem tradução, uma FK recusada chegaria ao cliente como `INTERNAL_SERVER_ERROR` com uma mensagem de driver, e ninguém trocaria uma checagem legível por isso. O `MikroOrmExceptionFilter` faz a ponte — FK → `BAD_USER_INPUT` com a mensagem vaga, unique → `CONFLICT`, `NotFoundError` → `NOT_FOUND`, e o resto sobe como está, porque um erro de driver que ele não reconhece é bug ou indisponibilidade e mascará-lo seria pior. Ele é aplicado com `@UseFilters` **no resolver que escreve**, e não globalmente: é lá que uma violação de integridade é uma resposta possível ao que o cliente pediu.
+**Trusting the constraint means translating it.** Untranslated, a refused foreign key would reach the client as an `INTERNAL_SERVER_ERROR` carrying a driver message, and nobody would trade a readable check for that. The translation is two layers now. `libs/database`'s `DatabaseExceptionFilter`, installed globally by `DatabaseModule`, says what any violation means from the driver's facts and never from its message — a reference to nothing is `BAD_USER_INPUT`, a unique violation `CONFLICT`, `NotFoundError` `NOT_FOUND` — and rethrows what it does not recognise, because a driver error it cannot explain is a bug or an outage and masking it would be worse. On the resolver that writes posts, `AuthorReferenceExceptionFilter` (`@UseFilters`, which Nest prefers to a global filter) says the one thing only this application knows: the foreign key a post mutation breaks is its author, and the vague message is the point.
 
 O que o command carrega, então, é o **retrato** do autor: o id, que vira a referência, e o nome, que é o que o `PostCreatedEvent` registra para a subscription montar a `PostView` sem tocar o banco. (Na versão Java o evento não leva o nome — lá o `Post.author` do GraphQL é resolvido por DataLoader. É a única coisa que ainda mantém um campo a mais no command deste lado.)
 
@@ -1341,7 +1353,7 @@ Uma consequência que ficou por decidir: o `authorName` dos eventos já **não �
 
 **Portas como classes abstratas.** `PostRepository` e `TagRepository` são `abstract class`, não `interface`: no Nest a classe é ao mesmo tempo o contrato e o token de injeção (`{ provide: PostRepository, useClass: MikroOrmPostRepository }`), sem `@Inject('TOKEN')`.
 
-**Uma altura de validação — mesmo com value objects na borda.** A versão Java validava na borda (Bean Validation) e no domínio. Aqui só o domínio valida, e isso não mudou quando `CreatePostInput` passou a declarar `title: PostTitle`: o construtor de um value object gerado **não lança** — ele normaliza pelo schema e, se o valor for inválido, guarda o valor cru para quem quiser perguntar (`isValid()`, ou o `class-validator`). Um título em branco continua atravessando a borda e sendo rejeitado pelo domínio, e o `DomainExceptionFilter` o entrega ao cliente como `BAD_USER_INPUT` com a mensagem do value object. A única exceção continua sendo a mesma de antes, agora escrita como `id.assertValid()` num `forMember` do `PostProfile` — um id que não é UUID nem vira command. Quando ela dispara, o AutoMapper embrulha a falha num `MapMemberError`, e o `DomainExceptionFilter` a descasca de volta para o erro de domínio: o cliente continua recebendo `BAD_USER_INPUT` com a mensagem do value object, e não um 500 falando do mapeador.
+**Uma altura de validação — mesmo com value objects na borda.** A versão Java validava na borda (Bean Validation) e no domínio. Aqui só o domínio valida, e isso não mudou quando `CreatePostInput` passou a declarar `title: PostTitle`: o construtor de um value object gerado **não lança** — ele normaliza pelo schema e, se o valor for inválido, guarda o valor cru para quem quiser perguntar (`isValid()`, ou o `class-validator`). Um título em branco continua atravessando a borda e sendo rejeitado pelo domínio, e o `PostsExceptionFilter` o entrega ao cliente como `BAD_USER_INPUT` com a mensagem do value object. A única exceção continua sendo a mesma de antes, agora escrita como `id.assertValid()` num `forMember` do `PostProfile` — um id que não é UUID nem vira command. Quando ela dispara, o AutoMapper embrulha a falha num `MapMemberError`, e o `MapperExceptionFilter` a descasca de volta para o erro de domínio: o cliente continua recebendo `BAD_USER_INPUT` com a mensagem do value object, e não um 500 falando do mapeador.
 
 **Exception filter que devolve, não escreve.** Num resolver GraphQL, um `ExceptionFilter` não escreve resposta: **devolve** o erro, e o @nestjs/graphql o lança de volta para o graphql-js, que o coloca em `errors[]`. No Yoga o `maskedErrors: false` é o que deixa a mensagem do domínio chegar ao cliente — ligado (o padrão dele), todo erro que não é `GraphQLError` vira `Unexpected error.`, que é o certo para uma API pública e o errado para uma cujos erros de domínio são a resposta.
 

@@ -107,7 +107,8 @@ organization, and nothing marks it as such. It is an ordinary team here.
 
 The first says the session has not picked an organization; the second says the caller picked one they
 do not belong to. `requireActiveMember()` throws them apart on purpose and
-`AuthExceptionFilter` gives them different codes — one is a prompt, the other a refusal.
+`OrganizationsExceptionFilter` (`filters/`) gives them different codes — one is a prompt, the other a
+refusal.
 
 ## An organization is a tenant
 

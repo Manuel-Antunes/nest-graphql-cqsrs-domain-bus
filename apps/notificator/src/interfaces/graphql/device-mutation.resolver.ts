@@ -5,20 +5,25 @@ import {
 } from '@nestjs/common';
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import { Args, Mutation, Resolver } from '@nestjs/graphql';
+import { HttpExceptionFilter } from '@nestposts/auth/filters/http-exception.filter';
+import { NotificationExceptionFilter } from '@nestposts/notifications/filters/notification-exception.filter';
+import { ValidationExceptionFilter } from '@nestposts/validated-dto/filters/validation-exception.filter';
 
 import { RegisterDeviceCommand } from '../../application/notification/command/register-device.command';
 import { RemoveDeviceCommand } from '../../application/notification/command/remove-device.command';
 import { FindDeviceQuery } from '../../application/notification/query/find-device.query';
 import { CurrentNotifiable } from '../auth/current-notifiable.decorator';
 import type { SessionNotifiable } from '../auth/session-notifiable.pipe';
-import { HttpExceptionFilter } from '../filters/http-exception.filter';
-import { NotificationExceptionFilter } from '../filters/notification-exception.filter';
 import { RegisterDeviceInputSchema } from './register-device.input';
 import type { DeviceView } from './views';
 import { deviceView } from './views';
 
 @Resolver('Device')
-@UseFilters(HttpExceptionFilter, NotificationExceptionFilter)
+@UseFilters(
+  HttpExceptionFilter,
+  NotificationExceptionFilter,
+  ValidationExceptionFilter,
+)
 export class DeviceMutationResolver {
   constructor(
     private readonly commandBus: CommandBus,
