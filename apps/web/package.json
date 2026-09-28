@@ -114,13 +114,19 @@
           }
         ]
       },
-      "build": {
-        "executor": "nx:run-commands",
-        "cache": true,
+      "build-deps": {
+        "executor": "nx:noop",
         "dependsOn": [
           "codegen",
           "^build",
           "^typecheck"
+        ]
+      },
+      "build": {
+        "executor": "nx:run-commands",
+        "cache": true,
+        "dependsOn": [
+          "build-deps"
         ],
         "inputs": [
           "production",

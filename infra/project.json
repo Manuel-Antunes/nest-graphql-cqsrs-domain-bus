@@ -8,12 +8,13 @@
     "@nestposts/posts-api",
     "@nestposts/tagging",
     "@nestposts/notificator",
-    "@nestposts/migrator"
+    "@nestposts/migrator",
+    "@nestposts/web"
   ],
   "targets": {
     "build-functions": {
       "executor": "nx:noop",
-      "dependsOn": ["^prune"]
+      "dependsOn": ["^prune", "^build-deps"]
     },
     "deploy": {
       "executor": "nx:run-commands",

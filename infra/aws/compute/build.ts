@@ -15,12 +15,18 @@
  * nothing moved; a fingerprint would be thirty lines that are wrong the first time somebody adds a
  * directory to the workspace.
  *
- * ## What it runs: `@nestposts/infra:build-functions`, which is `^prune`
- * The applications the functions point at are `@nestposts/infra`'s `implicitDependencies`, and
- * that is the only place they are listed. `build-functions` asks each of them for its `prune` —
+ * ## What it runs: `@nestposts/infra:build-functions`, which is `^prune` and `^build-deps`
+ * The applications this stack deploys are `@nestposts/infra`'s `implicitDependencies`, and that is
+ * the only place they are listed. `build-functions` asks each Nest application for its `prune` —
  * Nx's own deploy step: the application's `dist`, its pruned `package.json` and lockfile, and the
  * workspace modules it declares copied into `dist/workspace_modules`, built. Each `prune` waits for
  * its application's `build`, and the gateway's for its `supergraph` as well.
+ *
+ * The web has no `prune`: OpenNext packages it, by running its `build` SCRIPT rather than its Nx
+ * target, so nothing there asks for what that target depends on. `build-deps` is that list —
+ * `codegen`, `^build`, and `^typecheck`, without which `next build` stops on `TS6305: Output file
+ * 'libs/ui/dist/…d.ts' has not been built`, `libs/ui` and `libs/tanstack-query-graphql` being source
+ * packages whose declarations only `typecheck` writes.
  *
  * A second list already drifted twice. `tools/github/deploy-sst` has to run the same thing BEFORE
  * `sst deploy`: SST reads every `copyFiles` source while it evaluates the program, before this

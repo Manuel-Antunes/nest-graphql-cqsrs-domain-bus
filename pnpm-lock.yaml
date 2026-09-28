@@ -650,6 +650,12 @@ importers:
       clsx:
         specifier: 'catalog:'
         version: 2.1.1
+      exifreader:
+        specifier: 'catalog:'
+        version: 4.46.0
+      file-type:
+        specifier: 'catalog:'
+        version: 22.1.1
       firebase-admin:
         specifier: 'catalog:'
         version: 13.10.0
@@ -659,6 +665,9 @@ importers:
       ical-generator:
         specifier: 'catalog:'
         version: 11.1.1(@types/luxon@3.7.5)(@types/node@26.5.0)(luxon@3.7.2)
+      mime-types:
+        specifier: 'catalog:'
+        version: 3.0.2
       nodemailer:
         specifier: 'catalog:'
         version: 8.0.11
