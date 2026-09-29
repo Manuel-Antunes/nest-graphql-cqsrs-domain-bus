@@ -1,8 +1,6 @@
 import { Inject, Injectable, Scope } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
-import { Email } from '@nestposts/users/domain/user/vo/email';
 import { UserId } from '@nestposts/users/domain/user/vo/user-id';
-import { UserName } from '@nestposts/users/domain/user/vo/user-name';
 
 import type {
   NewCredential,
@@ -12,14 +10,11 @@ import type {
 } from '../../../domain/auth/auth.service';
 import { AuthService } from '../../../domain/auth/auth.service';
 import { SessionNotAuthenticatedException } from '../../../domain/auth/exception/session-not-authenticated.exception';
-import type { Session } from '../../../domain/auth/session';
+import { IdentityResolver } from '../../../domain/auth/identity.resolver';
+import type { Identity } from '../../../domain/auth/vo/identity';
+import { RequestHeaders } from '../../request/request-headers';
 import type { BetterAuth } from '../init-auth';
-import { RequestHeaders } from '../request-headers';
 import { BETTER_AUTH } from '../tokens';
-
-interface OrganizationAwareSessionRow {
-  activeOrganizationId?: string | null;
-}
 
 @Injectable({ scope: Scope.REQUEST })
 export class BetterAuthService extends AuthService {
@@ -28,17 +23,10 @@ export class BetterAuthService extends AuthService {
   constructor(
     @Inject(BETTER_AUTH) private readonly betterAuth: BetterAuth,
     @Inject(REQUEST) request: unknown,
+    private readonly caller: IdentityResolver,
   ) {
     super();
     this.headers = RequestHeaders.from(request);
-  }
-
-  /** `users.role` is one column, and a caller may hold more than one role in it. */
-  private static rolesOf(role: string | null | undefined): string[] {
-    return (role ?? '')
-      .split(',')
-      .map((entry) => entry.trim())
-      .filter((entry) => entry.length > 0);
   }
 
   get instance(): BetterAuth {
@@ -49,34 +37,16 @@ export class BetterAuthService extends AuthService {
     return this.betterAuth.api;
   }
 
-  async session(): Promise<Session | null> {
-    const found = await this.betterAuth.api.getSession({
-      headers: this.headers,
-    });
-    if (!found) {
-      return null;
-    }
-    const row = found.session as typeof found.session &
-      OrganizationAwareSessionRow;
-    return {
-      user: {
-        id: UserId.parse(found.user.id),
-        email: Email.parse(found.user.email),
-        name: UserName.parse(found.user.name),
-        roles: BetterAuthService.rolesOf(found.user.role),
-      },
-      token: found.session.token,
-      expiresAt: found.session.expiresAt,
-      activeOrganizationId: row.activeOrganizationId ?? null,
-    };
+  identity(): Promise<Identity | null> {
+    return this.caller.identity();
   }
 
-  async requireSession(): Promise<Session> {
-    const session = await this.session();
-    if (!session) {
+  async requireIdentity(): Promise<Identity> {
+    const identity = await this.identity();
+    if (!identity) {
       throw new SessionNotAuthenticatedException();
     }
-    return session;
+    return identity;
   }
 
   async signInWithPassword({
@@ -113,10 +83,7 @@ export class BetterAuthService extends AuthService {
   }
 
   async hasRole(roles: readonly string[]): Promise<boolean> {
-    const session = await this.session();
-    return session
-      ? roles.some((role) => session.user.roles.includes(role))
-      : false;
+    return (await this.identity())?.hasAnyRole(roles) ?? false;
   }
 
   async hasPermission(permissions: PermissionRequest): Promise<boolean> {

@@ -1,8 +1,8 @@
 import type { FactoryProvider } from '@nestjs/common';
 import { Logger } from '@nestjs/common';
-import type { AuthConfig } from '@nestposts/auth/infrastructure/better-auth/config';
+import type { AuthConfig } from '@nestposts/auth/config/auth.config';
+import { authConfig } from '@nestposts/auth/config/auth.config';
 import { AuthExpirations } from '@nestposts/auth/infrastructure/better-auth/emails/auth-expirations';
-import { BETTER_AUTH_CONFIG } from '@nestposts/auth/infrastructure/better-auth/tokens';
 import { TenantEntityManagerService } from '@nestposts/database';
 import { EMAIL_CHANNEL } from '@nestposts/notifications/domain/channel/channel-names';
 import { OnDemandNotifiable } from '@nestposts/notifications/domain/notification/on-demand-notifiable';
@@ -72,7 +72,7 @@ export const OrganizationBetterAuthPluginProvider = {
         ),
     }),
   inject: [
-    BETTER_AUTH_CONFIG,
+    authConfig.KEY,
     OnDemandNotifications,
     { token: TenantEntityManagerService, optional: true },
   ],

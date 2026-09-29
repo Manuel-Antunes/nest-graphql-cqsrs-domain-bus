@@ -1,14 +1,15 @@
+import { AuthEnvSchema } from '@nestposts/auth/config/auth-env.schema';
 import { BillingEnvSchema } from '@nestposts/billing/config/billing-env.schema';
+import { DatabaseEnvSchema } from '@nestposts/database/config/database-env.schema';
 import { createEnv } from '@t3-oss/env-nextjs';
 import { z } from 'zod';
 
 import { AppEnvSchema } from './nest/config/schemas/app-env.schema';
-import { AuthEnvSchema } from './nest/config/schemas/auth-env.schema';
 import { AwsEnvSchema } from './nest/config/schemas/aws-env.schema';
 import { InngestEnvSchema } from './nest/config/schemas/inngest-env.schema';
 import { OutboxEnvSchema } from './nest/config/schemas/outbox-env.schema';
-import { PostgresEnvSchema } from './nest/config/schemas/postgres-env.schema';
 import { RabbitmqEnvSchema } from './nest/config/schemas/rabbitmq-env.schema';
+import { RedisEnvSchema } from './nest/config/schemas/redis-env.schema';
 import { StorageEnvSchema } from './nest/config/schemas/storage-env.schema';
 
 export const env = createEnv({
@@ -16,11 +17,12 @@ export const env = createEnv({
     ...AppEnvSchema.shape,
     ...AuthEnvSchema.shape,
     ...BillingEnvSchema.shape,
+    ...DatabaseEnvSchema.shape,
     ...AwsEnvSchema.shape,
     ...InngestEnvSchema.shape,
     ...OutboxEnvSchema.shape,
-    ...PostgresEnvSchema.shape,
     ...RabbitmqEnvSchema.shape,
+    ...RedisEnvSchema.shape,
     ...StorageEnvSchema.shape,
     POSTS_SUBGRAPH_URL: z.string().optional(),
   },

@@ -1,5 +1,6 @@
+import { CacheModule } from '@nestjs/cache-manager';
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConditionalModule, ConfigModule } from '@nestjs/config';
 import { OutboxModule } from '@nestjs/outbox';
 import { CqsrsModule } from '@nestposts/cqsrs';
 import {
@@ -20,6 +21,7 @@ import {
 } from '@nestposts/outbox-mikro-orm';
 import { Post } from '@nestposts/posts/domain/post/post.entity';
 import { postsEntities } from '@nestposts/posts/infrastructure/posts-infrastructure.module';
+import { RedisCacheOptions, RedisModule } from '@nestposts/redis';
 import { RetryPolicyModule } from '@nestposts/retry-policy/retry-policy.module';
 import {
   IncomingRequest,
@@ -38,9 +40,9 @@ import { awsConfig } from './config/aws.config';
 import { inngestConfig } from './config/inngest.config';
 import type { OutboxConfig } from './config/outbox.config';
 import { outboxConfig } from './config/outbox.config';
-import type { PostgresConfig } from './config/postgres.config';
-import { postgresConfig } from './config/postgres.config';
 import { rabbitmqConfig } from './config/rabbitmq.config';
+import type { RedisConfig } from './config/redis.config';
+import { redisConfig } from './config/redis.config';
 import { MikroOrmConfiguration } from './infrastructure/persistence/mikro-orm.config';
 import { ExceptionProducers } from './infrastructure/transport/exception-producers';
 import { PostEventsClient } from './infrastructure/transport/post-events.client';
@@ -58,8 +60,8 @@ import { PostEventsController } from './interfaces/messaging/post-events.control
         awsConfig,
         inngestConfig,
         outboxConfig,
-        postgresConfig,
         rabbitmqConfig,
+        redisConfig,
       ],
     }),
     loggingModuleAsync({
@@ -71,12 +73,16 @@ import { PostEventsController } from './interfaces/messaging/post-events.control
     }),
     ErrorReportingModule.forRoot({ traceOf: IncomingRequest.traceOf }),
     CqsrsModule.forRoot({ aggregatePublisher: TRANSPORT_EVENT_BUS_PUBLISHER }),
-    DatabaseModule.forRootAsync({
-      inject: [postgresConfig.KEY],
-      useFactory: (postgres: PostgresConfig) =>
-        MikroOrmConfiguration.connection(postgres),
-    }),
+    DatabaseModule.forRoot(),
     DatabaseModule.forFeature([...postsEntities, ...usersEntities]),
+    ConditionalModule.registerWhen(
+      RedisModule.forRootAsync({
+        inject: [redisConfig.KEY],
+        useFactory: ({ url }: RedisConfig) => ({ url }),
+      }),
+      () => Boolean(redisConfig().url),
+    ),
+    CacheModule.registerAsync({ isGlobal: true, useClass: RedisCacheOptions }),
     TenancyModule.forRoot({
       http: false,
       resolver: MessageTenantResolver,

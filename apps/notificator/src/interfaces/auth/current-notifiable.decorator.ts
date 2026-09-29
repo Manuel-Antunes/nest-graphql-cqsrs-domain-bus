@@ -1,5 +1,5 @@
-import { Session } from '@thallesp/nestjs-better-auth';
+import { CurrentIdentity } from '@nestposts/auth/decorators/current-identity.decorator';
 
-import { SessionNotifiablePipe } from './session-notifiable.pipe';
+import { IdentityNotifiablePipe } from './identity-notifiable.pipe';
 
-export const CurrentNotifiable = () => Session(SessionNotifiablePipe);
+export const CurrentNotifiable = () => CurrentIdentity(IdentityNotifiablePipe);

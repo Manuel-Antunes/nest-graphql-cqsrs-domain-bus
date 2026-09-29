@@ -4,25 +4,22 @@ import { OnDemandNotifications } from '@nestposts/notifications/domain/notificat
 import { RecordingOnDemandNotifications } from '@nestposts/notifications/testing/recording-on-demand-notifications';
 import { mikroOrmAdapter } from 'better-auth-mikro-orm';
 
+import { authConfig } from '../../../config/auth.config';
 import { authEntities } from '../../persistence/auth-entities';
-import { AuthConfiguration } from '../config';
 import { BetterAuthEmails } from '../emails/better-auth-emails';
 import { BetterAuthInstance } from '../init-auth';
-import { BETTER_AUTH_CONFIG } from '../tokens';
 import { BetterAuthPlugins } from './registry';
 
 describe('the better-auth plugin registry', () => {
   let orm: AnyMikroORM;
 
   const build = () => {
-    const config = AuthConfiguration.fromEnvironment({
-      AUTH_URL: 'http://localhost:3000',
-    } as NodeJS.ProcessEnv);
+    const config = authConfig();
     const notifications = new RecordingOnDemandNotifications();
     const emails = new BetterAuthEmails(notifications);
     const providers = BetterAuthPlugins.providersWith();
     const plugins = BetterAuthPlugins.build(providers, [
-      [BETTER_AUTH_CONFIG, config],
+      [authConfig.KEY, config],
       [BetterAuthEmails, emails],
       [OnDemandNotifications, notifications],
     ]);
@@ -95,9 +92,7 @@ describe('the better-auth plugin registry', () => {
   });
 
   it('refuses a plugin dependency the standalone resolver does not know', () => {
-    const config = AuthConfiguration.fromEnvironment({
-      AUTH_URL: 'http://localhost:3000',
-    } as NodeJS.ProcessEnv);
+    const config = authConfig();
 
     expect(() =>
       BetterAuthPlugins.build(
@@ -108,7 +103,7 @@ describe('the better-auth plugin registry', () => {
             inject: ['NOT_REGISTERED'],
           },
         ],
-        [[BETTER_AUTH_CONFIG, config]],
+        [[authConfig.KEY, config]],
       ),
     ).toThrow(/NOT_REGISTERED/);
   });

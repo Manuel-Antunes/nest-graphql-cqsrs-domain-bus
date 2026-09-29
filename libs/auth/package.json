@@ -17,6 +17,7 @@
     "@nestposts/mail": "workspace:*",
     "@nestposts/notifications": "workspace:*",
     "@nestposts/platform": "workspace:*",
+    "@nestposts/redis": "workspace:*",
     "@nestposts/users": "workspace:*",
     "@nestposts/validated-dto": "workspace:*",
     "clsx": "catalog:",

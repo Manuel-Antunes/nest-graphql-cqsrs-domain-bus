@@ -23,6 +23,9 @@
       "path": "../../libs/core/transport-eventbus/tsconfig.lib.json"
     },
     {
+      "path": "../../libs/core/redis/tsconfig.lib.json"
+    },
+    {
       "path": "../../libs/posts/tsconfig.lib.json"
     },
     {
@@ -51,6 +54,9 @@
     },
     {
       "path": "../../libs/core/lambda/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/core/graphql-response-cache/tsconfig.lib.json"
     },
     {
       "path": "../../libs/events/tsconfig.lib.json"

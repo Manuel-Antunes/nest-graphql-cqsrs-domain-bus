@@ -1,7 +1,7 @@
 /// <reference path="../../../.sst/platform/config.d.ts" />
 
 import { errorReporting } from '../../sentry';
-import { postgresUrl } from '../data';
+import { postgresUrl, redisUrl } from '../data';
 import { router } from '../edge/router';
 import { mailFrom } from '../mail';
 import {
@@ -79,6 +79,12 @@ export const sharedEnvironment = {
    */
   NODE_OPTIONS: BASE_NODE_OPTIONS,
   POSTGRES_URL: postgresUrl,
+  /**
+   * Here and not per application, for the reason `AUTH_SECRET` is shared: every process that holds
+   * Better Auth must keep its sessions in the same place — the web, the API, the notificator, the
+   * gateway and the migrator. Tagging holds no Better Auth and connects for its Nest cache only.
+   */
+  REDIS_URL: redisUrl,
   /**
    * The application exports **to the collector beside it**, never over the network. What the
    * collector then does with it is the two variables below, which are its configuration and not the
@@ -194,14 +200,16 @@ export const migratorEnvironment = {
 };
 
 /**
- * The gateway holds no database and no Better Auth: it composes the SDL copied beside its bundle,
- * forwards each caller's cookie and bearer, and reads the issuer's published keys through the router
- * only to derive who a bearer token is for.
+ * **The gateway reads every caller's session**, through the same Better Auth as everything else — a
+ * cookie from Redis first and Postgres on a miss, an OAuth access token against the keys the jwt
+ * plugin keeps in Postgres — so it needs the shared `AUTH_SECRET` and both stores. It still forwards
+ * the cookie and the bearer: each subgraph decides for itself.
  */
 export const gatewayEnvironment = {
   ...sharedEnvironment,
   OTEL_SERVICE_NAME: 'gateway',
   ...errorReporting('gateway'),
+  AUTH_SECRET: authSecret.value,
   GATEWAY_URL: gatewayUrl,
   WEB_URL: router.url,
   AUTH_URL: router.url,

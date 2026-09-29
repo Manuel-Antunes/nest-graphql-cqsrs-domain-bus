@@ -13,7 +13,7 @@ import { HttpHealth, Launch, Service } from './service';
  * **The whole system, provisioned once**: a browser's worth of it.
  *
  * Everything the browser does not run is a **container**, from the images `apps/<app>/Dockerfile` build —
- * Postgres, RabbitMQ, Mailpit, the migrator as a one-shot, and then `posts-api`, `tagging`,
+ * Postgres, Redis, RabbitMQ, Mailpit, the migrator as a one-shot, and then `posts-api`, `tagging`,
  * `notificator` and the `gateway` that federates the first and the last. They share a
  * network and address each other by alias, so the suite never has to teach one of them a port.
  *
@@ -89,7 +89,9 @@ export class Stack {
       new HttpHealth(() => this.isWebUp(), environment.webUrl),
       {
         POSTGRES_URL: endpoints.postgresUrl,
+        REDIS_URL: endpoints.redisUrl,
         AUTH_SECRET: environment.authSecret,
+        AUTH_URL: environment.webUrl,
         WEB_URL: environment.webUrl,
         NEXT_PUBLIC_API_URL: endpoints.apiUrl,
         NEXT_PUBLIC_GATEWAY_URL: endpoints.gatewayUrl,

@@ -4,7 +4,7 @@ import { LoggingOnDemandNotifications } from '@nestposts/notifications/infrastru
 import { UserEntitySchema } from '@nestposts/users/infrastructure/persistence/entities/user-orm.entity';
 import type { BetterAuthPlugin } from 'better-auth';
 
-import { AuthConfiguration } from '../better-auth/config';
+import { authConfig } from '../../config/auth.config';
 import { BetterAuthEmails } from '../better-auth/emails/better-auth-emails';
 import { BetterAuthInstance } from '../better-auth/init-auth';
 import type {
@@ -13,7 +13,6 @@ import type {
 } from '../better-auth/plugins/registry';
 import { BetterAuthPlugins } from '../better-auth/plugins/registry';
 import { BetterAuthSchema } from '../better-auth/schema';
-import { BETTER_AUTH_CONFIG } from '../better-auth/tokens';
 import { AuthUserEntitySchema } from './entities/auth-user-orm.entity';
 
 /** The Better Auth model this package maps by hand. */
@@ -41,12 +40,12 @@ export class BetterAuthEntities {
     mapped = [],
     dependencies = [],
   }: BetterAuthEntityOptions = {}): EntitySchema[] {
-    const config = AuthConfiguration.fromEnvironment();
+    const config = authConfig();
     const emails = BetterAuthEmails.unsent();
     const built = BetterAuthPlugins.build(
       BetterAuthPlugins.providersWith(plugins),
       [
-        [BETTER_AUTH_CONFIG, config],
+        [authConfig.KEY, config],
         [BetterAuthEmails, emails],
         [OnDemandNotifications, new LoggingOnDemandNotifications()],
         ...dependencies,

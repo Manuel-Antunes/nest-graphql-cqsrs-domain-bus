@@ -3,8 +3,8 @@
 /**
  * The one door to MikroORM in this repository.
  *
- * What lives here is the ORM and nothing that has a rule of its own: the connection
- * ({@link postgresDatabase}), the module that assembles the entity list ({@link DatabaseModule}), how a
+ * What lives here is the ORM and nothing that has a rule of its own: the connection, read from the
+ * environment by {@link databaseConfig} ({@link postgresDatabase}), the module that assembles the entity list ({@link DatabaseModule}), how a
  * value object becomes a column ({@link valueObjectType}), how a path with no HTTP request gets a
  * context ({@link inRequestContext}), what a driver exception means ({@link DatabaseError}) and how
  * each context is told ({@link DatabaseExceptionFilter}, which {@link DatabaseModule} installs).
@@ -14,6 +14,7 @@
  * an application that knows what one of its foreign keys means says so with a filter of its own.
  */
 export * from './config/index';
+export * from './connection/index';
 export * from './database.module';
 export * from './decorators/index';
 export * from './entities/index';

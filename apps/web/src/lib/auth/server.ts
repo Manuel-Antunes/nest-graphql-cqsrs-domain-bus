@@ -3,8 +3,10 @@ import 'server-only';
 import { cookies } from 'next/headers';
 import type { AuthSocialProvider } from '@better-auth-ui/core';
 import type { AuthServer } from '@better-auth-ui/core/server';
+import { authConfig } from '@nestposts/auth/config/auth.config';
 import type { PermissionRequest } from '@nestposts/auth/domain/auth/auth.service';
 import { AuthService } from '@nestposts/auth/domain/auth/auth.service';
+import type { Identity } from '@nestposts/auth/domain/auth/vo/identity';
 import { BETTER_AUTH } from '@nestposts/auth/infrastructure/better-auth/tokens';
 import { billingConfig } from '@nestposts/billing/config/billing.config';
 import { BillingService } from '@nestposts/billing/infrastructure/better-auth/billing.service';
@@ -13,12 +15,10 @@ import { OrganizationService } from '@nestposts/organizations/domain/organizatio
 import type { OrganizationRole } from '@nestposts/organizations/domain/organization/schemas/member-role.schema';
 import { OrganizationId } from '@nestposts/organizations/domain/organization/vo/organization-id';
 
-import { env } from '@/env.mjs';
 import { Endpoints } from '@/lib/endpoints';
 import { Nest } from '@/nest/container';
 
 import type { SystemRole } from './roles';
-import type { Session } from './session';
 
 interface BetterAuthHandler {
   handler(request: Request): Promise<Response>;
@@ -57,13 +57,10 @@ export class WebAuth {
 
   /** The social providers this deployment has credentials for — the sign-in screen offers these. */
   static socialProviders(): AuthSocialProvider[] {
+    const { google, github } = authConfig();
     return [
-      ...(env.AUTH_GOOGLE_ID && env.AUTH_GOOGLE_SECRET
-        ? (['google'] as const)
-        : []),
-      ...(env.AUTH_GITHUB_ID && env.AUTH_GITHUB_SECRET
-        ? (['github'] as const)
-        : []),
+      ...(google ? (['google'] as const) : []),
+      ...(github ? (['github'] as const) : []),
     ];
   }
 
@@ -102,26 +99,11 @@ export class WebAuth {
   }
 
   /**
-   * The session as Better Auth answers it, in the shape this application reads.
-   *
-   * `null` covers both "no cookie" and "a cookie whose row is gone" — from the browser's side those
-   * are the same fact, and there is no refresh token to tell them apart with.
+   * Who is making this request, as every process reads a caller — `null` covers both "no cookie"
+   * and "a cookie whose row is gone": from the browser's side those are the same fact.
    */
-  static async session(): Promise<Session | null> {
-    const found = await (await WebAuth.auth()).session().catch(() => null);
-    if (!found) {
-      return null;
-    }
-    return {
-      expiresAt: found.expiresAt.getTime(),
-      activeOrganizationId: found.activeOrganizationId,
-      user: {
-        id: found.user.id.value,
-        email: found.user.email.value,
-        name: found.user.name.value,
-        role: found.user.roles.join(',') || null,
-      },
-    };
+  static async identity(): Promise<Identity | null> {
+    return (await WebAuth.auth()).identity().catch(() => null);
   }
 
   /**

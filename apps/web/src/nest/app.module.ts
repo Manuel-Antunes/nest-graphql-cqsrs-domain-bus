@@ -1,7 +1,8 @@
 import 'server-only';
 
+import { CacheModule } from '@nestjs/cache-manager';
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConditionalModule, ConfigModule } from '@nestjs/config';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { OutboxModule } from '@nestjs/outbox';
 import { StorageModule } from '@nestjs/storage';
@@ -9,12 +10,7 @@ import { AttachmentModule } from '@nestposts/asset/infrastructure/attachment.mod
 import { AuthInfrastructureModule } from '@nestposts/auth/infrastructure/auth-infrastructure.module';
 import { BillingInfrastructureModule } from '@nestposts/billing/infrastructure/billing-infrastructure.module';
 import { CqsrsModule } from '@nestposts/cqsrs';
-import {
-  DatabaseModule,
-  postgresDatabase,
-  SYSTEM_SCHEMA,
-  TenancyModule,
-} from '@nestposts/database';
+import { DatabaseModule, TenancyModule } from '@nestposts/database';
 import { tenantMigrations } from '@nestposts/migrator/migrations/tenant/index';
 import { PublishingOnDemandNotifications } from '@nestposts/notifications/infrastructure/on-demand/publishing-on-demand-notifications';
 import { organizationAuthPluginProviders } from '@nestposts/organizations/infrastructure/better-auth/organization-better-auth.plugin';
@@ -24,6 +20,7 @@ import {
   MikroOrmOutboxModule,
   MikroOrmTransactionManager,
 } from '@nestposts/outbox-mikro-orm';
+import { RedisCacheOptions, RedisModule } from '@nestposts/redis';
 import {
   TRANSPORT_EVENT_BUS_PUBLISHER,
   TransportEventBusModule,
@@ -32,14 +29,13 @@ import {
 
 import type { AppConfig } from './config/app.config';
 import { appConfig } from './config/app.config';
-import { authConfig } from './config/auth.config';
 import { awsConfig } from './config/aws.config';
 import { inngestConfig } from './config/inngest.config';
 import type { OutboxConfig } from './config/outbox.config';
 import { outboxConfig } from './config/outbox.config';
-import type { PostgresConfig } from './config/postgres.config';
-import { postgresConfig } from './config/postgres.config';
 import { rabbitmqConfig } from './config/rabbitmq.config';
+import type { RedisConfig } from './config/redis.config';
+import { redisConfig } from './config/redis.config';
 import { storageConfig } from './config/storage.config';
 import { NextCookiesBetterAuthPluginProvider } from './next-cookies.plugin';
 import { BucketDisks } from './storage/bucket-disks';
@@ -56,9 +52,9 @@ import { WebEventsClientModule } from './web-events-client.module';
  * and keeps what `@thallesp/nestjs-better-auth` does besides: attaching every `@DatabaseHook`
  * provider to the instance. Next serves the routes itself.
  *
- * `baseUrl` is overridden to this origin: the session cookie has to belong to the origin the browser
- * is talking to. The SECRET and the database are the posts-api's, which is what makes the cookie this
- * writes one that the posts-api resolves.
+ * Its `AUTH_URL` is this origin — the default under `next dev`, which sets `PORT` — because the session
+ * cookie has to belong to the origin the browser is talking to. The SECRET and the database are the
+ * posts-api's, which is what makes the cookie this writes one that the posts-api resolves.
  *
  * An organization created here is a tenant created here: `TenancyModule` is what the organization
  * plugin's hook migrates the new tenant's schema with, from the migrations the migrator lists.
@@ -75,22 +71,25 @@ import { WebEventsClientModule } from './web-events-client.module';
       ignoreEnvFile: true,
       load: [
         appConfig,
-        authConfig,
         awsConfig,
         inngestConfig,
         outboxConfig,
-        postgresConfig,
         rabbitmqConfig,
+        redisConfig,
         storageConfig,
       ],
     }),
+    ConditionalModule.registerWhen(
+      RedisModule.forRootAsync({
+        inject: [redisConfig.KEY],
+        useFactory: ({ url }: RedisConfig) => ({ url }),
+      }),
+      () => Boolean(redisConfig().url),
+    ),
+    CacheModule.registerAsync({ isGlobal: true, useClass: RedisCacheOptions }),
     EventEmitterModule.forRoot(),
     CqsrsModule.forRoot({ aggregatePublisher: TRANSPORT_EVENT_BUS_PUBLISHER }),
-    DatabaseModule.forRootAsync({
-      inject: [postgresConfig.KEY],
-      useFactory: ({ url, debug }: PostgresConfig) =>
-        postgresDatabase(SYSTEM_SCHEMA, { clientUrl: url, debug }),
-    }),
+    DatabaseModule.forRoot(),
     TenancyModule.forRoot({
       http: false,
       migrations: { migrationsList: tenantMigrations },
@@ -135,7 +134,6 @@ import { WebEventsClientModule } from './web-events-client.module';
       trailingPlugins: [NextCookiesBetterAuthPluginProvider],
       entities: OrganizationEntities.withAuth(),
       imports: [OrganizationsInfrastructureModule, BillingInfrastructureModule],
-      config: authConfig.KEY,
       notifications: PublishingOnDemandNotifications,
     }),
     OrganizationsInfrastructureModule,

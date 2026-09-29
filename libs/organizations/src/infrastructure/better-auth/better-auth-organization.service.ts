@@ -33,14 +33,14 @@ export class BetterAuthOrganizationService extends OrganizationService {
   }
 
   async organizations(): Promise<Organization[]> {
-    const session = await this.auth.requireSession();
-    return this.organizationRepository.findAllOf(session.user.id);
+    const identity = await this.auth.requireIdentity();
+    return this.organizationRepository.findAllOf(identity.userId);
   }
 
   async activeOrganizationId(): Promise<OrganizationId | null> {
-    const session = await this.auth.requireSession();
-    return session.activeOrganizationId
-      ? OrganizationId.parse(session.activeOrganizationId)
+    const identity = await this.auth.requireIdentity();
+    return identity.activeOrganizationId
+      ? OrganizationId.parse(identity.activeOrganizationId)
       : null;
   }
 
@@ -62,13 +62,13 @@ export class BetterAuthOrganizationService extends OrganizationService {
   }
 
   async activeMember(): Promise<Member | null> {
-    const session = await this.auth.requireSession();
-    if (!session.activeOrganizationId) {
+    const identity = await this.auth.requireIdentity();
+    if (!identity.activeOrganizationId) {
       return null;
     }
     return this.memberRepository.findIn(
-      OrganizationId.parse(session.activeOrganizationId),
-      session.user.id,
+      OrganizationId.parse(identity.activeOrganizationId),
+      identity.userId,
     );
   }
 
@@ -79,17 +79,17 @@ export class BetterAuthOrganizationService extends OrganizationService {
    * the first is a prompt, the second is a refusal — and the filter gives them different codes.
    */
   async requireActiveMember(): Promise<Member> {
-    const session = await this.auth.requireSession();
-    if (!session.activeOrganizationId) {
+    const identity = await this.auth.requireIdentity();
+    if (!identity.activeOrganizationId) {
       throw new OrganizationNotSelectedException();
     }
-    const organizationId = OrganizationId.parse(session.activeOrganizationId);
+    const organizationId = OrganizationId.parse(identity.activeOrganizationId);
     const member = await this.memberRepository.findIn(
       organizationId,
-      session.user.id,
+      identity.userId,
     );
     if (!member) {
-      throw new ActiveMemberNotFoundException(session.user.id, organizationId);
+      throw new ActiveMemberNotFoundException(identity.userId, organizationId);
     }
     return member;
   }

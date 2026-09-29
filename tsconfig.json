@@ -73,9 +73,6 @@
       "path": "./libs/ui"
     },
     {
-      "path": "./libs/core/federation-gateway"
-    },
-    {
       "path": "./apps/gateway"
     },
     {
@@ -95,6 +92,12 @@
     },
     {
       "path": "./libs/core/event-store-mikro-orm"
+    },
+    {
+      "path": "./libs/core/redis"
+    },
+    {
+      "path": "./libs/core/graphql-response-cache"
     }
   ]
 }

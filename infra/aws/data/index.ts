@@ -32,3 +32,34 @@ export const postgresUrl = $interpolate`postgresql://${database.username}:${data
 
 /** What a function connects to: the proxy's endpoint, which `database.host` becomes once it is on. */
 export const databaseHost = database.host;
+
+/**
+ * **Where every Better Auth instance keeps its sessions, in front of the `session` table** — and the
+ * Nest cache the gateway resolves organizations through. Every function that holds Better Auth reads
+ * the same one, or a session revoked by one of them stays valid in the others.
+ *
+ * Cluster mode is OFF: the applications hold a plain node-redis client (`libs/core/redis`), which a
+ * cluster's configuration endpoint does not answer, and one node is all this needs. Valkey because it
+ * is the cheaper engine (about $9 a month on a `t4g.micro`) and speaks Redis 7.2 — `EXPIRE … NX`,
+ * which Better Auth's rate limiting counts with, is Redis 7. The component requires TLS, hence
+ * `rediss://`.
+ */
+export const cache = new sst.aws.Redis('Cache', {
+  vpc,
+  engine: 'valkey',
+  cluster: false,
+});
+
+/**
+ * The auth token SST generates carries `#`, `&` and `$` — characters that end the userinfo of a URL —
+ * so it is escaped, or node-redis parses a host out of the middle of the password.
+ */
+export const redisUrl = $resolve({
+  username: cache.username,
+  password: cache.password,
+  host: cache.host,
+  port: cache.port,
+}).apply(
+  ({ username, password, host, port }) =>
+    `rediss://${encodeURIComponent(username)}:${encodeURIComponent(password ?? '')}@${host}:${port}`,
+);

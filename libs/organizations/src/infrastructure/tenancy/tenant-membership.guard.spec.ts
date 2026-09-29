@@ -1,6 +1,7 @@
 import type { ExecutionContext } from '@nestjs/common';
 import { ForbiddenException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import { BetterAuthIdentityResolver } from '@nestposts/auth/infrastructure/better-auth/identity/better-auth-identity.resolver';
 import type { BetterAuth } from '@nestposts/auth/infrastructure/better-auth/init-auth';
 import type { UserId } from '@nestposts/users/domain/user/vo/user-id';
 import {
@@ -16,8 +17,8 @@ import { OrganizationSlug } from '../../domain/organization/vo/organization-slug
 import { TenantMembershipGuard } from './tenant-membership.guard';
 
 type Session = {
-  user: { id: string };
-  session?: { activeOrganizationId: string | null };
+  user: { id: string; email: string; name: string };
+  session: { activeOrganizationId: string | null };
 };
 
 type Request = {
@@ -43,13 +44,18 @@ type Handler = keyof Resolvers;
 const graphqlContext = (
   req: Request,
   handler: Handler = 'events',
-): ExecutionContext =>
-  ({
+  credentials: Record<string, string> = {
+    cookie: 'better-auth.session_token=t',
+  },
+): ExecutionContext => {
+  Object.assign(req.headers, credentials);
+  return {
     getType: () => 'graphql',
     getArgByIndex: (index: number) => (index === 2 ? { req } : undefined),
     getHandler: () => Resolvers.prototype[handler],
     getClass: () => Resolvers,
-  }) as unknown as ExecutionContext;
+  } as unknown as ExecutionContext;
+};
 
 const organizationCalled = (slug: string): Organization => {
   const organization = new Organization();
@@ -61,7 +67,7 @@ describe('a tenant is an organization, and only its members work in it', () => {
   let sessionsAsked: number;
   let membershipsAsked: UserId[];
 
-  const guard = (session: Session | null = null) => {
+  const guard = (req: Request, session: Session | null = null) => {
     const auth = {
       api: {
         getSession: async () => {
@@ -80,13 +86,28 @@ describe('a tenant is an organization, and only its members work in it', () => {
       findById: async (organizationId: OrganizationId) =>
         organizationCalled(organizationId.value.replace(/^org_/, '')),
     } as unknown as OrganizationRepository;
-    return new TenantMembershipGuard(auth, organizations, new Reflector());
+    return new TenantMembershipGuard(
+      new BetterAuthIdentityResolver(auth, req),
+      organizations,
+      new Reflector(),
+    );
   };
 
-  const ana = (activeOrganizationId: string | null): Session => ({
-    user: { id: 'ana' },
+  const request = (tenant?: string, session?: Session): Request => ({
+    headers: tenant ? { 'x-tenant': tenant } : {},
+    ...(session && { session }),
+  });
+
+  const who = (
+    id: string,
+    activeOrganizationId: string | null = null,
+  ): Session => ({
+    user: { id, email: `${id}@example.com`, name: id },
     session: { activeOrganizationId },
   });
+
+  const ana = (activeOrganizationId: string | null): Session =>
+    who('ana', activeOrganizationId);
 
   beforeEach(() => {
     sessionsAsked = 0;
@@ -94,48 +115,55 @@ describe('a tenant is an organization, and only its members work in it', () => {
   });
 
   it('lets anybody into the root tenant, signed in or not, without asking who they are', async () => {
-    await expect(
-      guard().canActivate(graphqlContext({ headers: {} })),
-    ).resolves.toBe(true);
+    const req = request();
+
+    await expect(guard(req).canActivate(graphqlContext(req))).resolves.toBe(
+      true,
+    );
     expect(sessionsAsked).toBe(0);
   });
 
   it('lets a member into the organization’s tenant', async () => {
+    const req = request('Acme');
+
     await expect(
-      guard({ user: { id: 'ana' } }).canActivate(
-        graphqlContext({ headers: { 'x-tenant': 'Acme' } }),
-      ),
+      guard(req, who('ana')).canActivate(graphqlContext(req)),
     ).resolves.toBe(true);
   });
 
   it('refuses whoever is not a member, and whoever has no session', async () => {
+    const bia = request('acme');
+    const nobody = request('acme');
+
     await expect(
-      guard({ user: { id: 'bia' } }).canActivate(
-        graphqlContext({ headers: { 'x-tenant': 'acme' } }),
-      ),
+      guard(bia, who('bia')).canActivate(graphqlContext(bia)),
     ).rejects.toBeInstanceOf(ForbiddenException);
     await expect(
-      guard(null).canActivate(
-        graphqlContext({ headers: { 'x-tenant': 'acme' } }),
-      ),
+      guard(nobody, null).canActivate(graphqlContext(nobody)),
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
+  it('asks nobody who a caller presenting no credentials is', async () => {
+    const req = request('acme');
+
+    await expect(
+      guard(req, who('ana')).canActivate(graphqlContext(req, 'events', {})),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(sessionsAsked).toBe(0);
+  });
+
   it('reads the session the authentication guard already put on the request, when it ran first', async () => {
-    await guard(null).canActivate(
-      graphqlContext({
-        headers: { 'x-tenant': 'acme' },
-        session: { user: { id: 'ana' } },
-      }),
-    );
+    const req = request('acme', who('ana'));
+
+    await guard(req, null).canActivate(graphqlContext(req));
 
     expect(sessionsAsked).toBe(0);
     expect(membershipsAsked.map((id) => id.value)).toEqual(['ana']);
   });
 
   it('decides once per request, however many field resolvers it guards', async () => {
-    const membership = guard({ user: { id: 'ana' } });
-    const req: Request = { headers: { 'x-tenant': 'acme' } };
+    const req = request('acme');
+    const membership = guard(req, who('ana'));
 
     await membership.canActivate(graphqlContext(req));
     await membership.canActivate(graphqlContext(req));
@@ -146,9 +174,11 @@ describe('a tenant is an organization, and only its members work in it', () => {
 
   describe('on a handler checked against the active organization', () => {
     it('lets the caller work in the tenant of the organization that is active', async () => {
+      const req = request('acme');
+
       await expect(
-        guard(ana('org_acme')).canActivate(
-          graphqlContext({ headers: { 'x-tenant': 'acme' } }, 'updateEvent'),
+        guard(req, ana('org_acme')).canActivate(
+          graphqlContext(req, 'updateEvent'),
         ),
       ).resolves.toBe(true);
     });
@@ -159,38 +189,43 @@ describe('a tenant is an organization, and only its members work in it', () => {
         'deleteOrganization',
         'activeOrganization',
       ] as const) {
+        const req = request('initech');
+
         await expect(
-          guard(ana('org_acme')).canActivate(
-            graphqlContext({ headers: { 'x-tenant': 'initech' } }, handler),
-          ),
+          guard(req, ana('org_acme')).canActivate(graphqlContext(req, handler)),
         ).rejects.toBeInstanceOf(ForbiddenException);
       }
     });
 
     it('refuses the root tenant, which is no organization, and a session with none active', async () => {
+      const root = request();
+      const noneActive = request('acme');
+
       await expect(
-        guard(ana('org_acme')).canActivate(
-          graphqlContext({ headers: {} }, 'updateEvent'),
+        guard(root, ana('org_acme')).canActivate(
+          graphqlContext(root, 'updateEvent'),
         ),
       ).rejects.toBeInstanceOf(ForbiddenException);
       await expect(
-        guard(ana(null)).canActivate(
-          graphqlContext({ headers: { 'x-tenant': 'acme' } }, 'updateEvent'),
+        guard(noneActive, ana(null)).canActivate(
+          graphqlContext(noneActive, 'updateEvent'),
         ),
       ).rejects.toBeInstanceOf(ForbiddenException);
     });
 
     it('leaves every other handler free to name any tenant of theirs', async () => {
+      const req = request('initech');
+
       await expect(
-        guard(ana('org_acme')).canActivate(
-          graphqlContext({ headers: { 'x-tenant': 'initech' } }),
-        ),
+        guard(req, ana('org_acme')).canActivate(graphqlContext(req)),
       ).resolves.toBe(true);
     });
 
     it('asks for the session once, however many of its checks need it', async () => {
-      await guard(ana('org_acme')).canActivate(
-        graphqlContext({ headers: { 'x-tenant': 'acme' } }, 'updateEvent'),
+      const req = request('acme');
+
+      await guard(req, ana('org_acme')).canActivate(
+        graphqlContext(req, 'updateEvent'),
       );
 
       expect(sessionsAsked).toBe(1);
@@ -202,6 +237,6 @@ describe('a tenant is an organization, and only its members work in it', () => {
       getType: () => 'rpc',
     } as unknown as ExecutionContext;
 
-    await expect(guard().canActivate(message)).resolves.toBe(true);
+    await expect(guard(request()).canActivate(message)).resolves.toBe(true);
   });
 });

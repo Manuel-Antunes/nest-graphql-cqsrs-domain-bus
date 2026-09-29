@@ -5,11 +5,10 @@ import { OnDemandNotifications } from '@nestposts/notifications/domain/notificat
 import { RecordingOnDemandNotifications } from '@nestposts/notifications/testing/recording-on-demand-notifications';
 import { mikroOrmAdapter } from 'better-auth-mikro-orm';
 
+import { authConfig } from '../../../config/auth.config';
 import { authEntities } from '../../persistence/auth-entities';
-import { AuthConfiguration } from '../config';
 import { BetterAuthEmails } from '../emails/better-auth-emails';
 import { BetterAuthInstance } from '../init-auth';
-import { BETTER_AUTH_CONFIG } from '../tokens';
 import { BetterAuthPlugins } from './registry';
 
 const ISSUER = 'http://localhost:4200';
@@ -20,15 +19,15 @@ describe('an OAuth access token is a session', () => {
   let auth: ReturnType<typeof build>;
 
   const build = () => {
-    const config = AuthConfiguration.fromEnvironment({
-      AUTH_URL: 'http://localhost:3000',
-      WEB_URL: ISSUER,
-      GATEWAY_URL: GATEWAY,
-    } as NodeJS.ProcessEnv);
+    const config = {
+      ...authConfig(),
+      issuer: ISSUER,
+      oauthResources: [GATEWAY],
+    };
     const notifications = new RecordingOnDemandNotifications();
     const emails = new BetterAuthEmails(notifications);
     const plugins = BetterAuthPlugins.build(BetterAuthPlugins.providersWith(), [
-      [BETTER_AUTH_CONFIG, config],
+      [authConfig.KEY, config],
       [BetterAuthEmails, emails],
       [OnDemandNotifications, notifications],
     ]);

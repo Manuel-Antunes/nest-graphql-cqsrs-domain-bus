@@ -7,6 +7,7 @@ import { MessageInbox } from '../infrastructure/database/message-inbox';
 import { NotificationRecords } from '../infrastructure/database/notification-records';
 import { OrganizationRecords } from '../infrastructure/database/organization-records';
 import { PostRecords } from '../infrastructure/database/post-records';
+import { SessionCache } from '../infrastructure/database/session-cache';
 import { GraphqlEndpoints } from '../infrastructure/graphql/graphql-endpoints';
 import { Mailbox } from '../infrastructure/mail/mailbox';
 import { Broker } from '../infrastructure/messaging/broker';
@@ -62,8 +63,10 @@ export const test = environment.extend<InfrastructureFixtures>({
     await use(new MessageInbox(database));
   },
 
-  credentialRecords: async ({ database }, use) => {
-    await use(new CredentialRecords(database));
+  credentialRecords: async ({ database, environment }, use) => {
+    await use(
+      new CredentialRecords(database, new SessionCache(environment.redisUrl)),
+    );
   },
 
   organizationRecords: async ({ database }, use) => {

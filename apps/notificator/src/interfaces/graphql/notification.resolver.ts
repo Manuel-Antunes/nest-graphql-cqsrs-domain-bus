@@ -15,7 +15,7 @@ import { CountUnreadNotificationsQuery } from '../../application/notification/qu
 import { FindNotificationQuery } from '../../application/notification/query/find-notification.query';
 import { FindNotificationsQuery } from '../../application/notification/query/find-notifications.query';
 import { CurrentNotifiable } from '../auth/current-notifiable.decorator';
-import type { SessionNotifiable } from '../auth/session-notifiable.pipe';
+import type { IdentityNotifiable } from '../auth/identity-notifiable.pipe';
 import type { NotificationView } from './views';
 import { notificationView } from './views';
 
@@ -33,7 +33,7 @@ export class NotificationResolver {
 
   @Query('notifications')
   async notifications(
-    @CurrentNotifiable() reader: SessionNotifiable,
+    @CurrentNotifiable() reader: IdentityNotifiable,
     @Args('unreadOnly') unreadOnly?: boolean | null,
     @Args('first') first?: number | null,
   ): Promise<NotificationView[]> {
@@ -50,7 +50,7 @@ export class NotificationResolver {
   @Query('notification')
   async notification(
     @Args('id') id: string,
-    @CurrentNotifiable() reader: SessionNotifiable,
+    @CurrentNotifiable() reader: IdentityNotifiable,
   ): Promise<NotificationView | null> {
     if (!reader) return null;
     const record = await this.queryBus.execute(
@@ -64,7 +64,7 @@ export class NotificationResolver {
 
   @Query('unreadNotificationCount')
   unreadNotificationCount(
-    @CurrentNotifiable() reader: SessionNotifiable,
+    @CurrentNotifiable() reader: IdentityNotifiable,
   ): Promise<number> {
     return reader
       ? this.queryBus.execute(
@@ -76,7 +76,7 @@ export class NotificationResolver {
   @Mutation('markNotificationAsRead')
   async markNotificationAsRead(
     @Args('id') id: string,
-    @CurrentNotifiable() reader: SessionNotifiable,
+    @CurrentNotifiable() reader: IdentityNotifiable,
   ): Promise<NotificationView> {
     const notificationId = NotificationId.parse(id);
     if (!reader) throw new NotificationNotFoundException(notificationId);
@@ -95,7 +95,7 @@ export class NotificationResolver {
 
   @Mutation('markAllNotificationsAsRead')
   markAllNotificationsAsRead(
-    @CurrentNotifiable() reader: SessionNotifiable,
+    @CurrentNotifiable() reader: IdentityNotifiable,
   ): Promise<number> {
     return reader
       ? this.commandBus.execute(
@@ -109,7 +109,7 @@ export class NotificationResolver {
   @Mutation('deleteNotification')
   async deleteNotification(
     @Args('id') id: string,
-    @CurrentNotifiable() reader: SessionNotifiable,
+    @CurrentNotifiable() reader: IdentityNotifiable,
   ): Promise<string> {
     const notificationId = NotificationId.parse(id);
     if (!reader) throw new NotificationNotFoundException(notificationId);

@@ -87,7 +87,7 @@ type Composed = Omit<TransportEventBusModuleOptions, 'identity' | 'publishes'>;
  * @Module({
  *   imports: [
  *     CqsrsModule.forRoot({ aggregatePublisher: TRANSPORT_EVENT_BUS_PUBLISHER }),
- *     DatabaseModule.forRootAsync(…),
+ *     DatabaseModule.forRoot(),
  *     OutboxModule.forRootAsync({ imports: [PostEventsClientModule], transports, useFactory: … }),
  *     MikroOrmOutboxModule.forRootAsync(…),
  *     MikroOrmEventStoreModule,

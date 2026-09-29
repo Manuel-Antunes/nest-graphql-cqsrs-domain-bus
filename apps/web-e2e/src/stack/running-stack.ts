@@ -2,6 +2,7 @@ import { SeededAccounts } from '../environment/seeded-accounts';
 import { AuthApi } from '../infrastructure/auth/auth-api';
 import { CredentialRecords } from '../infrastructure/database/credential-records';
 import { Database } from '../infrastructure/database/database';
+import { SessionCache } from '../infrastructure/database/session-cache';
 import { Mailbox } from '../infrastructure/mail/mailbox';
 import { Registration } from '../workflows/auth/registration.workflow';
 import { Stack } from './stack';
@@ -25,7 +26,10 @@ export class RunningStack {
     const registration = new Registration(
       new AuthApi(environment.webUrl),
       new Mailbox(environment.mailboxUrl),
-      new CredentialRecords(Database.ofTenant(environment.postgresUrl)),
+      new CredentialRecords(
+        Database.ofTenant(environment.postgresUrl),
+        new SessionCache(environment.redisUrl),
+      ),
     );
     SeededAccounts.write(await registration.seed());
   }

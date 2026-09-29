@@ -11,12 +11,11 @@ import { UserId } from '@nestposts/users/domain/user/vo/user-id';
 import { UserName } from '@nestposts/users/domain/user/vo/user-name';
 import { mikroOrmAdapter } from 'better-auth-mikro-orm';
 
+import { authConfig } from '../../config/auth.config';
 import { AuthUser } from '../../domain/auth/auth-user.entity';
-import { AuthConfiguration } from '../better-auth/config';
 import { BetterAuthEmails } from '../better-auth/emails/better-auth-emails';
 import { BetterAuthInstance } from '../better-auth/init-auth';
 import { BetterAuthPlugins } from '../better-auth/plugins/registry';
-import { BETTER_AUTH_CONFIG } from '../better-auth/tokens';
 import { authEntities } from './auth-entities';
 
 describe('better-auth writing through the entities this module maps', () => {
@@ -39,13 +38,13 @@ describe('better-auth writing through the entities this module maps', () => {
       { entities: authEntities, subscribers: [new SoftDeleteSubscriber()] },
       'auth',
     );
-    const config = AuthConfiguration.fromEnvironment();
+    const config = authConfig();
     const emails = BetterAuthEmails.unsent();
     adapter = mikroOrmAdapter(orm)(
       BetterAuthInstance.optionsFor(
         config,
         BetterAuthPlugins.build(BetterAuthPlugins.providersWith(), [
-          [BETTER_AUTH_CONFIG, config],
+          [authConfig.KEY, config],
           [BetterAuthEmails, emails],
           [OnDemandNotifications, new LoggingOnDemandNotifications()],
         ]),

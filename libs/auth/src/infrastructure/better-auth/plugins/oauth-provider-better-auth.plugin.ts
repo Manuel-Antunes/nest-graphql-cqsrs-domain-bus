@@ -3,9 +3,9 @@ import type { FactoryProvider } from '@nestjs/common';
 import type { BetterAuthPlugin } from 'better-auth';
 import { APIError } from 'better-auth/api';
 
+import type { AuthConfig } from '../../../config/auth.config';
+import { authConfig } from '../../../config/auth.config';
 import { SYSTEM_ADMIN_ROLE } from '../../../domain/auth/roles';
-import type { AuthConfig } from '../config';
-import { BETTER_AUTH_CONFIG } from '../tokens';
 import { OAUTH_PROVIDER_BETTER_AUTH_PLUGIN } from './tokens';
 
 export const OAUTH_SCOPES = [
@@ -70,5 +70,5 @@ export const OAuthProviderBetterAuthPluginProvider = {
     });
     return plugin as typeof plugin & BetterAuthPlugin;
   },
-  inject: [BETTER_AUTH_CONFIG],
+  inject: [authConfig.KEY],
 } satisfies FactoryProvider;

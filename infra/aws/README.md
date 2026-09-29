@@ -1,13 +1,14 @@
 # The same system, on Lambda
 
 Eight functions of ours plus the Next server — none of them on a schedule —, one FIFO topic, three
-FIFO queues (and their dead-letter queues), one Postgres, one CloudFront router and one SES identity.
+FIFO queues (and their dead-letter queues), one Postgres, one Redis (Valkey, cluster mode off: Better
+Auth's sessions and the gateway's cache), one CloudFront router and one SES identity.
 The domain, application and presentation code is **unchanged**: what a handler here does is hand AWS's
 calling convention to the same container `main.ts` starts.
 
 ```
   CloudFront ──────► Gateway   apps/gateway/dist/lambda/http — the supergraph, composed from baked SDL
-  /graphql              │ forwards cookie + bearer + x-tenant
+  /graphql              │ reads the session (Redis, then Postgres); forwards cookie + bearer + x-tenant
        │                ├──────────────► NotificatorApi  apps/notificator/dist/lambda/http
        │                ▼                (the notifications subgraph)
        │            ┌─────────────────────────────────────────────────────┐
@@ -568,8 +569,9 @@ like.
 
 ## Cost, and the two lines that are it
 
-**Two** NAT gateways — SST puts one per availability zone — and a `t4g.micro` Postgres, on the order
-of **US$ 0.11/hour**, running whether anything is invoked or not. The functions themselves are billed per invocation and round to nothing at this
+**Two** NAT gateways — SST puts one per availability zone — a `t4g.micro` Postgres and a `t4g.micro`
+Valkey (about US$ 9 a month of it), on the order of **US$ 0.12/hour**, running whether anything is
+invoked or not. The functions themselves are billed per invocation and round to nothing at this
 scale. `sst remove` is not optional.
 
 The NAT is there because the functions sit in the VPC to reach the database and still have to reach

@@ -3,8 +3,8 @@ import type { BetterAuthPlugin } from 'better-auth';
 import { createAuthMiddleware } from 'better-auth/api';
 import { verifyJWT } from 'better-auth/plugins';
 
-import type { AuthConfig } from '../config';
-import { BETTER_AUTH_CONFIG } from '../tokens';
+import type { AuthConfig } from '../../../config/auth.config';
+import { authConfig } from '../../../config/auth.config';
 import { OAUTH_BEARER_SESSION_BETTER_AUTH_PLUGIN } from './tokens';
 
 export interface OAuthBearerSessionOptions {
@@ -84,5 +84,5 @@ export const OAuthBearerSessionBetterAuthPluginProvider = {
       issuer: config.issuer,
       audiences: config.oauthResources,
     }),
-  inject: [BETTER_AUTH_CONFIG],
+  inject: [authConfig.KEY],
 } satisfies FactoryProvider;

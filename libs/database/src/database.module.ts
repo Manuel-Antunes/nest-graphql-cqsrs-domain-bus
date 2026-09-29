@@ -4,13 +4,17 @@ import type {
   EntityName,
   EntitySchema,
 } from '@mikro-orm/core';
-import type { MikroOrmModuleSyncOptions } from '@mikro-orm/nestjs';
 import { MikroOrmModule } from '@mikro-orm/nestjs';
 import { PostgreSqlDriver } from '@mikro-orm/postgresql';
-import type { DynamicModule, InjectionToken } from '@nestjs/common';
+import type { DynamicModule } from '@nestjs/common';
 import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
 import { APP_FILTER } from '@nestjs/core';
 
+import type { DatabaseConfig } from './config/database.config';
+import { databaseConfig } from './config/database.config';
+import type { PostgresOptions } from './connection/postgres-database';
+import { postgresDatabase } from './connection/postgres-database';
 import { DatabaseExceptionFilter } from './filters/database-exception.filter';
 
 /** What a module contributes: the schemas of the tables it owns — MikroORM's own entity list. */
@@ -23,19 +27,18 @@ export type DatabaseEntities = readonly (
 /** Everything any module has declared, in this process. See {@link DatabaseModule.forFeature}. */
 const declared = new Set<string | EntityClass<AnyEntity> | EntitySchema>();
 
-type Connection = MikroOrmModuleSyncOptions & { exclusive?: boolean };
-
-/** {@link DatabaseModule.forRootAsync}'s options: the connection, built from what the application injects. */
-export interface DatabaseModuleAsyncOptions<Injected extends unknown[]> {
-  readonly inject?: InjectionToken[];
-  readonly useFactory: (...injected: Injected) => Connection;
-}
+type Connection = PostgresOptions & { exclusive?: boolean };
 
 @Module({})
 export class DatabaseModule {
   /**
-   * The connection, with the entity list resolved **lazily** — see the note in `CLAUDE.md` on why
-   * this is a factory and not `autoLoadEntities`.
+   * The connection: {@link databaseConfig} — `POSTGRES_URL` and `MIKRO_ORM_DEBUG`, registered here with
+   * `ConfigModule.forFeature` and injected, so an application loads nothing — under whatever it passes
+   * of its own (`dataloader`, the migrator's migrations and seeders), on the system schema unless it
+   * says otherwise.
+   *
+   * The entity list is resolved **lazily** — see the note in `CLAUDE.md` on why this is a factory and
+   * not `autoLoadEntities`.
    *
    * `exclusive` makes the connection take the entities it was given and nothing else. {@link declared}
    * is filled when a module is **imported**, not when it is booted, so in a process that imports more
@@ -49,24 +52,16 @@ export class DatabaseModule {
    * It also installs {@link DatabaseExceptionFilter} globally: a database failure reaches every
    * application that holds a connection, and each context answers it in its own words.
    */
-  static forRoot(options: Connection): DynamicModule {
-    return DatabaseModule.forRootAsync({ useFactory: () => options });
-  }
-
-  /** {@link DatabaseModule.forRoot}, with the connection built from injected configuration. */
-  static forRootAsync<Injected extends unknown[]>(
-    options: DatabaseModuleAsyncOptions<Injected>,
-  ): DynamicModule {
+  static forRoot(options: Connection = {}): DynamicModule {
+    const { exclusive = false, ...connection } = options;
     return {
       module: DatabaseModule,
       imports: [
         MikroOrmModule.forRootAsync({
           driver: PostgreSqlDriver,
-          inject: options.inject ?? [],
-          useFactory: (...injected: Injected) => {
-            const { exclusive = false, ...connection } = options.useFactory(
-              ...injected,
-            );
+          imports: [ConfigModule.forFeature(databaseConfig)],
+          inject: [databaseConfig.KEY],
+          useFactory: (database: DatabaseConfig) => {
             const entities = [
               ...new Set([
                 ...(connection.entities ?? []),
@@ -75,7 +70,7 @@ export class DatabaseModule {
             ] as EntityName<AnyEntity>[];
             return {
               registerRequestContext: false,
-              ...connection,
+              ...postgresDatabase(connection, database),
               entities,
               entitiesTs: entities,
             };

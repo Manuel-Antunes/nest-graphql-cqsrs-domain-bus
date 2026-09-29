@@ -11,7 +11,7 @@ import { MikroOrmEventStorageEngine } from './mikro-orm-event-storage-engine';
  * ```ts
  * @Module({
  *   imports: [
- *     DatabaseModule.forRootAsync(…),
+ *     DatabaseModule.forRoot(),
  *     MikroOrmEventStoreModule,
  *     TransportEventBusModule.forRoot({ …, eventStore: { engine: MikroOrmEventStorageEngine } }),
  *   ],

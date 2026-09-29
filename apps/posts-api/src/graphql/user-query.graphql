@@ -24,6 +24,9 @@ extend type Query {
 
   For a user without the author role the same fragment simply does not match — and the answer comes
   back without `posts`, instead of with an empty list.
+
+  Never served from the response cache, whatever it selects: the roles that decide its type, and the
+  profile it answers with, change outside this subgraph, where no invalidation can reach.
   """
-  me: IUser!
+  me: IUser! @cacheControl(maxAge: 0)
 }

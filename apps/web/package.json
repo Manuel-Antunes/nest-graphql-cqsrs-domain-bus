@@ -29,6 +29,7 @@
     "@nestposts/observability": "workspace:*",
     "@nestposts/organizations": "workspace:*",
     "@nestposts/outbox-mikro-orm": "workspace:*",
+    "@nestposts/redis": "workspace:*",
     "@nestposts/tanstack-query-graphql": "workspace:*",
     "@nestposts/transport-eventbus": "workspace:*",
     "@nestposts/ui": "workspace:*",

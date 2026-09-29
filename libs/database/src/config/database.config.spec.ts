@@ -1,62 +1,34 @@
-import {
-  DEFAULT_POSTGRES_URL,
-  databaseConfig,
-  postgresDatabase,
-  postgresUrl,
-  SYSTEM_SCHEMA,
-} from './database.config';
+import { databaseConfig } from './database.config';
 
-describe('postgresDatabase', () => {
-  const url = process.env.POSTGRES_URL;
-
+describe('databaseConfig', () => {
   afterEach(() => {
-    process.env.POSTGRES_URL = url;
-    delete process.env.MIKRO_ORM_DEBUG;
+    vi.unstubAllEnvs();
   });
 
-  it('connects to the system schema unless told otherwise', () => {
-    expect(postgresDatabase()).toMatchObject({
-      schema: SYSTEM_SCHEMA,
-      clientUrl: postgresUrl(),
-    });
-    expect(postgresDatabase('elsewhere')).toMatchObject({
-      schema: 'elsewhere',
-    });
-  });
-
-  it('leaves the schema to the migrations, and only makes sure the database is there', () => {
-    expect(postgresDatabase()).toMatchObject({
-      ensureDatabase: { create: false },
-    });
-  });
+  const withEnv = (env: Record<string, string>) => {
+    for (const name of ['POSTGRES_URL', 'MIKRO_ORM_DEBUG']) {
+      vi.stubEnv(name, env[name]);
+    }
+    return databaseConfig();
+  };
 
   it('falls back to the connection the compose file publishes', () => {
-    delete process.env.POSTGRES_URL;
-
-    expect(postgresUrl()).toBe(DEFAULT_POSTGRES_URL);
-  });
-
-  it('reads the debug flag off the environment', () => {
-    expect(databaseConfig().debug).toBe(false);
-
-    process.env.MIKRO_ORM_DEBUG = 'true';
-
-    expect(databaseConfig().debug).toBe(true);
-  });
-
-  it('lets the caller override anything it decided', () => {
-    const config = postgresDatabase(SYSTEM_SCHEMA, {
-      ensureDatabase: false,
-      allowGlobalContext: true,
-    });
-
-    expect(config).toMatchObject({
-      ensureDatabase: false,
-      allowGlobalContext: true,
+    expect(withEnv({})).toEqual({
+      clientUrl: 'postgresql://nestposts:nestposts@localhost:5432/nestposts',
+      debug: false,
     });
   });
 
-  it('refuses a schema with no name', () => {
-    expect(() => databaseConfig('')).toThrow();
+  it('reads the url and the debug flag off the environment', () => {
+    expect(
+      withEnv({
+        POSTGRES_URL: 'postgresql://elsewhere:5432/db',
+        MIKRO_ORM_DEBUG: 'true',
+      }),
+    ).toEqual({ clientUrl: 'postgresql://elsewhere:5432/db', debug: true });
+  });
+
+  it('refuses a debug flag that is not one', () => {
+    expect(() => withEnv({ MIKRO_ORM_DEBUG: 'sometimes' })).toThrow();
   });
 });

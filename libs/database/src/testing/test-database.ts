@@ -2,8 +2,8 @@ import type { EntityMetadata } from '@mikro-orm/core';
 import { MikroORM } from '@mikro-orm/core';
 import { MikroORM as PostgresMikroORM } from '@mikro-orm/postgresql';
 
-import type { PostgresOptions } from '../config/database.config';
-import { postgresDatabase } from '../config/database.config';
+import type { PostgresOptions } from '../connection/postgres-database';
+import { postgresDatabase } from '../connection/postgres-database';
 
 /** Any ORM, however its entity list was inferred: a spec hands over whatever Nest gave it. */
 export type AnyMikroORM = MikroORM<any, any, any>;
@@ -43,7 +43,7 @@ export const testDatabaseConfig = (
   prefix?: string,
 ): PostgresOptions => {
   const schema = testSchema(prefix);
-  return postgresDatabase(schema, {
+  return postgresDatabase({
     ...options,
     schema,
     discovery: { ...options.discovery, onMetadata: everyTableIn(schema) },
@@ -111,7 +111,8 @@ export async function metadataOnly(
   entities: NonNullable<PostgresOptions['entities']>,
 ): Promise<AnyMikroORM> {
   return (await PostgresMikroORM.init(
-    postgresDatabase('metadata', {
+    postgresDatabase({
+      schema: 'metadata',
       entities,
       ensureDatabase: false,
       discovery: { onMetadata: everyTableIn('metadata') },

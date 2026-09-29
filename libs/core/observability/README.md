@@ -132,7 +132,7 @@ mutation CreatePost                 graphql.operation.type/name, graphql.documen
   span), a child of `originOf(payload)` and linked to the subscription, and its result carries that
   span's `traceparent` in `extensions` — which is what a gateway in front continues. posts-api's
   `originOf` is `EventTrace.of` (`@nestposts/transport-eventbus`); the gateway's is
-  `subgraphEventOrigin` (`@nestposts/federation-gateway`).
+  `TracedExecutor.originOf` (`apps/gateway`).
 
 It does not use `isObjectType`, or any other `instanceof` of `graphql`'s: under Vitest a Nest
 application's schema is built by the CommonJS `graphql` and this module loads the ESM one.

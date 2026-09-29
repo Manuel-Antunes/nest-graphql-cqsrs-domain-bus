@@ -1,6 +1,6 @@
 import type { UserId } from '@nestposts/users/domain/user/vo/user-id';
 
-import type { Session } from './session';
+import type { Identity } from './vo/identity';
 
 export type PermissionRequest = Readonly<Record<string, readonly string[]>>;
 
@@ -24,7 +24,7 @@ export interface SignedIn {
  * to ask.
  *
  * The request is the constructor's business and no method's: an instance belongs to one request, so
- * `session()` can only ever mean "this one's". A caller that wanted to ask about a different request
+ * `identity()` can only ever mean "this one's". A caller that wanted to ask about a different request
  * would have to get a different instance, which is exactly the constraint that makes passing the
  * wrong headers impossible.
  */
@@ -32,9 +32,11 @@ export abstract class AuthService {
   /** The request's headers, as Better Auth reads them. */
   abstract readonly headers: Headers;
 
-  abstract session(): Promise<Session | null>;
+  /** Who is making this request; `null` for nobody. The same answer as `IdentityResolver`. */
+  abstract identity(): Promise<Identity | null>;
 
-  abstract requireSession(): Promise<Session>;
+  /** {@link identity}, or `SessionNotAuthenticatedException` for nobody. */
+  abstract requireIdentity(): Promise<Identity>;
 
   /**
    * Signs in with a password, for a caller that IS the server.

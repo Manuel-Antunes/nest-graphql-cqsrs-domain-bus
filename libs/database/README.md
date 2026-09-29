@@ -16,12 +16,13 @@ is mechanical and belongs to whoever is already editing the file.
 
 | | |
 |---|---|
-| `config/database.config.ts` | `postgresDatabase(schema, options)` — the connection both applications and the migrator build on, and the one place that decides `ensureDatabase` |
+| `config/database-env.schema.ts`, `config/database.config.ts` | the configuration: `DatabaseEnvSchema` (`POSTGRES_URL`, `MIKRO_ORM_DEBUG` — Zod alone, which `apps/web/src/env.mjs` spreads) and `databaseConfig`, the `registerAs('database')` that parses it into `{ clientUrl, debug }`; `DatabaseConfig` is its `ConfigType` |
+| `connection/` | `postgresDatabase(options, database?)` — the connection every application, the migrator and every spec build on, and the one place that decides `ensureDatabase` — and the three schema pins |
 | `database.module.ts` | `forRoot` (the connection) and `forFeature` (the tables a module owns), with the registry that makes the entity list lazy |
 | `entities/value-object.type.ts` | `valueObjectType(PostId, { columnType })` — how a value object becomes a column |
 | `helpers/request-context.ts` | `inRequestContext(em, work)` — a context for a path that did not start in an HTTP request |
 | `filters/database-error.ts` | what a driver exception **means**: `DatabaseError.of(exception)` — the code, the status, a message of its own, the field, whether to retry |
-| `filters/database-exception.filter.ts` | how each context is told: `DatabaseExceptionFilter`, which `DatabaseModule.forRootAsync` installs as a global `APP_FILTER` |
+| `filters/database-exception.filter.ts` | how each context is told: `DatabaseExceptionFilter`, which `DatabaseModule.forRoot` installs as a global `APP_FILTER` |
 
 The rule for what belongs here is that it must be understandable without a domain. That is why:
 
@@ -64,16 +65,15 @@ caller's to explain: `of` answers `undefined`. The filter then says it per conte
 ## `postgresDatabase`: one connection, and the schema every table is pinned to
 
 ```ts
-DatabaseModule.forRootAsync({
-  inject: [postgresConfig.KEY],                 // the application's registerAs('postgres')
-  useFactory: ({ url, debug }: PostgresConfig) =>
-    postgresDatabase(SYSTEM_SCHEMA, {
-      clientUrl: url,
-      debug,
-      subscribers: [new SoftDeleteSubscriber()],
-    }),
-})
+DatabaseModule.forRoot();                                       // most applications
+DatabaseModule.forRoot({ dataloader: DataloaderType.ALL });     // whatever else is theirs
 ```
+
+**The configuration is this library's, and an application loads none.** `DatabaseModule.forRoot`
+registers `databaseConfig` with `ConfigModule.forFeature`, injects it into the connection's factory,
+and builds the connection with `postgresDatabase(options, database)`: the environment's URL and debug
+flag, under whatever the application passed. Outside Nest — a spec's `testDatabase`, `metadataOnly` —
+`postgresDatabase(options)` calls `databaseConfig()` itself.
 
 Every service shares one Postgres — `POSTGRES_URL` — and the connection points at `public`. What
 decides where a table lives is the entity that maps it, `defineEntity({ schema })`, with one of three
@@ -85,11 +85,10 @@ pins:
 | `TRANSPORT_SCHEMA` (`'transport'`) | `transport` | the messaging's bookkeeping: the outbox and its dead letters and every consumer's inbox (`@nestposts/outbox-mikro-orm`), the event store's `event_log` (`@nestposts/event-store-mikro-orm`) |
 | `TENANT_SCHEMA` (`'*'`) | `tenant_<name>` | everything else — MikroORM's wildcard: the schema of the entity manager a query runs on |
 
-It reads `MIKRO_ORM_DEBUG`, validates what it got through `DatabaseConfigSchema`, and sets
-`ensureDatabase: { create: false }`: the *database* is made sure of, the *system schema* is not,
+It sets `ensureDatabase: { create: false }`: the *database* is made sure of, the *system schema* is not,
 because it belongs to `apps/migrator`. A service whose system migrations have not run fails with
 `relation … does not exist`, which is the honest answer. Anything after `schema` overrides what it
-decided. `DatabaseModule.forRoot` turns `@mikro-orm/nestjs`'s own request-context middleware off:
+decided — the schema included. `DatabaseModule.forRoot` turns `@mikro-orm/nestjs`'s own request-context middleware off:
 the context is `TenancyModule`'s to open, on the tenant's entity manager, and a second one opened on
 the global manager would put every wildcard table in `public`.
 

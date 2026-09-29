@@ -2,7 +2,8 @@ import { MikroORM } from '@mikro-orm/postgresql';
 import type { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { PostgreSqlContainer } from '@testcontainers/postgresql';
 
-import { DEFAULT_POSTGRES_URL, postgresUrl } from '../config/database.config';
+import { databaseConfig } from '../config/database.config';
+import { DatabaseEnvSchema } from '../config/database-env.schema';
 
 export const POSTGRES_IMAGE = 'postgres:18-alpine';
 
@@ -13,7 +14,7 @@ export type PostgresForTests = {
 
 class TestPostgres {
   static async start(): Promise<PostgresForTests> {
-    const clientUrl = postgresUrl();
+    const { clientUrl } = databaseConfig();
     if (await TestPostgres.answers(clientUrl)) {
       return { clientUrl, stop: async () => {} };
     }
@@ -54,7 +55,7 @@ class TestPostgres {
   }
 
   private static credentials() {
-    const url = new URL(DEFAULT_POSTGRES_URL);
+    const url = new URL(DatabaseEnvSchema.parse({}).POSTGRES_URL);
     return {
       database: url.pathname.slice(1),
       username: decodeURIComponent(url.username),

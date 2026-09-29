@@ -2,7 +2,6 @@ import { join } from 'node:path';
 import { Migrator } from '@mikro-orm/migrations';
 import { SeedManager } from '@mikro-orm/seeder';
 import type { DatabaseEntities, PostgresOptions } from '@nestposts/database';
-import { postgresDatabase, SYSTEM_SCHEMA } from '@nestposts/database';
 import { eventStoreEntities } from '@nestposts/event-store-mikro-orm/event-store.entities';
 import { eventsEntities } from '@nestposts/events/infrastructure/events-infrastructure.module';
 import { notificationsEntities } from '@nestposts/notifications/infrastructure/notifications-infrastructure.module';
@@ -11,8 +10,6 @@ import { outboxEntities } from '@nestposts/outbox-mikro-orm/outbox.entities';
 import { postsEntities } from '@nestposts/posts/infrastructure/posts-infrastructure.module';
 import { usersEntities } from '@nestposts/users/infrastructure/users-infrastructure.module';
 
-import type { PostgresConfig } from '../config/postgres.config';
-import { postgresConfig } from '../config/postgres.config';
 import { systemMigrations } from '../migrations/system';
 import { tenantMigrations } from '../migrations/tenant';
 import { DatabaseSeeder } from '../seeders/database.seeder';
@@ -40,19 +37,14 @@ export const migratorTables = (): DatabaseEntities => [
   ...eventStoreEntities,
 ];
 
-export const systemConnection = (
-  { url, debug }: PostgresConfig = postgresConfig(),
-): PostgresOptions =>
-  postgresDatabase(SYSTEM_SCHEMA, {
-    clientUrl: url,
-    debug,
-    preferTs: false,
-    entities: [...migratorTables()],
-    extensions: [Migrator, SeedManager],
-    migrations: migrationFiles('system'),
-    seeder: {
-      seedersList: [DatabaseSeeder, OAuthResourcesSeeder, TestUsersSeeder],
-      defaultSeeder: 'DatabaseSeeder',
-      emit: 'ts',
-    },
-  });
+export const systemConnection = (): PostgresOptions => ({
+  preferTs: false,
+  entities: [...migratorTables()],
+  extensions: [Migrator, SeedManager],
+  migrations: migrationFiles('system'),
+  seeder: {
+    seedersList: [DatabaseSeeder, OAuthResourcesSeeder, TestUsersSeeder],
+    defaultSeeder: 'DatabaseSeeder',
+    emit: 'ts',
+  },
+});

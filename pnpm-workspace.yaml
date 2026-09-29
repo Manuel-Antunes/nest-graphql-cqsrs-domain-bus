@@ -19,7 +19,10 @@ catalog:
   "@better-auth/oauth-provider": ^1.7.3
   "@biomejs/biome": ^2.5.14
   "@graphql-tools/webpack-loader": ^7.0.1
+  "@graphql-yoga/plugin-response-cache": ^3.26.1
+  "@keyv/redis": ^5.1.6
   "@nestjs-modules/mailer": 2.3.7
+  "@nestjs/cache-manager": ^12.0.0
   "@nestjs/outbox": 0.0.1
   "@nestjs/locks": 0.0.1
   "@nestjs/schedule": 12.0.2
@@ -31,6 +34,7 @@ catalog:
   "@nx/workspace": 23.2.1
   "@polar-sh/better-auth": ^1.8.4
   "@polar-sh/sdk": ~0.47.1
+  "@redis/client": ^5.12.1
   "@sentry/nestjs": ^11.0.0
   "@sentry/nextjs": ^11.0.0
   "@t3-oss/env-nextjs": ^0.13.11
@@ -48,6 +52,7 @@ catalog:
   better-auth: ^1.7.3
   blurhash: ^2.0.5
   bowser: ^2.14.1
+  cache-manager: ^7.2.9
   class-variance-authority: ^0.7.1
   clsx: ^2.1.1
   cn: ^0.3.2
@@ -58,6 +63,7 @@ catalog:
   html-to-text: ^9.0.5
   ical-generator: ^11.1.1
   input-otp: ^1.5.0
+  keyv: ^5.6.0
   mime-types: ^3.0.2
   nodemailer: 8.0.11
   nx: 23.2.1

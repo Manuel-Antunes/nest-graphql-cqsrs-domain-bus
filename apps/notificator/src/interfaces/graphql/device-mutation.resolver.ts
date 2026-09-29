@@ -13,7 +13,7 @@ import { RegisterDeviceCommand } from '../../application/notification/command/re
 import { RemoveDeviceCommand } from '../../application/notification/command/remove-device.command';
 import { FindDeviceQuery } from '../../application/notification/query/find-device.query';
 import { CurrentNotifiable } from '../auth/current-notifiable.decorator';
-import type { SessionNotifiable } from '../auth/session-notifiable.pipe';
+import type { IdentityNotifiable } from '../auth/identity-notifiable.pipe';
 import { RegisterDeviceInputSchema } from './register-device.input';
 import type { DeviceView } from './views';
 import { deviceView } from './views';
@@ -33,7 +33,7 @@ export class DeviceMutationResolver {
   @Mutation('registerDevice')
   async registerDevice(
     @Args('input') input: unknown,
-    @CurrentNotifiable() owner: SessionNotifiable,
+    @CurrentNotifiable() owner: IdentityNotifiable,
   ): Promise<DeviceView> {
     if (!owner) throw new UnauthorizedException('the session has no user yet');
     const deviceId = await this.commandBus.execute(
@@ -52,7 +52,7 @@ export class DeviceMutationResolver {
   @Mutation('removeDevice')
   removeDevice(
     @Args('token') token: string,
-    @CurrentNotifiable() owner: SessionNotifiable,
+    @CurrentNotifiable() owner: IdentityNotifiable,
   ): Promise<boolean> {
     return owner
       ? this.commandBus.execute(

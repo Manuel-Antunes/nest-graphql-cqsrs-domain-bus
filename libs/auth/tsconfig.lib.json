@@ -17,6 +17,9 @@
       "path": "../users/tsconfig.lib.json"
     },
     {
+      "path": "../core/redis/tsconfig.lib.json"
+    },
+    {
       "path": "../platform/tsconfig.lib.json"
     },
     {

@@ -123,7 +123,7 @@ const transports = PostEventsClient.destinations(appConfig());
 @Module({
   imports: [
     CqsrsModule.forRoot({ aggregatePublisher: TRANSPORT_EVENT_BUS_PUBLISHER }),
-    DatabaseModule.forRootAsync({ /* the connection */ }),
+    DatabaseModule.forRoot(),
     TenancyModule.forRoot({ resolver: MessageTenantResolver, migrations }),
     OutboxModule.forRoot({                                   // @nestjs/outbox, global — step 3
       imports: [PostEventsClientModule],

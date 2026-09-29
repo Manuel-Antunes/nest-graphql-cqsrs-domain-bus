@@ -3,9 +3,10 @@ import { APP_FILTER } from '@nestjs/core';
 import { AssetExceptionFilter } from '@nestposts/asset/filters/asset-exception.filter';
 import { AuthExceptionFilter } from '@nestposts/auth/filters/auth-exception.filter';
 import { HttpExceptionFilter } from '@nestposts/auth/filters/http-exception.filter';
-import { SessionUserPipe } from '@nestposts/auth/pipes/session-user.pipe';
+import { IdentityUserPipe } from '@nestposts/auth/pipes/identity-user.pipe';
 import { CalendarEventExceptionFilter } from '@nestposts/events/filters/calendar-event-exception.filter';
 import { SeesEveryEventPipe } from '@nestposts/events/pipes/sees-every-event.pipe';
+import { GraphQLResponseCacheModule } from '@nestposts/graphql-response-cache';
 import { OrganizationsExceptionFilter } from '@nestposts/organizations/filters/organizations-exception.filter';
 import { ActiveMemberPipe } from '@nestposts/organizations/pipes/active-member.pipe';
 import { ActiveOrganizationPipe } from '@nestposts/organizations/pipes/active-organization.pipe';
@@ -31,6 +32,7 @@ import { PostMutationResolver } from './graphql/post-mutation.resolver';
 import { PostQueryResolver } from './graphql/post-query.resolver';
 import { PostSubscriptionResolver } from './graphql/post-subscription.resolver';
 import { PostTagsResolver } from './graphql/post-tags.resolver';
+import { ResponseCacheInvalidation } from './graphql/response-cache-invalidation.handler';
 import { TagEntityResolver } from './graphql/tag-entity.resolver';
 import { UserEntityResolver } from './graphql/user-entity.resolver';
 import { UserQueryResolver } from './graphql/user-query.resolver';
@@ -42,9 +44,10 @@ import { UserProfile } from './mapper/user.profile';
 import { PostCompletionController } from './messaging/post-completion.controller';
 
 @Module({
-  imports: [ApplicationModule],
+  imports: [ApplicationModule, GraphQLResponseCacheModule],
   controllers: [PostCompletionController],
   providers: [
+    ResponseCacheInvalidation,
     PostQueryResolver,
     PostMutationResolver,
     AssetMutationResolver,
@@ -65,7 +68,7 @@ import { PostCompletionController } from './messaging/post-completion.controller
     TeamProfile,
     CalendarEventProfile,
     UserViewInterceptor,
-    SessionUserPipe,
+    IdentityUserPipe,
     SeesEveryEventPipe,
     AuthorPipe,
     ActiveOrganizationIdPipe,

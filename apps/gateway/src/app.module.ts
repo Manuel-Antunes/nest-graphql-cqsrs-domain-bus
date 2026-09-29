@@ -1,19 +1,25 @@
+import { YogaDriver } from '@graphql-yoga/nestjs';
+import { CacheModule } from '@nestjs/cache-manager';
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
-import {
-  FederationGatewayModule,
-  JwksGatewayTokenVerifier,
-  subgraphEventOrigin,
-} from '@nestposts/federation-gateway';
+import { ConditionalModule, ConfigModule } from '@nestjs/config';
+import { GraphQLModule } from '@nestjs/graphql';
+import { AuthInfrastructureModule } from '@nestposts/auth/infrastructure/auth-infrastructure.module';
+import { DatabaseModule } from '@nestposts/database';
 import { loggingModuleAsync } from '@nestposts/observability';
 import { ErrorReportingModule } from '@nestposts/observability/error-reporting.module';
-import { useGraphQLErrorReporting } from '@nestposts/observability/graphql-error-reporting';
-import { useGraphQLTracing } from '@nestposts/observability/graphql-tracing';
+import { organizationAuthPluginProviders } from '@nestposts/organizations/infrastructure/better-auth/organization-better-auth.plugin';
+import { OrganizationsInfrastructureModule } from '@nestposts/organizations/infrastructure/organizations-infrastructure.module';
+import { OrganizationEntities } from '@nestposts/organizations/infrastructure/persistence/organization-entities';
+import { RedisCacheOptions, RedisModule } from '@nestposts/redis';
+import z from 'zod';
 
 import type { AppConfig } from './config/app.config';
 import { appConfig } from './config/app.config';
-import type { AuthConfig } from './config/auth.config';
-import { authConfig } from './config/auth.config';
+import type { RedisConfig } from './config/redis.config';
+import { redisConfig } from './config/redis.config';
+import type { GatewayDriverConfig } from './graphql/gateway-gql-options.factory';
+import { GatewayGqlOptionsFactory } from './graphql/gateway-gql-options.factory';
+import { GatewayGraphQLModule } from './graphql/gateway-graphql.module';
 
 @Module({
   imports: [
@@ -21,7 +27,7 @@ import { authConfig } from './config/auth.config';
       isGlobal: true,
       cache: true,
       ignoreEnvFile: true,
-      load: [appConfig, authConfig],
+      load: [appConfig, redisConfig],
     }),
     loggingModuleAsync({
       inject: [appConfig.KEY],
@@ -31,24 +37,26 @@ import { authConfig } from './config/auth.config';
       }),
     }),
     ErrorReportingModule.forRoot(),
-    FederationGatewayModule.forRootAsync({
-      inject: [appConfig.KEY, authConfig.KEY],
-      useFactory: (app: AppConfig, auth: AuthConfig) => ({
-        subgraphs: app.subgraphs,
-        tokenVerifier: new JwksGatewayTokenVerifier({
-          jwksUrl: auth.jwksUrl,
-          issuer: auth.issuer,
-          audience: app.url,
-        }),
-        cors: { origin: app.corsOrigins, credentials: true },
-        plugins: [
-          useGraphQLTracing({
-            resolvers: false,
-            originOf: subgraphEventOrigin,
-          }),
-          useGraphQLErrorReporting(),
-        ],
+    DatabaseModule.forRoot(),
+    ConditionalModule.registerWhen(
+      RedisModule.forRootAsync({
+        inject: [redisConfig.KEY],
+        useFactory: ({ url }: RedisConfig) => ({ url }),
       }),
+      () => Boolean(redisConfig().url),
+    ),
+    CacheModule.registerAsync({ isGlobal: true, useClass: RedisCacheOptions }),
+    AuthInfrastructureModule.forRoot({
+      routes: false,
+      guard: false,
+      plugins: organizationAuthPluginProviders,
+      entities: OrganizationEntities.withAuth(),
+      imports: [OrganizationsInfrastructureModule],
+    }),
+    GraphQLModule.forRootAsync<GatewayDriverConfig>({
+      driver: YogaDriver,
+      imports: [GatewayGraphQLModule],
+      useClass: GatewayGqlOptionsFactory,
     }),
   ],
 })

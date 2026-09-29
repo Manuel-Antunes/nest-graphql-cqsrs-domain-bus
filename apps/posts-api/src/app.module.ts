@@ -2,13 +2,15 @@ import { join } from 'node:path';
 import { AutomapperModule } from '@automapper/nestjs';
 import type { YogaFederationDriverConfig } from '@graphql-yoga/nestjs-federation';
 import { YogaFederationDriver } from '@graphql-yoga/nestjs-federation';
+import { CacheModule } from '@nestjs/cache-manager';
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConditionalModule, ConfigModule } from '@nestjs/config';
 import { GraphQLISODateTime, GraphQLModule } from '@nestjs/graphql';
 import { OutboxModule } from '@nestjs/outbox';
 import { StorageModule } from '@nestjs/storage';
 import { AttachmentModule } from '@nestposts/asset/infrastructure/attachment.module';
 import { AuthInfrastructureModule } from '@nestposts/auth/infrastructure/auth-infrastructure.module';
+import { RequestCredentials } from '@nestposts/auth/infrastructure/request/request-credentials';
 import { CqsrsModule } from '@nestposts/cqsrs';
 import {
   DatabaseModule,
@@ -19,6 +21,10 @@ import {
   MikroOrmEventStorageEngine,
   MikroOrmEventStoreModule,
 } from '@nestposts/event-store-mikro-orm';
+import {
+  GraphQLResponseCache,
+  GraphQLResponseCacheModule,
+} from '@nestposts/graphql-response-cache';
 import { PublishingOnDemandNotifications } from '@nestposts/notifications/infrastructure/on-demand/publishing-on-demand-notifications';
 import { loggingModuleAsync } from '@nestposts/observability';
 import { ErrorReportingModule } from '@nestposts/observability/error-reporting.module';
@@ -33,9 +39,11 @@ import {
   MikroOrmOutboxStore,
   MikroOrmTransactionManager,
 } from '@nestposts/outbox-mikro-orm';
+import { RedisCacheOptions, RedisModule } from '@nestposts/redis';
 import {
   EventTrace,
   IncomingRequest,
+  LoggingErrorHandler,
   TRANSPORT_EVENT_BUS_PUBLISHER,
   TransportEventBusModule,
   TransportIdentity,
@@ -44,19 +52,19 @@ import {
 import { PostRequestContextCodec } from './application/shared/post-request-context.codec';
 import type { AppConfig } from './config/app.config';
 import { appConfig } from './config/app.config';
-import { authConfig } from './config/auth.config';
 import { awsConfig } from './config/aws.config';
 import { inngestConfig } from './config/inngest.config';
 import type { OutboxConfig } from './config/outbox.config';
 import { outboxConfig } from './config/outbox.config';
-import type { PostgresConfig } from './config/postgres.config';
-import { postgresConfig } from './config/postgres.config';
 import { rabbitmqConfig } from './config/rabbitmq.config';
+import type { RedisConfig } from './config/redis.config';
+import { redisConfig } from './config/redis.config';
 import { storageConfig } from './config/storage.config';
 import { MikroOrmConfiguration } from './infrastructure/persistence/mikro-orm.config';
 import { BucketDisks } from './infrastructure/storage/bucket-disks';
 import { PostEventsClient } from './infrastructure/transport/post-events.client';
 import { PostEventsClientModule } from './infrastructure/transport/post-events-client.module';
+import { RESPONSE_CACHE_GROUP } from './interfaces/graphql/response-cache-invalidation.handler';
 import { subscriptionDeadline } from './interfaces/graphql/subscription-deadline.plugin';
 import { InterfacesModule } from './interfaces/interfaces.module';
 import { MapperErrorHandler } from './interfaces/mapper/mapper-error.handler';
@@ -70,12 +78,11 @@ import { validatedDtoClasses } from './interfaces/mapper/validated-dto.strategy'
       ignoreEnvFile: true,
       load: [
         appConfig,
-        authConfig,
         awsConfig,
         inngestConfig,
         outboxConfig,
-        postgresConfig,
         rabbitmqConfig,
+        redisConfig,
         storageConfig,
       ],
     }),
@@ -88,17 +95,20 @@ import { validatedDtoClasses } from './interfaces/mapper/validated-dto.strategy'
     }),
     ErrorReportingModule.forRoot({ traceOf: IncomingRequest.traceOf }),
     CqsrsModule.forRoot({ aggregatePublisher: TRANSPORT_EVENT_BUS_PUBLISHER }),
-    DatabaseModule.forRootAsync({
-      inject: [postgresConfig.KEY],
-      useFactory: (postgres: PostgresConfig) =>
-        MikroOrmConfiguration.connection(postgres),
-    }),
+    DatabaseModule.forRoot(MikroOrmConfiguration.connection()),
     TenancyModule.forRoot({
       resolver: MessageTenantResolver,
       migrations: MikroOrmConfiguration.tenantMigrations(),
     }),
+    ConditionalModule.registerWhen(
+      RedisModule.forRootAsync({
+        inject: [redisConfig.KEY],
+        useFactory: ({ url }: RedisConfig) => ({ url }),
+      }),
+      () => Boolean(redisConfig().url),
+    ),
+    CacheModule.registerAsync({ isGlobal: true, useClass: RedisCacheOptions }),
     AuthInfrastructureModule.forRoot({
-      config: authConfig.KEY,
       plugins: organizationAuthPluginProviders,
       entities: OrganizationEntities.withAuth(),
       imports: [OrganizationsInfrastructureModule],
@@ -107,8 +117,12 @@ import { validatedDtoClasses } from './interfaces/mapper/validated-dto.strategy'
     TenantMembershipModule,
     GraphQLModule.forRootAsync<YogaFederationDriverConfig>({
       driver: YogaFederationDriver,
-      inject: [appConfig.KEY],
-      useFactory: ({ subscriptionMaxSeconds }: AppConfig) => ({
+      imports: [GraphQLResponseCacheModule],
+      inject: [appConfig.KEY, GraphQLResponseCache],
+      useFactory: (
+        { subscriptionMaxSeconds }: AppConfig,
+        responseCache: GraphQLResponseCache,
+      ) => ({
         typePaths: [join(__dirname, 'graphql', '**/*.graphql')],
         resolvers: { DateTime: GraphQLISODateTime },
         fieldResolverEnhancers: ['interceptors'],
@@ -120,6 +134,7 @@ import { validatedDtoClasses } from './interfaces/mapper/validated-dto.strategy'
           ...(subscriptionMaxSeconds
             ? [subscriptionDeadline(subscriptionMaxSeconds)]
             : []),
+          responseCache.plugin({ session: RequestCredentials.keyOf }),
         ],
       }),
     }),
@@ -162,7 +177,13 @@ import { validatedDtoClasses } from './interfaces/mapper/validated-dto.strategy'
         }),
       },
       requestContext: PostRequestContextCodec,
-      processingGroups: { notifications: 'streaming' },
+      processingGroups: {
+        notifications: 'streaming',
+        [RESPONSE_CACHE_GROUP]: {
+          processor: 'subscribing',
+          errorHandler: new LoggingErrorHandler(),
+        },
+      },
       ...(appConfig().subscriptionsFromFeed
         ? {
             eventStore: { engine: MikroOrmEventStorageEngine },

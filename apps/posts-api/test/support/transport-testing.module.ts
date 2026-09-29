@@ -16,16 +16,12 @@ import {
 } from '@nestposts/transport-eventbus';
 
 import { PostRequestContextCodec } from '../../src/application/shared/post-request-context.codec';
-import { postgresConfig } from '../../src/config/postgres.config';
 import { MikroOrmConfiguration } from '../../src/infrastructure/persistence/mikro-orm.config';
 
 /** This application's connection, on a schema of its own. Every table arrives through the module that owns it. */
 export const persistenceTesting = (): DynamicModule[] => [
   DatabaseModule.forRoot(
-    testDatabaseConfig(
-      MikroOrmConfiguration.connection(postgresConfig()),
-      'posts_api',
-    ),
+    testDatabaseConfig(MikroOrmConfiguration.connection(), 'posts_api'),
   ),
   TestSchemaModule.forRoot(),
 ];

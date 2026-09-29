@@ -1,8 +1,8 @@
 import { QueryBus } from '@nestjs/cqrs';
 import { Args, Mutation, Resolver } from '@nestjs/graphql';
-import { UserId } from '@nestposts/users/domain/user/vo/user-id';
-import type { UserSession } from '@thallesp/nestjs-better-auth';
-import { OptionalAuth, Session } from '@thallesp/nestjs-better-auth';
+import { CurrentIdentity } from '@nestposts/auth/decorators/current-identity.decorator';
+import type { Identity } from '@nestposts/auth/domain/auth/vo/identity';
+import { OptionalAuth } from '@thallesp/nestjs-better-auth';
 
 import { GeneratePresignedUrlQuery } from '../../application/asset/query/generate-presigned-url.query';
 import { GeneratePresignedUrlInput } from '../../dto/graphql/generate-presigned-url.input';
@@ -15,11 +15,11 @@ export class AssetMutationResolver {
   @Mutation('generatePresignedUrl')
   generatePresignedUrl(
     @Args('input') input: GeneratePresignedUrlInput,
-    @Session() session?: UserSession | null,
+    @CurrentIdentity() identity: Identity | null,
   ): Promise<GeneratePresignedUrlQuery.PresignedUpload> {
     return this.queryBus.execute(
       new GeneratePresignedUrlQuery.GeneratePresignedUrl(
-        session ? UserId.parse(session.user.id) : null,
+        identity?.userId ?? null,
         input.mimeType,
       ),
     );

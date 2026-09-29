@@ -45,8 +45,7 @@ The only exceptions:
    `libs/core/transport-eventbus`, `libs/core/outbox-mikro-orm`, `libs/core/event-store-mikro-orm`,
    `libs/core/microservices-aws`,
    `libs/core/microservices-inngest`, `libs/core/microservices-memory`, `libs/core/mail`,
-   `libs/core/federation-gateway`,
-   `libs/core/observability`, `libs/notifications`, `libs/asset`, `libs/auth` and
+   `libs/core/redis`, `libs/core/graphql-response-cache`, `libs/core/observability`, `libs/notifications`, `libs/asset`, `libs/auth` and
    `libs/organizations` — may
    carry **JSDoc**, and only JSDoc
    (`/** … */`), as usage documentation of their public API. These are
@@ -214,6 +213,7 @@ npx nx run @nestposts/gateway:supergraph   # dist/supergraph/{supergraph,api}.gr
 docker compose up -d localstack   # SNS + SQS, with the topology docker/localstack/init creates
 docker compose up -d minio createbuckets   # the bucket a post keeps its file in, with its policies
 docker compose up -d mailpit      # SMTP on 1025 and the inbox on http://localhost:8025 — every email sent locally
+docker compose up -d redis        # Better Auth's sessions and the Nest cache; set REDIS_URL for EVERY process (.env.example)
 docker compose --profile apps up -d --build   # the infrastructure AND the four applications, as images
 npx nx run @nestposts/posts-api:docker:build  # one image; `-t docker:build` builds all four
 npx sst deploy --stage <name>     # the topic, the queues and apps/tagging as a Lambda
@@ -262,6 +262,7 @@ Environment variables, per application:
 | logging | `LOG_LEVEL` (default `info`); pretty when stdout is a terminal, JSON otherwise | idem | idem |
 | telemetry | `OTEL_EXPORTER_OTLP_ENDPOINT` turns tracing **on** — unset, the SDK never starts; `OTEL_SERVICE_NAME`, and the rest of `OTEL_*` | idem | idem |
 | errors | `SENTRY_DSN` turns error reporting **on** — unset, every report is a no-op; `SENTRY_ENVIRONMENT`, `SENTRY_RELEASE`. The deploy sets all three from `infra/sentry` | idem | idem |
+| redis | `REDIS_URL` turns Redis **on** — unset, sessions are read from Postgres and the cache is in memory. Better Auth's secondary storage and the Nest cache (every service's `CacheModule`, the GraphQL response cache included), through `libs/core/redis`; **every process that holds Better Auth shares it, like `AUTH_SECRET`**, `apps/web` and the gateway included — a process without it revokes sessions the others keep answering from Redis | the Nest cache | idem |
 | auth | `AUTH_URL`, `AUTH_SECRET`, `AUTH_BASE_PATH` (default `/api/auth`), `WEB_URL`, `AUTH_TRUSTED_ORIGINS`, `AUTH_COOKIE_DOMAIN`, `AUTH_GOOGLE_ID`/`AUTH_GOOGLE_SECRET`, `AUTH_GITHUB_ID`/`AUTH_GITHUB_SECRET`, `AUTH_REQUIRE_EMAIL_VERIFICATION` (default `true`), `AUTH_RATE_LIMIT=false` (the e2e sets it) — see `libs/auth/README.md`. **Every process that reads a session shares `AUTH_SECRET`**, `apps/web` included | — | — |
 | storage | `DRIVE_BUCKET`, `DRIVE_S3_ENDPOINT`, `DRIVE_S3_PUBLIC_ENDPOINT` (where the BROWSER reaches the same storage — signed URLs are bound to it), `DRIVE_S3_FORCE_PATH_STYLE`, `DRIVE_CDN_URL`, `DRIVE_AWS_REGION`, `DRIVE_AWS_ACCESS_KEY_ID`/`DRIVE_AWS_SECRET_ACCESS_KEY` — read by `config/storage.config.ts`, turned into `@nestjs/storage`'s `S3Disk`s by `infrastructure/storage/bucket-disks.ts`; `libs/asset` reads no environment. The credentials fall back to `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`/`AWS_SESSION_TOKEN` (what Lambda sets), read there: an `S3Disk` reads them once, when it is BUILT, and refuses to be built without them, so with none at all `BucketDisks` hands it a function that fails only when the bucket is used, and the service still boots | — | — |
 | mail | — | — | `MAIL_TRANSPORT` = `smtp` (default) \| `ses` \| `json`, `MAIL_SMTP_URL` (default Mailpit, `smtp://localhost:1025`), `MAIL_FROM`, `MAIL_SES_REGION` — read by `infrastructure/mail/mail.config.ts`; `libs/core/mail` itself takes the mailer's options and reads no environment |
@@ -270,8 +271,10 @@ Environment variables, per application:
 
 `apps/gateway` reads `GATEWAY_PORT` (default 4000), `GATEWAY_URL`, `POSTS_SUBGRAPH_URL`,
 `NOTIFICATIONS_SUBGRAPH_URL`, `GATEWAY_SUBGRAPHS_DIR`, `GATEWAY_CORS_ORIGINS` (default `WEB_URL`),
-`AUTH_JWKS_URL` and `AUTH_ISSUER` — see `apps/gateway/README.md`. Every process that holds a Better
-Auth instance — posts-api, the notificator, `apps/web`, the migrator — reads **`GATEWAY_URL`** too
+and — because it holds a Better Auth instance to read each caller's session — `POSTGRES_URL`,
+`REDIS_URL` and the auth variables, `AUTH_SECRET` first — see `apps/gateway/README.md`. Every process
+that holds a Better Auth instance — posts-api, the notificator, `apps/web`, the migrator, the
+gateway — reads **`GATEWAY_URL`** too
 (default `http://localhost:4000/graphql`): it is the audience an OAuth access token must carry to be
 a session, and the resource the migrator registers. `AUTH_ISSUER` (default `WEB_URL`) is the one
 `iss` they all sign and verify with. The notificator now reads `AUTH_SECRET`, `AUTH_URL` and
@@ -279,7 +282,8 @@ a session, and the resource the migrator registers. `AUTH_ISSUER` (default `WEB_
 
 `apps/web` takes the auth and database variables of the posts-api (it holds the same Better Auth), the
 **storage** ones (`DRIVE_*`, `src/nest/config/storage.config.ts` — its Better Auth stores avatars, see
-`libs/auth/README.md`) and **billing** when `POLAR_ACCESS_TOKEN` is set (`POLAR_ENVIRONMENT`, sandbox by default, and
+`libs/auth/README.md`), `REDIS_URL` (`src/nest/config/redis.config.ts`, the same Redis as every other
+Better Auth process) and **billing** when `POLAR_ACCESS_TOKEN` is set (`POLAR_ENVIRONMENT`, sandbox by default, and
 `POLAR_WEBHOOK_SECRET` — see `libs/billing/README.md`), and a transport of its own, because it
 **publishes** the emails its Better Auth asks for:
 `WEB_TRANSPORT` = `inngest` (default) \| `rabbitmq` \| `memory` \| `aws`, with `INNGEST_BASE_URL`,
@@ -313,8 +317,10 @@ libs/users               domain/user + its ORM mapping and repositories, wired b
                          tenant, and the per-tenant authorship. It knows nothing about Better Auth
 libs/auth                authentication: the Better Auth server instance and its CORE plugin
                          registry, AuthUser (a kind of User, on the same public.users — see its
-                         README) and the tables Better Auth generates, the AuthService
-                         port and the IdentityProvider adapter — and every email authentication
+                         README) and the tables Better Auth generates, Identity (who is calling)
+                         with the AuthService and IdentityResolver ports and @CurrentIdentity(),
+                         RequestHeaders/RequestCredentials (the one place a request's headers and
+                         credentials are read), the IdentityProvider adapter — and every email authentication
                          sends, as a notification (BetterAuthEmails). Knows nothing about
                          organizations
 libs/organizations       organizations, members and invitations: the three tables, their domain and
@@ -388,9 +394,15 @@ libs/core/observability  the one door to observability: startTelemetry (the OTel
                          @nestposts/observability/telemetry, NEVER the barrel — see Observability
 libs/core/lambda         how AWS enters a Nest application: bootOnce (one boot per container),
                          streamingHandler (HTTP over a Function URL) and queueHandler (SQS)
-libs/core/federation-gateway  a federation gateway as a Nest module: local composition from the
-                         subgraphs' SDL, execution by @graphql-tools/federation (subscriptions over
-                         SSE), @interfaceObject, credential forwarding. It has a README
+libs/core/redis          Redis as one Nest provider: RedisModule (global, node-redis' own options,
+                         no environment) providing RedisConnection — one client per process,
+                         failing the boot when unreachable, closed on shutdown — RedisCacheOptions
+                         (the Nest cache on that client through Keyv) and ThrowawayRedis for specs.
+                         It has a README
+libs/core/graphql-response-cache  GraphQL response caching for a Yoga server, stored in the Nest
+                         cache manager: @graphql-yoga/plugin-response-cache over a store that
+                         invalidates by version, opt-in per type or field with @cacheControl in the
+                         SDL, keyed by caller and tenant. The subgraphs install it. It has a README
 libs/ui                  the design system: shadcn base-nova primitives (Base UI, not Radix), the
                          components built on them, the hooks and the theme. A SOURCE package — Next
                          compiles it with apps/web (transpilePackages); it has a README
@@ -407,8 +419,12 @@ libs/tanstack-query-graphql  GraphQL over TanStack Query, with Apollo's InMemory
                          ['graph', document, variables]), GraphQueryCache/GraphMutationCache and
                          useSubscription. A SOURCE package like libs/ui; it has a README
 
-apps/gateway             the one GraphQL endpoint: federates the posts and notifications subgraphs
-                         and forwards every caller's cookie and bearer. See "The gateway" below
+apps/gateway             the one GraphQL endpoint: composes the posts and notifications subgraphs
+                         from their SDL, executes them with @graphql-tools/federation (subscriptions
+                         over SSE, @interfaceObject), reads each caller's session through the same
+                         Better Auth (Redis first, Postgres on a miss) and forwards every caller's
+                         cookie and bearer. The whole gateway lives here, not in a library. See
+                         "The gateway" below
 apps/posts-api           application + interfaces (GraphQL, messaging), a HYBRID application:
                          HTTP (the `posts` subgraph, subscriptions over SSE) and a microservice
 apps/tagging             one step of the saga, a FULL microservice: no HTTP port at all
@@ -471,7 +487,8 @@ else. `apps/tagging/src/config` is the reference shape:
   `export type AwsConfig = ConfigType<typeof awsConfig>`. `app.config.ts` is the application's own
   information and its **routing** (name, identity, transport mode, exchange and queue names, port, the
   one `maxRetries` rule); the others are named after the technology they configure: `aws`, `inngest`,
-  `rabbitmq`, `postgres`, `auth`, `mail`, `storage`, `firebase`, `billing`, `seed`.
+  `rabbitmq`, `redis`, `mail`, `storage`, `firebase`, `seed`. The database, authentication and billing
+  are not among them: their libraries own their configuration (below).
 - **Defaults are literals in the schema's `.default(...)`**, so the environment can override every one
   of them; there is no constants object. What the schema cannot express as a default — a LocalStack
   queue URL built from the endpoint — is computed in the factory.
@@ -479,11 +496,15 @@ else. `apps/tagging/src/config` is the reference shape:
   load: [...] })` itself** — no wrapper module. `ignoreEnvFile` because the environment is the
   process's: Nx loads the root `.env` for local runs, `docker-compose.yml`, `apps/web-e2e` and SST set
   it everywhere else. Modules take their config through `forRootAsync({ inject: [xConfig.KEY] })`
-  (`DatabaseModule`, `FederationGatewayModule`, `RetryPolicyModule`, `MailModule`,
-  `NotificationChannelsModule`, `GraphQLModule`, `loggingModuleAsync`), `BetterAuthModule`
-  through its `config: authConfig.KEY` option, and `StorageModule` (`@nestjs/storage`) through `useClass` —
+  (`RedisModule`, `RetryPolicyModule`, `MailModule`,
+  `NotificationChannelsModule`, `GraphQLModule`, `loggingModuleAsync`), and `StorageModule`
+  (`@nestjs/storage`) through `useClass` —
   posts-api's `BucketDisks` is a `StorageOptionsFactory` that injects `storageConfig.KEY` and builds
-  the `S3Disk`s.
+  the `S3Disk`s. The gateway's `GraphQLModule` is `useClass` too: `GatewayGqlOptionsFactory` is a
+  `GqlOptionsFactory` that injects the config and the services its context function closes over.
+  **Every service registers the Nest cache the same way** —
+  `CacheModule.registerAsync({ isGlobal: true, useClass: RedisCacheOptions })` beside the conditional
+  `RedisModule` — so `CACHE_MANAGER` is Redis wherever `REDIS_URL` is set, and memory where it is not.
 - **A value needed before the container exists is read by calling the factory**, `appConfig()` —
   `main.ts` deciding whether tagging is a hybrid, `TransportEventBusModule`'s static `subscriptions`,
   the billing plugins the web registers. The same parse, the same validation.
@@ -494,18 +515,26 @@ else. `apps/tagging/src/config` is the reference shape:
   the retry producers take everything as arguments (`clientConfig`, `serveOrigin`, the `Inngest`
   client); each application's `aws.config.ts` and `inngest.config.ts` decide it, LocalStack's
   credential fallback included, and so is `libs/asset`: posts-api's `storage.config.ts` reads the
-  bucket and `BucketDisks` builds the drivers. Libraries with a parser of their own —
-  `AuthConfiguration`, `firebasePushOptionsFromEnv` — keep it, and the application's config calls it
-  with `process.env`: one rule, shared by every process that must agree on it, read where the
-  application says.
-- **A domain module of THIS application owns its configuration, and is a plain module.** The rule
-  above is for `libs/core/*` — general-purpose libraries a caller configures. A module that is part of
-  this system's domain is as simple as it can be instead: `libs/billing` keeps a `config/` folder with
-  its `registerAs` (`billingConfig`, reading `process.env` itself), registers it with
-  `ConfigModule.forFeature` inside `BillingInfrastructureModule` and exports it, and its services
-  inject `billingConfig.KEY`. No `forRoot(config)`, no option objects, no string tokens for the
-  config: the application imports the module and loads nothing. Where a value is needed before the
-  container exists — which Better Auth plugins to register — the module calls `billingConfig()`.
+  bucket and `BucketDisks` builds the drivers. A library with a parser of its own —
+  `firebasePushOptionsFromEnv` — keeps it, and the application's config calls it with `process.env`.
+- **Every library OUTSIDE `libs/core` owns its configuration, and is a plain module.** The rule above
+  is for `libs/core/*` — general-purpose libraries a caller configures. A library that is part of this
+  system (`libs/database`, `libs/auth`, `libs/billing`) is as simple as it can be instead, and its `src/config/` is two
+  files: **`<x>-env.schema.ts`**, the variables it reads as a Zod object — Zod and literals only, so
+  `apps/web/src/env.mjs` can spread it — and **`<x>.config.ts`**, the `registerAs` that parses
+  `process.env` with that schema and returns the configuration, with
+  `export type XConfig = ConfigType<typeof xConfig>` as its only type. No config class, no
+  `fromEnvironment`, no second schema for the result. The library's module registers it with
+  `ConfigModule.forFeature` — and exports it where others inject it: `BetterAuthModule` (global) and
+  `BillingInfrastructureModule` do, while `DatabaseModule` only hands `databaseConfig.KEY` to its own
+  connection factory — and whatever needs it injects `xConfig.KEY`. No `forRoot(config)`,
+  no option objects, no string tokens for the config: the application imports the module and loads
+  nothing. Where a value is needed before the container exists — which Better Auth plugins to
+  register, the tables Better Auth generates, whether the web shows a sign-in button — the caller
+  calls `xConfig()`. A spec that needs a different value spreads it: `{ ...authConfig(), rateLimit:
+  false }`. What differs between processes is the environment's to say, not an override in code:
+  `AUTH_URL` is the origin THIS process answers on, so the web's is its own — the default under
+  `next dev`, which sets `PORT`, and stated by compose, `apps/web-e2e` and SST everywhere else.
 - **Clients are providers of `AppModule`, and DI tokens are classes**: the Inngest client is
   `provide: Inngest` (one per process, the same object the proxy sends on and the strategy serves
   from), a `ClientProxy` is provided under the class that builds it (`provide: PostEventsClient`).
@@ -522,11 +551,14 @@ else. `apps/tagging/src/config` is the reference shape:
   of parsing `process.env`. The schemas are **Zod and literals only** — `env.mjs` reaches the browser
   bundle, so a schema importing `@nestposts/database` for a default would ship MikroORM to it. Reading
   a server variable from a client component throws, which is the point. `emptyStringAsUndefined`
-  makes an empty variable read as unset. Billing's schema comes from `libs/billing` itself
-  (`config/billing-env.schema.ts`, Zod alone — importing it from `billing.config.ts` would pull
-  `@nestjs/config`, whose `dotenv` asks for `fs`, into the browser bundle and fail `next build`), and
-  the library's `registerAs` treats `POLAR_ACCESS_TOKEN=''` — how `apps/web-e2e` turns billing off —
-  as unset the same way.
+  makes an empty variable read as unset. The database's, auth's and billing's schemas come from their
+  libraries (`@nestposts/database/config/database-env.schema`, `@nestposts/auth/config/auth-env.schema`,
+  `@nestposts/billing/config/billing-env.schema`, Zod alone, by that deep path and never through
+  `@nestposts/database`'s barrel, which is MikroORM — importing them from the `*.config.ts` beside them
+  would pull `@nestjs/config`, whose
+  `dotenv` asks for `fs`, into the browser bundle and fail `next build`), and those libraries'
+  `registerAs` read an empty variable as unset where it matters the same way — `POLAR_ACCESS_TOKEN=''`
+  is how `apps/web-e2e` turns billing off, and `AUTH_GOOGLE_ID=` is how `.env.example` ships.
   `lib/endpoints.ts` holds what is not environment: the tenant header, the proxy paths, the derived
   posts-subgraph URL.
 
@@ -1038,7 +1070,8 @@ signed in included. An organization is a tenant: `tenant_<slug>`. `libs/database
 - **The tenant a request names is checked.** `TenantMembershipGuard` (`libs/organizations`, installed
   by `TenantMembershipModule` in posts-api and the notificator) lets anybody into the root tenant and
   only an organization's members into its tenant; a message passes, because its publisher checked. The
-  verdict is remembered per request — a guard on field resolvers runs once per field. On a handler
+  verdict is remembered per request — the guard is request-scoped, and a guard on field resolvers runs
+  once per field. On a handler
   carrying `@OrgRoles`, `@MemberHasPermission` or `@RequireActiveOrg` it also requires the tenant to BE
   the active organization's: those decorators check the active organization, and without that rule an
   owner of one organization could act with that role in another tenant of theirs.
@@ -1177,7 +1210,7 @@ This applies to the libraries' `domain/` only. The GraphQL DTO schemas under
 
 `apps/gateway` is the only GraphQL endpoint a client calls — `apps/web` included, through its
 `/api/graphql` proxy on the server and directly for SSE subscriptions in the browser.
-`libs/core/federation-gateway/README.md` is the guide; the essentials:
+`apps/gateway/README.md` is the guide; the essentials:
 
 - **Execution is `@graphql-tools/federation`, served by `YogaDriver` — not `YogaGatewayDriver`.**
   The latter is Apollo's gateway, which refuses to execute subscriptions; a stitched schema runs
@@ -1192,9 +1225,28 @@ This applies to the libraries' `domain/` only. The GraphQL DTO schemas under
   gateway does not expose, so the federation page sends that one operation to the posts subgraph
   itself (`postsSubgraphQueryOptions`, `/api/graphql/posts`).
 - **Credentials are forwarded, and decided by each subgraph.** Cookie, bearer and `x-tenant` go to
-  every subgraph an operation reaches; each authenticates with its own Better Auth instance. A bearer
-  is verified at the gateway only to know who it is for — see `libs/auth`'s "An OAuth access token is
-  a session".
+  every subgraph an operation reaches; each authenticates with its own Better Auth instance. The
+  gateway reads the caller's session too — with a Better Auth instance of its own, on the same
+  Postgres and the same Redis (`AuthInfrastructureModule`, `routes: false`, `guard: false`) — only to
+  know who it is for and which organization they are in: `libs/auth`'s `IdentityResolver`, the same
+  one the subgraphs' tenant guard uses, so a cookie and an OAuth access token (`oauth-bearer-session`)
+  read exactly as they do in a subgraph. `OrganizationSlugs` names the caller's active organization
+  through the Nest cache (`CacheModule`, `RedisCacheOptions`), and that slug is the `x-tenant` when the
+  caller sent none — the rule the web's `/api/graphql` follows. Every subgraph is sent the same
+  headers, `GatewayContext.subgraphHeaders`, built once per request.
+- **The identity is resolved in Yoga's context function, never in a guard.** `YogaDriver` registers
+  `/graphql` straight on Fastify and the stitched schema has no `@Resolver` classes, so no Nest guard,
+  interceptor or pipe runs for an operation — an `APP_GUARD` would guard only
+  `GET /graphql/schema.graphql`. `GatewayGqlOptionsFactory` (a `GqlOptionsFactory`, `useClass`) gives
+  Yoga a context function that closes over `ModuleRef` and `OrganizationSlugs`; `IdentityResolver`
+  is request-scoped, so the function registers `req` under a context id of its own
+  (`ContextIdFactory.create()`, `registerRequestByContextId`) and `moduleRef.resolve`s it.
+  The gateway's own rules are not Yoga plugins because they act on each SUBGRAPH call, where Yoga has
+  no hook — the stitcher's `httpExecutorOpts`/`onSubschemaConfig` are where they live; the README says
+  why Hive Gateway, whose plugins do reach that layer, was left out.
+- **The executor names a subgraph by its `join__Graph` value** (`MAIN_GRAPH`), not its name
+  (`main-graph`): anything keyed by subgraph translates with `Supergraph.subgraphNamesOf`, or the
+  subgraph is called anonymously and `{ __typename }` still passes.
 - **A request log never carries a credential.** `loggingModule` redacts `cookie`, `authorization` and
   `set-cookie`: a gateway forwards both on every request, and a record is a working session token in
   whatever stores it.
@@ -1209,13 +1261,14 @@ in the domain or in `libs/core/validated-dto` (which knows nothing about databas
 `p.embedded(…).prefix(false).object(false)` on the entity, so its fields keep their own columns —
 `SoftDeletion` and `CalendarEvent`'s `details` and `window` are mapped that way.
 
-**The entity list is not a list.** `DatabaseModule.forRootAsync({ inject: [postgresConfig.KEY],
-useFactory: MikroOrmConfiguration.connection })` (`libs/database/src/database.module.ts`) is the
-connection, and every table
+**The entity list is not a list.** `DatabaseModule.forRoot(options?)` (`libs/database/src/database.module.ts`)
+is the connection — `POSTGRES_URL` and `MIKRO_ORM_DEBUG` from `libs/database`'s own `databaseConfig`,
+under whatever the application passes of its own: posts-api's `dataloader`, the migrator's migrations
+and seeders, nothing at all for the rest — and every table
 reaches it through `DatabaseModule.forFeature(...)` in the module that **owns** it:
 `PostsInfrastructureModule`, `UsersInfrastructureModule`, `BetterAuthModule` (the Better Auth tables, composed
 with whatever a contributed plugin adds), `MikroOrmOutboxModule` (the outbox and the inbox) and `MikroOrmEventStoreModule` (the event store). An application's `mikro-orm.config.ts` therefore
-holds the connection and nothing else — and `apps/tagging`, which needs the Post's *mapping* but not its
+holds its tenant migrations' path and, at most, a connection option of its own — and `apps/tagging`, which needs the Post's *mapping* but not its
 repositories, imports `DatabaseModule.forFeature([...postsEntities, ...usersEntities])` and nothing more.
 
 Two measured failures are why `forRoot` resolves that list **lazily**, in a factory, instead of using
@@ -1250,7 +1303,7 @@ Better Auth hooks, tests — need `inRequestContext(em, work)` (`@nestposts/data
 first query is rejected.
 
 **`libs/database` is the one door to MikroORM**, and `libs/database/README.md` is its guide. It holds
-the connection (`postgresDatabase`), `DatabaseModule`, `valueObjectType`, `inRequestContext`,
+the connection (`databaseConfig`, `postgresDatabase`), `DatabaseModule`, `valueObjectType`, `inRequestContext`,
 `DatabaseError` and the global `DatabaseExceptionFilter`, and re-exports `@mikro-orm/core` whole plus
 the legacy decorators. The rule for what may live there is that it must be understandable **without a
 domain** — which is why soft delete's ORM half stayed in `libs/platform` (it maps the `SoftDeletion`
@@ -1285,8 +1338,8 @@ the post mutations, answers one as "the author does not exist", ahead of the glo
 - **A throwaway schema is built from the entities** — `TestSchemaModule`, `testDatabase` — with every
   pinned table rewritten onto the spec's own schema (`everyTableIn`), so specs never share `public`.
   A spec that needs the real layout by name uses a DATABASE of its own (`testProject({ database:
-  'own' })`) and runs the real `migrate()` — the migrator's, posts-api's e2e, tagging's and the
-  notificator's specs do.
+  'own' })`) and runs the real `migrate()` — the migrator's, posts-api's e2e, tagging's, the
+  notificator's and the gateway's specs do.
 - **The migrator is one Nest container** (`MigratorModule`): the modules that own every table,
   `bootstrap.ts` hands over `{ app, orm }`, and the CLI configs and the lambda handlers run on that. It
   is what lets `TestUsersSeeder` resolve the **real** `BETTER_AUTH` and create a credential rather than
@@ -1299,6 +1352,19 @@ the post mutations, answers one as "the author does not exist", ahead of the glo
 
 ### GraphQL edge
 
+- **A query's response is cached by the subgraph, and only when its SDL asks.**
+  `@nestposts/graphql-response-cache` is Yoga's response cache plugin over the Nest cache manager,
+  installed by posts-api and the notificator (`responseCache.plugin({ session: RequestCredentials.keyOf })`,
+  after tracing and error reporting). Nothing is cached until a type or a field says `@cacheControl(maxAge: …, scope: …)` —
+  the directive is defined in each subgraph's `cache-control.graphql`. The key is the operation, the
+  caller's `cookie`/`authorization` and `x-tenant`; a mutation that returns an entity invalidates every
+  response containing it, in every process sharing Redis, and anything else is invalidated with
+  `GraphQLResponseCache.invalidate` or waits for the TTL. Not Nest's `CacheInterceptor`: in GraphQL
+  it runs per field resolver, as Nest's own docs warn. posts-api caches `Post` (60s), `Tag` (300s) and
+  `Event` (60s, `PRIVATE`), never `me` (`maxAge: 0`), and forgets them from the domain events in
+  `ResponseCacheInvalidation` — a **subscribing** group with a `LoggingErrorHandler`, so the
+  invalidation happens inside the unit, before a subscription hears or a mutation answers, and a Redis
+  that is down never fails a command. The library's README says what is left to the TTL.
 - **Fastify, not Express**, and **Yoga, not Apollo.** `apps/posts-api` runs on
   `@nestjs/platform-fastify` with `YogaDriver` (`@graphql-yoga/nestjs`), and Better Auth mounts its
   routes as middleware there. Both choices exist for the same reason: Fastify is what
@@ -1369,11 +1435,24 @@ the post mutations, answers one as "the author does not exist", ahead of the glo
   surface and the global guard — which requires a session, so post reads opt out with `@AllowAnonymous()`
   and writes use `@Roles([AUTHOR_ROLE])` + `@CurrentAuthor()`. Organization-scoped handlers use
   `@OrgRoles([...])` and `@ActiveOrganization()` / `@ActiveMember()` / `@ActiveOrganizationId()`, which are
-  `@Session()` with one pipe each; the pipes answer from `OrganizationService`. The auth, user and
+  `@CurrentIdentity()` with one pipe each; the pipes answer from `OrganizationService`. The auth, user and
   organization errors get their GraphQL codes from those modules' own filters (see **Errors**).
+- **The caller is one `Identity`, however it is asked for** (`libs/auth`, whose README has the table):
+  `@CurrentIdentity()` in a resolver — `@CurrentUser()`, `@CurrentAuthor()` and the organization
+  decorators are it plus a pipe — `AuthService.identity()` inside a request, and
+  `IdentityResolver.identity()` for a guard or a context function — request-scoped like `AuthService`,
+  so its answer is remembered in Nest's request scope, and a request-scoped `APP_GUARD` that injects it
+  (`TenantMembershipGuard`) makes every controller and `@Resolver` of its application request-scoped
+  (`libs/auth/README.md` has the measure). The global guard's lookup
+  is reused, not repeated, and `BetterAuthIdentityResolver.fromSession` is the one translation from
+  Better Auth's session. Nothing reads `@thallesp/nestjs-better-auth`'s raw `@Session()` any more.
+- **A request's headers are read in one place**: `RequestHeaders.from(anything)` (`libs/auth`) — a
+  Fastify or Express request, a GraphQL context, Yoga's `request` (whose headers are `@whatwg-node`'s
+  class, which a check for the global `Headers` used to read as empty, losing the cookie with nothing
+  failing), a Socket.IO client, a message with none. `RequestCredentials` is its `cookie` and
+  `authorization`, what the gateway forwards and the response cache keys by.
 - **`AuthService` and `OrganizationService` are `Scope.REQUEST` and take no headers.** They receive
-  Nest's `REQUEST` and turn it into a `Headers` in the constructor (`headersFrom`, which absorbs the
-  Express request, the GraphQL context and a headerless microservice message). An instance belongs to
+  Nest's `REQUEST` and turn it into a `Headers` in the constructor. An instance belongs to
   one request, so nothing can pass the wrong one. Nest's scope bubbling is the cost: whatever injects
   them is request-scoped too, which is why a saga and an event handler use `PostRequest` instead.
 - **Errors: each module translates its own exceptions**, in a `filters/` folder at the root of the
@@ -1388,7 +1467,7 @@ the post mutations, answers one as "the author does not exist", ahead of the glo
   unwraps AutoMapper's `MapMemberError` and hands the cause to the module filter that catches it (read
   off Nest's own `@Catch` metadata), and `AuthorReferenceExceptionFilter` reads a foreign key on a post
   mutation as its author.
-- **A database failure is `libs/database`'s, globally.** `DatabaseModule.forRootAsync` installs
+- **A database failure is `libs/database`'s, globally.** `DatabaseModule.forRoot` installs
   `DatabaseExceptionFilter` as an `APP_FILTER` in every application that holds a connection.
   `DatabaseError` says what the failure means — a unique or exclusion violation or a delete still
   referenced is `CONFLICT`, a reference to nothing, a missing or malformed value or a check is
@@ -1429,7 +1508,7 @@ error at all**: the system works, the trace is just wrong or absent, and only on
   every gateway → subgraph call without a `traceparent`, so each subgraph opened a trace of its own.
   `startTelemetry` leaves `http` out of its list in a Lambda; the preload owns it.
 - **The gateway traces each call to a subgraph** — `subgraph posts`, a client span around the
-  executor (`tracedExecutor`, `libs/core/federation-gateway`) with the HTTP request, and its
+  executor (`TracedExecutor.wrap`, `apps/gateway`) with the HTTP request, and its
   `traceparent`, inside it.
 - **A subscription delivers each event in the trace that produced it.** The trace travels in the
   event's metadata (`TraceContextDispatchInterceptor` writes it at dispatch), so it is in the outbox row,
@@ -1437,7 +1516,8 @@ error at all**: the system works, the trace is just wrong or absent, and only on
   reads it back off the event's attached message, `MapSubscriptionInterceptor` carries it onto the view
   (`EventTrace.carry`), and the plugin opens `subscription OnPostCreated event` as a **child** of it,
   **linked** to the subscription. The event's result carries that span's `traceparent` in its
-  `extensions`, the gateway's executor remembers it for the event's objects (`subgraphEventOrigin`),
+  `extensions`, the gateway's executor remembers it for the event's objects
+  (`TracedExecutor.originOf`),
   and the gateway's own delivery is one more child. A subscription's operation span ends when the
   stream is set up; only the events are in the mutation's trace.
 - **`startTelemetry` has to run before anything it instruments is loaded — including as a side
@@ -1542,7 +1622,8 @@ trigger — asks for a database of its own with `testProject({ database: 'own' }
 creates it for the run and drops it after, and the spec runs the migrator's real `migrate()` and
 overrides `TENANT_MIGRATIONS` with the migrator's `tenantMigrations` list, because under Vitest there
 is no `dist/migrations` to read. posts-api's e2e, tagging, the notificator, the migrator, the
-organizations and the database libraries do.
+gateway, the organizations and the database libraries do. A spec that needs Redis starts one of its
+own with `ThrowawayRedis` (`@nestposts/redis/testing/throwaway-redis`) — never the one on 6379.
 
 Where a spec lives follows one rule: **next to what it covers, in the project that can see it**. A
 spec that needs more than its own library — the persistence integration specs, the delegation over
@@ -1578,9 +1659,11 @@ the `authors_id_foreign` failure described under `MikroOrmTransactionManager`'s 
 reached AWS because no suite ran posts-api in that mode. The RabbitMQ run keeps a long-lived
 process's `local`.
 
-It provisions everything itself, through **Testcontainers**: Postgres, MinIO (the bucket and its
+It provisions everything itself, through **Testcontainers**: Postgres, Redis (every Better Auth
+process, the web included, keeps its sessions there), MinIO (the bucket and its
 policies included), Mailpit (where `notifications.spec` reads the author's email), the broker or the
-Inngest dev server, the migrator as a one-shot, and then `posts-api`, `tagging` and `notificator` as
+Inngest dev server, the migrator as a one-shot, and then `posts-api`, `tagging`, `notificator` and the
+`gateway` as
 the images `apps/<app>/Dockerfile` build. They share a network and address each other by alias, so nothing has to be taught a port, and
 what the host reaches is published wherever Docker likes — which is why the suite now needs no
 configuration and does not care what else on the machine is holding 5432 or 5672. The one host port
@@ -1900,6 +1983,38 @@ DTOs count.
   after sign-in the view is rendered by a client navigation BEFORE Next updates the URL, so the
   render saw `/auth/sign-in?redirectTo=…`, found no id, never asked for the invitation and said
   "unavailable" — every time, on a fast enough machine.
+- **With a secondary storage, Better Auth refuses to reserve a verification value that lives only
+  there** — `reserveVerificationValue requires database-backed verification storage`, thrown from
+  magic link and email OTP when they claim an unverified account, so those sign-ins fail.
+  `BetterAuthStorage.optionsWith` turns `verification.storeInDatabase` on whenever there is a storage,
+  and `session.storeSessionInDatabase` with it, so Postgres stays the source of truth and a session
+  issued before Redis existed still answers from its row. `redis-secondary-storage.spec.ts` turns the
+  first off and watches the error.
+- **Better Auth lists a user's sessions from Redis ONLY**, even with every row in the database, and
+  keeps a copy of the user inside each session. A write that goes around Better Auth — `update users
+  set role = …` by hand — is not what a session reads until the copies are refreshed; Better Auth's
+  own `internalAdapter.updateUser` (the identity provider, the admin plugin) refreshes them, SQL does
+  not. `apps/web-e2e`'s `SessionCache` rewrites the copies after its own `promote` and
+  `forgetUserAgentsOf`, or `settings.spec` would pass without its blank user agent ever reaching the
+  page. And every process that holds Better Auth shares `REDIS_URL`: one without it revokes a session
+  in Postgres alone, while the others keep answering it from Redis until it expires.
+- **node-redis' `connect()` never settles while the server is down.** Its default strategy retries
+  forever — measured: six errors in three seconds, the promise still pending — so a boot that awaits
+  it hangs in silence. `RedisConnection.open` refuses to reconnect until the first connection is made,
+  and backs off only after that.
+- **`ConditionalModule.registerWhen` decides when the module FILE is imported**, not when the
+  application boots: it awaits `ConfigModule.envVariablesLoaded`, which the same file's
+  `ConfigModule.forRoot` resolves at once. A spec that sets `REDIS_URL` must import the module after
+  it (`await import(...)`) — the gateway's `session-resolution.spec.ts` does — and a condition given
+  as a STRING is true for a variable that is unset (`undefined !== 'false'`): use a function.
+- **The response cache records only objects with an `id`**, so a list — a connection, an edge — is
+  never recorded: a post that APPEARS is in none of the cached lists, and only
+  `invalidate([{ typename: 'Post' }])` reaches them. And the plugin calls its store's `set` and
+  `invalidate` without awaiting them — a rejection there is unhandled, which ends a Node process, so
+  `CacheManagerResponseStore` never rejects; and a client refetching the instant a mutation answers can
+  beat the plugin's own invalidation, which is why posts-api invalidates from the domain events, inside
+  the unit. A version replaced less than five seconds ago keeps anything containing it from being
+  stored: without that, a query that read before a change and finished after it is cached stale.
 - **An account need not have a name.** A magic link or an emailed code signs up an address nobody
   registered, and Better Auth creates that user with `name: ''` — while `UserName` refuses the empty
   string, so the first `me` of such an account failed with `name não pode ser vazio`, and only
@@ -1909,8 +2024,8 @@ DTOs count.
   is hydrated as a `User` now, and an empty name would fail the read itself.
 - **A schema-first subgraph's SDL is its files MERGED, not concatenated.** posts-api declares
   `type Mutation` in more than one file; Nest merges them (`mergeTypeDefs`) and composition, handed
-  the text, reports `There can be only one type named "Mutation"`. `readSubgraphSdl` merges the way
-  Nest does.
+  the text, reports `There can be only one type named "Mutation"`. `Supergraph.readSdl`
+  merges the way Nest does.
 - **`@apollo/federation-internals` has a `graphql` of its own.** It is CommonJS, and under Vitest
   `graphql` also loads as ESM: printing its schema with `graphql`'s `printSchema` fails with
   `Cannot use GraphQLObjectType "Post" from another module or realm`. It is printed with that
@@ -1978,7 +2093,7 @@ DTOs count.
 - **`MikroOrmModule.forRootAsync` with `inject` needs `driver`.** Without it the module calls the
   factory with NO arguments to discover the driver, the destructuring throws, the error is swallowed,
   and the driver-specific `EntityManager` is never registered — one `console.warn` is all it says.
-  `DatabaseModule.forRootAsync` passes `PostgreSqlDriver`.
+  `DatabaseModule.forRoot`, which injects its configuration, passes `PostgreSqlDriver`.
 - **`@polar-sh/better-auth` passes a `referenceId` straight through, and 500s for a user it does
   not know** (checked in 1.8.4, the latest). `/customer/subscriptions/list?referenceId=…` lists any
   organization's subscriptions with the organization's access token, for any signed-in user, and
@@ -2014,8 +2129,11 @@ plugin writes the cookie.
   `app/api/auth/[...all]/route.ts` — but that library's `AuthModule` all the same, because it is
   what attaches the `@DatabaseHook` providers (`libs/auth`'s `UserDatabaseHooks`) to the instance.
 - `nextCookies()` is registered as a **trailing** plugin: Better Auth requires cookie plugins last.
-- `baseUrl` is overridden to this origin, so the cookie belongs to the origin the browser is talking
-  to. The secret and the database are the API's, which is what makes the cookie one the API resolves.
+- Its `AUTH_URL` is this origin, so the cookie belongs to the origin the browser is talking to — the
+  default under `next dev` (`localhost:${PORT}`, and Next sets `PORT`), stated by compose, whose
+  container listens on another port than it is reached at, and by `apps/web-e2e` and SST. There is
+  no override in code: the web loads `libs/auth`'s configuration like every other process. The secret
+  and the database are the API's, which is what makes the cookie one the API resolves.
 - Every resolved provider is wrapped so each call runs inside `inRequestContext`: nothing opens a
   MikroORM context here, because Next owns the request and there is no middleware or interceptor.
 

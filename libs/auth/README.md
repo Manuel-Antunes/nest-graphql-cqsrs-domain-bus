@@ -12,23 +12,44 @@ layer (see the root `CLAUDE.md`). Which command exists and which resolver answer
 `apps/posts-api`'s business; what an organization *is*, and where a session comes from, is this
 package's.
 
-## The three ways in, and when each is right
+## Who is calling: one `Identity`, however the question is asked
+
+`Identity` (`domain/auth/vo/identity.ts`) is the caller — user id, email, name, roles and the active
+organization's id, as value objects — and every way of asking answers it:
 
 | | what it is | use it when |
 |---|---|---|
-| `AuthService` | the **port** (`domain/auth/auth.service.ts`) — the session, the roles and the permissions of THIS request, in this repository's value objects | application code. It is the only one that does not name Better Auth |
-| `BETTER_AUTH` | the **instance**, fully typed, with every plugin's endpoints on `auth.api` | you need an endpoint the port does not wrap |
+| `@CurrentIdentity()` | a parameter decorator: the `Identity` the global guard found, `null` for nobody. Pipes compose on it — `@CurrentUser()` and `@CurrentAuthor()` are `CurrentIdentity(IdentityUserPipe…)`, and the organization decorators are the same | a resolver or a controller behind the global guard |
+| `AuthService` | the **port** (`domain/auth/auth.service.ts`), request-scoped: `identity()`, `requireIdentity()`, the roles and the permissions of THIS request | application code that lives inside the request. It is the only one that does not name Better Auth |
+| `IdentityResolver` | the **port** for who is calling, request-scoped like `AuthService`: `identity()` | a guard (`TenantMembershipGuard`), and code that holds a request instead of living inside one — the gateway's context function registers its `req` under a context id of its own and resolves it (`ContextIdFactory.create()`, `registerRequestByContextId`, `moduleRef.resolve`) |
+| `BETTER_AUTH` | the **instance**, fully typed, with every plugin's endpoints on `auth.api` | you need an endpoint the ports do not wrap |
 | `BetterAuthModule.forRoot` | the wiring itself: the instance, the ports, the tables | a composition root — `apps/posts-api`, and `apps/web`'s own Nest container |
 
-`BetterAuthService` implements the port over the instance, so the three are one object's worth of
-behaviour and never diverge.
+**One lookup per request, and one translation.** `BetterAuthIdentityResolver` answers a request the
+global guard (`@thallesp/nestjs-better-auth`) already authenticated from the session the guard wrote on
+it, a request presenting no credentials as nobody without asking, and anything else with
+`getSession` — remembered by the instance, which belongs to one request, so the guard, the tenant guard
+and `AuthService` asking about the same one cost what the guard cost. `BetterAuthIdentityResolver.fromSession` is the one place Better
+Auth's session becomes an `Identity`; `BetterAuthService` delegates to the resolver.
 
-**The port is request-scoped and takes no headers.** `Scope.REQUEST` + `@Inject(REQUEST)`, turned
-into a `Headers` in the constructor by `headersFrom` — which absorbs the three shapes `REQUEST`
-actually has (the Express request, the GraphQL context, a microservice message with no headers at
-all, which yields an empty set rather than throwing). An instance belongs to one request, so
-`session()` can only mean that one's. The cost is Nest's scope bubbling: whatever injects it becomes
-request-scoped too.
+**The request is read in one place too** (`infrastructure/request/`). `RequestHeaders.from(anything)`
+turns every shape a transport calls "the request" into the `Headers` Better Auth takes: a Fastify or
+Express request, a GraphQL context (`{ req }`), Yoga's `request` — whose headers are `@whatwg-node`'s
+class, not the global one, and used to be read as an empty object — a Socket.IO client, and a message
+with no headers at all, which yields an empty set rather than throwing. `RequestCredentials` is the
+`cookie` and the `authorization` of one, for whoever needs the credentials without resolving them: the
+gateway forwards them, the response cache keys by them (`RequestCredentials.keyOf`). `ExecutionRequest`
+is the request an `ExecutionContext` is about, for the decorator and the guards.
+
+**`AuthService` is request-scoped and takes no headers.** `Scope.REQUEST` + `@Inject(REQUEST)`, turned
+into a `Headers` in the constructor. An instance belongs to one request, so `identity()` can only mean
+that one's, and `IdentityResolver` is request-scoped the same way. The cost is Nest's scope bubbling:
+whatever injects either becomes request-scoped too. A request-scoped **global** guard goes further: Nest
+attaches it to every controller and every `@Resolver` (`addScopedEnhancersMetadata`), so
+`TenantMembershipGuard`, an `APP_GUARD` that injects the resolver, makes every entry point of posts-api
+and the notificator request-scoped — measured on posts-api, from 1 of 16 to all 16. That was accepted:
+an instance of each per request is cheap next to one `getSession`, and what is remembered per request
+lives in Nest's own request scope instead of a `WeakMap` keyed by the request.
 
 ## Why the plugin registry is a tuple of providers
 
@@ -206,7 +227,7 @@ A client that went through the consent screen holds an access token, and the ser
 gateway accept it where they accept a cookie. `plugins/oauth-bearer-session-better-auth.plugin.ts` is
 a `before` hook on `/get-session`: `Authorization: Bearer <JWT>` addressed to one of
 `oauthResources` and signed by this deployment's `issuer` answers as the user it was issued for —
-so the global guard, `@Session()` and `AuthService` see it without knowing a token was involved.
+so the global guard, `@CurrentIdentity()`, `IdentityResolver` and `AuthService` see it without knowing a token was involved.
 
 - **Verified locally.** `verifyJWT` reads the keys the jwt plugin keeps in the database every process
   shares: no call to the issuer, no JWKS fetch, nothing that a cold identity provider can stall.
@@ -241,6 +262,36 @@ that, on AWS, with a valid session. It now answers `403 OAUTH_CLIENT_ADMIN_REQUI
 "Only an admin can create an OAuth client", which the UI shows as a permission error. Nothing seeds an
 `admin`: the deployed stages have one only when somebody sets `users.role` by hand, the way
 `apps/web-e2e` does for its own.
+
+## Sessions in Redis, in front of the database
+
+When the application declares a `RedisModule` (`@nestposts/redis`), `BetterAuthModule` gives the
+instance a secondary storage on it — `storage/redis-secondary-storage.ts`, Better Auth's own node-redis
+implementation, every key under `better-auth:` — through an optional provider
+(`BETTER_AUTH_SECONDARY_STORAGE`), the same shape the organization plugin has for tenancy. Without one
+there is no storage and nothing changes. With one:
+
+- **Postgres stays the source of truth.** `session.storeSessionInDatabase` is on: a session is written
+  to both, read from Redis first and from its row on a miss — which is what keeps a session issued
+  before Redis existed valid, and a row everything else reads (the admin screens, the migrator) there.
+  A cookie session then costs no query at all: the storage keeps the user beside the session.
+- **`verification.storeInDatabase` is not optional.** Magic link and email OTP reserve a verification
+  value when an unverified account is claimed, and Better Auth throws
+  `reserveVerificationValue requires database-backed verification storage` for one that lives only in
+  the storage — the sign-in fails. `redis-secondary-storage.spec.ts` turns the option off and watches
+  exactly that error.
+- **Listing a user's sessions reads Redis only**, even with the rows in the database. A session
+  Better Auth never wrote to Redis is not listed, though it still authenticates.
+- **Every process that holds Better Auth shares the Redis**, like `AUTH_SECRET`. A process without it
+  revokes a session in Postgres alone, and the others keep answering it from Redis until it expires.
+- **A write around Better Auth leaves the copy stale.** `internalAdapter.updateUser` — which
+  `BetterAuthIdentityProvider` and the admin plugin use — refreshes the copy of every live session of
+  the user; an `update users set role = …` by hand does not, and the user keeps the old role until they
+  sign in again. `apps/web-e2e`'s `SessionCache` rewrites the copies after its own SQL.
+- **`clear()` forgets everything under the prefix** — the migrator's `db:fresh` calls it after dropping
+  the tables, or every session it issued would still answer, for users that no longer exist.
+- **Rate limiting moves to the storage** (Better Auth's default once there is one), counted with
+  `INCR` and `EXPIRE … NX`: Redis 7.
 
 ## Every email is a notification
 
@@ -289,7 +340,15 @@ which is what `@Roles([AUTHOR_ROLE])` reads off `users.role`.
 
 ## Configuration
 
-`config.ts`, from the environment, validated by Zod.
+The library owns it, and an application loads nothing. `src/config/auth-env.schema.ts` is the
+variables below as a Zod object — Zod and literals only, which is what lets `apps/web/src/env.mjs`
+spread it into its t3 env — and `src/config/auth.config.ts` is `authConfig`, the `registerAs('auth')`
+that parses `process.env` with it; `AuthConfig` is `ConfigType<typeof authConfig>`, and there is no
+other type. `BetterAuthModule` registers it with `ConfigModule.forFeature` and exports it, so every
+plugin provider — the organization module's included — injects `authConfig.KEY`. Before a container
+exists, call it: `authConfig()` is what `BetterAuthEntities` generates the tables with, and what the
+web's sign-in screen asks which social providers there are. A spec that needs another value spreads
+it, `{ ...authConfig(), rateLimit: false }`.
 
 | | |
 |---|---|
@@ -299,7 +358,7 @@ which is what `@Roles([AUTHOR_ROLE])` reads off `users.role`.
 | `WEB_URL` | where the login/consent screens live, and a trusted origin by default |
 | `AUTH_TRUSTED_ORIGINS` | replaces that default, comma-separated |
 | `AUTH_COOKIE_DOMAIN` | the cross-subdomain cookie domain, applied only on a real deployment |
-| `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET`, `AUTH_GITHUB_*` | a provider is configured or it is absent. Google asks which account (`prompt: select_account`); its client's redirect URI is `<AUTH_URL or WEB_URL>/api/auth/callback/google` — the web's locally, the router's on AWS |
+| `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET`, `AUTH_GITHUB_*` | a provider is configured or it is absent (`google`/`github`, or `null`): a pair half-filled or declared empty is none. Google asks which account (`prompt: select_account`); its client's redirect URI is `<AUTH_URL or WEB_URL>/api/auth/callback/google` — the web's locally, the router's on AWS |
 | `AUTH_REQUIRE_EMAIL_VERIFICATION` | `false` lets an unverified address sign in; the verification email is sent either way |
 | `AUTH_RATE_LIMIT` | `false` turns Better Auth's rate limiter off. It is on in production by default, and a browser suite signing dozens of people up from one address is exactly what it refuses |
 | `AUTH_ISSUER` | the `iss` every access token is signed with and verified against (default `WEB_URL`) |
@@ -311,7 +370,7 @@ which is what `@Roles([AUTHOR_ROLE])` reads off `users.role`.
 nobody in. `guard: false` as well is a runtime that is no Nest server — the web's container, the
 migrator: no routes, no guard, and the `@Hook`/`@DatabaseHook` providers attached all the same.
 
-`cookieSecurity` decides `Secure` and `Domain` from **the URL and `NODE_ENV` together**, not from
+`authConfig` decides `Secure` and `Domain` from **the URL and `NODE_ENV` together**, not from
 `NODE_ENV` alone: a production build served on `localhost` would otherwise issue
 `Secure; Domain=…` cookies the browser drops, and every login would succeed and bounce straight back
 to the sign-in page.
@@ -324,6 +383,7 @@ seeder — boots a Nest **container** instead and imports these same modules:
 ```ts
 const context = await NestFactory.createApplicationContext(SomeModule);
 const auth = await context.resolve(AuthService, contextId);
+const identity = await auth.identity();
 ```
 
 One wiring rather than two, which matters more than it sounds: the ports are `Scope.REQUEST`, so a

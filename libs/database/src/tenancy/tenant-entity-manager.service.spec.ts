@@ -2,11 +2,7 @@ import { defineEntity, MikroORM, p } from '@mikro-orm/core';
 import { Migration } from '@mikro-orm/migrations';
 import { MikroORM as PostgresMikroORM } from '@mikro-orm/postgresql';
 
-import {
-  postgresDatabase,
-  SYSTEM_SCHEMA,
-  TENANT_SCHEMA,
-} from '../config/database.config';
+import { postgresDatabase, TENANT_SCHEMA } from '../connection/index';
 import type { AnyMikroORM } from '../testing/test-database';
 import { TenantEntityManagerService } from './tenant-entity-manager.service';
 
@@ -64,7 +60,7 @@ describe('the entity manager a tenant works on', () => {
 
   beforeAll(async () => {
     orm = (await PostgresMikroORM.init(
-      postgresDatabase(SYSTEM_SCHEMA, { entities: [ThingSchema] }),
+      postgresDatabase({ entities: [ThingSchema] }),
     )) as AnyMikroORM;
   });
 

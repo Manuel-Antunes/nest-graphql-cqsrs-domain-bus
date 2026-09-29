@@ -11,7 +11,7 @@ declared:
 ```ts
 @Module({
   imports: [
-    DatabaseModule.forRootAsync({ /* the connection */ }),
+    DatabaseModule.forRoot(),
     OutboxModule.forRootAsync({                         // @nestjs/outbox: transports, route, relay, retry
       imports: [PostEventsClientModule],
       transports: PostEventsClient.destinations(appConfig()),

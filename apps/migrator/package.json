@@ -29,6 +29,7 @@
     "@nestposts/outbox-mikro-orm": "workspace:*",
     "@nestposts/platform": "workspace:*",
     "@nestposts/posts": "workspace:*",
+    "@nestposts/redis": "workspace:*",
     "@nestposts/users": "workspace:*"
   },
   "nx": {

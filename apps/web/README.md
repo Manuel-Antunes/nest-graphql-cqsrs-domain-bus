@@ -22,8 +22,9 @@ sends.
 ## Environment: `src/env.mjs`
 
 The one place this application reads its environment, with `@t3-oss/env-nextjs`. `server` is the
-Nest container's schemas merged (`src/nest/config/schemas/*.schema.ts`: app and routing, auth,
-AWS, billing, Inngest, Postgres, RabbitMQ) plus `POSTS_SUBGRAPH_URL`; `client` is the
+Nest container's schemas merged (`src/nest/config/schemas/*.schema.ts`: app and routing, AWS,
+Inngest, RabbitMQ, and the libraries' own, `libs/database`'s, `libs/auth`'s and `libs/billing`'s) plus
+`POSTS_SUBGRAPH_URL`; `client` is the
 `NEXT_PUBLIC_*` the browser is given, listed again in `experimental__runtimeEnv` so Next inlines
 them; `shared` is `NODE_ENV`. The container's `registerAs` factories read `env`, and so does every
 server component and route. A variable declared empty counts as unset.

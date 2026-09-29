@@ -13,6 +13,8 @@ export interface Endpoints {
   readonly storageUrl: string;
   /** Mailpit's API: every email the notificator sent. */
   readonly mailboxUrl: string;
+  /** Redis as the host reaches it — where Better Auth keeps every session, in front of Postgres. */
+  readonly redisUrl: string;
   /** The broker's management API, on the run that has a broker. */
   readonly managementUrl?: string;
   /** The broker itself, as the host reaches it — where the web process publishes on that run. */
@@ -74,6 +76,10 @@ export class RunEnvironment {
     );
   }
 
+  get redisUrl(): string | undefined {
+    return this.variables.E2E_REDIS_URL;
+  }
+
   get mailboxUrl(): string {
     return this.variables.E2E_MAILBOX_URL ?? 'http://localhost:8025';
   }
@@ -118,6 +124,7 @@ export class RunEnvironment {
     this.variables.GATEWAY_URL = endpoints.gatewayUrl;
     this.variables.E2E_STORAGE_URL = endpoints.storageUrl;
     this.variables.E2E_MAILBOX_URL = endpoints.mailboxUrl;
+    this.variables.E2E_REDIS_URL = endpoints.redisUrl;
     if (endpoints.managementUrl) {
       this.variables.RABBITMQ_MANAGEMENT = endpoints.managementUrl;
     }

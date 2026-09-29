@@ -1,5 +1,5 @@
 import type { PipeTransform, Type } from '@nestjs/common';
-import { Session } from '@thallesp/nestjs-better-auth';
+import { CurrentIdentity } from '@nestposts/auth/decorators/current-identity.decorator';
 
 import { ActiveMemberPipe } from '../pipes/active-member.pipe';
 import { ActiveOrganizationPipe } from '../pipes/active-organization.pipe';
@@ -10,17 +10,16 @@ type ExtraPipes = (Type<PipeTransform> | PipeTransform)[];
 /**
  * The caller's active organization, in its three useful shapes.
  *
- * Each is `@Session()` with one pipe on it, and the pipe answers from `OrganizationService` — which
- * is request-scoped, so it already knows whose request this is and the session value the decorator
- * produces is only what triggers the pipe. Keeping `@Session()` is deliberate: it is what makes the
- * global guard's refusal come first, before any of this runs.
+ * Each is `@CurrentIdentity()` with one pipe on it, and the pipe answers from `OrganizationService` —
+ * which is request-scoped, so it already knows whose request this is and the identity the decorator
+ * produces is only what triggers the pipe.
  */
 export const ActiveOrganizationId = (
   ...pipes: ExtraPipes
-): ParameterDecorator => Session(ActiveOrganizationIdPipe, ...pipes);
+): ParameterDecorator => CurrentIdentity(ActiveOrganizationIdPipe, ...pipes);
 
 export const ActiveOrganization = (...pipes: ExtraPipes): ParameterDecorator =>
-  Session(ActiveOrganizationPipe, ...pipes);
+  CurrentIdentity(ActiveOrganizationPipe, ...pipes);
 
 export const ActiveMember = (...pipes: ExtraPipes): ParameterDecorator =>
-  Session(ActiveMemberPipe, ...pipes);
+  CurrentIdentity(ActiveMemberPipe, ...pipes);

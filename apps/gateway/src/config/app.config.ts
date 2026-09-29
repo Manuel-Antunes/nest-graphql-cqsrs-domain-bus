@@ -1,15 +1,15 @@
 import { join } from 'node:path';
 import type { ConfigType } from '@nestjs/config';
 import { registerAs } from '@nestjs/config';
-import type { SubgraphSource } from '@nestposts/federation-gateway';
 import { z } from 'zod';
+
+import type { SubgraphSource } from '../supergraph/supergraph';
 
 const AppEnvSchema = z.object({
   OTEL_SERVICE_NAME: z.string().min(1).default('gateway'),
   LOG_LEVEL: z.string().min(1).default('info'),
   GATEWAY_PORT: z.coerce.number().int().positive().optional(),
   PORT: z.coerce.number().int().positive().default(4000),
-  GATEWAY_URL: z.string().optional(),
   GATEWAY_SUBGRAPHS_DIR: z.string().optional(),
   POSTS_SUBGRAPH_URL: z
     .string()
@@ -43,7 +43,6 @@ export const appConfig = registerAs('app', () => {
     serviceName: parsed.OTEL_SERVICE_NAME,
     logLevel: parsed.LOG_LEVEL,
     port,
-    url: parsed.GATEWAY_URL || `http://localhost:${port}/graphql`,
     subgraphs,
     corsOrigins: (parsed.GATEWAY_CORS_ORIGINS ?? parsed.WEB_URL)
       .split(',')

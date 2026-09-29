@@ -36,8 +36,6 @@ import type { AwsConfig } from './config/aws.config';
 import { awsConfig } from './config/aws.config';
 import type { InngestConfig } from './config/inngest.config';
 import { inngestConfig } from './config/inngest.config';
-import type { PostgresConfig } from './config/postgres.config';
-import { postgresConfig } from './config/postgres.config';
 import { rabbitmqConfig } from './config/rabbitmq.config';
 import { MikroOrmConfiguration } from './infrastructure/persistence/mikro-orm.config';
 import { ExceptionProducers } from './infrastructure/transport/exception-producers';
@@ -48,13 +46,7 @@ import { ExceptionProducers } from './infrastructure/transport/exception-produce
       isGlobal: true,
       cache: true,
       ignoreEnvFile: true,
-      load: [
-        appConfig,
-        awsConfig,
-        inngestConfig,
-        postgresConfig,
-        rabbitmqConfig,
-      ],
+      load: [appConfig, awsConfig, inngestConfig, rabbitmqConfig],
     }),
     loggingModuleAsync({
       inject: [appConfig.KEY],
@@ -65,11 +57,7 @@ import { ExceptionProducers } from './infrastructure/transport/exception-produce
     }),
     ErrorReportingModule.forRoot({ traceOf: IncomingRequest.traceOf }),
     CqsrsModule.forRoot({ aggregatePublisher: TRANSPORT_EVENT_BUS_PUBLISHER }),
-    DatabaseModule.forRootAsync({
-      inject: [postgresConfig.KEY],
-      useFactory: (postgres: PostgresConfig) =>
-        MikroOrmConfiguration.connection(postgres),
-    }),
+    DatabaseModule.forRoot(),
     DatabaseModule.forFeature([...postsEntities, ...usersEntities]),
     TenancyModule.forRoot({
       http: false,

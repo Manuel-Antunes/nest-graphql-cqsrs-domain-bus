@@ -11,7 +11,7 @@ at its root:
 ```ts
 @Module({
   imports: [
-    DatabaseModule.forRootAsync({ /* the connection */ }),
+    DatabaseModule.forRoot(),
     MikroOrmEventStoreModule,                              // the table and the engine, global
     TransportEventBusModule.forRootAsync({
       /* identity, transactionManager, … */

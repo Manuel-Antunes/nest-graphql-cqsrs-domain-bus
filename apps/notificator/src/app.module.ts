@@ -1,12 +1,14 @@
 import { join } from 'node:path';
 import type { YogaFederationDriverConfig } from '@graphql-yoga/nestjs-federation';
 import { YogaFederationDriver } from '@graphql-yoga/nestjs-federation';
+import { CacheModule } from '@nestjs/cache-manager';
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConditionalModule, ConfigModule } from '@nestjs/config';
 import { GraphQLISODateTime, GraphQLModule } from '@nestjs/graphql';
 import { OutboxModule } from '@nestjs/outbox';
 import { authNotifications } from '@nestposts/auth/domain/auth/notification/auth-notifications';
 import { AuthInfrastructureModule } from '@nestposts/auth/infrastructure/auth-infrastructure.module';
+import { RequestCredentials } from '@nestposts/auth/infrastructure/request/request-credentials';
 import { SubscriptionChangeNotification } from '@nestposts/billing/domain/billing/notification/subscription-change.notification';
 import { CqsrsModule } from '@nestposts/cqsrs';
 import {
@@ -16,6 +18,10 @@ import {
 } from '@nestposts/database';
 import { CalendarEventRescheduledNotification } from '@nestposts/events/domain/calendar-event/notification/calendar-event-rescheduled.notification';
 import { CalendarEventScheduledNotification } from '@nestposts/events/domain/calendar-event/notification/calendar-event-scheduled.notification';
+import {
+  GraphQLResponseCache,
+  GraphQLResponseCacheModule,
+} from '@nestposts/graphql-response-cache';
 import { MailModule } from '@nestposts/mail/mail.module';
 import { plainTextFromHtml } from '@nestposts/mail/plain-text.plugin';
 import { ReactEmailTemplateResolver } from '@nestposts/mail/react-email-template.resolver';
@@ -35,6 +41,7 @@ import {
   MikroOrmTransactionManager,
 } from '@nestposts/outbox-mikro-orm';
 import { PostCreatedNotification } from '@nestposts/posts/domain/post/notification/post-created.notification';
+import { RedisCacheOptions, RedisModule } from '@nestposts/redis';
 import { RetryPolicyModule } from '@nestposts/retry-policy/retry-policy.module';
 import {
   IncomingRequest,
@@ -48,7 +55,6 @@ import { SendNotificationCommand } from './application/send-notification.command
 import { SendOnNotificationReceived } from './application/send-on-notification-received.saga';
 import type { AppConfig } from './config/app.config';
 import { appConfig } from './config/app.config';
-import { authConfig } from './config/auth.config';
 import type { AwsConfig } from './config/aws.config';
 import { awsConfig } from './config/aws.config';
 import type { FirebaseConfig } from './config/firebase.config';
@@ -57,9 +63,9 @@ import type { InngestConfig } from './config/inngest.config';
 import { inngestConfig } from './config/inngest.config';
 import type { MailConfig } from './config/mail.config';
 import { mailConfig } from './config/mail.config';
-import type { PostgresConfig } from './config/postgres.config';
-import { postgresConfig } from './config/postgres.config';
 import { rabbitmqConfig } from './config/rabbitmq.config';
+import type { RedisConfig } from './config/redis.config';
+import { redisConfig } from './config/redis.config';
 import { MikroOrmConfiguration } from './infrastructure/persistence/mikro-orm.config';
 import { ExceptionProducers } from './infrastructure/transport/exception-producers';
 import { GraphQLJSON } from './interfaces/graphql/json.scalar';
@@ -73,13 +79,12 @@ import { InterfacesModule } from './interfaces/interfaces.module';
       ignoreEnvFile: true,
       load: [
         appConfig,
-        authConfig,
         awsConfig,
         firebaseConfig,
         inngestConfig,
         mailConfig,
-        postgresConfig,
         rabbitmqConfig,
+        redisConfig,
       ],
     }),
     loggingModuleAsync({
@@ -91,31 +96,42 @@ import { InterfacesModule } from './interfaces/interfaces.module';
     }),
     ErrorReportingModule.forRoot({ traceOf: IncomingRequest.traceOf }),
     CqsrsModule.forRoot({ aggregatePublisher: TRANSPORT_EVENT_BUS_PUBLISHER }),
-    DatabaseModule.forRootAsync({
-      inject: [postgresConfig.KEY],
-      useFactory: (postgres: PostgresConfig) =>
-        MikroOrmConfiguration.connection(postgres),
-    }),
+    DatabaseModule.forRoot(),
     TenancyModule.forRoot({
       resolver: MessageTenantResolver,
       migrations: MikroOrmConfiguration.tenantMigrations(),
     }),
+    ConditionalModule.registerWhen(
+      RedisModule.forRootAsync({
+        inject: [redisConfig.KEY],
+        useFactory: ({ url }: RedisConfig) => ({ url }),
+      }),
+      () => Boolean(redisConfig().url),
+    ),
+    CacheModule.registerAsync({ isGlobal: true, useClass: RedisCacheOptions }),
     AuthInfrastructureModule.forRoot({
-      config: authConfig.KEY,
       routes: false,
       plugins: organizationAuthPluginProviders,
       entities: OrganizationEntities.withAuth(),
       imports: [OrganizationsInfrastructureModule],
     }),
     TenantMembershipModule,
-    GraphQLModule.forRoot<YogaFederationDriverConfig>({
+    GraphQLModule.forRootAsync<YogaFederationDriverConfig>({
       driver: YogaFederationDriver,
-      typePaths: [join(__dirname, 'graphql', '**/*.graphql')],
-      resolvers: { DateTime: GraphQLISODateTime, JSON: GraphQLJSON },
-      fieldResolverEnhancers: ['guards', 'interceptors', 'filters'],
-      graphiql: true,
-      maskedErrors: false,
-      plugins: [useGraphQLTracing(), useGraphQLErrorReporting()],
+      imports: [GraphQLResponseCacheModule],
+      inject: [GraphQLResponseCache],
+      useFactory: (responseCache: GraphQLResponseCache) => ({
+        typePaths: [join(__dirname, 'graphql', '**/*.graphql')],
+        resolvers: { DateTime: GraphQLISODateTime, JSON: GraphQLJSON },
+        fieldResolverEnhancers: ['guards', 'interceptors', 'filters'],
+        graphiql: true,
+        maskedErrors: false,
+        plugins: [
+          useGraphQLTracing(),
+          useGraphQLErrorReporting(),
+          responseCache.plugin({ session: RequestCredentials.keyOf }),
+        ],
+      }),
     }),
     RetryPolicyModule.forRootAsync({
       inject: [appConfig.KEY, awsConfig.KEY],

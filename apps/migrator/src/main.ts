@@ -1,6 +1,8 @@
 import type { MikroORM } from '@mikro-orm/postgresql';
 import type { Seeder } from '@mikro-orm/seeder';
 import { Logger } from '@nestjs/common';
+import type { RedisSecondaryStorage } from '@nestposts/auth/infrastructure/better-auth/storage/redis-secondary-storage';
+import { BETTER_AUTH_SECONDARY_STORAGE } from '@nestposts/auth/infrastructure/better-auth/tokens';
 import {
   ROOT_TENANT,
   TENANT_SCHEMA_PREFIX,
@@ -40,6 +42,19 @@ const applyTenantMigrations = async ({ orm }: MigratorContext) => {
   for (const tenant of await tenantsIn(orm)) {
     await tenants.provision(tenant);
   }
+};
+
+const forgetAuthStorage = async ({ app }: MigratorContext) => {
+  const storage = app.get<RedisSecondaryStorage | null>(
+    BETTER_AUTH_SECONDARY_STORAGE,
+    { strict: false },
+  );
+  if (!storage) return;
+  const forgotten = await storage.clear();
+  Logger.log(
+    `better-auth's secondary storage cleared: ${forgotten} key(s) forgotten`,
+    'Migrator',
+  );
 };
 
 const DAY_MS = 86_400_000;
@@ -83,7 +98,8 @@ export const seedUsers = (): Promise<void> => seed([TestUsersSeeder]);
 export const seedDeployment = (): Promise<void> => seed([DatabaseSeeder]);
 
 export const fresh = async (): Promise<void> => {
-  await withMigrator(async ({ orm }) => {
+  await withMigrator(async (context) => {
+    const { orm } = context;
     for (const tenant of await tenantsIn(orm)) {
       await orm.em
         .fork()
@@ -91,6 +107,7 @@ export const fresh = async (): Promise<void> => {
         .execute(`drop schema if exists "${Tenant.schemaOf(tenant)}" cascade`);
     }
     await orm.schema.drop({ dropMigrationsTable: true });
+    await forgetAuthStorage(context);
   });
   await migrate();
   await seed();

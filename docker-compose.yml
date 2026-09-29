@@ -51,6 +51,20 @@ services:
       timeout: 5s
       retries: 20
 
+  # Better Auth's secondary storage — every session, in front of the `session` table — and the Nest
+  # cache. EVERY process that holds Better Auth points at the same one, or a session revoked by one
+  # of them is still valid in the others. REDIS_PORT exists for the reason POSTGRES_PORT does.
+  redis:
+    image: redis:7-alpine
+    container_name: nestposts-redis
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
   # THE APPLICATIONS, under the `apps` profile — `docker compose --profile apps up -d --build`.
   #
   # They are off by default because the ordinary loop is `pnpm dev`, which runs them from source with
@@ -76,8 +90,11 @@ services:
       POSTGRES_URL: postgresql://${POSTGRES_USER:-nestposts}:${POSTGRES_PASSWORD:-nestposts}@postgres:5432/${POSTGRES_DB:-nestposts}
       AUTH_SECRET: ${AUTH_SECRET:-nestposts-compose-secret}
       GATEWAY_URL: http://localhost:${GATEWAY_PORT:-4000}/graphql
+      REDIS_URL: redis://redis:6379
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     restart: "no"
 
@@ -109,9 +126,12 @@ services:
       DRIVE_S3_ENDPOINT: http://minio:9000
       DRIVE_S3_PUBLIC_ENDPOINT: http://localhost:${MINIO_PORT:-9000}
       DRIVE_S3_FORCE_PATH_STYLE: "true"
+      REDIS_URL: redis://redis:6379
     depends_on:
       createbuckets:
         condition: service_completed_successfully
+      redis:
+        condition: service_healthy
       rabbitmq:
         condition: service_healthy
       inngest:
@@ -166,7 +186,10 @@ services:
       INNGEST_BASE_URL: http://inngest:8288
       INNGEST_SERVE_ORIGIN: http://tagging:3001
       TAGGING_PORT: "3001"
+      REDIS_URL: redis://redis:6379
     depends_on:
+      redis:
+        condition: service_healthy
       rabbitmq:
         condition: service_healthy
       inngest:
@@ -193,7 +216,10 @@ services:
       GATEWAY_URL: http://localhost:${GATEWAY_PORT:-4000}/graphql
       MAIL_SMTP_URL: smtp://mailpit:1025
       MAIL_FROM: ${MAIL_FROM:-Nest Posts <no-reply@nestposts.local>}
+      REDIS_URL: redis://redis:6379
     depends_on:
+      redis:
+        condition: service_healthy
       rabbitmq:
         condition: service_healthy
       inngest:
@@ -228,6 +254,7 @@ services:
       PORT: "3000"
       POSTGRES_URL: postgresql://${POSTGRES_USER:-nestposts}:${POSTGRES_PASSWORD:-nestposts}@postgres:5432/${POSTGRES_DB:-nestposts}
       AUTH_SECRET: ${AUTH_SECRET:-nestposts-compose-secret}
+      AUTH_URL: http://localhost:${WEB_PORT:-4300}
       WEB_URL: http://localhost:${WEB_PORT:-4300}
       NEXT_PUBLIC_API_URL: http://posts-api:3000
       NEXT_PUBLIC_GATEWAY_URL: http://gateway:4000/graphql
@@ -236,13 +263,15 @@ services:
       RABBITMQ_URL: amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672
       WEB_TRANSPORT: ${WEB_TRANSPORT:-inngest}
       INNGEST_BASE_URL: http://inngest:8288
+      REDIS_URL: redis://redis:6379
     depends_on:
       gateway:
         condition: service_started
 
   # The federation gateway: the one GraphQL endpoint a client talks to. It composes the supergraph
-  # from the subgraphs' SDL, baked into its image, and forwards each caller's cookie and bearer to
-  # every subgraph an operation reaches.
+  # from the subgraphs' SDL, baked into its image, reads each caller's session — from Redis first,
+  # through the same Better Auth as everything else — and forwards the cookie and the bearer to every
+  # subgraph an operation reaches.
   gateway:
     profiles: ["apps"]
     image: nestposts/gateway:dev
@@ -257,9 +286,16 @@ services:
       GATEWAY_URL: http://localhost:${GATEWAY_PORT:-4000}/graphql
       POSTS_SUBGRAPH_URL: http://posts-api:3000/graphql
       NOTIFICATIONS_SUBGRAPH_URL: http://notificator:3002/graphql
+      POSTGRES_URL: postgresql://${POSTGRES_USER:-nestposts}:${POSTGRES_PASSWORD:-nestposts}@postgres:5432/${POSTGRES_DB:-nestposts}
+      REDIS_URL: redis://redis:6379
+      AUTH_SECRET: ${AUTH_SECRET:-nestposts-compose-secret}
+      AUTH_URL: http://localhost:${API_PORT:-3000}
       WEB_URL: http://localhost:${WEB_PORT:-4300}
-      AUTH_URL: http://posts-api:3000
     depends_on:
+      migrator:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
       posts-api:
         condition: service_started
       notificator:

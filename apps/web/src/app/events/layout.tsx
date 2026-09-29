@@ -25,8 +25,8 @@ export default async function EventsLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const [session, canManage] = await Promise.all([
-    WebAuth.session(),
+  const [identity, canManage] = await Promise.all([
+    WebAuth.identity(),
     WebAuth.hasOrgPermission({ [EVENT_RESOURCE]: [...MANAGE_EVENTS] }),
   ]);
 
@@ -41,7 +41,7 @@ export default async function EventsLayout({
         </p>
       </div>
 
-      {session ? (
+      {identity ? (
         <Suspense fallback={<Skeleton className="h-[640px] w-full" />}>
           <PrefetchQueries options={calendarOptions()}>
             <QueryErrorBoundary title="Não foi possível abrir o calendário">

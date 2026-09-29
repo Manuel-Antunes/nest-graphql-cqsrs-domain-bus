@@ -1,8 +1,8 @@
 import { Inject, Injectable, Scope } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
 import type { BetterAuthWith } from '@nestposts/auth/infrastructure/better-auth/init-auth';
-import { RequestHeaders } from '@nestposts/auth/infrastructure/better-auth/request-headers';
 import { BETTER_AUTH } from '@nestposts/auth/infrastructure/better-auth/tokens';
+import { RequestHeaders } from '@nestposts/auth/infrastructure/request/request-headers';
 
 import type { PolarBetterAuthPluginProvider } from './polar-better-auth.plugin';
 

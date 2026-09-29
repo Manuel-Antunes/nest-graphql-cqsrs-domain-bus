@@ -1,8 +1,9 @@
 import { AuthorPipe } from '@nestposts/users/pipes/author.pipe';
-import { Session } from '@thallesp/nestjs-better-auth';
 
-import { SessionUserPipe } from '../pipes/session-user.pipe';
+import { IdentityUserPipe } from '../pipes/identity-user.pipe';
+import { CurrentIdentity } from './current-identity.decorator';
 
-export const CurrentUser = () => Session(SessionUserPipe);
+export const CurrentUser = () => CurrentIdentity(IdentityUserPipe);
 
-export const CurrentAuthor = () => Session(SessionUserPipe, AuthorPipe);
+export const CurrentAuthor = () =>
+  CurrentIdentity(IdentityUserPipe, AuthorPipe);

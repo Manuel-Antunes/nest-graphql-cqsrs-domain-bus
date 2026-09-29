@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConditionalModule, ConfigModule } from '@nestjs/config';
 import { AuthInfrastructureModule } from '@nestposts/auth/infrastructure/auth-infrastructure.module';
 import { DatabaseModule } from '@nestposts/database';
 import { eventStoreEntities } from '@nestposts/event-store-mikro-orm/event-store.entities';
@@ -9,13 +9,13 @@ import { OrganizationsInfrastructureModule } from '@nestposts/organizations/infr
 import { OrganizationEntities } from '@nestposts/organizations/infrastructure/persistence/organization-entities';
 import { outboxEntities } from '@nestposts/outbox-mikro-orm/outbox.entities';
 import { PostsInfrastructureModule } from '@nestposts/posts/infrastructure/posts-infrastructure.module';
+import { RedisModule } from '@nestposts/redis';
 import { UsersInfrastructureModule } from '@nestposts/users/infrastructure/users-infrastructure.module';
 
 import { appConfig } from '../config/app.config';
-import { authConfig } from '../config/auth.config';
 import { outboxConfig } from '../config/outbox.config';
-import type { PostgresConfig } from '../config/postgres.config';
-import { postgresConfig } from '../config/postgres.config';
+import type { RedisConfig } from '../config/redis.config';
+import { redisConfig } from '../config/redis.config';
 import { seedConfig } from '../config/seed.config';
 import { systemConnection } from './connections';
 
@@ -25,22 +25,22 @@ import { systemConnection } from './connections';
       isGlobal: true,
       cache: true,
       ignoreEnvFile: true,
-      load: [appConfig, authConfig, outboxConfig, postgresConfig, seedConfig],
+      load: [appConfig, outboxConfig, redisConfig, seedConfig],
     }),
-    DatabaseModule.forRootAsync({
-      inject: [postgresConfig.KEY],
-      useFactory: (postgres: PostgresConfig) => ({
-        ...systemConnection(postgres),
-        exclusive: true,
+    DatabaseModule.forRoot({ ...systemConnection(), exclusive: true }),
+    ConditionalModule.registerWhen(
+      RedisModule.forRootAsync({
+        inject: [redisConfig.KEY],
+        useFactory: ({ url }: RedisConfig) => ({ url }),
       }),
-    }),
+      () => Boolean(redisConfig().url),
+    ),
     PostsInfrastructureModule,
     UsersInfrastructureModule,
     NotificationsInfrastructureModule,
     AuthInfrastructureModule.forRoot({
       routes: false,
       guard: false,
-      config: authConfig.KEY,
       plugins: organizationAuthPluginProviders,
       entities: OrganizationEntities.withAuth(),
       imports: [OrganizationsInfrastructureModule],

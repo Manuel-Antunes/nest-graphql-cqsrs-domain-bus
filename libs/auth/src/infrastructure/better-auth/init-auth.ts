@@ -1,8 +1,12 @@
-import type { BetterAuthOptions, BetterAuthPlugin } from 'better-auth';
+import type {
+  BetterAuthOptions,
+  BetterAuthPlugin,
+  SecondaryStorage,
+} from 'better-auth';
 import { betterAuth } from 'better-auth';
 
+import type { AuthConfig } from '../../config/auth.config';
 import { APP_NAME } from '../../domain/auth/app-name';
-import type { AuthConfig } from './config';
 import { AuthExpirations } from './emails/auth-expirations';
 import type { BetterAuthEmails } from './emails/better-auth-emails';
 import type {
@@ -42,26 +46,12 @@ export class BetterAuthLogging {
 }
 
 class SocialProviders {
-  /** A provider is configured or it is absent — a half-filled pair is neither. */
   static of(config: AuthConfig): BetterAuthOptions['socialProviders'] {
     return {
-      ...(config.googleClientId && config.googleClientSecret
-        ? {
-            google: {
-              clientId: config.googleClientId,
-              clientSecret: config.googleClientSecret,
-              prompt: 'select_account' as const,
-            },
-          }
+      ...(config.google
+        ? { google: { ...config.google, prompt: 'select_account' as const } }
         : {}),
-      ...(config.githubClientId && config.githubClientSecret
-        ? {
-            github: {
-              clientId: config.githubClientId,
-              clientSecret: config.githubClientSecret,
-            },
-          }
-        : {}),
+      ...(config.github ? { github: config.github } : {}),
     };
   }
 }
@@ -69,6 +59,36 @@ class SocialProviders {
 export interface InitAuthOptions {
   readonly hooks?: BetterAuthOptions['hooks'];
   readonly logger?: BetterAuthOptions['logger'];
+  /** Where sessions, verifications and rate-limit counters are kept in front of the database. */
+  readonly secondaryStorage?: SecondaryStorage | null;
+}
+
+type StorageOptions = Pick<
+  BetterAuthOptions,
+  'secondaryStorage' | 'session' | 'verification'
+>;
+
+export class BetterAuthStorage {
+  /**
+   * **With a secondary storage, the database stays the source of truth.** Sessions are written to
+   * both and read from the storage first, falling back to the row on a miss — which is what keeps a
+   * session issued before the storage existed valid, and the tables everything else reads complete.
+   *
+   * `verification.storeInDatabase` is not a preference: magic link and email OTP reserve a
+   * verification value when an unverified account is claimed, and Better Auth refuses to reserve one
+   * that lives only in the storage — the sign-in fails.
+   */
+  static optionsWith(
+    secondaryStorage?: SecondaryStorage | null,
+  ): StorageOptions {
+    return secondaryStorage
+      ? {
+          secondaryStorage,
+          session: { storeSessionInDatabase: true },
+          verification: { storeInDatabase: true },
+        }
+      : {};
+  }
 }
 
 export class BetterAuthInstance {
@@ -150,6 +170,7 @@ export class BetterAuthInstance {
     {
       hooks = {},
       logger = BetterAuthLogging.through(BetterAuthLogging.toConsole),
+      secondaryStorage,
     }: InitAuthOptions = {},
   ) {
     return betterAuth({
@@ -157,6 +178,7 @@ export class BetterAuthInstance {
       database,
       hooks,
       logger,
+      ...BetterAuthStorage.optionsWith(secondaryStorage),
     });
   }
 }

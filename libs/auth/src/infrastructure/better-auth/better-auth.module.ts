@@ -1,5 +1,6 @@
-import type { DynamicModule, InjectionToken, Type } from '@nestjs/common';
+import type { DynamicModule, Type } from '@nestjs/common';
 import { Module, Scope } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
 import type { DatabaseEntities } from '@nestposts/database';
 import { DatabaseModule } from '@nestposts/database';
 import { OnDemandNotifications } from '@nestposts/notifications/domain/notification/on-demand-notifications';
@@ -7,23 +8,25 @@ import { LoggingOnDemandNotifications } from '@nestposts/notifications/infrastru
 import { SoftDeleteModule } from '@nestposts/platform/infrastructure/persistence/soft-delete/soft-delete.module';
 import { IdentityProvider } from '@nestposts/users/domain/user/identity.provider';
 
+import { authConfig } from '../../config/auth.config';
 import { AuthService } from '../../domain/auth/auth.service';
+import { IdentityResolver } from '../../domain/auth/identity.resolver';
 import { authEntities } from '../persistence/auth-entities';
 import { AvatarImages } from './avatar/avatar-images';
-import type { AuthConfig } from './config';
 import { BetterAuthEmails } from './emails/better-auth-emails';
 import {
   BetterAuthAdapterFactory,
-  BetterAuthConfigFactory,
   BetterAuthFactory,
   BetterAuthPluginsFactory,
+  BetterAuthSecondaryStorageFactory,
 } from './factories';
 import { UserDatabaseHooks } from './hooks/user-database.hooks';
 import { BetterAuthIdentityProvider } from './identity/better-auth-identity.provider';
+import { BetterAuthIdentityResolver } from './identity/better-auth-identity.resolver';
 import type { BetterAuthPluginProvider } from './plugins/registry';
 import { BetterAuthPlugins } from './plugins/registry';
 import { BetterAuthService } from './services/better-auth.service';
-import { BETTER_AUTH, BETTER_AUTH_CONFIG } from './tokens';
+import { BETTER_AUTH, BETTER_AUTH_SECONDARY_STORAGE } from './tokens';
 
 export interface BetterAuthModuleOptions {
   /**
@@ -43,11 +46,6 @@ export interface BetterAuthModuleOptions {
    * is where `nextCookies()` goes.
    */
   trailingPlugins?: readonly BetterAuthPluginProvider[];
-  /**
-   * The token the application provides its {@link AuthConfig} under — its `registerAs('auth')` key.
-   * Left out, the configuration is read from the environment.
-   */
-  config?: InjectionToken;
   /** Modules providing what those plugin providers inject. */
   imports?: DynamicModule['imports'];
   /**
@@ -69,6 +67,7 @@ export class BetterAuthModule {
       notifications = LoggingOnDemandNotifications,
     } = options;
     const providers = BetterAuthPlugins.providersWith(plugins, trailingPlugins);
+    const configuration = ConfigModule.forFeature(authConfig);
 
     return {
       module: BetterAuthModule,
@@ -81,18 +80,20 @@ export class BetterAuthModule {
        */
       global: true,
       imports: [
+        configuration,
         ...imports,
         DatabaseModule.forFeature(entities),
         SoftDeleteModule,
       ],
       providers: [
-        BetterAuthConfigFactory.from(options.config),
         BetterAuthAdapterFactory,
+        BetterAuthSecondaryStorageFactory,
         { provide: OnDemandNotifications, useClass: notifications },
         BetterAuthEmails,
         ...providers,
         BetterAuthPluginsFactory(providers),
         BetterAuthFactory,
+        { provide: IdentityResolver, useClass: BetterAuthIdentityResolver },
         {
           provide: AuthService,
           useClass: BetterAuthService,
@@ -103,9 +104,11 @@ export class BetterAuthModule {
         UserDatabaseHooks,
       ],
       exports: [
+        configuration,
         BETTER_AUTH,
-        BETTER_AUTH_CONFIG,
+        BETTER_AUTH_SECONDARY_STORAGE,
         AuthService,
+        IdentityResolver,
         IdentityProvider,
         OnDemandNotifications,
         BetterAuthEmails,

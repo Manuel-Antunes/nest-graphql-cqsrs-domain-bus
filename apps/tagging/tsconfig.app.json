@@ -18,6 +18,9 @@
       "path": "../../libs/core/retry-policy/tsconfig.lib.json"
     },
     {
+      "path": "../../libs/core/redis/tsconfig.lib.json"
+    },
+    {
       "path": "../../libs/posts/tsconfig.lib.json"
     },
     {

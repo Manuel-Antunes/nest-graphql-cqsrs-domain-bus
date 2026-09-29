@@ -1,9 +1,8 @@
+import { authConfig } from '@nestposts/auth/config/auth.config';
 import { AuthUser } from '@nestposts/auth/domain/auth/auth-user.entity';
-import { AuthConfiguration } from '@nestposts/auth/infrastructure/better-auth/config';
 import { BetterAuthEmails } from '@nestposts/auth/infrastructure/better-auth/emails/better-auth-emails';
 import { BetterAuthInstance } from '@nestposts/auth/infrastructure/better-auth/init-auth';
 import { BetterAuthPlugins } from '@nestposts/auth/infrastructure/better-auth/plugins/registry';
-import { BETTER_AUTH_CONFIG } from '@nestposts/auth/infrastructure/better-auth/tokens';
 import { inRequestContext } from '@nestposts/database';
 import type { AnyMikroORM } from '@nestposts/database/testing';
 import { closeTestDatabase, testDatabase } from '@nestposts/database/testing';
@@ -70,7 +69,7 @@ describe('better-auth writing through the organization entities', () => {
       { entities: OrganizationEntities.withAuth() },
       'org',
     );
-    const config = AuthConfiguration.fromEnvironment();
+    const config = authConfig();
     const emails = BetterAuthEmails.unsent();
     adapter = mikroOrmAdapter(orm)(
       BetterAuthInstance.optionsFor(
@@ -78,7 +77,7 @@ describe('better-auth writing through the organization entities', () => {
         BetterAuthPlugins.build(
           BetterAuthPlugins.providersWith(organizationAuthPluginProviders),
           [
-            [BETTER_AUTH_CONFIG, config],
+            [authConfig.KEY, config],
             [BetterAuthEmails, emails],
             [OnDemandNotifications, new LoggingOnDemandNotifications()],
           ],

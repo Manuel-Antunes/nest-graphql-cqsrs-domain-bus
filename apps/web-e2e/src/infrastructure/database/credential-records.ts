@@ -1,10 +1,14 @@
 import type { Database } from './database';
 import type { StoredAttachment } from './post-records';
+import type { SessionCache } from './session-cache';
 
 export type StoredAvatar = NonNullable<StoredAttachment['asset']>;
 
 export class CredentialRecords {
-  constructor(private readonly database: Database) {}
+  constructor(
+    private readonly database: Database,
+    private readonly sessions: SessionCache,
+  ) {}
 
   /**
    * The author role, granted straight on the credential.
@@ -18,12 +22,16 @@ export class CredentialRecords {
     return this.promote(credentialId, 'author');
   }
 
-  promote(credentialId: string, role: string): Promise<void> {
-    return this.database.execute(
+  async promote(credentialId: string, role: string): Promise<void> {
+    await this.database.execute(
       'update users set role = ? where id = ?',
       role,
       credentialId,
     );
+    await this.sessions.rewriteUserOf(credentialId, (user) => ({
+      ...user,
+      role,
+    }));
   }
 
   async emailOf(credentialId: string): Promise<string | undefined> {
@@ -58,10 +66,14 @@ export class CredentialRecords {
     return rows.length > 0;
   }
 
-  forgetUserAgentsOf(credentialId: string): Promise<void> {
-    return this.database.execute(
+  async forgetUserAgentsOf(credentialId: string): Promise<void> {
+    await this.database.execute(
       `update session set user_agent = '' where user_id = ?`,
       credentialId,
     );
+    await this.sessions.rewriteSessionsOf(credentialId, (session) => ({
+      ...session,
+      userAgent: '',
+    }));
   }
 }

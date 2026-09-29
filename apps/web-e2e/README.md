@@ -160,7 +160,7 @@ server routes between them, and the client is Chromium on `apps/web`.
 `src/stack/stack.ts`, once, in Playwright's `globalSetup`:
 
 1. **A network, and everything but the web on it.** `src/stack/container-stack.ts` starts Postgres,
-   MinIO, Mailpit and — on that run — RabbitMQ, runs `nestposts/migrator:dev` as a **one-shot**,
+   Redis, MinIO, Mailpit and — on that run — RabbitMQ, runs `nestposts/migrator:dev` as a **one-shot**,
    waited on until it exits 0 so nothing comes up against a schema that does not exist, and then
    `tagging`, `notificator`, `posts-api` and the `gateway`. Those are the images
    `apps/<app>/Dockerfile` build and `docker compose --profile apps` runs, so this suite drives what
@@ -267,6 +267,10 @@ the request's cookie and its `x-tenant` on the way out. The exceptions are delib
   role is not an operation of this system (the identity port does it, in code) and opening an
   endpoint for it would be production surface existing because of a test. The domain profile is
   promoted by the application itself on the next request, which is the part worth exercising.
+  Because it goes around Better Auth, it also rewrites the copy of the user every live session keeps
+  in Redis (`SessionCache`) — Better Auth reads a session from there first, and would otherwise go on
+  answering the old role. `forgetUserAgentsOf` does the same for the session it blanks: Better Auth
+  lists a user's sessions from Redis only.
 - **`endpoints.postsApi(...)`** talks to the posts-api directly, to show that the cookie the web wrote
   is accepted there — that is the claim, so bypassing the web is the test — and
   **`endpoints.gateway(...)`** carries an OAuth bearer, which a browser never holds.

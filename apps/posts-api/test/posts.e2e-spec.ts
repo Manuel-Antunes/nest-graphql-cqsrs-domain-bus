@@ -2,15 +2,17 @@
 import { MikroORM } from '@mikro-orm/core';
 import type { INestApplication } from '@nestjs/common';
 import type { IEvent } from '@nestjs/cqrs';
-import { EventBus } from '@nestjs/cqrs';
+import { CommandBus, EventBus, QueryBus } from '@nestjs/cqrs';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { FastifyAdapter } from '@nestjs/platform-fastify';
 import { Test } from '@nestjs/testing';
 import { AuthUser } from '@nestposts/auth/domain/auth/auth-user.entity';
 import { SubscriptionBus } from '@nestposts/cqsrs';
 import { ROOT_TENANT_SCHEMA, TENANT_MIGRATIONS } from '@nestposts/database';
+import { GraphQLResponseCache } from '@nestposts/graphql-response-cache';
 import { migrate } from '@nestposts/migrator/main';
 import { tenantMigrations } from '@nestposts/migrator/migrations/tenant/index';
+import { PostId } from '@nestposts/posts/domain/post/vo/post-id';
 import { EventMessage } from '@nestposts/transport-eventbus';
 import {
   AUTHOR_ROLE,
@@ -22,6 +24,8 @@ import { Email } from '@nestposts/users/domain/user/vo/email';
 import { UserId } from '@nestposts/users/domain/user/vo/user-id';
 
 import { AppModule } from '../src/app.module';
+import { UpdatePostCommand } from '../src/application/post/command/update-post.command';
+import { FindPostQuery } from '../src/application/post/query/find-post.query';
 import { PostRequest } from '../src/application/shared/post-request';
 import { GraphqlClient, until } from './support/graphql-client';
 import { TaggingStandIn } from './support/tagging-stand-in.saga';
@@ -383,6 +387,49 @@ describe('posts (e2e)', () => {
       filtered.unsubscribe();
       await until(() => subscribers() === before);
     });
+  });
+
+  describe('the response cache', () => {
+    const POST_QUERY = 'query($id: ID!) { post(id: $id) { id title version } }';
+    const pause = (ms: number) =>
+      new Promise((resolve) => setTimeout(resolve, ms));
+
+    it('serves a settled post from the cache, and forgets it the moment the post changes — outside GraphQL too', async () => {
+      const post = await createCompletePost('cacheável');
+      await pause(GraphQLResponseCache.SETTLE_MS + 500);
+      const queries = vi.spyOn(app.get(QueryBus), 'execute');
+      const reads = () =>
+        queries.mock.calls.filter(
+          ([query]) => query instanceof FindPostQuery.FindPost,
+        ).length;
+      try {
+        await client.execute(POST_QUERY, { id: post.id });
+        await pause(100);
+        const cached = await client.execute(POST_QUERY, { id: post.id });
+        expect(cached.data!.post.title).toBe('cacheável');
+        expect(reads()).toBe(1);
+
+        const postId = PostId.parse(post.id);
+        await app
+          .get(CommandBus)
+          .execute(
+            new UpdatePostCommand.UpdatePost(
+              postId,
+              'mudou por fora',
+              undefined,
+              undefined,
+              UserId.parse(userId),
+            ),
+            new PostRequest(postId),
+          );
+        const after = await client.execute(POST_QUERY, { id: post.id });
+
+        expect(after.data!.post.title).toBe('mudou por fora');
+        expect(reads()).toBe(2);
+      } finally {
+        queries.mockRestore();
+      }
+    }, 30_000);
   });
 
   describe('queries', () => {

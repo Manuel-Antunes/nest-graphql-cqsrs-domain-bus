@@ -15,6 +15,7 @@
     "@nestposts/outbox-mikro-orm": "workspace:*",
     "@nestposts/platform": "workspace:*",
     "@nestposts/posts": "workspace:*",
+    "@nestposts/redis": "workspace:*",
     "@nestposts/retry-policy": "workspace:*",
     "@nestposts/transport-eventbus": "workspace:*",
     "@nestposts/users": "workspace:*",

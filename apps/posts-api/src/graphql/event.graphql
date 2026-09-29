@@ -1,7 +1,7 @@
 """
 A calendar event of the tenant the request names
 """
-type Event {
+type Event @cacheControl(maxAge: 60, scope: PRIVATE) {
   id: ID!
   title: String!
   description: String

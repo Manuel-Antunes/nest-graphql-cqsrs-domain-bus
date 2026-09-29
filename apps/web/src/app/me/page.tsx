@@ -8,7 +8,7 @@ import { IdentityPanel } from './_components/identity-panel';
 import { meOptions } from './query';
 
 export default async function MePage() {
-  const session = await WebAuth.session();
+  const identity = await WebAuth.identity();
 
   return (
     <div className="space-y-5">
@@ -21,7 +21,7 @@ export default async function MePage() {
         </p>
       </div>
       <Suspense fallback={<Skeleton className="h-64 w-full" />}>
-        {session ? (
+        {identity ? (
           <PrefetchQuery options={meOptions()}>
             <IdentityPanel />
           </PrefetchQuery>

@@ -1,13 +1,9 @@
-import {
-  collectInterfaceObjects,
-  LocalComposeSupergraph,
-  subgraphNamesByGraphEnum,
-} from '@nestposts/federation-gateway';
-
 import { subgraphSources } from '../scripts/subgraph-sources.mjs';
+import { InterfaceObjects } from '../src/supergraph/interface-objects';
+import { Supergraph } from '../src/supergraph/supergraph';
 
 describe('the supergraph this gateway federates', () => {
-  const supergraph = new LocalComposeSupergraph(
+  const supergraph = new Supergraph(
     subgraphSources.map(({ name, sdlDir }) => ({
       name,
       sdlDir,
@@ -16,7 +12,7 @@ describe('the supergraph this gateway federates', () => {
   );
 
   it('composes from the subgraphs’ own SDL files', () => {
-    expect(() => supergraph.compose()).not.toThrow();
+    expect(() => supergraph.sdl()).not.toThrow();
     expect(supergraph.subgraphNames).toEqual(['posts', 'notifications']);
   });
 
@@ -37,10 +33,10 @@ describe('the supergraph this gateway federates', () => {
   });
 
   it('adds what a user was told to every user type, through @interfaceObject', () => {
-    const sdl = supergraph.compose();
-    const [mapping] = collectInterfaceObjects(sdl);
+    const sdl = supergraph.sdl();
+    const [mapping] = InterfaceObjects.collect(sdl);
 
-    expect(subgraphNamesByGraphEnum(sdl).get(mapping.graph)).toBe(
+    expect(Supergraph.subgraphNamesOf(sdl).get(mapping.graph)).toBe(
       'notifications',
     );
     expect(mapping).toMatchObject({

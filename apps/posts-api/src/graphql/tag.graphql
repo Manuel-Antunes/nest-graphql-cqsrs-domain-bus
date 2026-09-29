@@ -1,7 +1,7 @@
 """
 Uma tag. Agregado próprio: tem id e eventos independentes do post.
 """
-type Tag @key(fields: "id") {
+type Tag @key(fields: "id") @cacheControl(maxAge: 300) {
   id: ID!
   name: String!
 }

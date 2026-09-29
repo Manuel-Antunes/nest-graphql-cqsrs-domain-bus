@@ -2,8 +2,8 @@ import type { FactoryProvider } from '@nestjs/common';
 import type { JwtOptions } from 'better-auth/plugins';
 import { jwt } from 'better-auth/plugins';
 
-import type { AuthConfig } from '../config';
-import { BETTER_AUTH_CONFIG } from '../tokens';
+import type { AuthConfig } from '../../../config/auth.config';
+import { authConfig } from '../../../config/auth.config';
 import { JWT_BETTER_AUTH_PLUGIN } from './tokens';
 
 export const jwtPluginOptions = (config: Pick<AuthConfig, 'issuer'>) =>
@@ -15,5 +15,5 @@ export const jwtPluginOptions = (config: Pick<AuthConfig, 'issuer'>) =>
 export const JwtBetterAuthPluginProvider = {
   provide: JWT_BETTER_AUTH_PLUGIN,
   useFactory: (config: AuthConfig) => jwt(jwtPluginOptions(config)),
-  inject: [BETTER_AUTH_CONFIG],
+  inject: [authConfig.KEY],
 } satisfies FactoryProvider;

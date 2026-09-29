@@ -3,9 +3,36 @@
   "version": "0.1.0",
   "private": true,
   "dependencies": {
-    "@nestposts/federation-gateway": "workspace:*",
+    "@nestjs-modules/mailer": "catalog:",
+    "@nestposts/asset": "workspace:*",
+    "@nestposts/auth": "workspace:*",
+    "@nestposts/cqsrs": "workspace:*",
+    "@nestposts/database": "workspace:*",
     "@nestposts/lambda": "workspace:*",
-    "@nestposts/observability": "workspace:*"
+    "@nestposts/mail": "workspace:*",
+    "@nestposts/notifications": "workspace:*",
+    "@nestposts/observability": "workspace:*",
+    "@nestposts/organizations": "workspace:*",
+    "@nestposts/platform": "workspace:*",
+    "@nestposts/redis": "workspace:*",
+    "@nestposts/transport-eventbus": "workspace:*",
+    "@nestposts/users": "workspace:*",
+    "@nestposts/validated-dto": "workspace:*",
+    "blurhash": "catalog:",
+    "clsx": "catalog:",
+    "exifreader": "catalog:",
+    "file-type": "catalog:",
+    "firebase-admin": "catalog:",
+    "html-to-text": "catalog:",
+    "ical-generator": "catalog:",
+    "mime-types": "catalog:",
+    "nodemailer": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "react-email": "catalog:",
+    "sharp": "catalog:",
+    "tailwind-merge": "catalog:",
+    "zod": "catalog:"
   },
   "nx": {
     "targets": {
@@ -99,5 +126,8 @@
         }
       }
     }
+  },
+  "devDependencies": {
+    "@nestposts/migrator": "workspace:*"
   }
 }
