@@ -6,6 +6,7 @@ import { createClient } from 'graphql-sse';
 export class GraphqlClient {
   private readonly sse: Client;
   private cookie = '';
+  private authorization: string | undefined;
   private tenant: string | undefined;
 
   constructor(
@@ -51,6 +52,11 @@ export class GraphqlClient {
     this.cookie = '';
   }
 
+  authorizedBy(accessToken: string): this {
+    this.authorization = `Bearer ${accessToken}`;
+    return this;
+  }
+
   inTenant(tenant: string | undefined): this {
     this.tenant = tenant;
     return this;
@@ -81,6 +87,7 @@ export class GraphqlClient {
   private headers(): Record<string, string> {
     return {
       ...(this.cookie ? { cookie: this.cookie } : {}),
+      ...(this.authorization ? { authorization: this.authorization } : {}),
       ...(this.tenant ? { 'x-tenant': this.tenant } : {}),
     };
   }

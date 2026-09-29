@@ -8,6 +8,7 @@ import { mikroOrmAdapter } from 'better-auth-mikro-orm';
 import { authConfig } from '../../../config/auth.config';
 import { authEntities } from '../../persistence/auth-entities';
 import { BetterAuthEmails } from '../emails/better-auth-emails';
+import { BetterAuthIdentityResolver } from '../identity/better-auth-identity.resolver';
 import { BetterAuthInstance } from '../init-auth';
 import { BetterAuthPlugins } from './registry';
 
@@ -78,6 +79,23 @@ describe('an OAuth access token is a session', () => {
     });
     expect(session?.session.userId).toBe(user.id);
     expect(session?.session.expiresAt.getTime()).toBeGreaterThan(Date.now());
+  });
+
+  it('carries the scopes the token was granted, and none when it names none', async () => {
+    const user = await givenAUser('clara-bearer@example.com');
+
+    const granted = await sessionFor(
+      `Bearer ${await tokenFor({ sub: user.id, aud: GATEWAY, scope: 'openid read:posts' })}`,
+    );
+    const bare = await sessionFor(
+      `Bearer ${await tokenFor({ sub: user.id, aud: GATEWAY })}`,
+    );
+
+    expect(BetterAuthIdentityResolver.fromSession(granted)?.scopes).toEqual([
+      'openid',
+      'read:posts',
+    ]);
+    expect(BetterAuthIdentityResolver.fromSession(bare)?.scopes).toEqual([]);
   });
 
   it('refuses a token addressed to another resource, or signed for another issuer', async () => {

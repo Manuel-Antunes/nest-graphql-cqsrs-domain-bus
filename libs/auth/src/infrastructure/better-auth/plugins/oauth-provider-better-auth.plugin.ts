@@ -6,16 +6,8 @@ import { APIError } from 'better-auth/api';
 import type { AuthConfig } from '../../../config/auth.config';
 import { authConfig } from '../../../config/auth.config';
 import { SYSTEM_ADMIN_ROLE } from '../../../domain/auth/roles';
+import { OAUTH_SCOPES } from '../../../domain/auth/scopes';
 import { OAUTH_PROVIDER_BETTER_AUTH_PLUGIN } from './tokens';
-
-export const OAUTH_SCOPES = [
-  'openid',
-  'profile',
-  'email',
-  'offline_access',
-  'read:posts',
-  'write:posts',
-];
 
 const READ_ONLY = new Set(['read', 'list']);
 
@@ -63,7 +55,7 @@ export const OAuthProviderBetterAuthPluginProvider = {
         page: `${config.webUrl}/auth/select-account`,
         shouldRedirect: () => false,
       },
-      scopes: OAUTH_SCOPES,
+      scopes: [...OAUTH_SCOPES],
       enforcePerClientResources: false,
       clientPrivileges: oauthClientPrivileges,
       silenceWarnings: { oauthAuthServerConfig: true, openidConfig: true },

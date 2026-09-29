@@ -96,6 +96,9 @@ overrides:
   "@better-auth/utils": 0.4.2
 
 packageExtensions:
+  "@camcima/nestjs-memory-microservices":
+    dependencies:
+      "@nestjs/testing": ^12.1.0
   "@nestjs-modules/mailer":
     dependencies:
       lodash: ^4.17.21

@@ -19,10 +19,15 @@ const signedBearerOf = (authorization: string | null | undefined) => {
   return token && token.split('.').length === 3 ? token : undefined;
 };
 
+const grantedScopesOf = (scope: unknown): string[] =>
+  typeof scope === 'string' ? scope.split(/\s+/).filter(Boolean) : [];
+
 /**
  * **An OAuth 2.0 access token is a session.** A request carrying `Authorization: Bearer <JWT>` — an
  * access token this deployment's `oauthProvider` issued for one of its resources — answers
- * `getSession` as the user the token was issued for.
+ * `getSession` as the user the token was issued for, and the session carries `scopes`: what the
+ * token was granted, from its `scope` claim — none when it names none. A session of this system's
+ * own has no `scopes` at all, which is how the two are told apart.
  *
  * It is a `before` hook on `/get-session`, so everything that asks Better Auth for a session sees it
  * the same way: the global guard, `@Session()`, `AuthService`. The token is verified LOCALLY, with the
@@ -68,6 +73,7 @@ export const oauthBearerSession = (options: OAuthBearerSessionOptions) =>
                 activeOrganizationId: null,
                 activeTeamId: null,
                 impersonatedBy: null,
+                scopes: grantedScopesOf(claims.scope),
               },
               user,
             });

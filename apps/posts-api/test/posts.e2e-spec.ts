@@ -6,9 +6,17 @@ import { CommandBus, EventBus, QueryBus } from '@nestjs/cqrs';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { FastifyAdapter } from '@nestjs/platform-fastify';
 import { Test } from '@nestjs/testing';
+import type { AuthConfig } from '@nestposts/auth/config/auth.config';
+import { authConfig } from '@nestposts/auth/config/auth.config';
 import { AuthUser } from '@nestposts/auth/domain/auth/auth-user.entity';
+import type { BetterAuth } from '@nestposts/auth/infrastructure/better-auth/init-auth';
+import { BETTER_AUTH } from '@nestposts/auth/infrastructure/better-auth/tokens';
 import { SubscriptionBus } from '@nestposts/cqsrs';
-import { ROOT_TENANT_SCHEMA, TENANT_MIGRATIONS } from '@nestposts/database';
+import {
+  inRequestContext,
+  ROOT_TENANT_SCHEMA,
+  TENANT_MIGRATIONS,
+} from '@nestposts/database';
 import { GraphQLResponseCache } from '@nestposts/graphql-response-cache';
 import { migrate } from '@nestposts/migrator/main';
 import { tenantMigrations } from '@nestposts/migrator/migrations/tenant/index';
@@ -476,6 +484,68 @@ describe('posts (e2e)', () => {
         pageInfo: { hasNextPage: false },
         totalCount: 1,
       });
+    });
+  });
+
+  describe('OAuth access tokens', () => {
+    const FIRST_POST = '{ posts(first: 1) { totalCount } }';
+    let delegate: GraphqlClient;
+
+    const grantedFor = async (scope: string) => {
+      const [gateway] = app.get<AuthConfig>(authConfig.KEY).oauthResources;
+      const { token } = await inRequestContext(app.get(MikroORM), () =>
+        app.get<BetterAuth>(BETTER_AUTH).api.signJWT({
+          body: { payload: { sub: userId, aud: gateway, scope } },
+        }),
+      );
+      return delegate.authorizedBy(token);
+    };
+
+    const createdBy = (by: GraphqlClient, title: string) =>
+      by.execute(
+        `mutation($input: CreatePostInput!) { createPost(input: $input) { id author { email } } }`,
+        { input: { title, content: 'c' } },
+      );
+
+    beforeAll(async () => {
+      delegate = await GraphqlClient.for(app);
+    });
+
+    afterAll(() => delegate.dispose());
+
+    it('a token granted read:posts reads the posts, and may not write one', async () => {
+      const reader = await grantedFor('openid read:posts');
+
+      const read = await reader.execute(FIRST_POST);
+      const written = await createdBy(reader, 'by a reading token');
+
+      expect(read.errors, JSON.stringify(read.errors)).toBeUndefined();
+      expect(written.errors?.[0]?.extensions).toMatchObject({
+        code: 'FORBIDDEN',
+      });
+    });
+
+    it('a token granted write:posts writes as the user it was issued to', async () => {
+      const writer = await grantedFor('read:posts write:posts');
+
+      const written = await createdBy(writer, 'by a writing token');
+
+      expect(written.errors, JSON.stringify(written.errors)).toBeUndefined();
+      expect(written.data!.createPost.author.email).toBe('manuel@example.com');
+    });
+
+    it('a token granted neither reads nothing, where nobody reads everything', async () => {
+      const bystander = await grantedFor('openid profile');
+      const anonymous = await GraphqlClient.for(app);
+
+      const refused = await bystander.execute(FIRST_POST);
+      const read = await anonymous.execute(FIRST_POST);
+
+      expect(refused.errors?.[0]?.extensions).toMatchObject({
+        code: 'FORBIDDEN',
+      });
+      expect(read.errors, JSON.stringify(read.errors)).toBeUndefined();
+      await anonymous.dispose();
     });
   });
 

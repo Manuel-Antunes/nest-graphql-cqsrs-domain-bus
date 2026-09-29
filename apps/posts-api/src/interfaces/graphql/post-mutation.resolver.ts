@@ -4,6 +4,7 @@ import { UseFilters, UseInterceptors } from '@nestjs/common';
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import { Args, Mutation, Resolver } from '@nestjs/graphql';
 import { CurrentAuthor } from '@nestposts/auth/decorators/current-user.decorator';
+import { RequireScopes } from '@nestposts/auth/decorators/require-scopes.decorator';
 import { CurrentTenant } from '@nestposts/database';
 import { PostNotFoundException } from '@nestposts/posts/domain/post/exception/post-not-found.exception';
 import { Post } from '@nestposts/posts/domain/post/post.entity';
@@ -22,6 +23,7 @@ import { PostView } from '../../dto/graphql/post.view';
 import { UpdatePostInput } from '../../dto/graphql/update-post.input';
 import { AuthorReferenceExceptionFilter } from '../filters/author-reference-exception.filter';
 
+@RequireScopes('write:posts')
 @Resolver('Post')
 @UseFilters(AuthorReferenceExceptionFilter)
 export class PostMutationResolver {

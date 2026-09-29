@@ -3,6 +3,7 @@ import type { Cursor } from '@mikro-orm/core';
 import { UseInterceptors } from '@nestjs/common';
 import { QueryBus } from '@nestjs/cqrs';
 import { Args, Query, Resolver } from '@nestjs/graphql';
+import { RequireScopes } from '@nestposts/auth/decorators/require-scopes.decorator';
 import { Post } from '@nestposts/posts/domain/post/post.entity';
 import { PostId } from '@nestposts/posts/domain/post/vo/post-id';
 import { AllowAnonymous } from '@thallesp/nestjs-better-auth';
@@ -13,6 +14,7 @@ import { PostView } from '../../dto/graphql/post.view';
 import { ConnectionInterceptor } from '../interceptors/connection.interceptor';
 
 @AllowAnonymous()
+@RequireScopes('read:posts')
 @Resolver('Post')
 export class PostQueryResolver {
   constructor(private readonly queryBus: QueryBus) {}

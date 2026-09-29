@@ -204,6 +204,7 @@ libs/auth/src                                        # the only place that knows
 │                                                    #   better-auth's own description of its schema
 ├── pipes/session-user                               # the session → its User, provisioned in the tenant
 ├── decorators/current-user, roles                   # @CurrentUser()/@CurrentAuthor(), @Roles/@UserCan
+├── decorators/require-scopes, guards/scopes         # @RequireScopes: what an OAuth access token may do
 ├── filters/auth-exception, http-exception           # UNAUTHENTICATED, and a Nest HttpException's status as
 │                                                    #   GraphQL's code — Yoga does not map it
 └── standalone.ts                                    # the same instance outside Nest

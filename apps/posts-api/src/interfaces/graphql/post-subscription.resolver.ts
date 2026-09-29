@@ -1,5 +1,6 @@
 import { UseInterceptors } from '@nestjs/common';
 import { Args, Resolver, Subscription } from '@nestjs/graphql';
+import { RequireScopes } from '@nestposts/auth/decorators/require-scopes.decorator';
 import { SubscriptionBus, subscribeAsAsyncIterable } from '@nestposts/cqsrs';
 import { CurrentTenant } from '@nestposts/database';
 import { PostCreatedEvent } from '@nestposts/posts/domain/post/event/post-created.event';
@@ -12,6 +13,7 @@ import { PostView } from '../../dto/graphql/post.view';
 import { MapSubscriptionInterceptor } from '../interceptors/map-subscription.interceptor';
 
 @AllowAnonymous()
+@RequireScopes('read:posts')
 @Resolver('Post')
 export class PostSubscriptionResolver {
   constructor(private readonly subscriptionBus: SubscriptionBus) {}

@@ -28,6 +28,7 @@ describe('IdentityUserPipe', () => {
       email: 'manuel@example.com',
       name: 'manuel',
       roles: ['user'],
+      scopes: [],
     });
 
     const user = await pipe.transform(identity);

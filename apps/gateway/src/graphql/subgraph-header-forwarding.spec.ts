@@ -90,6 +90,7 @@ describe('what the gateway forwards to each subgraph', () => {
       email: 'ana@example.com',
       name: 'Ana',
       roles: ['user'],
+      scopes: [],
       activeOrganizationId: organizationId,
     });
 

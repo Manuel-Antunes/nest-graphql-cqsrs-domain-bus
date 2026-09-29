@@ -2,6 +2,7 @@ import { Inject, Injectable, Scope } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
 
 import { IdentityResolver } from '../../../domain/auth/identity.resolver';
+import { OAUTH_SCOPES } from '../../../domain/auth/scopes';
 import { Identity } from '../../../domain/auth/vo/identity';
 import { RequestCredentials } from '../../request/request-credentials';
 import { RequestHeaders } from '../../request/request-headers';
@@ -17,7 +18,11 @@ export interface BetterAuthSession {
     readonly name: string;
     readonly role?: string | null;
   };
-  readonly session: { readonly activeOrganizationId?: string | null };
+  readonly session: {
+    readonly activeOrganizationId?: string | null;
+    /** What an OAuth access token was granted (`oauth-bearer-session`); absent for a session of this system's own. */
+    readonly scopes?: readonly string[];
+  };
 }
 
 type GuardedRequest = { session?: BetterAuthSession | null };
@@ -43,7 +48,11 @@ export class BetterAuthIdentityResolver extends IdentityResolver {
     super();
   }
 
-  /** The one translation from Better Auth's session to the domain's {@link Identity}. */
+  /**
+   * The one translation from Better Auth's session to the domain's {@link Identity}. A session an
+   * OAuth access token stands for keeps the scopes the token was granted; any other is this
+   * system's own — a cookie — and holds every one of `OAUTH_SCOPES`.
+   */
   static fromSession(
     found: BetterAuthSession | null | undefined,
   ): Identity | null {
@@ -55,6 +64,7 @@ export class BetterAuthIdentityResolver extends IdentityResolver {
       email: found.user.email,
       name: found.user.name,
       roles: AuthRoles.of(found.user.role),
+      scopes: found.session.scopes ?? OAUTH_SCOPES,
       activeOrganizationId: found.session.activeOrganizationId,
     });
   }

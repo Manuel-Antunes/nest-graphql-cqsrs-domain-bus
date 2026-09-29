@@ -14,14 +14,16 @@ package's.
 
 ## Who is calling: one `Identity`, however the question is asked
 
-`Identity` (`domain/auth/vo/identity.ts`) is the caller — user id, email, name, roles and the active
-organization's id, as value objects — and every way of asking answers it:
+`Identity` (`domain/auth/vo/identity.ts`) is the caller — user id, email, name, roles, the scopes its
+credential was granted and the active organization's id, as value objects — and every way of asking
+answers it:
 
 | | what it is | use it when |
 |---|---|---|
 | `@CurrentIdentity()` | a parameter decorator: the `Identity` the global guard found, `null` for nobody. Pipes compose on it — `@CurrentUser()` and `@CurrentAuthor()` are `CurrentIdentity(IdentityUserPipe…)`, and the organization decorators are the same | a resolver or a controller behind the global guard |
 | `AuthService` | the **port** (`domain/auth/auth.service.ts`), request-scoped: `identity()`, `requireIdentity()`, the roles and the permissions of THIS request | application code that lives inside the request. It is the only one that does not name Better Auth |
 | `IdentityResolver` | the **port** for who is calling, request-scoped like `AuthService`: `identity()` | a guard (`TenantMembershipGuard`), and code that holds a request instead of living inside one — the gateway's context function registers its `req` under a context id of its own and resolves it (`ContextIdFactory.create()`, `registerRequestByContextId`, `moduleRef.resolve`) |
+| `@RequireScopes(...)` | a class or handler decorator: `ScopesGuard` refuses a credential not granted every scope listed, with a 403 (`FORBIDDEN`) — see **What a token may do is its scopes** | a handler an OAuth client should reach only with the user's consent |
 | `BETTER_AUTH` | the **instance**, fully typed, with every plugin's endpoints on `auth.api` | you need an endpoint the ports do not wrap |
 | `BetterAuthModule.forRoot` | the wiring itself: the instance, the ports, the tables | a composition root — `apps/posts-api`, and `apps/web`'s own Nest container |
 
@@ -262,6 +264,28 @@ that, on AWS, with a valid session. It now answers `403 OAUTH_CLIENT_ADMIN_REQUI
 "Only an admin can create an OAuth client", which the UI shows as a permission error. Nothing seeds an
 `admin`: the deployed stages have one only when somebody sets `users.role` by hand, the way
 `apps/web-e2e` does for its own.
+
+### What a token may do is its scopes
+
+`Identity.scopes` is what the credential may be used for, and there are two kinds of credential:
+
+- **A cookie is this system's own.** Whoever holds one signed in through its screens and is using the
+  system itself, so the identity holds **every** scope — `OAUTH_SCOPES` (`domain/auth/scopes.ts`, which
+  is also the list the provider offers) — and only roles restrict it.
+- **An access token is a client acting for the user**, and holds what the user allowed it on the
+  consent screen: `oauth-bearer-session` puts the JWT's `scope` claim on the session it answers
+  (`session.scopes`), and `BetterAuthIdentityResolver.fromSession` keeps it. A token that names no scope
+  holds none — a session with no `scopes` at all is what marks the cookie, so a token can never fall
+  into "everything".
+
+`@RequireScopes('write:posts')` on a handler or a class (the two add up) is where a scope is enforced:
+`ScopesGuard` asks the `IdentityResolver` and refuses with a 403 — `FORBIDDEN` in GraphQL, naming the
+scopes required — a caller whose credential lacks one. **Nobody passes**: a scope narrows what a
+credential may do, and whether a handler needs a credential at all is the global guard's
+(`@AllowAnonymous()`). posts-api requires `read:posts` on the post queries and subscriptions and
+`write:posts` on the post mutations; its e2e signs tokens with each and calls them. The guard is
+declared `Scope.REQUEST`, and that is not decoration: left to scope bubbling, the posts-api resolvers
+were handed an instance whose constructor never ran, and every guarded operation failed.
 
 ## Sessions in Redis, in front of the database
 

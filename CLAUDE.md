@@ -873,11 +873,27 @@ gives it under the **`apps` profile**, so `docker compose --profile apps up` run
   because no application here declares a single third-party dependency: `@nestjs/core`, MikroORM and
   the rest live in the **root** `package.json`, and an app resolves them by walking up. An image built
   from `apps/posts-api` alone would have nothing to install.
-- **The first stage exists to make the install layer cacheable.** It copies the whole repository and
-  then extracts only the `package.json` files, the lockfile and `pnpm-workspace.yaml`; the next stage
-  copies *that* and installs. A source change leaves the extracted manifests byte-identical, so the
-  install layer survives it — and because the four Dockerfiles share those stages verbatim, the
-  install happens once for all of them.
+- **Every Dockerfile is one template, `base → deps → dev → builder → prod-deps → runner`**, with pnpm's
+  and Nx's own features only; an application's copy differs in its `ARG`s (`PROJECT`, `PROJECT_DIR`,
+  `PORT`), and the migrator and the web in their runner. `deps` copies the lockfile and every
+  `package.json` (`COPY --parents **/package.json`) and installs the **whole** workspace: a source
+  change leaves that layer alone, and because no Dockerfile uses an `ARG` before it, it is one layer
+  for every image. `dev` is the source on top (`serve`, `test` — `docker build --target dev`);
+  `builder` runs `nx build` with `.nx/cache` in a cache mount, so the libraries build once for all the
+  images; `prod-deps` installs the same manifests `--prod`, filtered to the root and the application
+  (`--filter='{.}' --filter="$PROJECT..."`); `runner` is that and the build output, as `node`. The
+  migrator's runner adds the libraries' `dist` — its `tsc` build `require`s them — and the web's is
+  `.next`, `public` and `next.config.ts` under `next start`.
+- **The runner keeps the workspace's shape; Nx's `prune` cannot make a standalone `dist` here.**
+  `@nx/js:prune-lockfile` writes the application's OWN `package.json`, and the dependencies live in the
+  root's, so the pruned output died with `Cannot find module '@opentelemetry/api'`. The webpack
+  plugin's `generatePackageJson` reads the project graph instead, and the graph has no edge for an
+  import it cannot resolve — `microservices-inngest` → `inngest` among them — so that output died on
+  `inngest/fastify`. The root's `dependencies` are therefore what an image runs on, and a package the
+  applications load belongs there, not in `devDependencies`: `inngest` and
+  `@camcima/nestjs-memory-microservices` were, and worked only because the old images carried the
+  full install. The latter's `index.js` also `require`s `@nestjs/testing`, which it never declares —
+  `packageExtensions` in `pnpm-workspace.yaml` declares it for it.
 - **Nothing here deploys as an image**, and that is worth saying out loud: production is
   `sst.aws.Function`, a zip. These exist for `apps/web-e2e` and for bringing the system up without a
   toolchain, and they are the only packaging in the repository that no deploy consumes.
@@ -1433,7 +1449,10 @@ the post mutations, answers one as "the author does not exist", ahead of the glo
   organizations; everything else talks to `AuthService`, `OrganizationService`, `IdentityProvider` or a
   repository. `AuthInfrastructureModule.forRoot({ plugins, entities, imports })` installs the `/api/auth/*`
   surface and the global guard — which requires a session, so post reads opt out with `@AllowAnonymous()`
-  and writes use `@Roles([AUTHOR_ROLE])` + `@CurrentAuthor()`. Organization-scoped handlers use
+  and writes use `@Roles([AUTHOR_ROLE])` + `@CurrentAuthor()`. What an OAuth access token may do is its
+  scopes': `@RequireScopes('write:posts')` (`libs/auth`) refuses a token not granted them with
+  `FORBIDDEN`, a cookie of this system's own holds every scope, and nobody passes — the post reads and
+  subscriptions require `read:posts`, the writes `write:posts`. Organization-scoped handlers use
   `@OrgRoles([...])` and `@ActiveOrganization()` / `@ActiveMember()` / `@ActiveOrganizationId()`, which are
   `@CurrentIdentity()` with one pipe each; the pipes answer from `OrganizationService`. The auth, user and
   organization errors get their GraphQL codes from those modules' own filters (see **Errors**).
@@ -1445,7 +1464,8 @@ the post mutations, answers one as "the author does not exist", ahead of the glo
   (`TenantMembershipGuard`) makes every controller and `@Resolver` of its application request-scoped
   (`libs/auth/README.md` has the measure). The global guard's lookup
   is reused, not repeated, and `BetterAuthIdentityResolver.fromSession` is the one translation from
-  Better Auth's session. Nothing reads `@thallesp/nestjs-better-auth`'s raw `@Session()` any more.
+  Better Auth's session — `Identity.scopes` included: an access token's `scope` claim, or every one of
+  `OAUTH_SCOPES` for a cookie. Nothing reads `@thallesp/nestjs-better-auth`'s raw `@Session()` any more.
 - **A request's headers are read in one place**: `RequestHeaders.from(anything)` (`libs/auth`) — a
   Fastify or Express request, a GraphQL context, Yoga's `request` (whose headers are `@whatwg-node`'s
   class, which a check for the global `Headers` used to read as empty, losing the cookie with nothing

@@ -1,32 +1,70 @@
 # syntax=docker/dockerfile:1
+#
+# Built from the workspace root, always — the context is the whole monorepo:
+#   nx docker:build @nestposts/web
+#   docker build -f apps/web/Dockerfile -t nestposts/web:dev .
+#   docker build -f apps/web/Dockerfile --target dev -t web-dev . && docker run --rm web-dev pnpm nx test @nestposts/web
+#
+# Stages, pnpm's and Nx's own features only:
+#   base       node + the pnpm the root package.json pins
+#   deps       the lockfile and every package.json, no source → the whole workspace installed ← one layer every image shares
+#   dev        the full source on top → serve / test / lint
+#   builder    nx build — codegen and next build — with Nx's cache kept across image builds
+#   prod-deps  the same manifests → pnpm install --prod, filtered to the root and this application
+#   runner     the production node_modules and what next start reads — .next, public, next.config.ts
 
-FROM node:24-slim AS manifests
-WORKDIR /src
-COPY . .
-RUN mkdir /manifests \
- && find . -name package.json -not -path '*/node_modules/*' -exec install -D {} /manifests/{} \; \
- && install -D pnpm-lock.yaml /manifests/pnpm-lock.yaml \
- && install -D pnpm-workspace.yaml /manifests/pnpm-workspace.yaml
+ARG NODE_VERSION=24
+ARG PNPM_VERSION=10.28.0
+ARG PROJECT=@nestposts/web
+ARG PROJECT_DIR=apps/web
+ARG PORT=3000
 
-FROM node:24-slim AS deps
-RUN corepack enable
-WORKDIR /workspace
-COPY --from=manifests /manifests ./
+FROM node:${NODE_VERSION}-alpine AS base
+ARG PNPM_VERSION
+ENV PNPM_HOME=/pnpm \
+    PATH=/pnpm:$PATH \
+    NX_DAEMON=false \
+    NX_NO_CLOUD=true \
+    CI=true \
+    COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
+WORKDIR /repo
+
+FROM base AS deps
+COPY pnpm-lock.yaml pnpm-workspace.yaml .npmrc* ./
+COPY --parents **/package.json ./
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
-    pnpm install --frozen-lockfile --store-dir /pnpm/store
+    pnpm install --frozen-lockfile
 
-FROM deps AS build
+FROM deps AS dev
 COPY . .
-RUN pnpm exec nx build @nestposts/web
+ARG PROJECT
+ENV PROJECT=${PROJECT}
+CMD ["sh", "-c", "pnpm nx serve \"$PROJECT\""]
 
-FROM node:24-slim AS runtime
-RUN corepack enable
-WORKDIR /workspace
-ENV NODE_ENV=production
-COPY --from=build /workspace/package.json /workspace/pnpm-workspace.yaml /workspace/pnpm-lock.yaml ./
-COPY --from=build /workspace/node_modules ./node_modules
-COPY --from=build /workspace/libs ./libs
-COPY --from=build /workspace/apps/web ./apps/web
-WORKDIR /workspace/apps/web
-EXPOSE 3000
-CMD ["pnpm", "exec", "next", "start", "-p", "3000"]
+FROM dev AS builder
+ARG PROJECT_DIR
+RUN --mount=type=cache,id=nx-cache,target=/repo/.nx/cache \
+    pnpm nx run "${PROJECT}:build" && rm -rf "${PROJECT_DIR}/.next/cache"
+
+FROM base AS prod-deps
+ARG PROJECT
+COPY pnpm-lock.yaml pnpm-workspace.yaml .npmrc* ./
+COPY --parents **/package.json ./
+RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
+    pnpm install --prod --frozen-lockfile --filter='{.}' --filter="${PROJECT}..."
+
+FROM node:${NODE_VERSION}-alpine AS runner
+ARG PROJECT_DIR
+ARG PORT
+ENV NODE_ENV=production \
+    PORT=${PORT}
+WORKDIR /repo
+COPY --from=prod-deps /repo ./
+COPY --from=builder --chown=node:node /repo/${PROJECT_DIR}/.next ./${PROJECT_DIR}/.next
+COPY --from=builder /repo/${PROJECT_DIR}/public ./${PROJECT_DIR}/public
+COPY --from=builder /repo/${PROJECT_DIR}/next.config.ts ./${PROJECT_DIR}/
+WORKDIR /repo/${PROJECT_DIR}
+USER node
+EXPOSE ${PORT}
+CMD ["node", "node_modules/next/dist/bin/next", "start"]

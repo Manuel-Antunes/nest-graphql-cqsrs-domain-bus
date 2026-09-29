@@ -215,6 +215,7 @@ describe('the gateway resolves who is calling, from Redis first', () => {
     const identity = await inContext(() => caller.identity());
 
     expect(identity?.userId.value).toBe(userId);
+    expect(identity?.scopes).toEqual(['openid']);
   });
 
   it('forwards a caller with no credentials as nobody', async () => {
