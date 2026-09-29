@@ -2156,6 +2156,12 @@ plugin writes the cookie.
   and the database are the API's, which is what makes the cookie one the API resolves.
 - Every resolved provider is wrapped so each call runs inside `inRequestContext`: nothing opens a
   MikroORM context here, because Next owns the request and there is no middleware or interceptor.
+- **The container boots for a request, never for the build.** `Nest.context()` awaits Next's
+  `connection()` first, so a page `next build` prerenders gives up on static rendering before anything
+  connects. The root layout used to boot it while prerendering `/_not-found` — harmless while nothing
+  in it connected at boot, since `MikroORM.init` never reaches the server — and once it held a
+  `RedisConnection`, which fails the boot when Redis is unreachable, the deploy's `next build`, on a
+  runner outside the VPC, failed with `Connection timeout`.
 
 **Under Turbopack the auth stack is BUNDLED — Nest, MikroORM and `pg` included — and never
 external.** Turbopack externalizes only what resolves inside `node_modules`, so the `@nestposts/*`

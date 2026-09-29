@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import 'server-only';
 
 import { headers } from 'next/headers';
+import { connection } from 'next/server';
 import type { EntityManager } from '@mikro-orm/core';
 import { MikroORM } from '@mikro-orm/core';
 import type { INestApplicationContext, Type } from '@nestjs/common';
@@ -33,9 +34,15 @@ const cache = globalThis as unknown as {
  * Once, because building it opens a database connection and constructs Better Auth; and on
  * `globalThis` rather than a module-level slot because Next re-evaluates modules on every change in
  * development, which would otherwise leave a new container — and a new pool — behind each time.
+ *
+ * Only for a request, never for the build: `connection()` comes first, so a page Next prerenders
+ * gives up on static rendering before anything connects. The root layout booted it while `next build`
+ * prerendered `/_not-found`, and once the container held a Redis client, a build that could not reach
+ * Redis — the deploy's, outside the VPC — failed with `Connection timeout`.
  */
 export class Nest {
-  static context(): Promise<INestApplicationContext> {
+  static async context(): Promise<INestApplicationContext> {
+    await connection();
     cache.__nestposts_web ??= new WeakMap();
     let context = cache.__nestposts_web.get(NestFactory);
     if (!context) {
