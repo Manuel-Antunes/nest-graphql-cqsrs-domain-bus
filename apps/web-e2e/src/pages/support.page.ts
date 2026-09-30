@@ -30,6 +30,15 @@ export class SupportPage extends WebPage {
     return this.frame.getByRole('button', { name: 'Criar organização' });
   }
 
+  /** The calls page of an account with no voice inbox yet. */
+  get callsSetup(): Locator {
+    return this.frame.getByText('Faça e receba chamadas em um só lugar');
+  }
+
+  get setUpVoiceChannel(): Locator {
+    return this.frame.getByRole('button', { name: 'Configurar canal de voz' });
+  }
+
   async openAt(dashboardPath: string): Promise<void> {
     await this.page.goto(`${this.path}${dashboardPath}`);
   }

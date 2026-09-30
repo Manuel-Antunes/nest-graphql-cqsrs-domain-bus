@@ -103,6 +103,31 @@ test.describe('Chatwoot, under the platform session', () => {
     await expect(app.page).toHaveURL(/\/settings\/organizations$/);
   });
 
+  test('the calls dashboard opens inside Support, and an account with no voice inbox is offered one', async ({
+    app,
+    registration,
+    authentication,
+    organizations,
+    chatwootRecords,
+  }) => {
+    const owner = await registration.freshAccount('Calls');
+    const organization = `Calls ${Unique.suffix()}`;
+    await authentication.signIn(owner);
+    await organizations.create(organization);
+    const account = await chatwootRecords.accountOf(organization);
+
+    await app.support.openAt(`/app/accounts/${account?.id}/calls`);
+    await expect
+      .poll(() => app.support.framedPath(), DASHBOARD)
+      .toBe(`/app/accounts/${account?.id}/calls`);
+    await expect(app.support.callsSetup).toBeVisible(DASHBOARD);
+
+    await app.support.setUpVoiceChannel.click();
+    await expect
+      .poll(() => app.support.framedPath(), DASHBOARD)
+      .toBe(`/app/accounts/${account?.id}/settings/inboxes/new`);
+  });
+
   test('Chatwoot has no sign-in of its own: its password form is refused, and its dashboard sends a stranger to the platform', async ({
     accounts,
     environment,

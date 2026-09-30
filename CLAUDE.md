@@ -1325,7 +1325,11 @@ last section is the design; the essentials:
   `libs/organizations`, a system migration to recreate the trigger) — `chatwoot-default-features.spec`
   reads `features.yml` and fails until they match — and a `pt_BR` text for every new `en` key, in
   `config/locales` and in the dashboard's JSON, because `pt_BR` is the installation's locale and
-  production falls back to nothing else.
+  production falls back to nothing else. Left out of 4.18 on purpose, because the platform owns
+  what they manage: the onboarding screens (an account is an organization, never a Chatwoot
+  sign-up), the profile's active-sessions list (a session is Better Auth's), and upstream's own
+  Playwright suite and GitHub workflows. The legacy `/notifications` page upstream removed
+  redirects to the inbox view.
 - **Clients** (`libs/clients`, posts-api's `client/` slices) are guarded by the organization's
   `client` resource (`CLIENT_RESOURCE`: owners and admins every action, members all but `delete`) and
   the `read:clients`/`write:clients` scopes. The web's `/clients` screen links and creates Chatwoot
