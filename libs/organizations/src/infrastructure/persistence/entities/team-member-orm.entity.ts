@@ -12,17 +12,19 @@ import { TeamMemberId } from '../../../domain/organization/vo/team-member-id';
 import { TeamMemberChatwootSyncTrigger } from '../triggers/chatwoot-sync.triggers';
 import { TeamEntitySchema } from './team-orm.entity';
 
-const TeamMemberIdType = valueObjectType(TeamMemberId, {
-  columnType: `varchar(${TEAM_MEMBER_ID_MAX_LENGTH})`,
-});
-
 export const TeamMemberEntitySchema = defineEntity({
   class: TeamMember,
   tableName: 'team_member',
   schema: SYSTEM_SCHEMA,
   forceConstructor: true,
   properties: {
-    id: p.type(TeamMemberIdType).primary(),
+    id: p
+      .type(
+        valueObjectType(TeamMemberId, {
+          columnType: `varchar(${TEAM_MEMBER_ID_MAX_LENGTH})`,
+        }),
+      )
+      .primary(),
     team: () => p.manyToOne(TeamEntitySchema).ref().deleteRule('cascade'),
     user: () => p.manyToOne(AuthUserEntitySchema).ref().deleteRule('cascade'),
     membershipKey: p.text().nullable().unique(),

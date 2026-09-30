@@ -24,18 +24,6 @@ import { ClientName } from '../../../domain/client/vo/client-name';
 import { ClientStatus } from '../../../domain/client/vo/client-status';
 import { Cpf } from '../../../domain/client/vo/cpf';
 
-const ClientIdType = valueObjectType(ClientId, { columnType: 'varchar(36)' });
-const ClientNameType = valueObjectType(ClientName, {
-  columnType: `varchar(${CLIENT_NAME_MAX_LENGTH})`,
-});
-const ClientKindType = valueObjectType(ClientKind, {
-  columnType: `varchar(${CLIENT_KIND_MAX_LENGTH})`,
-});
-const ClientStatusType = valueObjectType(ClientStatus, {
-  columnType: `varchar(${CLIENT_STATUS_MAX_LENGTH})`,
-});
-const CpfType = valueObjectType(Cpf, { columnType: `varchar(${CPF_LENGTH})` });
-
 const optionalText = () => p.string().length(CLIENT_TEXT_MAX_LENGTH).nullable();
 const addressLine = () =>
   p.string().length(ADDRESS_FIELD_MAX_LENGTH).nullable();
@@ -44,9 +32,17 @@ export const ClientDetailsEntitySchema = defineEntity({
   class: ClientDetails,
   embeddable: true,
   properties: {
-    name: p.type(ClientNameType),
-    kind: p.type(ClientKindType),
-    cpf: p.type(CpfType),
+    name: p.type(
+      valueObjectType(ClientName, {
+        columnType: `varchar(${CLIENT_NAME_MAX_LENGTH})`,
+      }),
+    ),
+    kind: p.type(
+      valueObjectType(ClientKind, {
+        columnType: `varchar(${CLIENT_KIND_MAX_LENGTH})`,
+      }),
+    ),
+    cpf: p.type(valueObjectType(Cpf, { columnType: `varchar(${CPF_LENGTH})` })),
     rg: optionalText(),
     birthDate: p.datetime().nullable(),
     deathDate: p.datetime().nullable(),
@@ -80,12 +76,18 @@ export const ClientEntitySchema = defineEntity({
   schema: TENANT_SCHEMA,
   forceConstructor: true,
   properties: {
-    id: p.type(ClientIdType).primary(),
+    id: p
+      .type(valueObjectType(ClientId, { columnType: 'varchar(36)' }))
+      .primary(),
     details: () =>
       p.embedded(ClientDetailsEntitySchema).prefix(false).object(false),
     address: () =>
       p.embedded(AddressEntitySchema).prefix('address_').object(false),
-    status: p.type(ClientStatusType),
+    status: p.type(
+      valueObjectType(ClientStatus, {
+        columnType: `varchar(${CLIENT_STATUS_MAX_LENGTH})`,
+      }),
+    ),
     createdBy: () =>
       p.manyToOne(UserEntitySchema).ref().nullable().deleteRule('set null'),
     createdAt: p.datetime(),
