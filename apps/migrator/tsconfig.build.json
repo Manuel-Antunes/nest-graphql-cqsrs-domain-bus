@@ -46,6 +46,9 @@
       "path": "../../libs/database/tsconfig.lib.json"
     },
     {
+      "path": "../../libs/clients/tsconfig.lib.json"
+    },
+    {
       "path": "../../libs/auth/tsconfig.lib.json"
     }
   ]

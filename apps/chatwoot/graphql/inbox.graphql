@@ -1,0 +1,77 @@
+"""
+An inbox: a communication channel (API, email, website widget, WhatsApp, etc.)
+within an account. Agents are granted access per inbox; conversations belong to
+exactly one inbox.
+"""
+type Inbox implements Node @key(fields: "id") {
+  """
+  Internal id of the inbox.
+  """
+  id: ID!
+
+  """
+  Display name of the inbox.
+  """
+  name: String
+
+  """
+  The channel class backing the inbox, e.g. "Channel::Api", "Channel::Email",
+  "Channel::WebWidget".
+  """
+  channelType: String
+
+  """
+  Business name shown to contacts, if configured.
+  """
+  businessName: String
+
+  """
+  Sending/receiving email address for email inboxes.
+  """
+  emailAddress: String
+
+  """
+  Whether agents may keep sending messages after a conversation is resolved.
+  """
+  allowMessagesAfterResolved: Boolean!
+
+  """
+  Whether new conversations are auto-assigned to available agents.
+  """
+  enableAutoAssignment: Boolean!
+
+  """
+  Whether an automatic greeting is sent on new conversations.
+  """
+  greetingEnabled: Boolean
+
+  """
+  The greeting message sent when greetingEnabled is true.
+  """
+  greetingMessage: String
+
+  """
+  Conversations in this inbox. Filter via `where` (id, status, uuid,
+  lastActivityAt, createdAt) and `hasContact` (name, email, contactType,
+  phoneNumber).
+  """
+  conversations(
+    where: _
+      @whereConditions(
+        columns: ["id", "status", "uuid", "lastActivityAt", "createdAt"]
+      )
+    hasContact: _
+      @whereHasConditions(
+        columns: ["name", "email", "contactType", "phoneNumber"]
+      )
+    after: String
+    before: String
+    first: Int
+    last: Int
+  ): [Conversation!]! @hasMany
+
+  """
+  When the inbox was created.
+  """
+  createdAt: ISO8601DateTime
+}

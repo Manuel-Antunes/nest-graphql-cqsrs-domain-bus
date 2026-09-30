@@ -1,7 +1,7 @@
 import { createSchema, createYoga } from 'graphql-yoga';
 
 import { Listening } from '../../test/support/listening';
-import { FederatedSchema } from './federated-schema';
+import { FederatedSchemaFactory } from './federated-schema';
 import { Supergraph } from './supergraph';
 
 const POSTS_SDL = /* GraphQL */ `
@@ -161,7 +161,7 @@ describe('@interfaceObject', () => {
   const gatewayOver = async (notificationsSdl: string): Promise<Listening> => {
     const served = await Listening.on(
       createYoga({
-        schema: FederatedSchema.of(
+        schema: FederatedSchemaFactory.of(
           Supergraph.compose([
             { name: 'posts', url: posts.url, sdl: POSTS_SDL },
             {

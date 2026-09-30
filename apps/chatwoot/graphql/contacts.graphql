@@ -1,0 +1,164 @@
+type Client @key(fields: "id") {
+  """
+  Internal id of the client, as stored on `contact_links.client_id`.
+  """
+  id: ID! @external
+
+  """
+  Support contacts linked to this client.
+  """
+  contacts: [Contact!]! @hasMany
+}
+
+"""
+A contact: an end customer or person the account communicates with. Belongs to
+the current account and may be linked to a `Client` of the `posts` subgraph.
+"""
+type Contact implements Node @key(fields: "id") {
+  """
+  Internal id of the contact.
+  """
+  id: ID!
+
+  """
+  Contact's display name.
+  """
+  name: String
+
+  """
+  Primary email address.
+  """
+  email: String
+
+  """
+  Primary phone number in E.164 form.
+  """
+  phoneNumber: String
+
+  """
+  ISO country code derived from the phone number / attributes.
+  """
+  countryCode: String
+
+  """
+  External unique identifier set by the integrating system, if any.
+  """
+  identifier: String
+
+  """
+  Lifecycle type, as an integer: 0 = visitor, 1 = lead, 2 = customer.
+  """
+  contactType: Int
+
+  """
+  Whether the contact is blocked.
+  """
+  blocked: Boolean
+
+  """
+  The linked client, or null if the contact is not linked, resolved by the `posts`
+  subgraph.
+  """
+  client: Client @field(resolver: "Resolvers::ContactClient")
+
+  """
+  The linked client's id, without resolving the federated entity.
+  """
+  clientId: ID @field(resolver: "Resolvers::ContactClientId")
+
+  """
+  Conversations with this contact. Filter via `where` (id, status, uuid,
+  lastActivityAt) and `hasContact` (name, access_level).
+  """
+  conversations(
+    after: String
+    before: String
+    first: Int
+    last: Int
+    where: _
+      @whereConditions(columns: ["id", "status", "uuid", "lastActivityAt"])
+    hasContact: _ @whereHasConditions(columns: ["name", "access_level"])
+  ): [Conversation!]! @hasMany
+
+  """
+  Titles of the labels applied to the contact.
+  """
+  labels: [String!]! @method(name: "label_list")
+
+  """
+  Internal notes attached to the contact by agents.
+  """
+  notes(after: String, before: String, first: Int, last: Int): [Note!]!
+    @hasMany(relation: "notes")
+
+  """
+  The inbox associations (source ids) through which this contact is reachable.
+  """
+  contactInboxes: [ContactInbox!]! @hasMany(relation: "contact_inboxes")
+
+  """
+  When the contact was last active.
+  """
+  lastActivityAt: ISO8601DateTime
+
+  """
+  Where the contact opens in the Chatwoot dashboard, relative to Chatwoot's origin.
+  """
+  dashboardPath: String! @field(resolver: "Resolvers::ContactDashboardPath")
+
+  """
+  Account-defined custom attributes for the contact.
+  """
+  customAttributes: JSON
+
+  """
+  Additional system attributes (e.g. social profiles, geo).
+  """
+  additionalAttributes: JSON
+
+  """
+  When the contact was created.
+  """
+  createdAt: ISO8601DateTime
+
+  """
+  When the contact was last updated.
+  """
+  updatedAt: ISO8601DateTime
+}
+
+"""
+Associates a contact with an inbox via a channel-specific source id (the
+addressable handle for reaching the contact on that inbox).
+"""
+type ContactInbox implements Node @key(fields: "id") {
+  """
+  Internal id of the contact-inbox association.
+  """
+  id: ID!
+
+  """
+  Channel-specific source id (e.g. phone number, widget id) used to reach the
+  contact on this inbox.
+  """
+  sourceId: String!
+
+  """
+  Whether the source id has been HMAC-verified (identity validation).
+  """
+  hmacVerified: Boolean
+
+  """
+  The inbox this association is for.
+  """
+  inbox: Inbox! @belongsTo(relation: "inbox")
+
+  """
+  When the association was created.
+  """
+  createdAt: ISO8601DateTime
+}
+
+# The Mutation root is defined code-first as Relay mutations in
+# app/graphql/types/mutation_type.rb (mounted via ChatwootSchema.mutation), so
+# it is intentionally not declared here in SDL.

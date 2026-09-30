@@ -1,0 +1,36 @@
+"""
+Which clients to bring; every one of them when absent
+"""
+input ClientFilterInput {
+  """
+  Part of the name, or of the CPF's digits
+  """
+  search: String
+  kind: ClientKind
+  status: ClientStatus
+}
+
+extend type Query {
+  """
+  The clients of the organization behind this tenant, by name, as a Relay cursor connection; only who
+  holds `client: read` in the active organization, whose tenant this must be
+  """
+  clients(
+    filter: ClientFilterInput
+
+    """
+    How many clients to bring; absent = 50, and 200 at most
+    """
+    first: Int
+
+    """
+    Cursor of the last client already seen
+    """
+    after: String
+  ): ClientConnection!
+
+  """
+  One client of the organization behind this tenant; null when there is none with that id
+  """
+  client(id: ID!): Client
+}

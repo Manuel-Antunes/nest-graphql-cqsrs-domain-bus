@@ -1,0 +1,30 @@
+"""
+A note: free-text annotation an agent attaches to a contact for internal
+reference (not visible to the contact).
+"""
+type Note implements Node @key(fields: "id") {
+  """
+  Internal id of the note.
+  """
+  id: ID!
+
+  """
+  The note text.
+  """
+  content: String!
+
+  """
+  The user (agent) who authored the note.
+  """
+  user: Agent @belongsTo(relation: "user")
+
+  """
+  When the note was created.
+  """
+  createdAt: ISO8601DateTime
+
+  """
+  When the note was last updated.
+  """
+  updatedAt: ISO8601DateTime
+}

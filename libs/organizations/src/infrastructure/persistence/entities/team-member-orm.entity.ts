@@ -9,6 +9,7 @@ import {
 import { TEAM_MEMBER_ID_MAX_LENGTH } from '../../../domain/organization/schemas/team-member-id.schema';
 import { TeamMember } from '../../../domain/organization/team-member.entity';
 import { TeamMemberId } from '../../../domain/organization/vo/team-member-id';
+import { TeamMemberChatwootSyncTrigger } from '../triggers/chatwoot-sync.triggers';
 import { TeamEntitySchema } from './team-orm.entity';
 
 const TeamMemberIdType = valueObjectType(TeamMemberId, {
@@ -28,4 +29,5 @@ export const TeamMemberEntitySchema = defineEntity({
     createdAt: p.datetime().nullable(),
   },
   indexes: [{ properties: ['team'] }, { properties: ['user'] }],
+  triggers: [TeamMemberChatwootSyncTrigger],
 });

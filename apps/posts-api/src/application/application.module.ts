@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { ClientsInfrastructureModule } from '@nestposts/clients/infrastructure/clients-infrastructure.module';
 import { EventsInfrastructureModule } from '@nestposts/events/infrastructure/events-infrastructure.module';
 import { OrganizationsInfrastructureModule } from '@nestposts/organizations/infrastructure/organizations-infrastructure.module';
 import { PostsInfrastructureModule } from '@nestposts/posts/infrastructure/posts-infrastructure.module';
@@ -16,7 +17,13 @@ import { UpdateCalendarEventCommand } from './calendar-event/command/update-cale
 import { FindCalendarEventQuery } from './calendar-event/query/find-calendar-event.query';
 import { FindCalendarEventsQuery } from './calendar-event/query/find-calendar-events.query';
 import { NotifyAttendeesOnCalendarEvent } from './calendar-event/saga/notify-attendees-on-calendar-event.saga';
+import { RegisterClientCommand } from './client/command/register-client.command';
+import { RemoveClientCommand } from './client/command/remove-client.command';
+import { ReviseClientCommand } from './client/command/revise-client.command';
+import { FindClientQuery } from './client/query/find-client.query';
+import { FindClientsQuery } from './client/query/find-clients.query';
 import { FindMembersQuery } from './organization/query/find-members.query';
+import { FindTeamQuery } from './organization/query/find-team.query';
 import { FindTeamsQuery } from './organization/query/find-teams.query';
 import { AssignTagToPostCommand } from './post/command/assign-tag-to-post.command';
 import { CompletePostCommand } from './post/command/complete-post.command';
@@ -43,6 +50,7 @@ import { FindUserQuery } from './user/query/find-user.query';
     UsersInfrastructureModule,
     OrganizationsInfrastructureModule,
     EventsInfrastructureModule,
+    ClientsInfrastructureModule,
   ],
   providers: [
     {
@@ -69,6 +77,7 @@ import { FindUserQuery } from './user/query/find-user.query';
     OnPostCreatedSubscription.Handler,
     OnPostUpdatedSubscription.Handler,
     FindMembersQuery.Handler,
+    FindTeamQuery.Handler,
     FindTeamsQuery.Handler,
     CalendarAttendees,
     CreateCalendarEventCommand.Handler,
@@ -79,6 +88,11 @@ import { FindUserQuery } from './user/query/find-user.query';
     NotifyAttendeesOnCalendarEvent,
     FindCalendarEventQuery.Handler,
     FindCalendarEventsQuery.Handler,
+    RegisterClientCommand.Handler,
+    ReviseClientCommand.Handler,
+    RemoveClientCommand.Handler,
+    FindClientQuery.Handler,
+    FindClientsQuery.Handler,
   ],
   exports: [UsersInfrastructureModule, OrganizationsInfrastructureModule],
 })

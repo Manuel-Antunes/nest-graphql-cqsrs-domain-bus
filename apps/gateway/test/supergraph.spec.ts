@@ -13,7 +13,11 @@ describe('the supergraph this gateway federates', () => {
 
   it('composes from the subgraphs’ own SDL files', () => {
     expect(() => supergraph.sdl()).not.toThrow();
-    expect(supergraph.subgraphNames).toEqual(['posts', 'notifications']);
+    expect(supergraph.subgraphNames).toEqual([
+      'posts',
+      'notifications',
+      'chatwoot',
+    ]);
   });
 
   it('serves posts, users and their subscriptions from one subgraph, and notifications from the other', () => {

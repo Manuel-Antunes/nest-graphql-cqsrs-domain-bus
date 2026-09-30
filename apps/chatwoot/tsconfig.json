@@ -1,0 +1,75 @@
+{
+  // Type-check gate for Chatwoot's TS surface (vue-tsc --noEmit). This does NOT
+  // drive the Vite build (that stays JS/babel-free via esbuild) — it exists so
+  // the incremental TS migration is actually validated. `checkJs:false` means
+  // only `.ts` files and `<script lang="ts">` SFCs are checked; the ~1000 JS
+  // files and JS-script SFCs are allowed as untyped module boundaries (any) and
+  // are not reported. Path aliases mirror resolve.alias in vite.config.mts.
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "jsx": "preserve",
+    "jsxImportSource": "vue",
+
+    "allowJs": true,
+    "checkJs": false,
+    "noEmit": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": false,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "useDefineForClassFields": true,
+    "forceConsistentCasingInFileNames": true,
+
+    "strict": true,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "noImplicitAny": false,
+
+    "baseUrl": ".",
+    "paths": {
+      "components": ["app/javascript/dashboard/components"],
+      "components/*": ["app/javascript/dashboard/components/*"],
+      "next": ["app/javascript/dashboard/components-next"],
+      "next/*": ["app/javascript/dashboard/components-next/*"],
+      "dashboard": ["app/javascript/dashboard"],
+      "dashboard/*": ["app/javascript/dashboard/*"],
+      "v3": ["app/javascript/v3"],
+      "v3/*": ["app/javascript/v3/*"],
+      "helpers/*": ["app/javascript/shared/helpers/*"],
+      "shared": ["app/javascript/shared"],
+      "shared/*": ["app/javascript/shared/*"],
+      "survey": ["app/javascript/survey"],
+      "survey/*": ["app/javascript/survey/*"],
+      "widget": ["app/javascript/widget"],
+      "widget/*": ["app/javascript/widget/*"],
+      "assets/*": ["app/javascript/dashboard/assets/*"]
+    },
+
+    "types": ["node"]
+  },
+  "vueCompilerOptions": {
+    "target": 3.5
+  },
+  "include": [
+    "app/javascript/env.d.ts",
+    "app/javascript/**/*.ts",
+    "app/javascript/**/*.vue"
+  ],
+  "exclude": [
+    "node_modules",
+    "public",
+    "tmp",
+    "**/*.spec.ts",
+    "**/*.spec.js",
+    "**/*.test.ts",
+    "**/*.test.js",
+    "**/specs/**",
+    "**/*.stories.js",
+    "**/*.stories.ts"
+  ]
+}

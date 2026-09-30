@@ -14,10 +14,17 @@ export const EVENT_RESOURCE = 'event';
 
 export const MANAGE_EVENTS = ['read', 'create', 'update', 'delete'] as const;
 
+export const CLIENT_RESOURCE = 'client';
+
+export const MANAGE_CLIENTS = ['read', 'create', 'update', 'delete'] as const;
+
+export const KEEP_CLIENTS = ['read', 'create', 'update'] as const;
+
 export const organizationStatements = {
   ...organizationDefaultStatements,
   [POST_RESOURCE]: [...WRITE_A_POST],
   [EVENT_RESOURCE]: [...MANAGE_EVENTS],
+  [CLIENT_RESOURCE]: [...MANAGE_CLIENTS],
 } as const;
 
 export const organizationAccessControl = createAccessControl(
@@ -29,14 +36,17 @@ export const organizationRoles = {
     ...organizationOwnerAc.statements,
     [POST_RESOURCE]: [...WRITE_A_POST],
     [EVENT_RESOURCE]: [...MANAGE_EVENTS],
+    [CLIENT_RESOURCE]: [...MANAGE_CLIENTS],
   }),
   admin: organizationAccessControl.newRole({
     ...organizationAdminAc.statements,
     [POST_RESOURCE]: [...WRITE_A_POST],
     [EVENT_RESOURCE]: [...MANAGE_EVENTS],
+    [CLIENT_RESOURCE]: [...MANAGE_CLIENTS],
   }),
   member: organizationAccessControl.newRole({
     ...organizationMemberAc.statements,
     [POST_RESOURCE]: ['create'],
+    [CLIENT_RESOURCE]: [...KEEP_CLIENTS],
   }),
 };

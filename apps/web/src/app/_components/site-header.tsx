@@ -25,6 +25,8 @@ const routes = [
   { href: '/feed', label: 'Feed' },
   { href: '/posts/new', label: 'Escrever' },
   { href: '/events', label: 'Eventos' },
+  { href: '/clients', label: 'Clients' },
+  { href: '/atendimento', label: 'Support' },
   { href: '/saga', label: 'Saga' },
   { href: '/live', label: 'Tempo real' },
   { href: '/me', label: 'Identidade' },

@@ -2,6 +2,7 @@ import {
   type ConstDirectiveNode,
   type DocumentNode,
   type FieldDefinitionNode,
+  type InterfaceTypeDefinitionNode,
   Kind,
   type ObjectTypeDefinitionNode,
   parse,
@@ -30,89 +31,99 @@ export class InterfaceObjects {
         ? parse(supergraphSdl, { noLocation: true })
         : supergraphSdl;
 
-    const mappings: InterfaceObjectMapping[] = [];
+    return document.definitions.flatMap((definition) =>
+      definition.kind === Kind.INTERFACE_TYPE_DEFINITION
+        ? InterfaceObjects.interfaceObjectJoins(definition)
+            .map((join) =>
+              InterfaceObjects.mappingOf(document, definition, join),
+            )
+            .filter((mapping): mapping is InterfaceObjectMapping =>
+              Boolean(mapping),
+            )
+        : [],
+    );
+  }
 
-    for (const definition of document.definitions) {
-      if (definition.kind !== Kind.INTERFACE_TYPE_DEFINITION) continue;
+  private static mappingOf(
+    document: DocumentNode,
+    definition: InterfaceTypeDefinitionNode,
+    join: ConstDirectiveNode,
+  ): InterfaceObjectMapping | undefined {
+    const graph = InterfaceObjects.argOf(join, 'graph');
+    const key = InterfaceObjects.argOf(join, 'key');
+    if (!graph || !key) return undefined;
 
-      const join = InterfaceObjects.interfaceObjectJoin(definition);
-      if (!join) continue;
-
-      const graph = InterfaceObjects.argOf(join, 'graph');
-      const key = InterfaceObjects.argOf(join, 'key');
-      if (!graph || !key) continue;
-
-      const fields = (definition.fields ?? [])
-        .filter((field) =>
-          InterfaceObjects.directives(field).some(
-            (directive) =>
-              directive.name.value === 'join__field' &&
-              InterfaceObjects.argOf(directive, 'graph') === graph,
-          ),
-        )
-        .map((field) => field.name.value);
-
-      if (!fields.length) continue;
-
-      const implementations = document.definitions
-        .filter(
-          (candidate): candidate is ObjectTypeDefinitionNode =>
-            candidate.kind === Kind.OBJECT_TYPE_DEFINITION &&
-            (candidate.interfaces ?? []).some(
-              (i) => i.name.value === definition.name.value,
-            ),
-        )
-        .map((candidate) => candidate.name.value);
-
-      if (!implementations.length) continue;
-
-      const requiresByField = new Map<string, string>();
-      for (const field of definition.fields ?? []) {
-        if (!fields.includes(field.name.value)) continue;
-
-        const fieldJoin = InterfaceObjects.directives(field).find(
+    const fields = (definition.fields ?? [])
+      .filter((field) =>
+        InterfaceObjects.directives(field).some(
           (directive) =>
             directive.name.value === 'join__field' &&
             InterfaceObjects.argOf(directive, 'graph') === graph,
-        );
-        const requires =
-          fieldJoin && InterfaceObjects.argOf(fieldJoin, 'requires');
-        if (requires) requiresByField.set(field.name.value, requires);
-      }
+        ),
+      )
+      .map((field) => field.name.value);
 
-      mappings.push({
-        interfaceName: definition.name.value,
-        graph,
-        key,
-        fields,
-        implementations,
-        requiresByField,
-      });
+    if (!fields.length) return undefined;
+
+    const implementations = document.definitions
+      .filter(
+        (candidate): candidate is ObjectTypeDefinitionNode =>
+          candidate.kind === Kind.OBJECT_TYPE_DEFINITION &&
+          (candidate.interfaces ?? []).some(
+            (i) => i.name.value === definition.name.value,
+          ),
+      )
+      .map((candidate) => candidate.name.value);
+
+    if (!implementations.length) return undefined;
+
+    const requiresByField = new Map<string, string>();
+    for (const field of definition.fields ?? []) {
+      if (!fields.includes(field.name.value)) continue;
+
+      const fieldJoin = InterfaceObjects.directives(field).find(
+        (directive) =>
+          directive.name.value === 'join__field' &&
+          InterfaceObjects.argOf(directive, 'graph') === graph,
+      );
+      const requires =
+        fieldJoin && InterfaceObjects.argOf(fieldJoin, 'requires');
+      if (requires) requiresByField.set(field.name.value, requires);
     }
 
-    return mappings;
+    return {
+      interfaceName: definition.name.value,
+      graph,
+      key,
+      fields,
+      implementations,
+      requiresByField,
+    };
   }
 
   static apply(
     supergraphSdl: string,
     mappings: InterfaceObjectMapping[],
   ): string {
-    if (!mappings.length) return supergraphSdl;
+    return mappings.reduce(
+      (sdl, mapping) => InterfaceObjects.applyOne(sdl, mapping),
+      supergraphSdl,
+    );
+  }
 
+  private static applyOne(
+    supergraphSdl: string,
+    mapping: InterfaceObjectMapping,
+  ): string {
     const document = parse(supergraphSdl, { noLocation: true });
 
-    const byImplementation = new Map<string, InterfaceObjectMapping>();
-    for (const mapping of mappings) {
-      for (const implementation of mapping.implementations) {
-        byImplementation.set(implementation, mapping);
-      }
-    }
-
     const definitions = document.definitions.map((definition) => {
-      if (definition.kind !== Kind.OBJECT_TYPE_DEFINITION) return definition;
-
-      const mapping = byImplementation.get(definition.name.value);
-      if (!mapping) return definition;
+      if (
+        definition.kind !== Kind.OBJECT_TYPE_DEFINITION ||
+        !mapping.implementations.includes(definition.name.value)
+      ) {
+        return definition;
+      }
 
       const alreadyJoined = InterfaceObjects.directives(definition).some(
         (directive) =>
@@ -298,10 +309,10 @@ export class InterfaceObjects {
     return undefined;
   }
 
-  private static interfaceObjectJoin(
+  private static interfaceObjectJoins(
     node: Directed,
-  ): ConstDirectiveNode | undefined {
-    return InterfaceObjects.directives(node).find(
+  ): readonly ConstDirectiveNode[] {
+    return InterfaceObjects.directives(node).filter(
       (directive) =>
         directive.name.value === 'join__type' &&
         InterfaceObjects.argOf(directive, 'isInterfaceObject') === 'true',

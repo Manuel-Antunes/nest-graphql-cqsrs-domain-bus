@@ -1659,3 +1659,77 @@ same second. GlitchTip itself was not storing event rows at the time, for any pr
 stored event on the instance was from 2026-09-22 22:53 UTC), so the issue pages show counts but not
 the events' detail.
 
+
+## Chatwoot: a third subgraph that shares the database
+
+`apps/chatwoot` is a fork of Chatwoot 4.10 (Rails and Vue), vendored as an application of the
+monorepo. It is not a service the platform calls: it is **part of the platform**, and three things
+make it so — it knows the same people, it answers to the same session, and its data joins ours in
+one supergraph.
+
+**It lives in the same Postgres, in a schema of its own.** Chatwoot's tables are `chatwoot.*`, and
+its search path is `chatwoot` alone. That is not tidiness: Chatwoot's `schema.rb` is a list of
+`create_table … force: :cascade`, and with `public` on the search path a first `db:chatwoot_prepare`
+resolves `DROP TABLE IF EXISTS users` to **this repository's `public.users`**. The fork came from a
+project whose user table was `public.user`, which is the only reason it never bit there. Its schema
+also needs `vector`, so the compose Postgres is `pgvector/pgvector:pg18`.
+
+**The platform is the source of the people; Chatwoot mirrors them.** Five triggers, declared on the
+entities that own the tables — `libs/users` for `users`, `libs/organizations` for `organization`,
+`member`, `team` and `team_member` — keep Chatwoot in step, one way:
+
+| platform | Chatwoot |
+|---|---|
+| a user | an agent (`chatwoot.users.platform_user_id`), a `SuperAdmin` when their role includes `admin`; soft deleting the user takes the agent away |
+| an organization | an account (`platform_organization_id`); deleting it suspends the account, which keeps its conversations |
+| a member | a seat in the account, an administrator when `owner` or `admin` |
+| a team, a team member | a team (`platform_team_id`, named in lower case as Chatwoot names them) and its members |
+
+The link columns are Chatwoot's own migration (`AddPlatformLinks`), because the triggers upsert on
+them. A trigger only fires on change, so rows that existed before Chatwoot did are mirrored by the
+migrator: `migrate()` ends with `chatwoot:mirror`, which touches only what Chatwoot does not have yet
+and is a no-op when the `chatwoot` schema is absent. The triggers mirror rows of `public` only, which
+is what keeps a spec's throwaway schema out of a developer's Chatwoot.
+
+**Chatwoot has no sign-in of its own.** `lib/omni_auth/strategies/better_auth.rb` authenticates
+every request with the platform's Better Auth: the session cookie, whose HMAC it verifies with the
+`AUTH_SECRET` every process shares, or an access token the platform's OAuth provider issued, checked
+exactly as `oauth-bearer-session` checks it (keys in `public.jwks`, `AUTH_ISSUER`, the gateway as
+audience). The user is found by `platform_user_id`, never by email. The account is the one mirrored
+for the organization the request names in `x-tenant` — and a request that names one it is not a
+member of gets no account, not another one — or else the session's active organization. Chatwoot's
+password sign-in answers `403`, the dashboard without a platform session goes to the web's sign-in,
+and the dashboard's own tokens are honoured only beside a platform session of the same user, so
+signing out of the platform signs out of Chatwoot. `/graphql` is stateless: the gateway calls it on
+every request, and it mints no dashboard session.
+
+**Federation.** Chatwoot's SDL is written with Lighthouse directives (`apps/chatwoot/graphql`), so
+what the gateway composes is its dump, `apps/chatwoot/schema.graphql`
+(`nx run @chatwoot/chatwoot:graphql:generate`). Ownership is the platform's:
+
+- `posts` owns `Client`, `Team` and `IUser`. Chatwoot contributes `Client.contacts` (through
+  `contact_links.client_id`), `Team.workingHours` and `Team.supportTeam` (by `platform_team_id`),
+  and points at `IUser` from `Agent.user`, as an `@interfaceObject`.
+- Chatwoot's own types keep Chatwoot's ids: `Agent` (its user), `SupportTeam` (its team), `Contact`,
+  `Conversation`. `Contact.client` resolves through `posts`, and `Contact.dashboardPath` is where
+  the contact opens.
+- Every `_entities` lookup in Chatwoot is scoped to the request's account, and only a numeric id
+  reaches ActiveRecord: `find_by(id: "12abc")` casts to `12`, so a platform id would otherwise match
+  a Chatwoot row that happens to share its leading digits.
+
+**Clients.** `libs/clients` is the domain (a `Client` aggregate: CPF, kind, status, address and the
+litigation flags) and its mapping, a tenant table; `apps/posts-api` has the slices and the
+`clients`, `client`, `createClient`, `updateClient` and `deleteClient` surface, guarded by the
+organization's `client` permission — owners and admins manage, members read, register and revise —
+and the `read:clients`/`write:clients` scopes. A CPF is one client per organization.
+
+**The web.** `/clients` lists the organization's clients with their Chatwoot contacts, links an
+existing contact or creates one in Chatwoot, and opens a contact in `/atendimento`, which embeds
+Chatwoot's dashboard (`CHATWOOT_URL`). The embed keeps the web's URL in step with
+Chatwoot's, tells it the colour scheme, and republishes its WebMCP tools in the web's own model
+context, checking every message's origin.
+
+**What is not done.** Chatwoot is not deployed by `infra/aws`, is not in `docker-compose.yml`'s
+`apps` profile and is not in `apps/web-e2e`; the gateway composes its SDL everywhere, so an operation
+that reaches it where it does not run fails. Its own suites — RSpec and Vitest — run from
+`apps/chatwoot`, not from `pnpm test`.

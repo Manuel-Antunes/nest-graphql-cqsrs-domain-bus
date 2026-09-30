@@ -1,11 +1,12 @@
 # `apps/gateway`
 
-The one GraphQL endpoint a client talks to. It federates two subgraphs:
+The one GraphQL endpoint a client talks to. It federates three subgraphs:
 
 | subgraph | served by | what it owns |
 |---|---|---|
 | `posts` | `apps/posts-api` | posts, tags, users and their subscriptions (`onPostCreated`, `onPostUpdated`, …) |
 | `notifications` | `apps/notificator` | notifications and devices, and `IUser.notifications` / `IUser.unreadNotificationCount` through `@interfaceObject` |
+| `chatwoot` | `apps/chatwoot` (Rails) | contacts, conversations, inboxes and agents of the organization's support account, and `Client.contacts`, `Team.workingHours` / `Team.supportTeam` on the entities `posts` owns; its SDL is the dump `apps/chatwoot/schema.graphql` |
 
 It composes the supergraph from the subgraphs' SDL, executes it — queries, mutations **and
 subscriptions over SSE** — and forwards each caller's credentials to every subgraph an operation
@@ -79,7 +80,7 @@ operation with a validation error.
 `nx run @nestposts/gateway:supergraph` writes `dist/supergraph/supergraph.graphql` and
 `dist/supergraph/api.graphql`. The second is the schema `apps/web` and `apps/web-e2e` generate their
 types from — their `codegen` targets depend on it — and `test/supergraph.spec.ts` fails the build when
-the two subgraphs stop composing. `GET /graphql/schema.graphql` serves the same API schema at runtime.
+the subgraphs stop composing. `GET /graphql/schema.graphql` serves the same API schema at runtime.
 
 ## Execution: a stitched schema, not Apollo's gateway
 
@@ -195,13 +196,21 @@ has no resolver — a non-null one takes its whole parent down.
 
 `@requires` travels with the contributed field and is resolved by the library's existing machinery.
 
+More than one subgraph may treat the same interface as an `@interfaceObject`: `chatwoot` declares
+`IUser` as one only to point at it, and contributes nothing. `collect` makes a mapping of every such
+subgraph that contributes a field and `apply` applies them in turn — it used to read the first join
+only, which is Chatwoot's alphabetically, find no field there and drop `IUser` altogether, and
+`me { notifications }` stopped resolving with nothing failing (`test/supergraph.spec.ts` covers it).
+
 One case is **not** handled: a contributing subgraph that hands out bare references to the interface
 (`recipient: IUser`) whose id the owning subgraph cannot resolve. The owner's `_entities` answers
 `null`, no concrete `__typename` replaces the interface's, and graphql-js cannot complete the abstract
 value — which nulls every non-null ancestor rather than the one field. It needs a one-line fix in
 `@graphql-tools/delegate`'s `resolveExternalValue` (null an abstract value whose resolved type is not
 an object type). A subgraph here that only **contributes** fields, and never returns the interface,
-never meets it.
+never meets it. `chatwoot` does return one, `Agent.user`, for an agent whose platform user the
+`posts` subgraph no longer knows; the field is nullable, so the case costs that field and nothing
+above it.
 
 ## Environment
 
@@ -211,6 +220,7 @@ never meets it.
 | `GATEWAY_URL` | `http://localhost:4000/graphql` | this gateway as a resource — the audience an OAuth access token must carry |
 | `POSTS_SUBGRAPH_URL` | `http://localhost:3000/graphql` | |
 | `NOTIFICATIONS_SUBGRAPH_URL` | `http://localhost:3002/graphql` | |
+| `CHATWOOT_SUBGRAPH_URL` | `http://localhost:3100/graphql` | |
 | `GATEWAY_SUBGRAPHS_DIR` | `dist/subgraphs` beside `main.js` | where the baked SDL is read from |
 | `GATEWAY_CORS_ORIGINS` | `WEB_URL`, then `http://localhost:4200` | the browser calls the gateway cross-origin for SSE |
 | `POSTGRES_URL` | `postgresql://nestposts:nestposts@localhost:5432/nestposts` | the system schema: sessions, users, organizations, the jwt plugin's keys |

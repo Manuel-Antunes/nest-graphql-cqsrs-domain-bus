@@ -14,6 +14,7 @@ import { OutboxInboxEntitySchema } from '@nestposts/outbox-mikro-orm/outbox.enti
 import type { MigratorContext } from './app/bootstrap';
 import { liveSchemas, withMigrator } from './app/bootstrap';
 import { migrationFiles } from './app/connections';
+import { ChatwootMirror } from './chatwoot/chatwoot-mirror';
 import type { OutboxConfig } from './config/outbox.config';
 import { outboxConfig } from './config/outbox.config';
 import { withSeederContainer } from './seeders/container';
@@ -80,10 +81,14 @@ export const migrateTenants = (): Promise<void> =>
 export const pruneInbox = (): Promise<number> =>
   withMigrator(forgetProcessedMessages);
 
+export const mirrorChatwoot = (): Promise<number> =>
+  withMigrator(({ orm }) => ChatwootMirror.backfill(orm));
+
 export async function migrate(): Promise<void> {
   await migrateSystem();
   await migrateTenants();
   await pruneInbox();
+  await mirrorChatwoot();
 }
 
 export const seed = (
@@ -131,6 +136,7 @@ const commands: Record<string, () => Promise<unknown>> = {
   'migrate:system': migrateSystem,
   'migrate:tenants': migrateTenants,
   'inbox:prune': pruneInbox,
+  'chatwoot:mirror': mirrorChatwoot,
   'seed': () => seed(),
   'seed:users': seedUsers,
   'seed:deployment': seedDeployment,

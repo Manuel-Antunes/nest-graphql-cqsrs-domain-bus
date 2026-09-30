@@ -47,7 +47,7 @@ system half: `auth_user` renamed, not recreated, so every credential keeps its i
 accumulates tenants, and a diff that saw them would emit DDL for somebody else's leftovers.
 
 **The system migrations run before any tenant's**, always: `migrate()` is `migrateSystem()`, then
-`migrateTenants()`, then `pruneInbox()` (below), and `migrateTenants()` provisions `tenant_root` and
+`migrateTenants()`, then `pruneInbox()` and `mirrorChatwoot()` (below), and `migrateTenants()` provisions `tenant_root` and
 every `tenant_*` schema that exists, through the same `TenantEntityManagerService` the applications
 use — so a deploy brings every tenant up to date, and the service still migrates, on its first
 request, a tenant created after it.
@@ -83,6 +83,17 @@ A forgotten row is a message the inbox no longer recognises: one redelivered aft
 be acted on again. That is why the retention outlives every redelivery, and why the aggregate's own
 state — or the event store's append condition — stays a guard that survives an emptied inbox.
 
+## `migrate()` ends by mirroring the platform into Chatwoot
+
+`mirrorChatwoot()` (`src/chatwoot/chatwoot-mirror.ts`, alone as `chatwoot:mirror`) catches Chatwoot up
+with what the platform had before Chatwoot was installed — or while its schema was being rebuilt. The
+mirroring itself is the `chatwoot_sync` triggers on `users`, `organization`, `member`, `team` and
+`team_member`, which only fire on change; this step re-fires them for the rows Chatwoot has no
+counterpart of yet, by updating each to itself, in that order, so a seat always finds its agent and its
+account. It does nothing while the `chatwoot` schema is absent and nothing for rows already mirrored,
+which is what makes it cheap on every deploy. `src/chatwoot/chatwoot-mirror.spec.ts` proves the
+triggers and the step against a minimal `chatwoot` schema of its own.
+
 ## Where the entity list comes from
 
 Nowhere in this app is a table or a column named. `app/connections.ts` composes the arrays the
@@ -104,7 +115,7 @@ Every command has a root-level script (`pnpm db:*`) and an Nx target; the target
 configuration:
 
 ```bash
-pnpm db:setup                          # migrate (system, every tenant, the inbox's prune), then the OAuth resources
+pnpm db:setup                          # migrate (system, every tenant, the inbox's prune, the Chatwoot mirror), then the OAuth resources
 pnpm db:migrate                        # the same without seeding
 pnpm db:migrate:system                 # mikro-orm migration:up on the system config
 pnpm db:migrate:tenant                 # mikro-orm migration:up on tenant_root only

@@ -8,4 +8,5 @@ export const subgraphSources = [
     name: 'notifications',
     sdlDir: `${repository}apps/notificator/src/graphql`,
   },
+  { name: 'chatwoot', sdlDir: `${repository}apps/chatwoot` },
 ];

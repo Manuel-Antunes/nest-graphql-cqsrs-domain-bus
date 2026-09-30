@@ -25,6 +25,7 @@ export const env = createEnv({
     ...RedisEnvSchema.shape,
     ...StorageEnvSchema.shape,
     POSTS_SUBGRAPH_URL: z.string().optional(),
+    CHATWOOT_URL: z.string().min(1).default('http://localhost:3100'),
   },
   client: {
     NEXT_PUBLIC_API_URL: z.string().min(1).default('http://localhost:3000'),

@@ -12,7 +12,7 @@ import { useGraphQLTracing } from '@nestposts/observability/graphql-tracing';
 
 import type { AppConfig } from '../config/app.config';
 import { appConfig } from '../config/app.config';
-import { FederatedSchema } from '../supergraph/federated-schema';
+import { FederatedSchemaFactory } from '../supergraph/federated-schema';
 import { Supergraph } from '../supergraph/supergraph';
 import { TracedExecutor } from '../supergraph/traced-executor';
 import type { GatewayContext, GatewayServerContext } from './gateway-context';
@@ -37,7 +37,7 @@ export class GatewayGqlOptionsFactory
 
   createGqlOptions(): Omit<GatewayDriverConfig, 'driver'> {
     return {
-      schema: FederatedSchema.of(this.supergraph.sdl()),
+      schema: FederatedSchemaFactory.of(this.supergraph.sdl()),
       path: '/graphql',
       graphiql: true,
       cors: { origin: this.app.corsOrigins, credentials: true },

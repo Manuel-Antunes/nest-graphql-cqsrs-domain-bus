@@ -1,0 +1,9 @@
+<%#
+# Administrate library stylesheets (sprockets-built — see app/assets/config/manifest.js).
+# The Administrate-generated pages (search, tables, forms, field units, pagination…)
+# are styled by `administrate/application.css`; without it the search box and other
+# generated components render unstyled. The Vite `superadmin` entry (loaded after this)
+# only carries the fonts, colour tokens and Tailwind overrides that theme on top.
+%>
+<%= stylesheet_link_tag "administrate/application", media: :all %>
+<%= stylesheet_link_tag "administrate-field-active_storage/application", media: :all %>

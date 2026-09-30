@@ -39,6 +39,8 @@ const plugins = [
     scopeMetadata: {
       'read:posts': { label: 'Read your posts' },
       'write:posts': { label: 'Write posts on your behalf' },
+      'read:clients': { label: "Read your organization's clients" },
+      'write:clients': { label: "Manage your organization's clients" },
     },
   }),
 ];

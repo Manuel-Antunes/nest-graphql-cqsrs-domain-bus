@@ -1,0 +1,361 @@
+
+/* scss-lint:disable PropertySortOrder */
+@layer base {
+  body {
+    @apply bg-background text-foreground;
+    letter-spacing: -0.01em;
+  }
+
+  /* Tailwind v4 compatibility shim (temporary, removed in the @theme migration). */
+  /* v4 changes preflight defaults vs v3: default border/divide colour becomes */
+  /* currentColor, and buttons lose `cursor: pointer`. Restore the v3 behaviour */
+  /* so the upgrade is visually neutral before the design tokens are migrated. */
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-n-weak, #e5e7eb);
+  }
+  button:not(:disabled),
+  [role='button']:not(:disabled) {
+    cursor: pointer;
+  }
+  /* NEXT COLORS START */
+  :root {
+    /* slate */
+    --slate-1: 252 252 253;
+    --slate-2: 249 249 251;
+    --slate-3: 240 240 243;
+    --slate-4: 232 232 236;
+    --slate-5: 224 225 230;
+    --slate-6: 217 217 224;
+    --slate-7: 205 206 214;
+    --slate-8: 185 187 198;
+    --slate-9: 139 141 152;
+    --slate-10: 128 131 141;
+    --slate-11: 96 100 108;
+    --slate-12: 28 32 36;
+
+    --iris-1: 253 253 254;
+    --iris-2: 247 249 255;
+    --iris-3: 237 242 254;
+    --iris-4: 225 234 253;
+    --iris-5: 210 222 255;
+    --iris-6: 193 208 255;
+    --iris-7: 171 189 249;
+    --iris-8: 141 164 239;
+    --iris-9: 62 99 221;
+    --iris-10: 51 88 212;
+    --iris-11: 58 91 199;
+    --iris-12: 31 45 92;
+
+    --blue-1: 251 253 255;
+    --blue-2: 245 249 255;
+    --blue-3: 233 243 255;
+    --blue-4: 218 236 255;
+    --blue-5: 201 226 255;
+    --blue-6: 181 213 255;
+    --blue-7: 155 195 252;
+    --blue-8: 117 171 247;
+    --blue-9: 39 129 246;
+    --blue-10: 16 115 233;
+    --blue-11: 8 109 224;
+    --blue-12: 11 50 101;
+
+    --ruby-1: 255 252 253;
+    --ruby-2: 255 247 248;
+    --ruby-3: 254 234 237;
+    --ruby-4: 255 220 225;
+    --ruby-5: 255 206 214;
+    --ruby-6: 248 191 200;
+    --ruby-7: 239 172 184;
+    --ruby-8: 229 146 163;
+    --ruby-9: 229 70 102;
+    --ruby-10: 220 59 93;
+    --ruby-11: 202 36 77;
+    --ruby-12: 100 23 43;
+
+    --amber-1: 254 253 251;
+    --amber-2: 254 251 233;
+    --amber-3: 255 247 194;
+    --amber-4: 255 238 156;
+    --amber-5: 251 229 119;
+    --amber-6: 243 214 115;
+    --amber-7: 233 193 98;
+    --amber-8: 226 163 54;
+    --amber-9: 255 197 61;
+    --amber-10: 255 186 24;
+    --amber-11: 171 100 0;
+    --amber-12: 79 52 34;
+
+    --teal-1: 250 254 253;
+    --teal-2: 243 251 249;
+    --teal-3: 224 248 243;
+    --teal-4: 204 243 234;
+    --teal-5: 184 234 224;
+    --teal-6: 161 222 210;
+    --teal-7: 131 205 193;
+    --teal-8: 83 185 171;
+    --teal-9: 18 165 148;
+    --teal-10: 13 155 138;
+    --teal-11: 0 133 115;
+    --teal-12: 13 61 56;
+
+    --gray-1: 252 252 252;
+    --gray-2: 249 249 249;
+    --gray-3: 240 240 240;
+    --gray-4: 232 232 232;
+    --gray-5: 224 224 224;
+    --gray-6: 217 217 217;
+    --gray-7: 206 206 206;
+    --gray-8: 187 187 187;
+    --gray-9: 141 141 141;
+    --gray-10: 131 131 131;
+    --gray-11: 100 100 100;
+    --gray-12: 32 32 32;
+
+    --background-color: 249 249 252;
+    --text-blue: 8 109 224;
+    --border-container: 236 236 236;
+    --border-strong: 231 231 236;
+    --border-weak: 228 228 233;
+    --solid-1: 255 255 255;
+    --solid-2: 255 255 255;
+    --solid-3: 255 255 255;
+    --solid-active: 255 255 255;
+    --solid-amber: 252 232 193;
+    --solid-blue: 218 236 255;
+    --solid-iris: 225 234 253;
+
+    --alpha-1: 67, 67, 67, 0.06;
+    --alpha-2: 201, 202, 207, 0.15;
+    --alpha-3: 255, 255, 255, 0.96;
+    --black-alpha-1: 0, 0, 0, 0.12;
+    --black-alpha-2: 0, 0, 0, 0.04;
+    --border-blue: 39, 129, 246, 0.5;
+    --white-alpha: 255, 255, 255, 0.8;
+
+    /* shadcn-vue semantic tokens (exact OKLCH values from apps/web — libs/ui/src/styles/theme.css) */
+    --background: 0.982 0.001 286;
+    --foreground: 0.2103 0.0059 285.8852;
+    --card: 1 0 0;
+    --card-foreground: 0.2103 0.0059 285.8852;
+    --popover: 1 0 0;
+    --popover-foreground: 0.2103 0.0059 285.8852;
+    --primary: 57.4% 0.273 269.3;
+    --primary-foreground: 1 0 0;
+    --secondary: 0.274 0.006 286;
+    --secondary-foreground: 0.9851 0 0;
+    --muted: 0.9674 0.0013 286.3752;
+    --muted-foreground: 0.5517 0.0138 285.9385;
+    --accent: 0.9674 0.0013 286.3752;
+    --accent-foreground: 0.2103 0.0059 285.8852;
+    --destructive: 0.6368 0.2078 25.3313;
+    --destructive-foreground: 1 0 0;
+    --success: 69.6% 0.17 162.48;
+    --success-foreground: 1 0 0;
+    --border: 0.9197 0.004 286.3202;
+    --input: var(--border);
+    --ring: 57.4% 0.273 269.3;
+    --chart-1: 57.4% 0.273 269.3;
+    --chart-2: 0.709 0.1592 293.5412;
+    --chart-3: 0.8112 0.1013 293.5712;
+    --chart-4: 0.8943 0.0549 293.2829;
+    --chart-5: 0.9433 0.0284 294.5878;
+    --radius: 0.75rem;
+
+    /* sidebar (shadcn) — aliased to existing semantic tokens so it stays brand-
+       consistent and flips light/dark via the referenced tokens' own cascade. */
+    --sidebar: var(--card);
+    --sidebar-foreground: var(--foreground);
+    --sidebar-primary: var(--primary);
+    --sidebar-primary-foreground: var(--primary-foreground);
+    --sidebar-accent: var(--accent);
+    --sidebar-accent-foreground: var(--accent-foreground);
+    --sidebar-border: var(--border);
+    --sidebar-ring: var(--ring);
+  }
+
+  .dark {
+    /* slate */
+    --slate-1: 17 17 19;
+    --slate-2: 24 25 27;
+    --slate-3: 33 34 37;
+    --slate-4: 39 42 45;
+    --slate-5: 46 49 53;
+    --slate-6: 54 58 63;
+    --slate-7: 67 72 78;
+    --slate-8: 90 97 105;
+    --slate-9: 105 110 119;
+    --slate-10: 119 123 132;
+    --slate-11: 176 180 186;
+    --slate-12: 237 238 240;
+
+    --iris-1: 17 19 31;
+    --iris-2: 20 23 38;
+    --iris-3: 24 36 73;
+    --iris-4: 29 46 98;
+    --iris-5: 37 57 116;
+    --iris-6: 48 67 132;
+    --iris-7: 61 82 150;
+    --iris-8: 79 103 176;
+    --iris-9: 62 99 221;
+    --iris-10: 83 115 231;
+    --iris-11: 158 177 255;
+    --iris-12: 214 225 255;
+
+    --blue-1: 10 17 28;
+    --blue-2: 15 24 38;
+    --blue-3: 15 39 72;
+    --blue-4: 10 49 99;
+    --blue-5: 18 61 117;
+    --blue-6: 29 84 134;
+    --blue-7: 40 89 156;
+    --blue-8: 48 106 186;
+    --blue-9: 39 129 246;
+    --blue-10: 21 116 231;
+    --blue-11: 126 182 255;
+    --blue-12: 205 227 255;
+
+    --ruby-1: 25 17 19;
+    --ruby-2: 30 21 23;
+    --ruby-3: 58 20 30;
+    --ruby-4: 78 19 37;
+    --ruby-5: 94 26 46;
+    --ruby-6: 111 37 57;
+    --ruby-7: 136 52 71;
+    --ruby-8: 179 68 90;
+    --ruby-9: 229 70 102;
+    --ruby-10: 236 90 114;
+    --ruby-11: 255 148 157;
+    --ruby-12: 254 210 225;
+
+    --amber-1: 22 18 12;
+    --amber-2: 29 24 15;
+    --amber-3: 48 32 8;
+    --amber-4: 63 39 0;
+    --amber-5: 77 48 0;
+    --amber-6: 92 61 5;
+    --amber-7: 113 79 25;
+    --amber-8: 143 100 36;
+    --amber-9: 255 197 61;
+    --amber-10: 255 214 10;
+    --amber-11: 255 202 22;
+    --amber-12: 255 231 179;
+
+    --teal-1: 13 21 20;
+    --teal-2: 17 28 27;
+    --teal-3: 13 45 42;
+    --teal-4: 2 59 55;
+    --teal-5: 8 72 67;
+    --teal-6: 20 87 80;
+    --teal-7: 28 105 97;
+    --teal-8: 32 126 115;
+    --teal-9: 18 165 148;
+    --teal-10: 14 179 158;
+    --teal-11: 11 216 182;
+    --teal-12: 173 240 221;
+
+    --gray-1: 17 17 17;
+    --gray-2: 25 25 25;
+    --gray-3: 34 34 34;
+    --gray-4: 42 42 42;
+    --gray-5: 49 49 49;
+    --gray-6: 58 58 58;
+    --gray-7: 72 72 72;
+    --gray-8: 96 96 96;
+    --gray-9: 110 110 110;
+    --gray-10: 123 123 123;
+    --gray-11: 180 180 180;
+    --gray-12: 238 238 238;
+
+    --background-color: 18 18 19;
+    --border-strong: 52 52 52;
+    --border-weak: 38 38 42;
+    --solid-1: 23 23 26;
+    --solid-2: 29 30 36;
+    --solid-3: 44 45 54;
+    --solid-active: 53 57 66;
+    --solid-amber: 42 37 30;
+    --solid-blue: 16 49 91;
+    --solid-iris: 29 46 98;
+    --text-blue: 126 182 255;
+
+    --alpha-1: 36, 36, 36, 0.8;
+    --alpha-2: 139, 147, 182, 0.15;
+    --alpha-3: 36, 38, 45, 0.9;
+    --black-alpha-1: 0, 0, 0, 0.3;
+    --black-alpha-2: 0, 0, 0, 0.2;
+    --border-blue: 39, 129, 246, 0.5;
+    --border-container: 236, 236, 236, 0;
+    --white-alpha: 255, 255, 255, 0.1;
+
+    /* shadcn-vue semantic tokens (exact OKLCH values from apps/web — libs/ui/src/styles/theme.css) */
+    --background: 0.176 0.0038 285.8229;
+    --foreground: 0.9851 0 0;
+    --card: 0.214 0.0053 285.8852;
+    --card-foreground: 0.9851 0 0;
+    --popover: 0.214 0.0053 285.8852;
+    --popover-foreground: 0.9851 0 0;
+    --primary: 57.4% 0.273 269.3;
+    --primary-foreground: 1 0 0;
+    --secondary: 0.9674 0.0013 286.3752;
+    --secondary-foreground: 0.2103 0.0059 285.8852;
+    --muted: 0.303 0.0048 286.0326;
+    --muted-foreground: 0.76 0.011 286.0665;
+    --accent: 0.303 0.0048 286.0326;
+    --accent-foreground: 0.9851 0 0;
+    --destructive: 0.545 0.176 25.723;
+    --destructive-foreground: 0.9851 0 0;
+    --success: 69.6% 0.17 162.48;
+    --success-foreground: 1 0 0;
+    --border: 0.332 0.0046 286.0326;
+    --input: var(--border);
+    --ring: 57.4% 0.273 269.3;
+    --chart-1: 0.709 0.22 269.3;
+    --chart-2: 0.62 0.25 255;
+    --chart-3: 0.78 0.16 282;
+    --chart-4: 0.54 0.27 262;
+    --chart-5: 0.82 0.12 293;
+  }
+}
+/* NEXT COLORS END */
+
+/*
+ * prose-bubble colour overrides — intentionally UNLAYERED so they beat the
+ * `@layer utilities` `.prose` defaults (unlayered rules win over any cascade
+ * layer). Under Tailwind v4 the custom `prose-bubble` typography modifier
+ * (tailwind.config `theme.typography.bubble`) no longer emits its colour
+ * overrides via the @config bridge, so `prose prose-bubble` text fell back to
+ * the default grey prose body and rendered low-contrast on the solid bubble
+ * backgrounds (Text, Email and Template bubbles).
+ *
+ * Since the chat moved to shadcn Bubble variants, the CORRECT text colour is now
+ * set per-variant on `[data-slot=bubble-content]` (e.g. `text-primary-foreground`
+ * on the dark primary bubble, amber on private, slate on bot). So the prose must
+ * simply INHERIT that colour — `currentColor` makes every prose text element
+ * follow the bubble's own foreground, staying readable on every variant (light
+ * muted, dark primary, iris bot, amber private, ghost email…). Hard-coding a
+ * slate token here (as before) overrode the variant and rendered dark text on the
+ * dark bubble. Structural borders/rules use a faint mix of the same colour.
+ * `.prose.prose-bubble` (specificity 0,2,0) guarantees it wins the prose defaults.
+ */
+.prose.prose-bubble {
+  --tw-prose-body: currentColor;
+  --tw-prose-headings: currentColor;
+  --tw-prose-lead: currentColor;
+  --tw-prose-links: currentColor;
+  --tw-prose-bold: currentColor;
+  --tw-prose-counters: currentColor;
+  --tw-prose-bullets: currentColor;
+  --tw-prose-quotes: currentColor;
+  --tw-prose-captions: currentColor;
+  --tw-prose-code: currentColor;
+  --tw-prose-pre-code: currentColor;
+  --tw-prose-pre-bg: rgba(var(--alpha-3));
+  --tw-prose-hr: color-mix(in srgb, currentColor 22%, transparent);
+  --tw-prose-quote-borders: color-mix(in srgb, currentColor 22%, transparent);
+  --tw-prose-th-borders: color-mix(in srgb, currentColor 22%, transparent);
+  --tw-prose-td-borders: color-mix(in srgb, currentColor 22%, transparent);
+}

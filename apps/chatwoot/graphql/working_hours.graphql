@@ -1,0 +1,19 @@
+"""
+A team's business hours for a single weekday, contributed by Chatwoot to the
+platform's `Team`.
+
+(Chatwoot also stores inbox-scoped working hours for the same model; those are
+internal — only the team ones are exposed here. Fields map to the snake_case
+`working_hours` columns: `dayOfWeek` → `day_of_week`, etc.)
+"""
+type WorkingHour {
+  id: ID!
+  "Day of week: 0 = Sunday … 6 = Saturday."
+  dayOfWeek: Int!
+  openHour: Int
+  openMinutes: Int
+  closeHour: Int
+  closeMinutes: Int
+  closedAllDay: Boolean!
+  openAllDay: Boolean!
+}

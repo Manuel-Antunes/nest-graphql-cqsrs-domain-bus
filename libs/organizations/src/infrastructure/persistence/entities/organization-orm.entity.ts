@@ -2,7 +2,6 @@ import {
   defineEntity,
   p,
   SYSTEM_SCHEMA,
-  TENANT_SCHEMA_PREFIX,
   valueObjectType,
 } from '@nestposts/database';
 
@@ -13,6 +12,8 @@ import { ORGANIZATION_SLUG_MAX_LENGTH } from '../../../domain/organization/schem
 import { OrganizationId } from '../../../domain/organization/vo/organization-id';
 import { OrganizationName } from '../../../domain/organization/vo/organization-name';
 import { OrganizationSlug } from '../../../domain/organization/vo/organization-slug';
+import { OrganizationChatwootSyncTrigger } from '../triggers/chatwoot-sync.triggers';
+import { OrganizationTenantSchemaTrigger } from '../triggers/tenant-schema.trigger';
 
 export const OrganizationIdType = valueObjectType(OrganizationId, {
   columnType: `varchar(${ORGANIZATION_ID_MAX_LENGTH})`,
@@ -25,8 +26,6 @@ const OrganizationNameType = valueObjectType(OrganizationName, {
 const OrganizationSlugType = valueObjectType(OrganizationSlug, {
   columnType: `varchar(${ORGANIZATION_SLUG_MAX_LENGTH})`,
 });
-
-export const ORGANIZATION_TENANT_SCHEMA_TRIGGER = 'organization_tenant_schema';
 
 export const OrganizationEntitySchema = defineEntity({
   class: Organization,
@@ -41,20 +40,5 @@ export const OrganizationEntitySchema = defineEntity({
     metadata: p.text().nullable(),
     createdAt: p.datetime(),
   },
-  triggers: [
-    {
-      name: ORGANIZATION_TENANT_SCHEMA_TRIGGER,
-      timing: 'after',
-      events: ['insert', 'delete'],
-      forEach: 'row',
-      body: (columns) => `
-        IF TG_OP = 'INSERT' THEN
-          EXECUTE format('create schema if not exists %I', '${TENANT_SCHEMA_PREFIX}_' || NEW.${columns.slug});
-        ELSIF TG_OP = 'DELETE' THEN
-          EXECUTE format('drop schema if exists %I cascade', '${TENANT_SCHEMA_PREFIX}_' || OLD.${columns.slug});
-        END IF;
-        RETURN NULL;
-      `,
-    },
-  ],
+  triggers: [OrganizationTenantSchemaTrigger, OrganizationChatwootSyncTrigger],
 });

@@ -14,7 +14,7 @@ import type { Plugin } from 'graphql-yoga';
 import { createSchema, createYoga } from 'graphql-yoga';
 
 import { Listening } from '../../test/support/listening';
-import { FederatedSchema } from './federated-schema';
+import { FederatedSchemaFactory } from './federated-schema';
 import { Supergraph } from './supergraph';
 import { TracedExecutor } from './traced-executor';
 
@@ -189,7 +189,7 @@ describe('TracedExecutor', () => {
           logging: false,
           maskedErrors: false,
           plugins: [recordingOrigins],
-          schema: FederatedSchema.of(
+          schema: FederatedSchemaFactory.of(
             Supergraph.compose([
               { name: 'demo', url: subgraph.url, sdl: SUBGRAPH_SDL },
             ]),

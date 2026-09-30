@@ -1,0 +1,57 @@
+"""
+An agent: a platform user as Chatwoot knows them, working in one or more accounts.
+The platform's triggers create one for every user (`chatwoot.users.platform_user_id`);
+the user they are is `user`, which the `posts` subgraph owns.
+"""
+type Agent implements Node {
+  """
+  Internal id of the user.
+  """
+  id: ID!
+
+  """
+  User's email address (login identity).
+  """
+  email: String!
+
+  """
+  User's full name.
+  """
+  name: String
+
+  """
+  Name shown to contacts (falls back to name when unset).
+  """
+  displayName: String
+
+  """
+  Availability for assignment, as an integer: 0 = online, 1 = offline,
+  2 = busy.
+  """
+  availability: Int
+
+  """
+  Accounts the user is a member of.
+  """
+  accounts(after: String, before: String, first: Int, last: Int): [Account!]!
+    @hasMany
+
+  """
+  Timestamp of the current sign-in session.
+  """
+  currentSignInAt: ISO8601DateTime
+
+  """
+  Timestamp of the previous sign-in.
+  """
+  lastSignInAt: ISO8601DateTime
+
+  """
+  The platform user this agent is; null for an agent created in Chatwoot alone.
+  """
+  user: IUser @field(resolver: "Resolvers::AgentUser")
+}
+
+type IUser @key(fields: "id") @interfaceObject {
+  id: ID!
+}

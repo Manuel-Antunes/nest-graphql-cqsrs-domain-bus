@@ -1,0 +1,82 @@
+"""
+A single message within a conversation. May be an incoming customer message, an
+outgoing agent reply, a private internal note, or a system activity entry.
+"""
+type Message implements Node {
+  """
+  Internal id of the message.
+  """
+  id: ID!
+
+  """
+  The message text. Null for some non-text content types.
+  """
+  content: String
+
+  """
+  Direction/kind of the message, as an integer: 0 = incoming (from the contact),
+  1 = outgoing (from an agent/bot), 2 = activity (system event),
+  3 = template (pre-approved channel template).
+  """
+  messageType: Int!
+
+  """
+  Rendering/content type, as an integer: 0 = text, 1 = input_text,
+  2 = input_textarea, 3 = input_email, 4 = input_select, 5 = cards, 6 = form,
+  7 = article, 8 = incoming_email, 9 = input_csat, 10 = integrations,
+  11 = sticker, 12 = voice_call.
+  """
+  contentType: Int!
+
+  """
+  Whether this is a private internal note, visible only to agents (not the
+  contact).
+  """
+  private: Boolean!
+
+  """
+  Delivery status, as an integer, or null when not applicable: 0 = sent,
+  1 = delivered, 2 = read, 3 = failed.
+  """
+  status: Int
+
+  """
+  Id of the sender (a User, AgentBot or Contact, depending on senderType).
+  """
+  senderId: Int
+
+  """
+  Class name of the sender: "User", "AgentBot" or "Contact".
+  """
+  senderType: String
+
+  """
+  External/channel-specific id for the message (e.g. provider message id).
+  """
+  sourceId: String
+
+  """
+  The conversation this message belongs to.
+  """
+  conversation: Conversation! @belongsTo
+
+  """
+  Structured content metadata (e.g. CSAT, items, submitted values).
+  """
+  contentAttributes: JSON
+
+  """
+  Additional channel/system attributes for the message.
+  """
+  additionalAttributes: JSON
+
+  """
+  When the message was created.
+  """
+  createdAt: ISO8601DateTime
+
+  """
+  When the message was last updated.
+  """
+  updatedAt: ISO8601DateTime
+}

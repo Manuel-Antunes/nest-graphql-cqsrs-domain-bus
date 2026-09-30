@@ -1,0 +1,98 @@
+"""
+Which kind of client this is
+"""
+enum ClientKind {
+  """
+  A creditor with a claim in a lawsuit (exequente)
+  """
+  JUDGMENT_CREDITOR
+
+  """
+  Someone inheriting a deceased client's claim (herdeiro)
+  """
+  HEIR
+}
+
+"""
+Where a client is in its lifecycle
+"""
+enum ClientStatus {
+  ACTIVE
+  ARCHIVED
+  PENDING
+}
+
+"""
+A postal address
+"""
+type Address {
+  street: String
+  number: String
+  complement: String
+  city: String
+  state: String
+  zipCode: String
+}
+
+"""
+Someone the organization behind this tenant represents. Their Chatwoot contacts are linked to them by
+`id`, which is what the `chatwoot` subgraph extends it with.
+"""
+type Client @key(fields: "id") {
+  id: ID!
+  name: String!
+  kind: ClientKind!
+
+  """
+  The Brazilian taxpayer id (CPF), eleven digits
+  """
+  cpf: String!
+
+  """
+  The state-issued identity card (RG)
+  """
+  rg: String
+  address: Address!
+  birthDate: DateTime
+  deathDate: DateTime
+  isDeceased: Boolean!
+  status: ClientStatus!
+
+  """
+  Whether `status` is ACTIVE
+  """
+  isActive: Boolean!
+  occupation: String
+
+  """
+  Labor union affiliation
+  """
+  unionMembership: String
+  notes: String
+  hasPendingLitigation: Boolean!
+  hasRenounced: Boolean!
+  isQualified: Boolean!
+  documentationComplete: Boolean!
+
+  """
+  Who registered the client; null once that account is gone
+  """
+  createdBy: IUser
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+type ClientConnection {
+  edges: [ClientEdge!]!
+  pageInfo: PageInfo!
+
+  """
+  Total of items; null when the source does not count
+  """
+  totalCount: Int
+}
+
+type ClientEdge {
+  cursor: String!
+  node: Client!
+}

@@ -1,0 +1,28 @@
+default: &default
+  adapter: postgresql
+  encoding: unicode
+  host: <%= ENV.fetch('POSTGRES_HOST', 'localhost') %>
+  port: <%= ENV.fetch('POSTGRES_PORT', '5432') %>
+  schema_search_path: <%= ENV.fetch('POSTGRES_SCHEMA', 'chatwoot') %>
+  pool: <%= ENV.fetch('RAILS_MAX_THREADS', '5') %>
+  reaping_frequency: <%= ENV.fetch('DB_POOL_REAPING_FREQUENCY', '30') %>
+  variables:
+    statement_timeout: <%= ENV['POSTGRES_STATEMENT_TIMEOUT'] || (ENV['RAILS_ENV'] == 'production' ? '14s' : '0') %>
+
+development:
+  <<: *default
+  database: "<%= ENV.fetch('POSTGRES_DATABASE', 'nestposts') %>"
+  username: "<%= ENV.fetch('POSTGRES_USERNAME', 'nestposts') %>"
+  password: "<%= ENV.fetch('POSTGRES_PASSWORD', 'nestposts') %>"
+
+test:
+  <<: *default
+  database: "<%= ENV.fetch('POSTGRES_DATABASE', 'nestposts_chatwoot_test') %>"
+  username: "<%= ENV.fetch('POSTGRES_USERNAME', 'nestposts') %>"
+  password: "<%= ENV.fetch('POSTGRES_PASSWORD', 'nestposts') %>"
+
+production:
+  <<: *default
+  database: "<%= ENV.fetch('POSTGRES_DATABASE', 'nestposts') %>"
+  username: "<%= ENV.fetch('POSTGRES_USERNAME', 'nestposts') %>"
+  password: "<%= ENV.fetch('POSTGRES_PASSWORD', 'nestposts') %>"

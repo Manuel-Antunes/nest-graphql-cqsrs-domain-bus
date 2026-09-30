@@ -21,6 +21,11 @@ export class Organizations {
     await this.api.createOrganization(name, slug);
   }
 
+  /** A team of the active organization; answers its id. */
+  createTeam(name: string): Promise<string> {
+    return this.api.createTeam(name);
+  }
+
   async invite(email: string): Promise<void> {
     await this.app.organizationSettings.open();
     await this.app.organizationSettings.manage();

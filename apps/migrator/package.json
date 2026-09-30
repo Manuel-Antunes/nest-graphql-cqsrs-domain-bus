@@ -20,6 +20,7 @@
   },
   "dependencies": {
     "@nestposts/auth": "workspace:*",
+    "@nestposts/clients": "workspace:*",
     "@nestposts/database": "workspace:*",
     "@nestposts/event-store-mikro-orm": "workspace:*",
     "@nestposts/events": "workspace:*",

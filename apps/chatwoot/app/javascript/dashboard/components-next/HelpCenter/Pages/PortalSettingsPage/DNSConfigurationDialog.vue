@@ -1,0 +1,187 @@
+<script setup>
+import { reactive, computed, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
+import { useAlert } from 'dashboard/composables';
+import { copyTextToClipboard } from 'shared/helpers/clipboard';
+import { getHostNameFromURL } from 'dashboard/helper/URLHelper';
+import { email, required } from '@vuelidate/validators';
+import { useVuelidate } from '@vuelidate/core';
+
+import { Dialog, DialogContent } from 'dashboard/components-next/ui/dialog';
+import Input from 'dashboard/components-next/input/Input.vue';
+import { Button } from 'dashboard/components-next/ui/button';
+import Icon from 'dashboard/components-next/icon/Icon.vue';
+
+const props = defineProps({
+  customDomain: {
+    type: String,
+    default: '',
+  },
+});
+
+const emit = defineEmits(['send', 'close']);
+
+const { t } = useI18n();
+
+const state = reactive({
+  email: '',
+});
+
+const validationRules = {
+  email: { email, required },
+};
+
+const v$ = useVuelidate(validationRules, state);
+
+const domain = computed(() => {
+  const { hostURL, helpCenterURL } = window?.chatwootConfig || {};
+  return getHostNameFromURL(helpCenterURL) || getHostNameFromURL(hostURL) || '';
+});
+
+const subdomainCNAME = computed(
+  () => `${props.customDomain} CNAME ${domain.value}`
+);
+
+const handleCopy = async e => {
+  e.stopPropagation();
+  await copyTextToClipboard(subdomainCNAME.value);
+  useAlert(
+    t(
+      'HELP_CENTER.PORTAL_SETTINGS.CONFIGURATION_FORM.CUSTOM_DOMAIN.DNS_CONFIGURATION_DIALOG.COPY'
+    )
+  );
+};
+
+const isOpen = ref(false);
+
+const resetForm = () => {
+  v$.value.$reset();
+  state.email = '';
+};
+
+const onClose = () => {
+  resetForm();
+  emit('close');
+  isOpen.value = false;
+};
+
+const handleSend = async () => {
+  const isFormCorrect = await v$.value.$validate();
+  if (!isFormCorrect) return;
+
+  emit('send', state.email);
+  onClose();
+};
+
+const open = () => {
+  isOpen.value = true;
+};
+
+const close = () => {
+  isOpen.value = false;
+};
+
+defineExpose({ dialogRef: { open, close } });
+</script>
+
+<template>
+  <Dialog
+    :open="isOpen"
+    @update:open="
+      val => {
+        if (!val) {
+          resetForm();
+          isOpen = false;
+        }
+      }
+    "
+  >
+    <DialogContent>
+      <div class="flex flex-col gap-6 divide-y divide-n-strong">
+        <div class="flex flex-col gap-6">
+          <div class="flex flex-col gap-2 ltr:pr-10 rtl:pl-10">
+            <h3 class="text-base font-medium leading-6 text-n-slate-12">
+              {{
+                t(
+                  'HELP_CENTER.PORTAL_SETTINGS.CONFIGURATION_FORM.CUSTOM_DOMAIN.DNS_CONFIGURATION_DIALOG.HEADER'
+                )
+              }}
+            </h3>
+            <p class="mb-0 text-sm text-n-slate-12">
+              {{
+                t(
+                  'HELP_CENTER.PORTAL_SETTINGS.CONFIGURATION_FORM.CUSTOM_DOMAIN.DNS_CONFIGURATION_DIALOG.DESCRIPTION'
+                )
+              }}
+            </p>
+          </div>
+          <div class="flex items-center gap-3 w-full">
+            <span
+              class="min-h-10 px-3 py-2.5 inline-flex items-center w-full text-sm bg-transparent border rounded-lg text-n-slate-11 border-n-strong"
+            >
+              {{ subdomainCNAME }}
+            </span>
+            <Button
+              variant="outline"
+              size="icon"
+              type="button"
+              class="flex-shrink-0"
+              @click="handleCopy"
+            >
+              <Icon icon="i-lucide-copy" class="size-4" />
+            </Button>
+          </div>
+        </div>
+
+        <div class="flex flex-col gap-6 pt-6">
+          <div class="flex flex-col gap-2 ltr:pr-10 rtl:pl-10">
+            <h3 class="text-base font-medium leading-6 text-n-slate-12">
+              {{
+                t(
+                  'HELP_CENTER.PORTAL_SETTINGS.CONFIGURATION_FORM.CUSTOM_DOMAIN.DNS_CONFIGURATION_DIALOG.SEND_INSTRUCTIONS.HEADER'
+                )
+              }}
+            </h3>
+            <p class="mb-0 text-sm text-n-slate-12">
+              {{
+                t(
+                  'HELP_CENTER.PORTAL_SETTINGS.CONFIGURATION_FORM.CUSTOM_DOMAIN.DNS_CONFIGURATION_DIALOG.SEND_INSTRUCTIONS.DESCRIPTION'
+                )
+              }}
+            </p>
+          </div>
+          <form
+            class="flex items-start gap-3 w-full"
+            @submit.prevent="handleSend"
+          >
+            <Input
+              v-model="state.email"
+              :placeholder="
+                t(
+                  'HELP_CENTER.PORTAL_SETTINGS.CONFIGURATION_FORM.CUSTOM_DOMAIN.DNS_CONFIGURATION_DIALOG.SEND_INSTRUCTIONS.PLACEHOLDER'
+                )
+              "
+              :message="
+                v$.email.$error
+                  ? t(
+                      'HELP_CENTER.PORTAL_SETTINGS.CONFIGURATION_FORM.CUSTOM_DOMAIN.DNS_CONFIGURATION_DIALOG.SEND_INSTRUCTIONS.ERROR'
+                    )
+                  : ''
+              "
+              :message-type="v$.email.$error ? 'error' : 'info'"
+              class="w-full"
+              @blur="v$.email.$touch()"
+            />
+            <Button variant="default" type="submit" class="flex-shrink-0">
+              {{
+                t(
+                  'HELP_CENTER.PORTAL_SETTINGS.CONFIGURATION_FORM.CUSTOM_DOMAIN.DNS_CONFIGURATION_DIALOG.SEND_INSTRUCTIONS.SEND_BUTTON'
+                )
+              }}
+            </Button>
+          </form>
+        </div>
+      </div>
+    </DialogContent>
+  </Dialog>
+</template>

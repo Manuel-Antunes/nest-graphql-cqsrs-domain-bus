@@ -1,0 +1,142 @@
+type Query {
+  """
+  The account the current request is scoped to (derived from the authenticated
+  user's active account).
+  """
+  currentAccount: Account @currentAccount
+
+  """
+  Accounts the authenticated user is a member of.
+  """
+  accounts(
+    "Forward-paging cursor: return items after this cursor."
+    after: String
+    "Backward-paging cursor: return items before this cursor."
+    before: String
+    "Forward page size (take the first N)."
+    first: Int
+    "Backward page size (take the last N)."
+    last: Int
+  ): [Account!]! @paginate @builder(class: "Resolvers::AccountsBuilder")
+
+  """
+  The authenticated agent.
+  """
+  currentAgent: Agent @currentUser
+
+  """
+  Paginated contacts in the current account (resolved contacts: those with an
+  email, phone or identifier). Optional label / unassigned filters.
+  """
+  contacts(
+    "Forward-paging cursor: return items after this cursor."
+    after: String
+    "Backward-paging cursor: return items before this cursor."
+    before: String
+    "Forward page size (take the first N)."
+    first: Int
+    "Backward page size (take the last N)."
+    last: Int
+    "When true, return only contacts with no assigned agent."
+    unassigned: Boolean
+    "Return only contacts tagged with all of these label titles."
+    labels: [String!]
+    "Structured filter on id, name, email or identifier (e.g. partial-name search)."
+    where: _ @whereConditions(columns: ["id", "name", "email", "identifier"])
+  ): [Contact!]! @paginate @builder(class: "Resolvers::ContactsBuilder")
+
+  """
+  A single contact by internal id, scoped to the current account. Returns null /
+  unauthorized if the caller cannot access it.
+  """
+  contact("Internal id of the contact (the `Contact.id`)." id: ID!): Contact
+    @accountFind(in: "contacts")
+    @can(ability: "show")
+
+  """
+  Paginated conversations in the current account, filtered by the agent's inbox
+  visibility (admins see all). All filter arguments are optional and combine with
+  AND.
+  """
+  conversations(
+    "Forward-paging cursor: return items after this cursor."
+    after: String
+    "Backward-paging cursor: return items before this cursor."
+    before: String
+    "Forward page size (take the first N)."
+    first: Int
+    "Backward page size (take the last N)."
+    last: Int
+    "Filter to the conversation with this internal id (the `Conversation.id`)."
+    id: ID @eq
+    "Filter to the conversation with this per-account display number (the `#123` badge)."
+    displayId: Int @eq(key: "display_id")
+    "Filter by status name: open, resolved, pending or snoozed."
+    status: String @eq
+    """
+    Filter to conversations in ANY of these statuses. Use it instead of
+    `status` to mean "not resolved": an inbox with an active bot starts its
+    conversations as `pending` (see `Conversation#determine_conversation_status`),
+    so `status: "open"` alone silently drops every conversation a bot inbox
+    has just received.
+    """
+    statuses: [String!] @in(key: "status")
+    "Filter by priority name: low, medium, high or urgent."
+    priority: String @eq
+    "Filter to conversations in the inbox with this id."
+    inboxId: ID @eq(key: "inbox_id")
+    "Filter to conversations assigned to the agent with this id."
+    assigneeId: ID @eq(key: "assignee_id")
+  ): [Conversation!]!
+    @paginate
+    @builder(class: "Resolvers::AccountConversationsBuilder")
+
+  """
+  A single conversation by its per-account display number (the `#123` badge),
+  scoped to the current account. Returns null / unauthorized if the caller cannot
+  access it.
+  """
+  conversation(
+    "The conversation's per-account display number (the `#123` badge)."
+    displayId: Int!
+  ): Conversation
+    @accountFind(in: "conversations", by: "display_id", arg: "displayId")
+    @can(ability: "show")
+
+  """
+  Inboxes the user can access (admins: all account inboxes; agents: assigned only).
+  """
+  inboxes(
+    "Forward-paging cursor: return items after this cursor."
+    after: String
+    "Backward-paging cursor: return items before this cursor."
+    before: String
+    "Forward page size (take the first N)."
+    first: Int
+    "Backward page size (take the last N)."
+    last: Int
+  ): [Inbox!]! @paginate @builder(class: "Resolvers::AccountInboxesBuilder")
+
+  """
+  A single inbox by internal id, if the caller can access it.
+  """
+  inbox("Internal id of the inbox (the `Inbox.id`)." id: ID!): Inbox
+    @accountFind(in: "inboxes")
+    @can(ability: "show")
+
+  """
+  Labels defined in the current account.
+  """
+  labels: [Label!]! @accountScope(of: "labels")
+
+  """
+  Total number of conversations in the current account.
+  """
+  totalConversationCount: Int!
+    @aggregate(model: "Conversation", column: "id", function: COUNT)
+
+  """
+  Health-check field used by the schema/integration tests. Not for production use.
+  """
+  testField: String @field(resolver: "TestFieldResolver")
+}

@@ -13,7 +13,9 @@ const config: CodegenConfig = {
       config: {
         scalars: {
           DateTime: 'string',
+          ISO8601DateTime: 'string',
           JSON: 'Record<string, unknown>',
+          Mixed: 'string | number | boolean | null',
         },
         useTypeImports: true,
         skipTypename: false,

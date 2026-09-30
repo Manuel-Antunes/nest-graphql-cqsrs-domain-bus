@@ -1,0 +1,36 @@
+"""
+A label: an account-defined tag that can be applied to conversations and
+contacts for organization and filtering.
+"""
+type Label implements Node @key(fields: "id") {
+  """
+  Internal id of the label.
+  """
+  id: ID!
+
+  """
+  The label's unique title within the account (this is the value that appears in
+  a conversation's or contact's `labels` list).
+  """
+  title: String!
+
+  """
+  Optional human-readable description.
+  """
+  description: String
+
+  """
+  Hex color used to render the label.
+  """
+  color: String!
+
+  """
+  Whether the label is pinned to the sidebar in the agent UI.
+  """
+  showOnSidebar: Boolean
+
+  """
+  When the label was created.
+  """
+  createdAt: ISO8601DateTime
+}

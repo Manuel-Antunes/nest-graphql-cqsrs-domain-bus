@@ -1,0 +1,240 @@
+"""
+A customer-support conversation: a thread of messages between a contact and the
+agents of an inbox. Scoped to the current account; an agent only sees
+conversations in inboxes they can access (admins see all).
+"""
+type Conversation implements Node @key(fields: "id") {
+  """
+  Internal database id of the conversation. Stable and globally unique. Use this
+  for `conversations(id:)` lookups and message mutations.
+  """
+  id: ID!
+
+  """
+  Per-account sequential number shown in the agent UI (the "#123" badge). Unique
+  only within an account — use `conversation(displayId:)` to fetch by it.
+  """
+  displayId: Int!
+
+  """
+  Stable opaque UUID for the conversation (used by public/widget APIs).
+  """
+  uuid: String!
+
+  """
+  Lifecycle state, as an integer: 0 = open, 1 = resolved, 2 = pending,
+  3 = snoozed.
+  """
+  status: Int!
+
+  """
+  Priority, as an integer, or null when unset: 0 = low, 1 = medium, 2 = high,
+  3 = urgent.
+  """
+  priority: Int
+
+  """
+  The contact (end customer) this conversation is with.
+  """
+  contact: Contact!
+
+  """
+  The inbox (channel) the conversation belongs to.
+  """
+  inbox: Inbox!
+
+  """
+  The agent currently assigned to the conversation, or null if unassigned.
+  """
+  assignee: Agent @belongsTo(relation: "assignee")
+
+  """
+  The team the conversation is assigned to, or null if none.
+  """
+  team: SupportTeam @belongsTo(relation: "team")
+
+  """
+  Titles of the labels applied to the conversation.
+  """
+  labels: [String!]! @method(name: "label_list")
+
+  """
+  Messages in the conversation, oldest-first. Filter with `where` on id, status,
+  messageType (0=incoming, 1=outgoing, 2=activity, 3=template), private,
+  senderId or senderType.
+  """
+  messages(
+    after: String
+    before: String
+    first: Int
+    last: Int
+    where: _
+      @whereConditions(
+        columns: [
+          "id"
+          "status"
+          "messageType"
+          "private"
+          "senderId"
+          "senderType"
+        ]
+      )
+  ): [Message!]! @hasMany
+
+  """
+  Number of unread incoming (customer) messages.
+  """
+  unreadCount: Int @count(relation: "unread_incoming_messages")
+
+  """
+  Whether the agent can currently send a reply (e.g. within the channel's
+  messaging window).
+  """
+  canReply: Boolean @method(name: "can_reply?")
+
+  """
+  When the assigned agent last viewed the conversation.
+  """
+  agentLastSeenAt: ISO8601DateTime
+
+  """
+  When the contact last viewed the conversation.
+  """
+  contactLastSeenAt: ISO8601DateTime
+
+  """
+  Timestamp of the most recent activity (message or status change).
+  """
+  lastActivityAt: ISO8601DateTime!
+
+  """
+  If snoozed, the time until which the conversation stays snoozed.
+  """
+  snoozedUntil: ISO8601DateTime
+
+  """
+  Since when the conversation has been waiting for an agent reply, or null if
+  not waiting.
+  """
+  waitingSince: ISO8601DateTime
+
+  """
+  When the first agent reply was sent.
+  """
+  firstReplyCreatedAt: ISO8601DateTime
+
+  """
+  Conversation-level custom attributes (account-defined key/value pairs).
+  """
+  customAttributes: JSON
+
+  """
+  Additional channel/system attributes (e.g. browser, referer).
+  """
+  additionalAttributes: JSON
+
+  """
+  When the conversation was created.
+  """
+  createdAt: ISO8601DateTime
+
+  """
+  When the conversation was last updated.
+  """
+  updatedAt: ISO8601DateTime
+}
+
+"""
+A team of an account, grouping agents for assignment and routing: the Chatwoot side
+of a platform team, which the platform's triggers keep in step with it
+(`chatwoot.teams.platform_team_id`), or a team created in Chatwoot alone. Its `id`
+is Chatwoot's; the platform team it is, when it is one, is `team`.
+"""
+type SupportTeam implements Node {
+  """
+  Internal id of the team (Chatwoot).
+  """
+  id: ID!
+
+  """
+  Team name, in lower case as Chatwoot keeps it.
+  """
+  name: String!
+
+  """
+  Optional team description.
+  """
+  description: String
+
+  """
+  The platform team this is; null for a team created in Chatwoot alone.
+  """
+  team: Team @field(resolver: "Resolvers::SupportTeamTeam")
+
+  """
+  The team's business hours, one entry per configured weekday; empty until set
+  with `setTeamWorkingHours`.
+  """
+  workingHours: [WorkingHour!]! @hasMany(relation: "working_hours")
+}
+
+type Team @key(fields: "id") {
+  """
+  The platform team id.
+  """
+  id: ID! @rename(attribute: "platform_team_id")
+
+  """
+  The team's business hours, one entry per configured weekday; empty until set
+  with `setTeamWorkingHours`.
+  """
+  workingHours: [WorkingHour!] @hasMany(relation: "working_hours")
+
+  """
+  The Chatwoot team this platform team is.
+  """
+  supportTeam: SupportTeam @method(name: "itself")
+}
+
+"""
+Direction of a sort clause.
+"""
+enum SortOrder {
+  ASC
+  DESC
+}
+
+"""
+Column a `conversations` sort clause can order by. Each value maps to the
+column of the same name in snake_case.
+"""
+enum ConversationOrderByColumn {
+  """
+  Timestamp of the most recent activity — a message or a status change. This is
+  the "what did I touch last" order the agent UI sorts by.
+  """
+  LAST_ACTIVITY_AT
+
+  """
+  When the conversation was created.
+  """
+  CREATED_AT
+
+  """
+  Since when the conversation has been waiting for an agent reply.
+  """
+  WAITING_SINCE
+}
+
+"""
+One clause of a `conversations` sort. Clauses apply in the order given, so
+`[{column: LAST_ACTIVITY_AT, order: DESC}]` puts the most recently active
+conversation first.
+"""
+input ConversationOrderByClause {
+  "Column to order by."
+  column: ConversationOrderByColumn!
+
+  "Direction to order in."
+  order: SortOrder!
+}

@@ -15,6 +15,7 @@
     "@nestjs-modules/mailer": "catalog:",
     "@nestposts/asset": "workspace:*",
     "@nestposts/auth": "workspace:*",
+    "@nestposts/clients": "workspace:*",
     "@nestposts/cqsrs": "workspace:*",
     "@nestposts/database": "workspace:*",
     "@nestposts/event-store-mikro-orm": "workspace:*",

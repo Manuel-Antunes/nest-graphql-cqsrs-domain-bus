@@ -145,6 +145,11 @@ is already one of that project's inputs.
 - **Generated code is not linted**: `src/gql/**` (codegen) in `apps/web` and `apps/web-e2e`,
   `apps/migrator`'s `src/migrations/**`, which MikroORM writes, and `apps/web/public/**` — each
   excluded by the `files.includes` of the configuration it lives under.
+- **`apps/chatwoot` is not Biome's at all**: its `biome.json` includes `!**`. It is a vendored Rails
+  and Vue application with its own ESLint, Prettier and RuboCop (`apps/chatwoot/AGENTS.md`), and
+  checked by Biome it is 5,000 files and 3,000 errors. Its `package.json` keeps its npm scripts out of
+  Nx (`includedScripts: []`) and its `test` a no-op, so `pnpm test` and `pnpm typecheck` stay this
+  repository's — Chatwoot's RSpec and Vitest suites run from `apps/chatwoot`.
 - **What ESLint had and Biome does not ship is `tools/biome`**, three GritQL plugins wired by path
   in the `biome.json` of the project each one checks — `playwright.grit` in `apps/web-e2e`,
   `graphql-operations.grit` and `tailwind.grit` in `apps/web`.
@@ -209,6 +214,11 @@ pnpm lint:fix                  # the same with --write
 pnpm format / format:check     # biome format, alone
 pnpm graph                     # the project graph, which is also the layer graph
 npx nx run @nestposts/gateway:supergraph   # dist/supergraph/{supergraph,api}.graphql — what the web's codegen reads
+npx nx run @chatwoot/chatwoot:setup        # the migrator's setup, Chatwoot's db:chatwoot_prepare into the `chatwoot` schema, then chatwoot:mirror
+npx nx run @chatwoot/chatwoot:serve        # Rails on 3100 (CHATWOOT_PORT) and Vite on 3036 — the dashboard needs both
+npx nx run @chatwoot/chatwoot:migrate      # a new Chatwoot migration, then chatwoot:mirror
+npx nx run @chatwoot/chatwoot:graphql:generate   # apps/chatwoot/schema.graphql, the SDL the gateway composes — after any change to apps/chatwoot/graphql
+node apps/migrator/dist/main.js chatwoot:mirror  # mirror into Chatwoot what it does not have yet; migrate() already ends with it
 
 docker compose up -d localstack   # SNS + SQS, with the topology docker/localstack/init creates
 docker compose up -d minio createbuckets   # the bucket a post keeps its file in, with its policies
@@ -279,6 +289,15 @@ gateway — reads **`GATEWAY_URL`** too
 a session, and the resource the migrator registers. `AUTH_ISSUER` (default `WEB_URL`) is the one
 `iss` they all sign and verify with. The notificator now reads `AUTH_SECRET`, `AUTH_URL` and
 `WEB_URL` as well: it authenticates the callers of its subgraph.
+
+The gateway also reads `CHATWOOT_SUBGRAPH_URL` (default `http://localhost:3100/graphql`), and
+`apps/web` `CHATWOOT_URL` (default `http://localhost:3100`), the origin it embeds.
+`apps/chatwoot` reads `POSTGRES_HOST`/`PORT`/`DATABASE`/`USERNAME`/`PASSWORD` (defaults: the compose
+Postgres, database `nestposts`), `POSTGRES_SCHEMA` (default `chatwoot` — never add `public`, see
+Chatwoot below), `REDIS_URL`, `FRONTEND_URL` (its own origin), `AUTH_SECRET` (the platform's — it
+verifies the session cookie with it; outside production it falls back to the same development default
+as `libs/auth`), `WEB_URL`, `AUTH_ISSUER`, `AUTH_OAUTH_RESOURCES`/`GATEWAY_URL` (what an access token
+is checked against) and `PLATFORM_SIGN_IN_URL` (default `${WEB_URL}/auth/sign-in`).
 
 `apps/web` takes the auth and database variables of the posts-api (it holds the same Better Auth), the
 **storage** ones (`DRIVE_*`, `src/nest/config/storage.config.ts` — its Better Auth stores avatars, see
@@ -418,8 +437,13 @@ libs/tanstack-query-graphql  GraphQL over TanStack Query, with Apollo's InMemory
                          normalized store underneath: GqlRpc (option builders keyed
                          ['graph', document, variables]), GraphQueryCache/GraphMutationCache and
                          useSubscription. A SOURCE package like libs/ui; it has a README
+libs/clients             domain/client (a Client of the tenant's organization: CPF, kind, status,
+                         address, the litigation flags) + its ORM mapping and repository, wired by
+                         ClientsInfrastructureModule; a tenant table. Its application layer and the
+                         `clients` GraphQL surface live in apps/posts-api; its Chatwoot contacts are
+                         federated onto it by the `chatwoot` subgraph (see Chatwoot)
 
-apps/gateway             the one GraphQL endpoint: composes the posts and notifications subgraphs
+apps/gateway             the one GraphQL endpoint: composes the posts, notifications and chatwoot subgraphs
                          from their SDL, executes them with @graphql-tools/federation (subscriptions
                          over SSE, @interfaceObject), reads each caller's session through the same
                          Better Auth (Redis first, Postgres on a miss) and forwards every caller's
@@ -444,6 +468,9 @@ apps/web-e2e             the whole system through a BROWSER: Playwright over thr
 apps/web                 a Next.js client of the GATEWAY (not part of the saga). It boots a Nest
                          CONTAINER of its own, holds the same Better Auth and serves its screens —
                          better-auth-ui's — and PUBLISHES the emails they send — see below
+apps/chatwoot            a vendored Chatwoot 4.10 fork (Rails, Vue): the `chatwoot` subgraph and
+                         the support dashboard the web embeds at /atendimento. Same Postgres,
+                         schema `chatwoot`; no sign-in of its own. See "Chatwoot" below
 ```
 
 What that buys, concretely: `apps/tagging` imports `libs/posts` and gets the `Post`, its events, its
@@ -1056,7 +1083,7 @@ are three kinds:
 |---|---|---|
 | `SYSTEM_SCHEMA` (`public`) | `public` | the users (`libs/users`' `User`, which Better Auth writes as `AuthUser`), Better Auth's tables and the organizations' — `libs/users`, `libs/auth`, `libs/organizations` |
 | `TRANSPORT_SCHEMA` (`libs/database`) | `transport` | the messaging's bookkeeping: the outbox and the inbox (`libs/core/outbox-mikro-orm`) and the event store's `event_log` (`libs/core/event-store-mikro-orm`) |
-| `TENANT_SCHEMA` (`*`, MikroORM's wildcard) | `tenant_<name>` | everything else: posts, tags, authors, calendar events, notifications, devices |
+| `TENANT_SCHEMA` (`*`, MikroORM's wildcard) | `tenant_<name>` | everything else: posts, tags, authors, calendar events, clients, notifications, devices |
 
 A wildcard table exists once per tenant, and which copy a query reaches is the schema of the entity
 manager it runs on. `tenant_root` is the root tenant's — whoever names no tenant, the visitor who never
@@ -1222,7 +1249,46 @@ This applies to the libraries' `domain/` only. The GraphQL DTO schemas under
 `apps/posts-api/src/dto/graphql/` are a different layer with a different job (they carry
 `AUTOMAP_REGISTRY` decorator metadata) and stay where they are.
 
-### The gateway: one endpoint, two subgraphs
+### Chatwoot: a vendored Rails subgraph on the same database
+
+`apps/chatwoot` is a Chatwoot fork that is part of the platform, not a service it calls. The README's
+last section is the design; the essentials:
+
+- **Its tables are `chatwoot.*`, and its search path is `chatwoot` ALONE.** Its `schema.rb` is
+  `create_table … force: :cascade`, so with `public` on the path a first `db:chatwoot_prepare` drops
+  `public.users` — this repository's users — by resolving Chatwoot's `users` there. Every platform
+  table Chatwoot reads is qualified (`public.session`, `public.users`, `public.organization`,
+  `public.jwks`). Its schema needs `vector`: the compose Postgres is `pgvector/pgvector:pg18`.
+- **The platform's people are mirrored by triggers on the tables that own them**
+  (`infrastructure/persistence/triggers/` in `libs/users` and `libs/organizations`): a user is an
+  agent (a `SuperAdmin` when `admin`), an organization an account, a member a seat (administrator
+  when `owner`/`admin`), a team a team, a team member a team member. They upsert on Chatwoot's
+  `platform_user_id`/`platform_organization_id`/`platform_team_id` (Chatwoot's own migration
+  `AddPlatformLinks`), no-op while the `chatwoot` schema is absent and mirror rows of `public` only,
+  so a spec's schema never writes into a developer's Chatwoot. What existed before Chatwoot did is
+  mirrored by `migrate()`'s last step, `chatwoot:mirror` (`ChatwootMirror`), which touches only rows
+  Chatwoot lacks. `chatwoot-mirror.spec` proves both against a minimal `chatwoot` schema.
+- **Authentication is the platform's** (`lib/omni_auth/strategies/better_auth.rb`,
+  `lib/better_auth/`): the Better Auth cookie, its HMAC verified with `AUTH_SECRET`, or an access
+  token verified as `oauth-bearer-session` does; the user by `platform_user_id`; the account of the
+  organization `x-tenant` names — none at all when the user is not its member — else of the session's
+  active one. Password sign-in is `403`, the dashboard without a session goes to the web's sign-in,
+  and the dashboard's DeviseTokenAuth headers need a platform session of the same user beside them.
+  `/graphql` is stateless (the gateway calls it on every request) and the account it resolved reaches
+  `GraphqlController` through `env['platform.account_user']`, never through the user's active account,
+  which two concurrent tenants would flip.
+- **The SDL the gateway composes is a dump**, `apps/chatwoot/schema.graphql`
+  (`graphql:generate`), because `apps/chatwoot/graphql` is Lighthouse SDL. `posts` owns `Client`,
+  `Team` and `IUser`; Chatwoot contributes `Client.contacts`, `Team.workingHours`/`supportTeam` and
+  points at `IUser` from `Agent.user` (`@interfaceObject`). Chatwoot's own `User` and `Team` are
+  `Agent` and `SupportTeam` in the SDL, with Chatwoot's ids. A `@hasMany` list is served as a Relay
+  connection (`contacts { nodes { … } }`).
+- **Clients** (`libs/clients`, posts-api's `client/` slices) are guarded by the organization's
+  `client` resource (`CLIENT_RESOURCE`: owners and admins every action, members all but `delete`) and
+  the `read:clients`/`write:clients` scopes. The web's `/clients` screen links and creates Chatwoot
+  contacts through the gateway and opens them in `/atendimento`, the embedded dashboard.
+
+### The gateway: one endpoint, three subgraphs
 
 `apps/gateway` is the only GraphQL endpoint a client calls — `apps/web` included, through its
 `/api/graphql` proxy on the server and directly for SSE subscriptions in the browser.
@@ -1709,6 +1775,27 @@ Coverage excludes `index.ts`, `interfaces/`, `*.interface.ts` and `main.ts`; res
 DTOs count.
 
 ## Gotchas
+
+- **Lighthouse (`lighthouse-graphql`) dispatches only to resolvers defined under its own
+  `/lib/lighthouse/`.** Its `SchemaImplementation` checks the source path of every `resolve_field_*`,
+  so the app's directives in `apps/chatwoot/app/graphql/directives` (`@currentUser`,
+  `@currentAccount`, `@accountFind`, `@accountScope`) resolved `null` without an error once the gem
+  stopped being vendored under that path. They reach the runtime through the field's `resolve_proc`,
+  which is why `BaseField` in `chatwoot_schema.rb` has an `attr_accessor` for it.
+- **A Rails initializer is not reloaded, `app/` is.** `config/initializers/federation.rb` (the
+  `Client` and `Team` reference resolvers) and everything under `lib/` (the Better Auth strategy)
+  need a restart of Chatwoot's server; an edit there looks like it did nothing. And Puma renames its
+  process, so `pkill -f "rails server"` finds nothing to kill — look for `puma … :3100`.
+- **Chatwoot's frontend imports packages its `package.json` did not declare** — `prosemirror-*`,
+  `@internationalized/date` — which only resolved in the project it came from, where they were
+  hoisted. Vite refuses them under pnpm; they are declared now. A blank dashboard in the embed is
+  Vite: `serve` runs it beside Rails, and `autoBuild` does not replace it.
+- **`rails db:*` in development prepares the TEST database too**, which does not exist here:
+  Chatwoot's Nx targets set `SKIP_TEST_DATABASE=true`.
+- **`@interfaceObject` on an interface may come from more than one subgraph.** Chatwoot declares
+  `IUser` as one to point at it and contributes no field; `InterfaceObjects.collect` used to take the
+  first `isInterfaceObject` join only — Chatwoot's, alphabetically — skip it for having no field, and
+  lose `me { notifications }` with nothing failing. It collects every join that contributes a field.
 
 - **The Inngest SDK advertises the URL it was REACHED at, not the one it is reachable at.** A
   registration triggered from outside the network — a `PUT /api/inngest` from the host, say — tells

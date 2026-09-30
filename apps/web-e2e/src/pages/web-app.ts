@@ -12,6 +12,7 @@ import { ResetPasswordPage } from './auth/reset-password.page';
 import { SignInPage } from './auth/sign-in.page';
 import { SignUpPage } from './auth/sign-up.page';
 import { TwoFactorPage } from './auth/two-factor.page';
+import { ClientsPage } from './clients.page';
 import { FederationPage } from './federation.page';
 import { FeedPage } from './feed.page';
 import { MePage } from './me.page';
@@ -24,6 +25,7 @@ import { AccountSettingsPage } from './settings/account-settings.page';
 import { BillingSettingsPage } from './settings/billing-settings.page';
 import { OrganizationSettingsPage } from './settings/organization-settings.page';
 import { SecuritySettingsPage } from './settings/security-settings.page';
+import { SupportPage } from './support.page';
 
 export class WebApp {
   readonly header: AppHeader;
@@ -43,6 +45,8 @@ export class WebApp {
   readonly newPost: NewPostPage;
   readonly me: MePage;
   readonly federation: FederationPage;
+  readonly clients: ClientsPage;
+  readonly support: SupportPage;
 
   readonly accountSettings: AccountSettingsPage;
   readonly securitySettings: SecuritySettingsPage;
@@ -71,6 +75,8 @@ export class WebApp {
     this.newPost = new NewPostPage(page);
     this.me = new MePage(page);
     this.federation = new FederationPage(page);
+    this.clients = new ClientsPage(page);
+    this.support = new SupportPage(page);
 
     this.accountSettings = new AccountSettingsPage(page);
     this.securitySettings = new SecuritySettingsPage(page);
@@ -96,6 +102,12 @@ export class WebApp {
 
   async reload(): Promise<void> {
     await this.page.reload();
+  }
+
+  /** A cookie this browser holds, by name — what it would send to any localhost port. */
+  async cookie(name: string): Promise<string | undefined> {
+    const cookies = await this.page.context().cookies();
+    return cookies.find((cookie) => cookie.name === name)?.value;
   }
 
   fetch(url: string): Promise<APIResponse> {

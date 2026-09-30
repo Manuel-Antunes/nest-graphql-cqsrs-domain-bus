@@ -2,7 +2,7 @@ import { createClient } from 'graphql-sse';
 import { createSchema, createYoga } from 'graphql-yoga';
 
 import { Listening } from '../../test/support/listening';
-import { FederatedSchema } from './federated-schema';
+import { FederatedSchemaFactory } from './federated-schema';
 import { Supergraph } from './supergraph';
 
 const SUBGRAPH_SDL = /* GraphQL */ `
@@ -21,7 +21,7 @@ const SUBGRAPH_SDL = /* GraphQL */ `
 describe('federated subscriptions over SSE', () => {
   let subgraph: Listening;
   let gateway: Listening;
-  let gatewaySchema: ReturnType<typeof FederatedSchema.of>;
+  let gatewaySchema: ReturnType<typeof FederatedSchemaFactory.of>;
 
   beforeAll(async () => {
     subgraph = await Listening.on(
@@ -55,7 +55,7 @@ describe('federated subscriptions over SSE', () => {
         logging: false,
       }),
     );
-    gatewaySchema = FederatedSchema.of(
+    gatewaySchema = FederatedSchemaFactory.of(
       Supergraph.compose([
         { name: 'demo', url: subgraph.url, sdl: SUBGRAPH_SDL },
       ]),

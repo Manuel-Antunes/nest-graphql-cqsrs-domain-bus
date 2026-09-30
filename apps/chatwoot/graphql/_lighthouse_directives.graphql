@@ -1,0 +1,78 @@
+directive @hasMany(relation: String, scopes: [String!]) on FIELD_DEFINITION
+directive @belongsTo(relation: String, scopes: [String!]) on FIELD_DEFINITION
+directive @belongsToMany(
+  relation: String
+  scopes: [String!]
+) on FIELD_DEFINITION
+directive @paginate(
+  model: String
+  type: String
+  scopes: [String!]
+) on FIELD_DEFINITION
+directive @all(
+  model: String
+
+  scopes: [String!]
+) on FIELD_DEFINITION
+directive @find(model: String) on FIELD_DEFINITION
+directive @auth(guards: [String!]) on FIELD_DEFINITION
+directive @whereConditions(
+  columns: [String!]
+  columnsEnum: String
+  relation: String
+) on ARGUMENT_DEFINITION
+directive @whereHasConditions(
+  relation: String
+  columns: [String!]
+  columnsEnum: String
+) on ARGUMENT_DEFINITION
+
+directive @aggregate(
+  model: String
+  relation: String
+  column: String!
+  function: AggregateFunction!
+) on FIELD_DEFINITION
+
+enum AggregateFunction {
+  AVG
+  SUM
+  MIN
+  MAX
+  COUNT
+}
+
+directive @field(resolver: String!) on FIELD_DEFINITION
+
+directive @key(fields: String!) repeatable on INTERFACE | OBJECT
+
+directive @external on FIELD_DEFINITION
+
+directive @requires(fields: String!) on FIELD_DEFINITION
+
+directive @provides(fields: String!) on FIELD_DEFINITION
+
+directive @extends on OBJECT | INTERFACE
+
+directive @shareable on FIELD_DEFINITION | OBJECT
+
+"""
+Federation v2.3. Lets this subgraph contribute fields to an interface owned by
+another subgraph while treating it as a plain object — without knowing, or
+enumerating, its implementations. Unused here: `Client` is a plain federated
+entity (see contacts.graphql), kept only so the directive set stays complete.
+"""
+directive @interfaceObject on OBJECT
+
+directive @inaccessible on FIELD_DEFINITION | OBJECT | INTERFACE | UNION | ARGUMENT_DEFINITION | SCALAR | ENUM | ENUM_VALUE | INPUT_OBJECT | INPUT_FIELD_DEFINITION
+
+directive @tag(name: String!) repeatable on FIELD_DEFINITION | OBJECT
+
+directive @override(from: String!) on FIELD_DEFINITION
+
+directive @specifiedBy(url: String!) on SCALAR
+
+directive @builder(
+  class: String
+  method: String
+) repeatable on FIELD_DEFINITION | ARGUMENT_DEFINITION | INPUT_FIELD_DEFINITION

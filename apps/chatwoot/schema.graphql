@@ -1,0 +1,2590 @@
+extend schema
+  @link(url: "https://specs.apollo.dev/federation/v2.3", import: ["@inaccessible", "@tag"])
+
+directive @accountFind(arg: String, by: String, in: String!) on FIELD_DEFINITION
+
+directive @accountScope(of: String!) on FIELD_DEFINITION
+
+directive @aggregate(column: String!, function: AggregateFunction!, model: String, relation: String) on FIELD_DEFINITION
+
+directive @all(model: String, scopes: [String!]) on FIELD_DEFINITION
+
+directive @auth(guards: [String!]) on FIELD_DEFINITION
+
+directive @belongsTo(relation: String, scopes: [String!]) on FIELD_DEFINITION
+
+directive @belongsToMany(relation: String, scopes: [String!]) on FIELD_DEFINITION
+
+directive @builder(class: String, method: String) repeatable on ARGUMENT_DEFINITION | FIELD_DEFINITION | INPUT_FIELD_DEFINITION
+
+directive @can(ability: String!, find: String, model: String, root: Boolean) repeatable on FIELD_DEFINITION
+
+directive @count(model: String, relation: String, scopes: [String!]) on FIELD_DEFINITION
+
+directive @currentAccount on FIELD_DEFINITION
+
+directive @currentUser on FIELD_DEFINITION
+
+directive @eq(key: String) on ARGUMENT_DEFINITION | INPUT_FIELD_DEFINITION
+
+directive @extends on INTERFACE | OBJECT
+
+directive @external on FIELD_DEFINITION
+
+directive @field(resolver: String!) on FIELD_DEFINITION
+
+directive @find(model: String) on FIELD_DEFINITION
+
+directive @first(model: String, scopes: [String!]) on FIELD_DEFINITION
+
+directive @guard on FIELD_DEFINITION
+
+directive @hasMany(relation: String, scopes: [String!]) on FIELD_DEFINITION
+
+directive @hasOne(relation: String, scopes: [String!]) on FIELD_DEFINITION
+
+directive @in(key: String) on ARGUMENT_DEFINITION | INPUT_FIELD_DEFINITION
+
+directive @inaccessible on ARGUMENT_DEFINITION | ENUM | ENUM_VALUE | FIELD_DEFINITION | INPUT_FIELD_DEFINITION | INPUT_OBJECT | INTERFACE | OBJECT | SCALAR | UNION
+
+"""
+Federation v2.3. Lets this subgraph contribute fields to an interface owned by
+another subgraph while treating it as a plain object — without knowing, or
+enumerating, its implementations. Unused here: `Client` is a plain federated
+entity (see contacts.graphql), kept only so the directive set stays complete.
+"""
+directive @interfaceObject on OBJECT
+
+directive @key(fields: String!) repeatable on INTERFACE | OBJECT
+
+directive @like(key: String) on ARGUMENT_DEFINITION | INPUT_FIELD_DEFINITION
+
+directive @method(name: String) on FIELD_DEFINITION
+
+directive @neq(key: String) on ARGUMENT_DEFINITION | INPUT_FIELD_DEFINITION
+
+directive @notIn(key: String) on ARGUMENT_DEFINITION | INPUT_FIELD_DEFINITION
+
+directive @orderBy(columns: [String!], relations: [String!]) on ARGUMENT_DEFINITION | FIELD_DEFINITION
+
+directive @override(from: String!) on FIELD_DEFINITION
+
+directive @paginate(model: String, scopes: [String!], type: String) on FIELD_DEFINITION
+
+directive @provides(fields: String!) on FIELD_DEFINITION
+
+directive @rename(attribute: String!) on FIELD_DEFINITION | INPUT_FIELD_DEFINITION
+
+directive @requires(fields: String!) on FIELD_DEFINITION
+
+directive @shareable on FIELD_DEFINITION | OBJECT
+
+directive @specifiedBy(url: String!) on SCALAR
+
+directive @tag(name: String!) repeatable on FIELD_DEFINITION | OBJECT
+
+directive @where(key: String, operator: String) on ARGUMENT_DEFINITION | INPUT_FIELD_DEFINITION
+
+directive @whereConditions(columns: [String!], columnsEnum: String, relation: String) on ARGUMENT_DEFINITION
+
+directive @whereHasConditions(columns: [String!], columnsEnum: String, relation: String) on ARGUMENT_DEFINITION
+
+"""
+A Chatwoot account (tenant). All support data — inboxes, conversations,
+contacts, labels — is scoped to an account. GraphQL requests operate within the
+caller's active account.
+"""
+type Account {
+  """
+  Internal id of the account.
+  """
+  id: ID!
+
+  """
+  Default locale, stored as an integer index into Chatwoot's configured
+  languages list.
+  """
+  locale: Int
+
+  """
+  Account display name.
+  """
+  name: String!
+
+  """
+  Account status, as an integer: 0 = active, 1 = suspended.
+  """
+  status: Int
+
+  """
+  Users (agents and admins) that are members of the account.
+  """
+  users(
+    """
+    Returns the elements in the list that come after the specified cursor.
+    """
+    after: String
+
+    """
+    Returns the elements in the list that come before the specified cursor.
+    """
+    before: String
+
+    """
+    Returns the first _n_ elements from the list.
+    """
+    first: Int
+
+    """
+    Returns the last _n_ elements from the list.
+    """
+    last: Int
+  ): AgentConnection! @hasMany
+}
+
+"""
+The connection type for Account.
+"""
+type AccountConnection {
+  """
+  A list of edges.
+  """
+  edges: [AccountEdge]
+
+  """
+  A list of nodes.
+  """
+  nodes: [Account]
+
+  """
+  Information to aid in pagination.
+  """
+  pageInfo: PageInfo!
+}
+
+"""
+An edge in a connection.
+"""
+type AccountEdge {
+  """
+  A cursor for use in pagination.
+  """
+  cursor: String!
+
+  """
+  The item at the end of the edge.
+  """
+  node: Account
+}
+
+"""
+A paginated list of Account items.
+"""
+type AccountPaginator {
+  """
+  A list of Account items.
+  """
+  data: [Account]
+
+  """
+  Pagination information about the list of items.
+  """
+  paginatorInfo: PaginatorInfo!
+}
+
+"""
+An agent: a platform user as Chatwoot knows them, working in one or more accounts.
+The platform's triggers create one for every user (`chatwoot.users.platform_user_id`);
+the user they are is `user`, which the `posts` subgraph owns.
+"""
+type Agent implements Node {
+  """
+  Accounts the user is a member of.
+  """
+  accounts(
+    """
+    Returns the elements in the list that come after the specified cursor.
+    """
+    after: String
+
+    """
+    Returns the elements in the list that come before the specified cursor.
+    """
+    before: String
+
+    """
+    Returns the first _n_ elements from the list.
+    """
+    first: Int
+
+    """
+    Returns the last _n_ elements from the list.
+    """
+    last: Int
+  ): AccountConnection! @hasMany
+
+  """
+  Availability for assignment, as an integer: 0 = online, 1 = offline,
+  2 = busy.
+  """
+  availability: Int
+
+  """
+  Timestamp of the current sign-in session.
+  """
+  currentSignInAt: ISO8601DateTime
+
+  """
+  Name shown to contacts (falls back to name when unset).
+  """
+  displayName: String
+
+  """
+  User's email address (login identity).
+  """
+  email: String!
+
+  """
+  Internal id of the user.
+  """
+  id: ID!
+
+  """
+  Timestamp of the previous sign-in.
+  """
+  lastSignInAt: ISO8601DateTime
+
+  """
+  User's full name.
+  """
+  name: String
+
+  """
+  The platform user this agent is; null for an agent created in Chatwoot alone.
+  """
+  user: IUser @field(resolver: "Resolvers::AgentUser")
+}
+
+"""
+The connection type for Agent.
+"""
+type AgentConnection {
+  """
+  A list of edges.
+  """
+  edges: [AgentEdge]
+
+  """
+  A list of nodes.
+  """
+  nodes: [Agent]
+
+  """
+  Information to aid in pagination.
+  """
+  pageInfo: PageInfo!
+}
+
+"""
+An edge in a connection.
+"""
+type AgentEdge {
+  """
+  A cursor for use in pagination.
+  """
+  cursor: String!
+
+  """
+  The item at the end of the edge.
+  """
+  node: Agent
+}
+
+enum AggregateFunction {
+  AVG
+  COUNT
+  MAX
+  MIN
+  SUM
+}
+
+"""
+Autogenerated input type of AssignConversationToAgent
+"""
+input AssignConversationToAgentInput {
+  """
+  Agent (User) id to assign; omit or null to unassign.
+  """
+  assigneeId: ID
+
+  """
+  Assignee type: 'User' (default) or 'AgentBot'.
+  """
+  assigneeType: String
+
+  """
+  A unique identifier for the client performing the mutation.
+  """
+  clientMutationId: String
+
+  """
+  Conversation display id (the per-account #123 number).
+  """
+  conversationId: Int!
+}
+
+"""
+Autogenerated return type of AssignConversationToAgent.
+"""
+type AssignConversationToAgentPayload {
+  """
+  A unique identifier for the client performing the mutation.
+  """
+  clientMutationId: String
+  conversation: Conversation
+}
+
+"""
+Autogenerated input type of AssignConversationToTeam
+"""
+input AssignConversationToTeamInput {
+  """
+  A unique identifier for the client performing the mutation.
+  """
+  clientMutationId: String
+
+  """
+  Conversation display id (the per-account #123 number).
+  """
+  conversationId: Int!
+
+  """
+  The NUMERIC Chatwoot team id to assign — the `chatwootTeamId` returned by
+  ListTeamsWithLaborUnions. NEVER the team name (a name returns "Team not
+  found"). Omit or null to unassign.
+  """
+  teamId: ID
+}
+
+"""
+Autogenerated return type of AssignConversationToTeam.
+"""
+type AssignConversationToTeamPayload {
+  """
+  A unique identifier for the client performing the mutation.
+  """
+  clientMutationId: String
+  conversation: Conversation
+}
+
+type Client @key(fields: "id") @federation__key(fields: "id") {
+  """
+  Support contacts linked to this client.
+  """
+  contacts(
+    """
+    Returns the elements in the list that come after the specified cursor.
+    """
+    after: String
+
+    """
+    Returns the elements in the list that come before the specified cursor.
+    """
+    before: String
+
+    """
+    Returns the first _n_ elements from the list.
+    """
+    first: Int
+
+    """
+    Returns the last _n_ elements from the list.
+    """
+    last: Int
+  ): ContactConnection! @hasMany
+
+  """
+  Internal id of the client, as stored on `contact_links.client_id`.
+  """
+  id: ID! @external
+}
+
+"""
+A contact: an end customer or person the account communicates with. Belongs to
+the current account and may be linked to a `Client` of the `posts` subgraph.
+"""
+type Contact implements Node @key(fields: "id") @federation__key(fields: "id") {
+  """
+  Additional system attributes (e.g. social profiles, geo).
+  """
+  additionalAttributes: JSON
+
+  """
+  Whether the contact is blocked.
+  """
+  blocked: Boolean
+
+  """
+  The linked client, or null if the contact is not linked, resolved by the `posts`
+  subgraph.
+  """
+  client: Client @field(resolver: "Resolvers::ContactClient")
+
+  """
+  The linked client's id, without resolving the federated entity.
+  """
+  clientId: ID @field(resolver: "Resolvers::ContactClientId")
+
+  """
+  The inbox associations (source ids) through which this contact is reachable.
+  """
+  contactInboxes(
+    """
+    Returns the elements in the list that come after the specified cursor.
+    """
+    after: String
+
+    """
+    Returns the elements in the list that come before the specified cursor.
+    """
+    before: String
+
+    """
+    Returns the first _n_ elements from the list.
+    """
+    first: Int
+
+    """
+    Returns the last _n_ elements from the list.
+    """
+    last: Int
+  ): ContactInboxConnection! @hasMany(relation: "contact_inboxes")
+
+  """
+  Lifecycle type, as an integer: 0 = visitor, 1 = lead, 2 = customer.
+  """
+  contactType: Int
+
+  """
+  Conversations with this contact. Filter via `where` (id, status, uuid,
+  lastActivityAt) and `hasContact` (name, access_level).
+  """
+  conversations(
+    """
+    Returns the elements in the list that come after the specified cursor.
+    """
+    after: String
+
+    """
+    Returns the elements in the list that come before the specified cursor.
+    """
+    before: String
+
+    """
+    Returns the first _n_ elements from the list.
+    """
+    first: Int
+
+    """
+    Filter results by related records conditions.
+    """
+    hasContact: ContactConversationsHasContactWhereConditions @whereHasConditions(columns: ["name", "access_level"])
+
+    """
+    Returns the last _n_ elements from the list.
+    """
+    last: Int
+
+    """
+    Filter results by field conditions.
+    """
+    where: ContactConversationsWhereWhereConditions @whereConditions(columns: ["id", "status", "uuid", "lastActivityAt"])
+  ): ConversationConnection! @hasMany
+
+  """
+  ISO country code derived from the phone number / attributes.
+  """
+  countryCode: String
+
+  """
+  When the contact was created.
+  """
+  createdAt: ISO8601DateTime
+
+  """
+  Account-defined custom attributes for the contact.
+  """
+  customAttributes: JSON
+
+  """
+  Where the contact opens in the Chatwoot dashboard, relative to Chatwoot's origin.
+  """
+  dashboardPath: String! @field(resolver: "Resolvers::ContactDashboardPath")
+
+  """
+  Primary email address.
+  """
+  email: String
+
+  """
+  Internal id of the contact.
+  """
+  id: ID!
+
+  """
+  External unique identifier set by the integrating system, if any.
+  """
+  identifier: String
+
+  """
+  Titles of the labels applied to the contact.
+  """
+  labels: [String!]! @method(name: "label_list")
+
+  """
+  When the contact was last active.
+  """
+  lastActivityAt: ISO8601DateTime
+
+  """
+  Contact's display name.
+  """
+  name: String
+
+  """
+  Internal notes attached to the contact by agents.
+  """
+  notes(
+    """
+    Returns the elements in the list that come after the specified cursor.
+    """
+    after: String
+
+    """
+    Returns the elements in the list that come before the specified cursor.
+    """
+    before: String
+
+    """
+    Returns the first _n_ elements from the list.
+    """
+    first: Int
+
+    """
+    Returns the last _n_ elements from the list.
+    """
+    last: Int
+  ): NoteConnection! @hasMany(relation: "notes")
+
+  """
+  Primary phone number in E.164 form.
+  """
+  phoneNumber: String
+
+  """
+  When the contact was last updated.
+  """
+  updatedAt: ISO8601DateTime
+}
+
+"""
+The connection type for Contact.
+"""
+type ContactConnection {
+  """
+  A list of edges.
+  """
+  edges: [ContactEdge]
+
+  """
+  A list of nodes.
+  """
+  nodes: [Contact]
+
+  """
+  Information to aid in pagination.
+  """
+  pageInfo: PageInfo!
+}
+
+enum ContactConversationsHasContactColumn {
+  ACCESS_LEVEL
+  NAME
+}
+
+input ContactConversationsHasContactWhereConditions {
+  AND: [ContactConversationsHasContactWhereConditions!]
+  OR: [ContactConversationsHasContactWhereConditions!]
+  column: ContactConversationsHasContactColumn
+  operator: SQLOperator = EQ
+  value: Mixed
+}
+
+enum ContactConversationsWhereColumn {
+  ID
+  LASTACTIVITYAT
+  STATUS
+  UUID
+}
+
+input ContactConversationsWhereWhereConditions {
+  AND: [ContactConversationsWhereWhereConditions!]
+  HAS: ContactConversationsWhereWhereConditionsRelation
+  OR: [ContactConversationsWhereWhereConditions!]
+  column: ContactConversationsWhereColumn
+  operator: SQLOperator = EQ
+  value: Mixed
+}
+
+input ContactConversationsWhereWhereConditionsRelation {
+  amount: Int = 1
+  condition: ContactConversationsWhereWhereConditions
+  operator: SQLOperator = GTE
+  relation: String!
+}
+
+"""
+An edge in a connection.
+"""
+type ContactEdge {
+  """
+  A cursor for use in pagination.
+  """
+  cursor: String!
+
+  """
+  The item at the end of the edge.
+  """
+  node: Contact
+}
+
+"""
+Associates a contact with an inbox via a channel-specific source id (the
+addressable handle for reaching the contact on that inbox).
+"""
+type ContactInbox implements Node @key(fields: "id") @federation__key(fields: "id") {
+  """
+  When the association was created.
+  """
+  createdAt: ISO8601DateTime
+
+  """
+  Whether the source id has been HMAC-verified (identity validation).
+  """
+  hmacVerified: Boolean
+
+  """
+  Internal id of the contact-inbox association.
+  """
+  id: ID!
+
+  """
+  The inbox this association is for.
+  """
+  inbox: Inbox! @belongsTo(relation: "inbox")
+
+  """
+  Channel-specific source id (e.g. phone number, widget id) used to reach the
+  contact on this inbox.
+  """
+  sourceId: String!
+}
+
+"""
+The connection type for ContactInbox.
+"""
+type ContactInboxConnection {
+  """
+  A list of edges.
+  """
+  edges: [ContactInboxEdge]
+
+  """
+  A list of nodes.
+  """
+  nodes: [ContactInbox]
+
+  """
+  Information to aid in pagination.
+  """
+  pageInfo: PageInfo!
+}
+
+"""
+An edge in a connection.
+"""
+type ContactInboxEdge {
+  """
+  A cursor for use in pagination.
+  """
+  cursor: String!
+
+  """
+  The item at the end of the edge.
+  """
+  node: ContactInbox
+}
+
+"""
+A paginated list of Contact items.
+"""
+type ContactPaginator {
+  """
+  A list of Contact items.
+  """
+  data: [Contact]
+
+  """
+  Pagination information about the list of items.
+  """
+  paginatorInfo: PaginatorInfo!
+}
+
+"""
+A customer-support conversation: a thread of messages between a contact and the
+agents of an inbox. Scoped to the current account; an agent only sees
+conversations in inboxes they can access (admins see all).
+"""
+type Conversation implements Node @key(fields: "id") @federation__key(fields: "id") {
+  """
+  Additional channel/system attributes (e.g. browser, referer).
+  """
+  additionalAttributes: JSON
+
+  """
+  When the assigned agent last viewed the conversation.
+  """
+  agentLastSeenAt: ISO8601DateTime
+
+  """
+  The agent currently assigned to the conversation, or null if unassigned.
+  """
+  assignee: Agent @belongsTo(relation: "assignee")
+
+  """
+  Whether the agent can currently send a reply (e.g. within the channel's
+  messaging window).
+  """
+  canReply: Boolean @method(name: "can_reply?")
+
+  """
+  The contact (end customer) this conversation is with.
+  """
+  contact: Contact!
+
+  """
+  When the contact last viewed the conversation.
+  """
+  contactLastSeenAt: ISO8601DateTime
+
+  """
+  When the conversation was created.
+  """
+  createdAt: ISO8601DateTime
+
+  """
+  Conversation-level custom attributes (account-defined key/value pairs).
+  """
+  customAttributes: JSON
+
+  """
+  Per-account sequential number shown in the agent UI (the "#123" badge). Unique
+  only within an account — use `conversation(displayId:)` to fetch by it.
+  """
+  displayId: Int!
+
+  """
+  When the first agent reply was sent.
+  """
+  firstReplyCreatedAt: ISO8601DateTime
+
+  """
+  Internal database id of the conversation. Stable and globally unique. Use this
+  for `conversations(id:)` lookups and message mutations.
+  """
+  id: ID!
+
+  """
+  The inbox (channel) the conversation belongs to.
+  """
+  inbox: Inbox!
+
+  """
+  Titles of the labels applied to the conversation.
+  """
+  labels: [String!]! @method(name: "label_list")
+
+  """
+  Timestamp of the most recent activity (message or status change).
+  """
+  lastActivityAt: ISO8601DateTime!
+
+  """
+  Messages in the conversation, oldest-first. Filter with `where` on id, status,
+  messageType (0=incoming, 1=outgoing, 2=activity, 3=template), private,
+  senderId or senderType.
+  """
+  messages(
+    """
+    Returns the elements in the list that come after the specified cursor.
+    """
+    after: String
+
+    """
+    Returns the elements in the list that come before the specified cursor.
+    """
+    before: String
+
+    """
+    Returns the first _n_ elements from the list.
+    """
+    first: Int
+
+    """
+    Returns the last _n_ elements from the list.
+    """
+    last: Int
+
+    """
+    Filter results by field conditions.
+    """
+    where: ConversationMessagesWhereWhereConditions @whereConditions(columns: ["id", "status", "messageType", "private", "senderId", "senderType"])
+  ): MessageConnection! @hasMany
+
+  """
+  Priority, as an integer, or null when unset: 0 = low, 1 = medium, 2 = high,
+  3 = urgent.
+  """
+  priority: Int
+
+  """
+  If snoozed, the time until which the conversation stays snoozed.
+  """
+  snoozedUntil: ISO8601DateTime
+
+  """
+  Lifecycle state, as an integer: 0 = open, 1 = resolved, 2 = pending,
+  3 = snoozed.
+  """
+  status: Int!
+
+  """
+  The team the conversation is assigned to, or null if none.
+  """
+  team: SupportTeam @belongsTo(relation: "team")
+
+  """
+  Number of unread incoming (customer) messages.
+  """
+  unreadCount: Int @count(relation: "unread_incoming_messages")
+
+  """
+  When the conversation was last updated.
+  """
+  updatedAt: ISO8601DateTime
+
+  """
+  Stable opaque UUID for the conversation (used by public/widget APIs).
+  """
+  uuid: String!
+
+  """
+  Since when the conversation has been waiting for an agent reply, or null if
+  not waiting.
+  """
+  waitingSince: ISO8601DateTime
+}
+
+"""
+The connection type for Conversation.
+"""
+type ConversationConnection {
+  """
+  A list of edges.
+  """
+  edges: [ConversationEdge]
+
+  """
+  A list of nodes.
+  """
+  nodes: [Conversation]
+
+  """
+  Information to aid in pagination.
+  """
+  pageInfo: PageInfo!
+}
+
+"""
+An edge in a connection.
+"""
+type ConversationEdge {
+  """
+  A cursor for use in pagination.
+  """
+  cursor: String!
+
+  """
+  The item at the end of the edge.
+  """
+  node: Conversation
+}
+
+enum ConversationMessagesWhereColumn {
+  ID
+  MESSAGETYPE
+  PRIVATE
+  SENDERID
+  SENDERTYPE
+  STATUS
+}
+
+input ConversationMessagesWhereWhereConditions {
+  AND: [ConversationMessagesWhereWhereConditions!]
+  HAS: ConversationMessagesWhereWhereConditionsRelation
+  OR: [ConversationMessagesWhereWhereConditions!]
+  column: ConversationMessagesWhereColumn
+  operator: SQLOperator = EQ
+  value: Mixed
+}
+
+input ConversationMessagesWhereWhereConditionsRelation {
+  amount: Int = 1
+  condition: ConversationMessagesWhereWhereConditions
+  operator: SQLOperator = GTE
+  relation: String!
+}
+
+"""
+A paginated list of Conversation items.
+"""
+type ConversationPaginator {
+  """
+  A list of Conversation items.
+  """
+  data: [Conversation]
+
+  """
+  Pagination information about the list of items.
+  """
+  paginatorInfo: PaginatorInfo!
+}
+
+"""
+Autogenerated input type of CreateContact
+"""
+input CreateContactInput {
+  """
+  Additional system attributes (JSON object).
+  """
+  additionalAttributes: JSON
+
+  """
+  A unique identifier for the client performing the mutation.
+  """
+  clientMutationId: String
+
+  """
+  Account-defined custom attributes (JSON object).
+  """
+  customAttributes: JSON
+
+  """
+  Primary email address.
+  """
+  email: String
+
+  """
+  External unique identifier set by the integrating system.
+  """
+  identifier: String
+
+  """
+  Contact's display name.
+  """
+  name: String
+
+  """
+  Primary phone number in E.164 form.
+  """
+  phoneNumber: String
+}
+
+"""
+Autogenerated return type of CreateContact.
+"""
+type CreateContactPayload {
+  """
+  A unique identifier for the client performing the mutation.
+  """
+  clientMutationId: String
+  contact: Contact
+}
+
+"""
+Autogenerated input type of CreateConversation
+"""
+input CreateConversationInput {
+  """
+  Internal id of the agent (User) to assign.
+  """
+  assigneeId: ID
+
+  """
+  A unique identifier for the client performing the mutation.
+  """
+  clientMutationId: String
+
+  """
+  Internal id of the contact to converse with.
+  """
+  contactId: ID!
+
+  """
+  Optional initial outgoing message.
+  """
+  content: String
+
+  """
+  Internal id of the inbox to open the conversation on.
+  """
+  inboxId: ID!
+
+  """
+  Channel-specific source id; auto-resolved from the contact inbox when omitted.
+  """
+  sourceId: String
+
+  """
+  Initial status: open, resolved, pending or snoozed (default: open).
+  """
+  status: String
+
+  """
+  Internal id of the team to assign.
+  """
+  teamId: ID
+}
+
+"""
+Autogenerated return type of CreateConversation.
+"""
+type CreateConversationPayload {
+  """
+  A unique identifier for the client performing the mutation.
+  """
+  clientMutationId: String
+  conversation: Conversation
+}
+
+"""
+Autogenerated input type of CreateNote
+"""
+input CreateNoteInput {
+  """
+  A unique identifier for the client performing the mutation.
+  """
+  clientMutationId: String
+
+  """
+  Internal id of the contact to attach the note to.
+  """
+  contactId: ID!
+
+  """
+  The note text.
+  """
+  content: String!
+}
+
+"""
+Autogenerated return type of CreateNote.
+"""
+type CreateNotePayload {
+  """
+  A unique identifier for the client performing the mutation.
+  """
+  clientMutationId: String
+  note: Note
+}
+
+"""
+Autogenerated input type of CreatePrivateMessage
+"""
+input CreatePrivateMessageInput {
+  """
+  A unique identifier for the client performing the mutation.
+  """
+  clientMutationId: String
+
+  """
+  The private note text.
+  """
+  content: String!
+
+  """
+  Internal id of the conversation (the Conversation.id, not the display number).
+  """
+  conversationId: ID!
+}
+
+"""
+Autogenerated return type of CreatePrivateMessage.
+"""
+type CreatePrivateMessagePayload {
+  """
+  A unique identifier for the client performing the mutation.
+  """
+  clientMutationId: String
+  message: Message
+}
+
+"""
+Autogenerated input type of DeleteNote
+"""
+input DeleteNoteInput {
+  """
+  A unique identifier for the client performing the mutation.
+  """
+  clientMutationId: String
+
+  """
+  Internal id of the note to delete.
+  """
+  id: ID!
+}
+
+"""
+Autogenerated return type of DeleteNote.
+"""
+type DeleteNotePayload {
+  """
+  A unique identifier for the client performing the mutation.
+  """
+  clientMutationId: String
+  contact: Contact
+}
+
+"""
+An ISO 8601-encoded datetime
+"""
+scalar ISO8601DateTime @specifiedBy(url: "https://tools.ietf.org/html/rfc3339")
+
+type IUser @key(fields: "id") @interfaceObject @federation__key(fields: "id") @federation__interfaceObject {
+  id: ID!
+}
+
+"""
+An inbox: a communication channel (API, email, website widget, WhatsApp, etc.)
+within an account. Agents are granted access per inbox; conversations belong to
+exactly one inbox.
+"""
+type Inbox implements Node @key(fields: "id") @federation__key(fields: "id") {
+  """
+  Whether agents may keep sending messages after a conversation is resolved.
+  """
+  allowMessagesAfterResolved: Boolean!
+
+  """
+  Business name shown to contacts, if configured.
+  """
+  businessName: String
+
+  """
+  The channel class backing the inbox, e.g. "Channel::Api", "Channel::Email",
+  "Channel::WebWidget".
+  """
+  channelType: String
+
+  """
+  Conversations in this inbox. Filter via `where` (id, status, uuid,
+  lastActivityAt, createdAt) and `hasContact` (name, email, contactType,
+  phoneNumber).
+  """
+  conversations(
+    """
+    Returns the elements in the list that come after the specified cursor.
+    """
+    after: String
+
+    """
+    Returns the elements in the list that come before the specified cursor.
+    """
+    before: String
+
+    """
+    Returns the first _n_ elements from the list.
+    """
+    first: Int
+
+    """
+    Filter results by related records conditions.
+    """
+    hasContact: InboxConversationsHasContactWhereConditions @whereHasConditions(columns: ["name", "email", "contactType", "phoneNumber"])
+
+    """
+    Returns the last _n_ elements from the list.
+    """
+    last: Int
+
+    """
+    Filter results by field conditions.
+    """
+    where: InboxConversationsWhereWhereConditions @whereConditions(columns: ["id", "status", "uuid", "lastActivityAt", "createdAt"])
+  ): ConversationConnection! @hasMany
+
+  """
+  When the inbox was created.
+  """
+  createdAt: ISO8601DateTime
+
+  """
+  Sending/receiving email address for email inboxes.
+  """
+  emailAddress: String
+
+  """
+  Whether new conversations are auto-assigned to available agents.
+  """
+  enableAutoAssignment: Boolean!
+
+  """
+  Whether an automatic greeting is sent on new conversations.
+  """
+  greetingEnabled: Boolean
+
+  """
+  The greeting message sent when greetingEnabled is true.
+  """
+  greetingMessage: String
+
+  """
+  Internal id of the inbox.
+  """
+  id: ID!
+
+  """
+  Display name of the inbox.
+  """
+  name: String
+}
+
+enum InboxConversationsHasContactColumn {
+  CONTACTTYPE
+  EMAIL
+  NAME
+  PHONENUMBER
+}
+
+input InboxConversationsHasContactWhereConditions {
+  AND: [InboxConversationsHasContactWhereConditions!]
+  OR: [InboxConversationsHasContactWhereConditions!]
+  column: InboxConversationsHasContactColumn
+  operator: SQLOperator = EQ
+  value: Mixed
+}
+
+enum InboxConversationsWhereColumn {
+  CREATEDAT
+  ID
+  LASTACTIVITYAT
+  STATUS
+  UUID
+}
+
+input InboxConversationsWhereWhereConditions {
+  AND: [InboxConversationsWhereWhereConditions!]
+  HAS: InboxConversationsWhereWhereConditionsRelation
+  OR: [InboxConversationsWhereWhereConditions!]
+  column: InboxConversationsWhereColumn
+  operator: SQLOperator = EQ
+  value: Mixed
+}
+
+input InboxConversationsWhereWhereConditionsRelation {
+  amount: Int = 1
+  condition: InboxConversationsWhereWhereConditions
+  operator: SQLOperator = GTE
+  relation: String!
+}
+
+"""
+A paginated list of Inbox items.
+"""
+type InboxPaginator {
+  """
+  A list of Inbox items.
+  """
+  data: [Inbox]
+
+  """
+  Pagination information about the list of items.
+  """
+  paginatorInfo: PaginatorInfo!
+}
+
+"""
+Arbitrary JSON value (used for custom/additional attributes).
+"""
+scalar JSON
+
+"""
+A label: an account-defined tag that can be applied to conversations and
+contacts for organization and filtering.
+"""
+type Label implements Node @key(fields: "id") @federation__key(fields: "id") {
+  """
+  Hex color used to render the label.
+  """
+  color: String!
+
+  """
+  When the label was created.
+  """
+  createdAt: ISO8601DateTime
+
+  """
+  Optional human-readable description.
+  """
+  description: String
+
+  """
+  Internal id of the label.
+  """
+  id: ID!
+
+  """
+  Whether the label is pinned to the sidebar in the agent UI.
+  """
+  showOnSidebar: Boolean
+
+  """
+  The label's unique title within the account (this is the value that appears in
+  a conversation's or contact's `labels` list).
+  """
+  title: String!
+}
+
+"""
+Autogenerated input type of LinkContactToClient
+"""
+input LinkContactToClientInput {
+  """
+  Internal id of the Client to link the contact to.
+  """
+  clientId: ID!
+
+  """
+  A unique identifier for the client performing the mutation.
+  """
+  clientMutationId: String
+
+  """
+  Internal id of the contact to link.
+  """
+  contactId: ID!
+}
+
+"""
+Autogenerated return type of LinkContactToClient.
+"""
+type LinkContactToClientPayload {
+  """
+  A unique identifier for the client performing the mutation.
+  """
+  clientMutationId: String
+  contact: Contact
+}
+
+"""
+A single message within a conversation. May be an incoming customer message, an
+outgoing agent reply, a private internal note, or a system activity entry.
+"""
+type Message implements Node {
+  """
+  Additional channel/system attributes for the message.
+  """
+  additionalAttributes: JSON
+
+  """
+  The message text. Null for some non-text content types.
+  """
+  content: String
+
+  """
+  Structured content metadata (e.g. CSAT, items, submitted values).
+  """
+  contentAttributes: JSON
+
+  """
+  Rendering/content type, as an integer: 0 = text, 1 = input_text,
+  2 = input_textarea, 3 = input_email, 4 = input_select, 5 = cards, 6 = form,
+  7 = article, 8 = incoming_email, 9 = input_csat, 10 = integrations,
+  11 = sticker, 12 = voice_call.
+  """
+  contentType: Int!
+
+  """
+  The conversation this message belongs to.
+  """
+  conversation: Conversation! @belongsTo
+
+  """
+  When the message was created.
+  """
+  createdAt: ISO8601DateTime
+
+  """
+  Internal id of the message.
+  """
+  id: ID!
+
+  """
+  Direction/kind of the message, as an integer: 0 = incoming (from the contact),
+  1 = outgoing (from an agent/bot), 2 = activity (system event),
+  3 = template (pre-approved channel template).
+  """
+  messageType: Int!
+
+  """
+  Whether this is a private internal note, visible only to agents (not the
+  contact).
+  """
+  private: Boolean!
+
+  """
+  Id of the sender (a User, AgentBot or Contact, depending on senderType).
+  """
+  senderId: Int
+
+  """
+  Class name of the sender: "User", "AgentBot" or "Contact".
+  """
+  senderType: String
+
+  """
+  External/channel-specific id for the message (e.g. provider message id).
+  """
+  sourceId: String
+
+  """
+  Delivery status, as an integer, or null when not applicable: 0 = sent,
+  1 = delivered, 2 = read, 3 = failed.
+  """
+  status: Int
+
+  """
+  When the message was last updated.
+  """
+  updatedAt: ISO8601DateTime
+}
+
+"""
+The connection type for Message.
+"""
+type MessageConnection {
+  """
+  A list of edges.
+  """
+  edges: [MessageEdge]
+
+  """
+  A list of nodes.
+  """
+  nodes: [Message]
+
+  """
+  Information to aid in pagination.
+  """
+  pageInfo: PageInfo!
+}
+
+"""
+An edge in a connection.
+"""
+type MessageEdge {
+  """
+  A cursor for use in pagination.
+  """
+  cursor: String!
+
+  """
+  The item at the end of the edge.
+  """
+  node: Message
+}
+
+scalar Mixed
+
+type Mutation {
+  """
+  Assign a conversation to an agent.
+  """
+  assignConversationToAgent(
+    """
+    Parameters for AssignConversationToAgent
+    """
+    input: AssignConversationToAgentInput!
+  ): AssignConversationToAgentPayload
+
+  """
+  Assign a conversation to a team.
+  """
+  assignConversationToTeam(
+    """
+    Parameters for AssignConversationToTeam
+    """
+    input: AssignConversationToTeamInput!
+  ): AssignConversationToTeamPayload
+
+  """
+  Create a contact in the current account.
+  """
+  createContact(
+    """
+    Parameters for CreateContact
+    """
+    input: CreateContactInput!
+  ): CreateContactPayload
+
+  """
+  Create a conversation for a contact on an inbox.
+  """
+  createConversation(
+    """
+    Parameters for CreateConversation
+    """
+    input: CreateConversationInput!
+  ): CreateConversationPayload
+
+  """
+  Create a note on a contact.
+  """
+  createNote(
+    """
+    Parameters for CreateNote
+    """
+    input: CreateNoteInput!
+  ): CreateNotePayload
+
+  """
+  Create a private (internal) note message on a conversation (by internal id).
+  """
+  createPrivateMessage(
+    """
+    Parameters for CreatePrivateMessage
+    """
+    input: CreatePrivateMessageInput!
+  ): CreatePrivateMessagePayload
+
+  """
+  Delete a note.
+  """
+  deleteNote(
+    """
+    Parameters for DeleteNote
+    """
+    input: DeleteNoteInput!
+  ): DeleteNotePayload
+
+  """
+  Links a contact to a Client (an exequente or a herdeiro).
+  """
+  linkContactToClient(
+    """
+    Parameters for LinkContactToClient
+    """
+    input: LinkContactToClientInput!
+  ): LinkContactToClientPayload
+
+  """
+  Send a message (or private note) on a conversation.
+  """
+  sendMessage(
+    """
+    Parameters for SendMessage
+    """
+    input: SendMessageInput!
+  ): SendMessagePayload
+
+  """
+  Replace a team's business hours (platform calendar).
+  """
+  setTeamWorkingHours(
+    """
+    Parameters for SetTeamWorkingHours
+    """
+    input: SetTeamWorkingHoursInput!
+  ): SetTeamWorkingHoursPayload
+
+  """
+  Set a conversation's priority (low|medium|high|urgent, or null to clear).
+  """
+  toggleConversationPriority(
+    """
+    Parameters for ToggleConversationPriority
+    """
+    input: ToggleConversationPriorityInput!
+  ): ToggleConversationPriorityPayload
+
+  """
+  Toggle a conversation's status.
+  """
+  toggleConversationStatus(
+    """
+    Parameters for ToggleConversationStatus
+    """
+    input: ToggleConversationStatusInput!
+  ): ToggleConversationStatusPayload
+
+  """
+  Unlinks a contact from a Client.
+  """
+  unlinkContactFromClient(
+    """
+    Parameters for UnlinkContactFromClient
+    """
+    input: UnlinkContactFromClientInput!
+  ): UnlinkContactFromClientPayload
+
+  """
+  Update a contact's attributes.
+  """
+  updateContact(
+    """
+    Parameters for UpdateContact
+    """
+    input: UpdateContactInput!
+  ): UpdateContactPayload
+
+  """
+  Merge attributes into a contact (without touching other fields).
+  """
+  updateContactAttributes(
+    """
+    Parameters for UpdateContactAttributes
+    """
+    input: UpdateContactAttributesInput!
+  ): UpdateContactAttributesPayload
+
+  """
+  Replace a contact's labels.
+  """
+  updateContactLabels(
+    """
+    Parameters for UpdateContactLabels
+    """
+    input: UpdateContactLabelsInput!
+  ): UpdateContactLabelsPayload
+
+  """
+  Replace a conversation's labels.
+  """
+  updateConversationLabels(
+    """
+    Parameters for UpdateConversationLabels
+    """
+    input: UpdateConversationLabelsInput!
+  ): UpdateConversationLabelsPayload
+
+  """
+  Update a note's content.
+  """
+  updateNote(
+    """
+    Parameters for UpdateNote
+    """
+    input: UpdateNoteInput!
+  ): UpdateNotePayload
+}
+
+"""
+An object with an ID.
+"""
+interface Node {
+  """
+  ID of the object.
+  """
+  id: ID!
+}
+
+"""
+A note: free-text annotation an agent attaches to a contact for internal
+reference (not visible to the contact).
+"""
+type Note implements Node @key(fields: "id") @federation__key(fields: "id") {
+  """
+  The note text.
+  """
+  content: String!
+
+  """
+  When the note was created.
+  """
+  createdAt: ISO8601DateTime
+
+  """
+  Internal id of the note.
+  """
+  id: ID!
+
+  """
+  When the note was last updated.
+  """
+  updatedAt: ISO8601DateTime
+
+  """
+  The user (agent) who authored the note.
+  """
+  user: Agent @belongsTo(relation: "user")
+}
+
+"""
+The connection type for Note.
+"""
+type NoteConnection {
+  """
+  A list of edges.
+  """
+  edges: [NoteEdge]
+
+  """
+  A list of nodes.
+  """
+  nodes: [Note]
+
+  """
+  Information to aid in pagination.
+  """
+  pageInfo: PageInfo!
+}
+
+"""
+An edge in a connection.
+"""
+type NoteEdge {
+  """
+  A cursor for use in pagination.
+  """
+  cursor: String!
+
+  """
+  The item at the end of the edge.
+  """
+  node: Note
+}
+
+"""
+Information about pagination in a connection.
+"""
+type PageInfo @shareable @federation__shareable {
+  """
+  When paginating forwards, the cursor to continue.
+  """
+  endCursor: String
+
+  """
+  When paginating forwards, are there more items?
+  """
+  hasNextPage: Boolean!
+
+  """
+  When paginating backwards, are there more items?
+  """
+  hasPreviousPage: Boolean!
+
+  """
+  When paginating backwards, the cursor to continue.
+  """
+  startCursor: String
+}
+
+"""
+Information about pagination in a paginator.
+"""
+type PaginatorInfo {
+  count: Int!
+  currentPage: Int!
+  firstItem: Int
+  hasMorePages: Boolean!
+  lastItem: Int
+  lastPage: Int!
+  perPage: Int!
+  total: Int!
+}
+
+type Query {
+  """
+  Accounts the authenticated user is a member of.
+  """
+  accounts(
+    """
+    Forward-paging cursor: return items after this cursor.
+    """
+    after: String
+
+    """
+    Backward-paging cursor: return items before this cursor.
+    """
+    before: String
+
+    """
+    Forward page size (take the first N).
+    """
+    first: Int
+
+    """
+    Backward page size (take the last N).
+    """
+    last: Int
+  ): AccountPaginator! @paginate @builder(class: "Resolvers::AccountsBuilder")
+
+  """
+  A single contact by internal id, scoped to the current account. Returns null /
+  unauthorized if the caller cannot access it.
+  """
+  contact(
+    """
+    Internal id of the contact (the `Contact.id`).
+    """
+    id: ID!
+  ): Contact @accountFind(in: "contacts") @can(ability: "show")
+
+  """
+  Paginated contacts in the current account (resolved contacts: those with an
+  email, phone or identifier). Optional label / unassigned filters.
+  """
+  contacts(
+    """
+    Forward-paging cursor: return items after this cursor.
+    """
+    after: String
+
+    """
+    Backward-paging cursor: return items before this cursor.
+    """
+    before: String
+
+    """
+    Forward page size (take the first N).
+    """
+    first: Int
+
+    """
+    Return only contacts tagged with all of these label titles.
+    """
+    labels: [String!]
+
+    """
+    Backward page size (take the last N).
+    """
+    last: Int
+
+    """
+    When true, return only contacts with no assigned agent.
+    """
+    unassigned: Boolean
+
+    """
+    Structured filter on id, name, email or identifier (e.g. partial-name search).
+    """
+    where: QueryContactsWhereWhereConditions @whereConditions(columns: ["id", "name", "email", "identifier"])
+  ): ContactPaginator! @paginate @builder(class: "Resolvers::ContactsBuilder")
+
+  """
+  A single conversation by its per-account display number (the `#123` badge),
+  scoped to the current account. Returns null / unauthorized if the caller cannot
+  access it.
+  """
+  conversation(
+    """
+    The conversation's per-account display number (the `#123` badge).
+    """
+    displayId: Int!
+  ): Conversation @accountFind(in: "conversations", by: "display_id", arg: "displayId") @can(ability: "show")
+
+  """
+  Paginated conversations in the current account, filtered by the agent's inbox
+  visibility (admins see all). All filter arguments are optional and combine with
+  AND.
+  """
+  conversations(
+    """
+    Forward-paging cursor: return items after this cursor.
+    """
+    after: String
+
+    """
+    Filter to conversations assigned to the agent with this id.
+    """
+    assigneeId: ID @eq(key: "assignee_id")
+
+    """
+    Backward-paging cursor: return items before this cursor.
+    """
+    before: String
+
+    """
+    Filter to the conversation with this per-account display number (the `#123` badge).
+    """
+    displayId: Int @eq(key: "display_id")
+
+    """
+    Forward page size (take the first N).
+    """
+    first: Int
+
+    """
+    Filter to the conversation with this internal id (the `Conversation.id`).
+    """
+    id: ID @eq
+
+    """
+    Filter to conversations in the inbox with this id.
+    """
+    inboxId: ID @eq(key: "inbox_id")
+
+    """
+    Backward page size (take the last N).
+    """
+    last: Int
+
+    """
+    Filter by priority name: low, medium, high or urgent.
+    """
+    priority: String @eq
+
+    """
+    Filter by status name: open, resolved, pending or snoozed.
+    """
+    status: String @eq
+
+    """
+    Filter to conversations in ANY of these statuses. Use it instead of
+    `status` to mean "not resolved": an inbox with an active bot starts its
+    conversations as `pending` (see `Conversation#determine_conversation_status`),
+    so `status: "open"` alone silently drops every conversation a bot inbox
+    has just received.
+    """
+    statuses: [String!] @in(key: "status")
+  ): ConversationPaginator! @paginate @builder(class: "Resolvers::AccountConversationsBuilder")
+
+  """
+  The account the current request is scoped to (derived from the authenticated
+  user's active account).
+  """
+  currentAccount: Account @currentAccount
+
+  """
+  The authenticated agent.
+  """
+  currentAgent: Agent @currentUser
+
+  """
+  A single inbox by internal id, if the caller can access it.
+  """
+  inbox(
+    """
+    Internal id of the inbox (the `Inbox.id`).
+    """
+    id: ID!
+  ): Inbox @accountFind(in: "inboxes") @can(ability: "show")
+
+  """
+  Inboxes the user can access (admins: all account inboxes; agents: assigned only).
+  """
+  inboxes(
+    """
+    Forward-paging cursor: return items after this cursor.
+    """
+    after: String
+
+    """
+    Backward-paging cursor: return items before this cursor.
+    """
+    before: String
+
+    """
+    Forward page size (take the first N).
+    """
+    first: Int
+
+    """
+    Backward page size (take the last N).
+    """
+    last: Int
+  ): InboxPaginator! @paginate @builder(class: "Resolvers::AccountInboxesBuilder")
+
+  """
+  Labels defined in the current account.
+  """
+  labels: [Label!]! @accountScope(of: "labels")
+
+  """
+  Health-check field used by the schema/integration tests. Not for production use.
+  """
+  testField: String @field(resolver: "TestFieldResolver")
+
+  """
+  Total number of conversations in the current account.
+  """
+  totalConversationCount: Int! @aggregate(model: "Conversation", column: "id", function: COUNT)
+}
+
+enum QueryContactsWhereColumn {
+  EMAIL
+  ID
+  IDENTIFIER
+  NAME
+}
+
+input QueryContactsWhereWhereConditions {
+  AND: [QueryContactsWhereWhereConditions!]
+  HAS: QueryContactsWhereWhereConditionsRelation
+  OR: [QueryContactsWhereWhereConditions!]
+  column: QueryContactsWhereColumn
+  operator: SQLOperator = EQ
+  value: Mixed
+}
+
+input QueryContactsWhereWhereConditionsRelation {
+  amount: Int = 1
+  condition: QueryContactsWhereWhereConditions
+  operator: SQLOperator = GTE
+  relation: String!
+}
+
+enum SQLOperator {
+  CONTAINS
+  ENDS_WITH
+  EQ
+  GT
+  GTE
+  IN
+  IS_NOT_NULL
+  IS_NULL
+  LT
+  LTE
+  NEQ
+  NIN
+  STARTS_WITH
+}
+
+"""
+Autogenerated input type of SendMessage
+"""
+input SendMessageInput {
+  """
+  A unique identifier for the client performing the mutation.
+  """
+  clientMutationId: String
+
+  """
+  The message text.
+  """
+  content: String!
+
+  """
+  Optional content type, e.g. text, input_select, cards, form.
+  """
+  contentType: String
+
+  """
+  Conversation display id (the per-account #123 number).
+  """
+  conversationId: Int!
+
+  """
+  incoming | outgoing (default: outgoing).
+  """
+  messageType: String
+
+  """
+  When true, create a private internal note instead of a customer-visible reply.
+  """
+  private: Boolean = false
+}
+
+"""
+Autogenerated return type of SendMessage.
+"""
+type SendMessagePayload {
+  """
+  A unique identifier for the client performing the mutation.
+  """
+  clientMutationId: String
+  message: Message
+}
+
+"""
+Autogenerated input type of SetTeamWorkingHours
+"""
+input SetTeamWorkingHoursInput {
+  """
+  A unique identifier for the client performing the mutation.
+  """
+  clientMutationId: String
+
+  """
+  Full set of weekday working hours; replaces the existing ones.
+  """
+  days: [WorkingHourInput!]!
+
+  """
+  Team id — native Chatwoot id or the federated platformTeamId.
+  """
+  teamId: ID!
+}
+
+"""
+Autogenerated return type of SetTeamWorkingHours.
+"""
+type SetTeamWorkingHoursPayload {
+  """
+  A unique identifier for the client performing the mutation.
+  """
+  clientMutationId: String
+  team: SupportTeam!
+}
+
+"""
+A team of an account, grouping agents for assignment and routing: the Chatwoot side
+of a platform team, which the platform's triggers keep in step with it
+(`chatwoot.teams.platform_team_id`), or a team created in Chatwoot alone. Its `id`
+is Chatwoot's; the platform team it is, when it is one, is `team`.
+"""
+type SupportTeam implements Node {
+  """
+  Optional team description.
+  """
+  description: String
+
+  """
+  Internal id of the team (Chatwoot).
+  """
+  id: ID!
+
+  """
+  Team name, in lower case as Chatwoot keeps it.
+  """
+  name: String!
+
+  """
+  The platform team this is; null for a team created in Chatwoot alone.
+  """
+  team: Team @field(resolver: "Resolvers::SupportTeamTeam")
+
+  """
+  The team's business hours, one entry per configured weekday; empty until set
+  with `setTeamWorkingHours`.
+  """
+  workingHours(
+    """
+    Returns the elements in the list that come after the specified cursor.
+    """
+    after: String
+
+    """
+    Returns the elements in the list that come before the specified cursor.
+    """
+    before: String
+
+    """
+    Returns the first _n_ elements from the list.
+    """
+    first: Int
+
+    """
+    Returns the last _n_ elements from the list.
+    """
+    last: Int
+  ): WorkingHourConnection! @hasMany(relation: "working_hours")
+}
+
+type Team @key(fields: "id") @federation__key(fields: "id") {
+  """
+  The platform team id.
+  """
+  id: ID! @rename(attribute: "platform_team_id")
+
+  """
+  The Chatwoot team this platform team is.
+  """
+  supportTeam: SupportTeam @method(name: "itself")
+
+  """
+  The team's business hours, one entry per configured weekday; empty until set
+  with `setTeamWorkingHours`.
+  """
+  workingHours(
+    """
+    Returns the elements in the list that come after the specified cursor.
+    """
+    after: String
+
+    """
+    Returns the elements in the list that come before the specified cursor.
+    """
+    before: String
+
+    """
+    Returns the first _n_ elements from the list.
+    """
+    first: Int
+
+    """
+    Returns the last _n_ elements from the list.
+    """
+    last: Int
+  ): WorkingHourConnection @hasMany(relation: "working_hours")
+}
+
+"""
+Autogenerated input type of ToggleConversationPriority
+"""
+input ToggleConversationPriorityInput {
+  """
+  A unique identifier for the client performing the mutation.
+  """
+  clientMutationId: String
+
+  """
+  Conversation display id (the per-account #123 number).
+  """
+  conversationId: Int!
+
+  """
+  New priority: low, medium, high or urgent. Omit or pass null to clear priority.
+  """
+  priority: String
+}
+
+"""
+Autogenerated return type of ToggleConversationPriority.
+"""
+type ToggleConversationPriorityPayload {
+  """
+  A unique identifier for the client performing the mutation.
+  """
+  clientMutationId: String
+  conversation: Conversation
+}
+
+"""
+Autogenerated input type of ToggleConversationStatus
+"""
+input ToggleConversationStatusInput {
+  """
+  A unique identifier for the client performing the mutation.
+  """
+  clientMutationId: String
+
+  """
+  Conversation display id (the per-account #123 number).
+  """
+  conversationId: Int!
+}
+
+"""
+Autogenerated return type of ToggleConversationStatus.
+"""
+type ToggleConversationStatusPayload {
+  """
+  A unique identifier for the client performing the mutation.
+  """
+  clientMutationId: String
+  conversation: Conversation
+}
+
+"""
+Autogenerated input type of UnlinkContactFromClient
+"""
+input UnlinkContactFromClientInput {
+  """
+  Internal id of the Client to unlink the contact from.
+  """
+  clientId: ID!
+
+  """
+  A unique identifier for the client performing the mutation.
+  """
+  clientMutationId: String
+
+  """
+  Internal id of the contact to unlink.
+  """
+  contactId: ID!
+}
+
+"""
+Autogenerated return type of UnlinkContactFromClient.
+"""
+type UnlinkContactFromClientPayload {
+  """
+  A unique identifier for the client performing the mutation.
+  """
+  clientMutationId: String
+  contact: Contact
+}
+
+"""
+Autogenerated input type of UpdateContactAttributes
+"""
+input UpdateContactAttributesInput {
+  """
+  Additional attributes to merge into the existing set (JSON object).
+  """
+  additionalAttributes: JSON
+
+  """
+  A unique identifier for the client performing the mutation.
+  """
+  clientMutationId: String
+
+  """
+  Custom attributes to merge into the existing set (JSON object).
+  """
+  customAttributes: JSON
+
+  """
+  Internal id of the contact to update.
+  """
+  id: ID!
+}
+
+"""
+Autogenerated return type of UpdateContactAttributes.
+"""
+type UpdateContactAttributesPayload {
+  """
+  A unique identifier for the client performing the mutation.
+  """
+  clientMutationId: String
+  contact: Contact
+}
+
+"""
+Autogenerated input type of UpdateContact
+"""
+input UpdateContactInput {
+  """
+  Additional attributes to merge into the existing set (JSON object).
+  """
+  additionalAttributes: JSON
+
+  """
+  Whether the contact is blocked.
+  """
+  blocked: Boolean
+
+  """
+  A unique identifier for the client performing the mutation.
+  """
+  clientMutationId: String
+
+  """
+  Custom attributes to merge into the existing set (JSON object).
+  """
+  customAttributes: JSON
+
+  """
+  Primary email address.
+  """
+  email: String
+
+  """
+  Internal id of the contact to update.
+  """
+  id: ID!
+
+  """
+  External unique identifier set by the integrating system.
+  """
+  identifier: String
+
+  """
+  Contact's display name.
+  """
+  name: String
+
+  """
+  Primary phone number in E.164 form.
+  """
+  phoneNumber: String
+}
+
+"""
+Autogenerated input type of UpdateContactLabels
+"""
+input UpdateContactLabelsInput {
+  """
+  A unique identifier for the client performing the mutation.
+  """
+  clientMutationId: String
+
+  """
+  Internal id of the contact.
+  """
+  contactId: ID!
+
+  """
+  Full set of label titles to apply (replaces existing labels).
+  """
+  labels: [String!]!
+}
+
+"""
+Autogenerated return type of UpdateContactLabels.
+"""
+type UpdateContactLabelsPayload {
+  """
+  A unique identifier for the client performing the mutation.
+  """
+  clientMutationId: String
+  contact: Contact
+}
+
+"""
+Autogenerated return type of UpdateContact.
+"""
+type UpdateContactPayload {
+  """
+  A unique identifier for the client performing the mutation.
+  """
+  clientMutationId: String
+  contact: Contact
+}
+
+"""
+Autogenerated input type of UpdateConversationLabels
+"""
+input UpdateConversationLabelsInput {
+  """
+  A unique identifier for the client performing the mutation.
+  """
+  clientMutationId: String
+
+  """
+  Conversation display id (the per-account #123 number).
+  """
+  conversationId: Int!
+
+  """
+  Full set of label titles to apply (replaces existing labels).
+  """
+  labels: [String!]!
+}
+
+"""
+Autogenerated return type of UpdateConversationLabels.
+"""
+type UpdateConversationLabelsPayload {
+  """
+  A unique identifier for the client performing the mutation.
+  """
+  clientMutationId: String
+  conversation: Conversation
+}
+
+"""
+Autogenerated input type of UpdateNote
+"""
+input UpdateNoteInput {
+  """
+  A unique identifier for the client performing the mutation.
+  """
+  clientMutationId: String
+
+  """
+  New note text.
+  """
+  content: String!
+
+  """
+  Internal id of the note to update.
+  """
+  id: ID!
+}
+
+"""
+Autogenerated return type of UpdateNote.
+"""
+type UpdateNotePayload {
+  """
+  A unique identifier for the client performing the mutation.
+  """
+  clientMutationId: String
+  note: Note
+}
+
+"""
+A team's business hours for a single weekday, contributed by Chatwoot to the
+platform's `Team`.
+
+(Chatwoot also stores inbox-scoped working hours for the same model; those are
+internal — only the team ones are exposed here. Fields map to the snake_case
+`working_hours` columns: `dayOfWeek` → `day_of_week`, etc.)
+"""
+type WorkingHour {
+  closeHour: Int
+  closeMinutes: Int
+  closedAllDay: Boolean!
+
+  """
+  Day of week: 0 = Sunday … 6 = Saturday.
+  """
+  dayOfWeek: Int!
+  id: ID!
+  openAllDay: Boolean!
+  openHour: Int
+  openMinutes: Int
+}
+
+"""
+The connection type for WorkingHour.
+"""
+type WorkingHourConnection {
+  """
+  A list of edges.
+  """
+  edges: [WorkingHourEdge]
+
+  """
+  A list of nodes.
+  """
+  nodes: [WorkingHour]
+
+  """
+  Information to aid in pagination.
+  """
+  pageInfo: PageInfo!
+}
+
+"""
+An edge in a connection.
+"""
+type WorkingHourEdge {
+  """
+  A cursor for use in pagination.
+  """
+  cursor: String!
+
+  """
+  The item at the end of the edge.
+  """
+  node: WorkingHour
+}
+
+input WorkingHourInput {
+  closeHour: Int
+  closeMinutes: Int
+  closedAllDay: Boolean
+
+  """
+  0 = Sunday … 6 = Saturday.
+  """
+  dayOfWeek: Int!
+  openAllDay: Boolean
+  openHour: Int
+  openMinutes: Int
+}

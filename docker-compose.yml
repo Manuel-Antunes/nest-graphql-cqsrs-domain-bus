@@ -30,8 +30,10 @@ services:
       timeout: 5s
       retries: 20
 
+  # pgvector and not plain postgres: apps/chatwoot keeps its tables in the `chatwoot` schema of this
+  # same database, and its schema needs the `vector` extension.
   postgres:
-    image: postgres:18-alpine
+    image: pgvector/pgvector:pg18
     container_name: nestposts-postgres
     ports:
       # POSTGRES_PORT existe porque 5432 costuma já estar ocupado por outro projeto na máquina. Quem

@@ -119,7 +119,14 @@ three things that make an organization one:
 - **The schema is created with the row.** `Organization` carries a MikroORM `trigger` that creates
   `tenant_<slug>` on insert and drops it `cascade` on delete, emitted into a system migration like any
   other DDL. It quotes with `%I`: a slug may contain a dash, and `tenant_acme-corp` is not a valid
-  unquoted identifier.
+  unquoted identifier. The triggers live in `infrastructure/persistence/triggers/`, beside the
+  entities that declare them.
+- **Chatwoot mirrors the organization, its members and its teams.** `organization`, `member`, `team`
+  and `team_member` each carry a `chatwoot_sync` trigger (`chatwoot-sync.triggers.ts`) that keeps
+  `apps/chatwoot`'s account, seats and teams in step, one way; `libs/users` does the same for
+  `users`. They do nothing while the `chatwoot` schema is absent, and nothing for a table outside
+  `public`. An organization deleted here is a Chatwoot account suspended, not removed: Chatwoot keeps
+  its conversations. The mapping and the reasons are in the root README's Chatwoot section.
 - **The schema is migrated when the organization is created.** The plugin's
   `organizationHooks.afterCreateOrganization` calls `TenantEntityManagerService.provision(slug)` — an
   optional dependency, `{ token, optional: true }`, which `BetterAuthPlugins.build` resolves to nothing

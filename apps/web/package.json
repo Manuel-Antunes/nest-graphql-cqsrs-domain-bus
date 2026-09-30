@@ -95,6 +95,7 @@
         "inputs": [
           "{workspaceRoot}/apps/posts-api/src/graphql/**/*.graphql",
           "{workspaceRoot}/apps/notificator/src/graphql/**/*.graphql",
+          "{workspaceRoot}/apps/chatwoot/schema.graphql",
           "{projectRoot}/federation.graphql",
           "{projectRoot}/codegen.ts",
           "{projectRoot}/src/**/*.{ts,tsx}"

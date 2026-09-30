@@ -5,6 +5,7 @@ import type { Endpoints } from '../environment/run-environment';
 import { RunEnvironment } from '../environment/run-environment';
 import { Storage } from '../infrastructure/storage/storage';
 import { BillingStack } from './billing-stack';
+import { ChatwootStack } from './chatwoot-stack';
 import { ContainerStack } from './container-stack';
 import { FreePort } from './free-port';
 import { HttpHealth, Launch, Service } from './service';
@@ -19,7 +20,8 @@ import { HttpHealth, Launch, Service } from './service';
  *
  * `apps/web` is the exception, and deliberately: it is the thing under the browser, it is served by
  * `next start` the way `nx` serves it everywhere else, and keeping it a process is what keeps a
- * failure one `tail` away instead of one `docker build` away.
+ * failure one `tail` away instead of one `docker build` away. Chatwoot is the other exception, for the
+ * same reason (`ChatwootStack`): its dashboard is embedded in the web's Support tab.
  *
  * The web PUBLISHES on the run's transport as well — the emails its Better Auth asks for are
  * notifications, and they reach the notificator's container the way every other event does — so it
@@ -37,6 +39,7 @@ import { HttpHealth, Launch, Service } from './service';
  */
 export class Stack {
   private readonly containers = new ContainerStack();
+  private readonly chatwoot = new ChatwootStack();
   private web?: Service;
   private billing?: BillingStack;
 
@@ -53,6 +56,7 @@ export class Stack {
       apiPort: await FreePort.pick(),
       gatewayPort: await FreePort.pick(),
       storagePort: await FreePort.pick(),
+      chatwootPort: await FreePort.pick(),
       webUrl: environment.webUrl,
       authSecret: environment.authSecret,
       logLevel: environment.logLevel,
@@ -62,6 +66,12 @@ export class Stack {
     environment.publish(endpoints);
 
     try {
+      await this.chatwoot.up({
+        endpoints,
+        webUrl: environment.webUrl,
+        authSecret: environment.authSecret,
+        logDirectory: environment.logDirectory,
+      });
       this.billing =
         (await BillingStack.up(environment.webPort, logs)) ?? undefined;
       this.billing?.publish();
@@ -76,6 +86,7 @@ export class Stack {
   async down(): Promise<void> {
     this.web?.stop();
     this.web = undefined;
+    this.chatwoot.down();
     await this.billing?.down();
     this.billing = undefined;
     await this.containers.down();
@@ -96,6 +107,7 @@ export class Stack {
         NEXT_PUBLIC_API_URL: endpoints.apiUrl,
         NEXT_PUBLIC_GATEWAY_URL: endpoints.gatewayUrl,
         POSTS_SUBGRAPH_URL: `${endpoints.apiUrl}/graphql`,
+        CHATWOOT_URL: endpoints.chatwootUrl,
         GATEWAY_URL: endpoints.gatewayUrl,
         PORT: String(environment.webPort),
         MIKRO_ORM_DEBUG: 'false',

@@ -1,0 +1,168 @@
+<script setup>
+import { ref, computed } from 'vue';
+import { useI18n } from 'vue-i18n';
+import { useMapGetter } from 'dashboard/composables/store';
+import { useUISettings } from 'dashboard/composables/useUISettings';
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from 'dashboard/components-next/ui/input-group';
+
+import ContactCustomAttributeItem from 'dashboard/components-next/Contacts/ContactsSidebar/ContactCustomAttributeItem.vue';
+import Icon from 'next/icon/Icon.vue';
+import Separator from 'next/ui/separator/Separator.vue';
+
+const props = defineProps({
+  selectedContact: {
+    type: Object,
+    default: null,
+  },
+});
+
+const { t } = useI18n();
+
+const { uiSettings } = useUISettings();
+
+const searchQuery = ref('');
+
+const contactAttributes = useMapGetter('attributes/getContactAttributes') || [];
+
+const hasContactAttributes = computed(
+  () => contactAttributes.value?.length > 0
+);
+
+const processContactAttributes = (
+  attributes,
+  customAttributes,
+  filterCondition
+) => {
+  if (!attributes.length || !customAttributes) {
+    return [];
+  }
+
+  return attributes.reduce((result, attribute) => {
+    const { attributeKey } = attribute;
+    const meetsCondition = filterCondition(attributeKey, customAttributes);
+
+    if (meetsCondition) {
+      result.push({
+        ...attribute,
+        value: customAttributes[attributeKey] ?? '',
+      });
+    }
+
+    return result;
+  }, []);
+};
+
+const sortAttributesOrder = computed(
+  () =>
+    uiSettings.value.conversation_elements_order_conversation_contact_panel ??
+    []
+);
+
+const sortByUISettings = attributes => {
+  // Get saved order from UI settings
+  // Same as conversation panel contact attribute order
+  const order = sortAttributesOrder.value;
+
+  // If no order defined, return original array
+  if (!order?.length) return attributes;
+
+  const orderMap = new Map(order.map((key, index) => [key, index]));
+
+  // Sort attributes based on their position in saved order
+  return [...attributes].sort((a, b) => {
+    // Get positions, use Infinity if not found in order (pushes to end)
+    const aPos = orderMap.get(a.attributeKey) ?? Infinity;
+    const bPos = orderMap.get(b.attributeKey) ?? Infinity;
+    return aPos - bPos;
+  });
+};
+
+const usedAttributes = computed(() => {
+  const attributes = processContactAttributes(
+    contactAttributes.value,
+    props.selectedContact?.customAttributes,
+    (key, custom) => key in custom
+  );
+
+  return sortByUISettings(attributes);
+});
+
+const unusedAttributes = computed(() => {
+  const attributes = processContactAttributes(
+    contactAttributes.value,
+    props.selectedContact?.customAttributes,
+    (key, custom) => !(key in custom)
+  );
+
+  return sortByUISettings(attributes);
+});
+
+const filteredUnusedAttributes = computed(() => {
+  return unusedAttributes.value?.filter(attribute =>
+    attribute.attributeDisplayName
+      .toLowerCase()
+      .includes(searchQuery.value.toLowerCase())
+  );
+});
+
+const unusedAttributesCount = computed(() => unusedAttributes.value?.length);
+const hasNoUnusedAttributes = computed(() => unusedAttributesCount.value === 0);
+const hasNoUsedAttributes = computed(() => usedAttributes.value.length === 0);
+</script>
+
+<template>
+  <div v-if="hasContactAttributes" class="flex flex-col gap-6 px-6 py-6">
+    <div v-if="!hasNoUsedAttributes" class="flex flex-col gap-2">
+      <ContactCustomAttributeItem
+        v-for="attribute in usedAttributes"
+        :key="attribute.id"
+        is-editing-view
+        :attribute="attribute"
+      />
+    </div>
+    <div v-if="!hasNoUnusedAttributes" class="flex items-center gap-3">
+      <Separator class="bg-border flex-1" />
+      <span class="text-sm text-muted-foreground">{{
+        t('CONTACTS_LAYOUT.SIDEBAR.ATTRIBUTES.UNUSED_ATTRIBUTES', {
+          count: unusedAttributesCount,
+        })
+      }}</span>
+      <Separator class="bg-border flex-1" />
+    </div>
+    <div class="flex flex-col gap-6">
+      <InputGroup v-if="!hasNoUnusedAttributes">
+        <InputGroupAddon>
+          <Icon icon="i-lucide-search" class="size-4 text-muted-foreground" />
+        </InputGroupAddon>
+        <InputGroupInput
+          v-model="searchQuery"
+          :placeholder="
+            t('CONTACTS_LAYOUT.SIDEBAR.ATTRIBUTES.SEARCH_PLACEHOLDER')
+          "
+        />
+      </InputGroup>
+      <div
+        v-if="filteredUnusedAttributes.length === 0 && !hasNoUnusedAttributes"
+        class="flex items-center justify-start h-11"
+      >
+        <p class="text-sm text-n-slate-11">
+          {{ t('CONTACTS_LAYOUT.SIDEBAR.ATTRIBUTES.NO_ATTRIBUTES') }}
+        </p>
+      </div>
+      <div v-if="!hasNoUnusedAttributes" class="flex flex-col gap-2">
+        <ContactCustomAttributeItem
+          v-for="attribute in filteredUnusedAttributes"
+          :key="attribute.id"
+          :attribute="attribute"
+        />
+      </div>
+    </div>
+  </div>
+  <p v-else class="px-6 py-10 text-sm leading-6 text-center text-n-slate-11">
+    {{ t('CONTACTS_LAYOUT.SIDEBAR.ATTRIBUTES.EMPTY_STATE') }}
+  </p>
+</template>

@@ -4,6 +4,7 @@ import { AssetExceptionFilter } from '@nestposts/asset/filters/asset-exception.f
 import { AuthExceptionFilter } from '@nestposts/auth/filters/auth-exception.filter';
 import { HttpExceptionFilter } from '@nestposts/auth/filters/http-exception.filter';
 import { IdentityUserPipe } from '@nestposts/auth/pipes/identity-user.pipe';
+import { ClientExceptionFilter } from '@nestposts/clients/filters/client-exception.filter';
 import { CalendarEventExceptionFilter } from '@nestposts/events/filters/calendar-event-exception.filter';
 import { SeesEveryEventPipe } from '@nestposts/events/pipes/sees-every-event.pipe';
 import { GraphQLResponseCacheModule } from '@nestposts/graphql-response-cache';
@@ -25,6 +26,9 @@ import { AuthorEntityResolver } from './graphql/author-entity.resolver';
 import { AuthorPostsResolver } from './graphql/author-posts.resolver';
 import { CalendarEventMutationResolver } from './graphql/calendar-event-mutation.resolver';
 import { CalendarEventQueryResolver } from './graphql/calendar-event-query.resolver';
+import { ClientEntityResolver } from './graphql/client-entity.resolver';
+import { ClientMutationResolver } from './graphql/client-mutation.resolver';
+import { ClientQueryResolver } from './graphql/client-query.resolver';
 import { OrganizationQueryResolver } from './graphql/organization-query.resolver';
 import { PostAuthorResolver } from './graphql/post-author.resolver';
 import { PostEntityResolver } from './graphql/post-entity.resolver';
@@ -34,10 +38,12 @@ import { PostSubscriptionResolver } from './graphql/post-subscription.resolver';
 import { PostTagsResolver } from './graphql/post-tags.resolver';
 import { ResponseCacheInvalidation } from './graphql/response-cache-invalidation.handler';
 import { TagEntityResolver } from './graphql/tag-entity.resolver';
+import { TeamEntityResolver } from './graphql/team-entity.resolver';
 import { UserEntityResolver } from './graphql/user-entity.resolver';
 import { UserQueryResolver } from './graphql/user-query.resolver';
 import { UserViewInterceptor } from './interceptors/user-view.interceptor';
 import { CalendarEventProfile } from './mapper/calendar-event.profile';
+import { ClientProfile } from './mapper/client.profile';
 import { PostProfile } from './mapper/post.profile';
 import { TeamProfile } from './mapper/team.profile';
 import { UserProfile } from './mapper/user.profile';
@@ -58,15 +64,20 @@ import { PostCompletionController } from './messaging/post-completion.controller
     AuthorPostsResolver,
     PostEntityResolver,
     TagEntityResolver,
+    TeamEntityResolver,
     UserEntityResolver,
     AuthorEntityResolver,
     CalendarEventQueryResolver,
     CalendarEventMutationResolver,
     OrganizationQueryResolver,
+    ClientQueryResolver,
+    ClientMutationResolver,
+    ClientEntityResolver,
     PostProfile,
     UserProfile,
     TeamProfile,
     CalendarEventProfile,
+    ClientProfile,
     UserViewInterceptor,
     IdentityUserPipe,
     SeesEveryEventPipe,
@@ -81,6 +92,7 @@ import { PostCompletionController } from './messaging/post-completion.controller
     { provide: APP_FILTER, useClass: OrganizationsExceptionFilter },
     { provide: APP_FILTER, useClass: PostsExceptionFilter },
     { provide: APP_FILTER, useClass: CalendarEventExceptionFilter },
+    { provide: APP_FILTER, useClass: ClientExceptionFilter },
     { provide: APP_FILTER, useClass: SoftDeleteExceptionFilter },
     { provide: APP_FILTER, useClass: AssetExceptionFilter },
     { provide: APP_FILTER, useClass: ValidationExceptionFilter },

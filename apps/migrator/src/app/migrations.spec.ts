@@ -70,6 +70,7 @@ describe('migrating the system, then every tenant', () => {
         'devices',
         'calendar_events',
         'calendar_events_participants',
+        'clients',
         'mikro_orm_migrations',
       ]),
     );
@@ -99,6 +100,7 @@ describe('migrating the system, then every tenant', () => {
       { name: 'Migration20260925012004_calendar_events' },
       { name: 'Migration20260926174755_calendar_event_sequence' },
       { name: 'Migration20260928130001_users' },
+      { name: 'Migration20260929225922_clients' },
     ]);
   });
 
@@ -110,7 +112,7 @@ describe('migrating the system, then every tenant', () => {
         context.orm,
         'select count(*)::int as applied from tenant_root.mikro_orm_migrations',
       ),
-    ).toEqual([{ applied: 5 }]);
+    ).toEqual([{ applied: 6 }]);
   });
 
   it('forgets what the inbox processed longer ago than its retention, and remembers the rest', async () => {

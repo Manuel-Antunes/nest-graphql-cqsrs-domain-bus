@@ -30,6 +30,28 @@
     "files.trimTrailingWhitespace": false
   },
   "vitest.configSearchPatternExclude": "{**/node_modules/**,**/vendor/**,**/.*/**,**/*.d.{ts,mts,cts},tmp/**,**/dist/**,**/out-tsc/**}",
+  "files.watcherExclude": {
+    "**/.git/objects/**": true,
+    "**/.git/subtree-cache/**": true,
+    "**/node_modules/**": true,
+    "**/.nx/**": true,
+    "**/.next/**": true,
+    "**/.sst/**": true,
+    "**/.venv/**": true,
+    "**/dist/**": true,
+    "**/out-tsc/**": true,
+    "**/build/**": true,
+    "**/tmp/**": true,
+    "**/.turbo/**": true,
+    "**/.cache/**": true,
+    "**/coverage/**": true,
+    "**/*.tsbuildinfo": true,
+    "**/apps/chatwoot/tmp/**": true,
+    "**/apps/chatwoot/log/**": true,
+    "**/apps/chatwoot/storage/**": true,
+    "**/apps/chatwoot/vendor/**": true,
+    "**/apps/chatwoot/public/packs/**": true
+  },
   "search.exclude": {
     "**/node_modules": true,
     "**/dist": true,
@@ -39,6 +61,58 @@
     "**/.nx": true,
     "**/.sst": true,
     "apps/web/src/gql": true,
-    "apps/web-e2e/src/gql": true
+    "apps/web-e2e/src/gql": true,
+    "**/.venv": true,
+    "**/out-tsc": true,
+    "**/build": true,
+    "**/tmp": true,
+    "**/.turbo": true,
+    "**/.cache": true,
+    "**/coverage": true,
+    "**/*.tsbuildinfo": true,
+    "**/pnpm-lock.yaml": true,
+    "**/package-lock.json": true,
+    "**/yarn.lock": true,
+    "**/apps/chatwoot/tmp": true,
+    "**/apps/chatwoot/log": true,
+    "**/apps/chatwoot/storage": true,
+    "**/apps/chatwoot/vendor": true,
+    "**/apps/chatwoot/public/packs": true,
+    "**/execution.log": true
+  },
+  "js/ts.tsserver.maxMemory": 8192,
+  "js/ts.tsserver.watchOptions": {
+    "watchFile": "useFsEvents",
+    "watchDirectory": "useFsEvents",
+    "fallbackPolling": "dynamicPriorityPolling"
+  },
+  "js/ts.tsserver.automaticTypeAcquisition.enabled": false,
+  "js/ts.tsc.autoDetect": "off",
+  "npm.autoDetect": "off",
+  "files.exclude": {
+    "**/.nx/cache": true,
+    "**/.nx/workspace-data": true,
+    "**/*.tsbuildinfo": true
+  },
+  "git.autoRepositoryDetection": "subFolders",
+  "files.associations": {
+    "*.css": "tailwindcss"
+  },
+  "tailwindCSS.classFunctions": [
+    "cva",
+    "cx",
+    "cn"
+  ],
+  "vitest.disableWorkspaceWarning": true,
+  "[python]": {
+    "editor.defaultFormatter": "ms-python.black-formatter"
+  },
+  "[feature]": {
+    "editor.defaultFormatter": "alexkrechik.cucumberautocomplete"
+  },
+  "material-icon-theme.folders.associations": {
+    "infrastructure": "app",
+    "neo4j": "graphql",
+    "graphdb": "graphql"
   }
 }

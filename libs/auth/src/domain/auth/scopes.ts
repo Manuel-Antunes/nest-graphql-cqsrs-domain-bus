@@ -10,6 +10,8 @@ export const OAUTH_SCOPES = [
   'offline_access',
   'read:posts',
   'write:posts',
+  'read:clients',
+  'write:clients',
 ] as const;
 
 export type OAuthScope = (typeof OAUTH_SCOPES)[number];

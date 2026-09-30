@@ -31,6 +31,14 @@ export class SignedInAuthApi {
     );
   }
 
+  async createTeam(name: string): Promise<string> {
+    const response = await this.post('/api/auth/organization/create-team', {
+      name,
+    });
+    await SignedInAuthApi.mustSucceed(response);
+    return ((await response.json()) as { id: string }).id;
+  }
+
   async registerOAuthClient(client: OAuthClientRegistration): Promise<string> {
     const response = await this.post('/api/auth/oauth2/create-client', {
       client_name: client.name,

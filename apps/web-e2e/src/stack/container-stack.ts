@@ -2,7 +2,12 @@
 import type { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { PostgreSqlContainer } from '@testcontainers/postgresql';
 import type { StartedNetwork, StartedTestContainer } from 'testcontainers';
-import { GenericContainer, Network, Wait } from 'testcontainers';
+import {
+  GenericContainer,
+  Network,
+  TestContainers,
+  Wait,
+} from 'testcontainers';
 
 import type {
   E2eTransport,
@@ -21,6 +26,8 @@ export interface ContainerStackOptions {
   /** Chosen up front: the gateway's URL is the audience every OAuth access token is issued for. */
   readonly gatewayPort: number;
   readonly storagePort: number;
+  /** Where Chatwoot, a process on the host, will listen — the gateway is told it before it starts. */
+  readonly chatwootPort: number;
   readonly webUrl: string;
   readonly authSecret: string;
   readonly logLevel: string;
@@ -28,7 +35,7 @@ export interface ContainerStackOptions {
 }
 
 /**
- * **Everything but the web, as containers on one network** — Postgres, Redis, MinIO, Mailpit, the
+ * **Everything but the web and Chatwoot, as containers on one network** — Postgres, Redis, MinIO, Mailpit, the
  * broker or the Inngest dev server, the migrator, and `posts-api`, `tagging`, `notificator` and the
  * `gateway`. Every one of them that holds Better Auth is given the same Redis, the web included: a
  * session is kept there in front of its row, and a process reading only the row would disagree with
@@ -44,11 +51,16 @@ export interface ContainerStackOptions {
  * suite reads the mapping back and publishes it as environment, which is how a Playwright worker —
  * a process that never saw any of this — finds the database it is about to make assertions about.
  *
+ * Postgres is pgvector's image because Chatwoot keeps its tables in the same database, in a `chatwoot`
+ * schema that needs the `vector` extension. Chatwoot itself is a process on the host
+ * (`ChatwootStack`); the gateway reaches it as `host.testcontainers.internal`, the host port
+ * Testcontainers exposes to the network before the gateway starts.
+ *
  * The clean slate is the container itself. There is no schema to drop and no queue to delete, which
  * is what the compose-based version spent its first seconds doing.
  */
 export class ContainerStack {
-  private static readonly POSTGRES_IMAGE = 'postgres:18-alpine';
+  private static readonly POSTGRES_IMAGE = 'pgvector/pgvector:pg18';
   private static readonly RABBITMQ_IMAGE = 'rabbitmq:4-management';
   private static readonly INNGEST_IMAGE = 'inngest/inngest:latest';
   private static readonly MAILPIT_IMAGE = 'axllent/mailpit:latest';
@@ -244,6 +256,7 @@ export class ContainerStack {
   private async startApplications(
     options: ContainerStackOptions,
   ): Promise<void> {
+    await TestContainers.exposeHostPorts(options.chatwootPort);
     const apiUrl = `http://localhost:${options.apiPort}`;
     const shared = {
       POSTGRES_URL: this.internalPostgresUrl,
@@ -336,6 +349,7 @@ export class ContainerStack {
         GATEWAY_URL: this.gatewayUrl(options),
         POSTS_SUBGRAPH_URL: 'http://posts-api:3000/graphql',
         NOTIFICATIONS_SUBGRAPH_URL: `http://notificator:${ContainerStack.NOTIFICATOR_PORT}/graphql`,
+        CHATWOOT_SUBGRAPH_URL: `http://host.testcontainers.internal:${options.chatwootPort}/graphql`,
         POSTGRES_URL: this.internalPostgresUrl,
         REDIS_URL: this.internalRedisUrl,
         AUTH_SECRET: options.authSecret,
@@ -391,6 +405,7 @@ export class ContainerStack {
       storageUrl: this.storageUrl(options),
       mailboxUrl: `http://${this.mailpit!.getHost()}:${this.mailpit!.getMappedPort(ContainerStack.MAILPIT_API_PORT)}`,
       redisUrl: `redis://${this.redis!.getHost()}:${this.redis!.getMappedPort(ContainerStack.REDIS_PORT)}`,
+      chatwootUrl: `http://localhost:${options.chatwootPort}`,
       ...(this.rabbitmq
         ? {
             managementUrl: `http://${this.rabbitmq.getHost()}:${this.rabbitmq.getMappedPort(15672)}`,

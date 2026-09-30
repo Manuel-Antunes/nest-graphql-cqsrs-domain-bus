@@ -21,6 +21,8 @@ export interface Endpoints {
   readonly brokerUrl?: string;
   /** The Inngest dev server, on the run that has one — its `/v1/events` is that run's wire. */
   readonly inngestUrl?: string;
+  /** Chatwoot, as the host and the browser reach it — a process, like the web. */
+  readonly chatwootUrl: string;
 }
 
 /**
@@ -104,6 +106,10 @@ export class RunEnvironment {
     return this.variables.INNGEST_BASE_URL ?? 'http://localhost:8288';
   }
 
+  get chatwootUrl(): string {
+    return this.variables.E2E_CHATWOOT_URL ?? 'http://localhost:3100';
+  }
+
   get logLevel(): string {
     return this.variables.E2E_LOG_LEVEL ?? 'info';
   }
@@ -125,6 +131,7 @@ export class RunEnvironment {
     this.variables.E2E_STORAGE_URL = endpoints.storageUrl;
     this.variables.E2E_MAILBOX_URL = endpoints.mailboxUrl;
     this.variables.E2E_REDIS_URL = endpoints.redisUrl;
+    this.variables.E2E_CHATWOOT_URL = endpoints.chatwootUrl;
     if (endpoints.managementUrl) {
       this.variables.RABBITMQ_MANAGEMENT = endpoints.managementUrl;
     }

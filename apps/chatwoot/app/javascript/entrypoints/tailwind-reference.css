@@ -1,0 +1,31 @@
+/*
+ * SLIM Tailwind v4 reference. This file is NEVER imported for output — it is the
+ * `@reference` target injected (via vite.config.mts `additionalData`) into Sass
+ * stylesheets so `@apply` (and the custom `field-*` utilities) resolve inside SFC
+ * <style lang="scss"> blocks, the scss roots, and their partials.
+ *
+ * v4-only: theme + variants come from the shared ./theme.css (same as the
+ * generation entry), so `@apply`'d colors/variants stay in sync. It deliberately
+ * OMITS the @egoist icons + @tailwindcss/typography plugins (the per-file OOM
+ * driver) and disables content scanning (`source(none)`) — a `@reference` never
+ * emits, and icons/typography are used only as template classes, emitted ONCE by
+ * the generation entry (tailwind.css).
+ *
+ * The `@utility` definitions are duplicated here (they also live in tailwind.css)
+ * because _base.scss does `@apply field-base`, which must resolve against THIS
+ * reference. Keep the two in sync.
+ */
+@import 'tailwindcss' source(none);
+@import './theme.css';
+
+@utility field-base {
+  @apply block box-border w-full transition-colors duration-300 ease-in-out focus:outline-n-brand dark:focus:outline-n-brand appearance-none mx-0 mt-0 mb-4 py-2 px-3 rounded-xl text-base font-normal bg-n-alpha-black2 placeholder:text-n-slate-10 dark:placeholder:text-n-slate-10 text-n-slate-12 border-none outline outline-1 outline-n-weak dark:outline-n-weak hover:outline-n-slate-6 dark:hover:outline-n-slate-6;
+}
+
+@utility field-disabled {
+  @apply opacity-50 outline-n-weak dark:outline-n-weak cursor-not-allowed;
+}
+
+@utility field-error {
+  @apply outline outline-1 outline-n-ruby-8 dark:outline-n-ruby-8 hover:outline-n-ruby-9 dark:hover:outline-n-ruby-9 disabled:outline-n-ruby-8 dark:disabled:outline-n-ruby-8;
+}

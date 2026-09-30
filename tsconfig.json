@@ -98,6 +98,9 @@
     },
     {
       "path": "./libs/core/graphql-response-cache"
+    },
+    {
+      "path": "./libs/clients"
     }
   ]
 }

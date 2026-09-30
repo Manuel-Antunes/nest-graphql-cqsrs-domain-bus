@@ -12,14 +12,14 @@ export interface SubgraphCallContext {
   readonly subgraphHeaders?: Readonly<Record<string, string>>;
 }
 
-export class FederatedSchema {
-  private static readonly logger = new Logger(FederatedSchema.name);
+export class FederatedSchemaFactory {
+  private static readonly logger = new Logger(FederatedSchemaFactory.name);
 
   static of(supergraphSdl: string): GraphQLSchema {
     const interfaceObjects = InterfaceObjects.collect(supergraphSdl);
     const graphNames = Supergraph.subgraphNamesOf(supergraphSdl);
     if (interfaceObjects.length) {
-      FederatedSchema.logger.log(
+      FederatedSchemaFactory.logger.log(
         `Wiring @interfaceObject for ${interfaceObjects
           .map(
             (mapping) =>

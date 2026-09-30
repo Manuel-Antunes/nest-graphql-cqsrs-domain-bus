@@ -1,0 +1,66 @@
+/*
+ * The single Tailwind v4 GENERATION entry (plain CSS, NOT Sass), processed by
+ * @tailwindcss/postcss. Imported from every JS entrypoint (dashboard.js,
+ * widget.js, …); Vite dedupes it so the framework + the full theme (incl. the
+ * @egoist icon collections) are generated ONCE.
+ *
+ * v4-only: no tailwind.config.js / `@config`. Theme + variants come from the
+ * shared ./theme.css; the two JS-only plugins (icons, typography-bubble) are
+ * loaded via `@plugin`. `source('../../..')` scopes automatic content detection
+ * to the chatwoot app (so the monorepo root isn't scanned).
+ *
+ * Sass files do NOT import this — they `@reference` the SLIM
+ * `tailwind-reference.css` instead (injected via vite.config.mts) so `@apply`
+ * resolves cheaply without rebuilding the icon utilities per file.
+ */
+@import 'tailwindcss' source('../../..');
+@import 'tw-animate-css';
+/*
+ * shadcn base utilities (scroll-fade-*, shimmer, no-scrollbar, data-* variants)
+ * consumed by the ported components-next/ui chat components (bubble, attachment,
+ * message, marker, message-scroller). Imported before ./theme.css so chatwoot's
+ * theme tokens win on any shared @theme value.
+ */
+@import 'shadcn/tailwind.css';
+@import './theme.css';
+
+@plugin '@tailwindcss/typography';
+@plugin '../../../theme/typography-bubble-plugin.js';
+@plugin '../../../theme/icons-plugin.js';
+
+/*
+ * Field utilities (moved here from _base.scss): `@utility` must be declared in
+ * the main Tailwind entry, not inside a `@reference`'d stylesheet.
+ */
+@utility field-base {
+  @apply block box-border w-full transition-colors duration-300 ease-in-out focus:outline-n-brand dark:focus:outline-n-brand appearance-none mx-0 mt-0 mb-4 py-2 px-3 rounded-xl text-base font-normal bg-n-alpha-black2 placeholder:text-n-slate-10 dark:placeholder:text-n-slate-10 text-n-slate-12 border-none outline outline-1 outline-n-weak dark:outline-n-weak hover:outline-n-slate-6 dark:hover:outline-n-slate-6;
+}
+
+@utility field-disabled {
+  @apply opacity-50 outline-n-weak dark:outline-n-weak cursor-not-allowed;
+}
+
+@utility field-error {
+  @apply outline outline-1 outline-n-ruby-8 dark:outline-n-ruby-8 hover:outline-n-ruby-9 dark:hover:outline-n-ruby-9 disabled:outline-n-ruby-8 dark:disabled:outline-n-ruby-8;
+}
+
+/*
+ * Scrollbar utilities used by the ported components-next/ui chat components
+ * (attachment, message-scroller). shadcn ships the hide-scrollbar behaviour as
+ * `no-scrollbar`, and native `scrollbar-*` utilities only landed in a later
+ * Tailwind v4 — chatwoot pins 4.1.4 — so define them here.
+ */
+@utility scrollbar-none {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@utility scrollbar-thin {
+  scrollbar-width: thin;
+}
+
+@utility scrollbar-gutter-stable {
+  scrollbar-gutter: stable;
+}

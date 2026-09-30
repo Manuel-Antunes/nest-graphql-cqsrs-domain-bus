@@ -22,6 +22,7 @@ import { User } from '../../../domain/user/user.entity';
 import { Email } from '../../../domain/user/vo/email';
 import { UserId } from '../../../domain/user/vo/user-id';
 import { UserName } from '../../../domain/user/vo/user-name';
+import { UserChatwootSyncTrigger } from '../triggers/chatwoot-sync.trigger';
 
 export const UserIdType = valueObjectType(UserId, {
   columnType: `varchar(${USER_ID_MAX_LENGTH})`,
@@ -58,6 +59,7 @@ export const UserEntitySchema = defineEntity({
     },
   ],
   indexes: [softDeleteIndex],
+  triggers: [UserChatwootSyncTrigger],
 });
 
 export const AuthorshipEntitySchema = defineEntity({

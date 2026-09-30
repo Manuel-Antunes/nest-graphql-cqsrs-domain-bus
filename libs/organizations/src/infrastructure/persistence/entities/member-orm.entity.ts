@@ -11,6 +11,7 @@ import { MEMBER_ID_MAX_LENGTH } from '../../../domain/organization/schemas/membe
 import { MEMBER_ROLE_MAX_LENGTH } from '../../../domain/organization/schemas/member-role.schema';
 import { MemberId } from '../../../domain/organization/vo/member-id';
 import { MemberRole } from '../../../domain/organization/vo/member-role';
+import { MemberChatwootSyncTrigger } from '../triggers/chatwoot-sync.triggers';
 import { OrganizationEntitySchema } from './organization-orm.entity';
 
 const MemberIdType = valueObjectType(MemberId, {
@@ -34,4 +35,5 @@ export const MemberEntitySchema = defineEntity({
     createdAt: p.datetime(),
   },
   indexes: [{ properties: ['organization', 'user'] }],
+  triggers: [MemberChatwootSyncTrigger],
 });

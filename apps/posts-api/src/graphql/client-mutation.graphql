@@ -1,0 +1,77 @@
+input AddressInput {
+  street: String
+  number: String
+  complement: String
+  city: String
+  state: String
+  zipCode: String
+}
+
+input CreateClientInput {
+  name: String!
+
+  """
+  Absent = JUDGMENT_CREDITOR
+  """
+  kind: ClientKind
+  cpf: String!
+  rg: String
+  address: AddressInput
+  birthDate: DateTime
+  deathDate: DateTime
+  isDeceased: Boolean
+  occupation: String
+  unionMembership: String
+  notes: String
+  hasPendingLitigation: Boolean
+  hasRenounced: Boolean
+  isQualified: Boolean
+  documentationComplete: Boolean
+}
+
+"""
+Absent keeps the current value; so does null, except where the field is optional on the client, where
+null clears it
+"""
+input UpdateClientInput {
+  id: ID!
+  name: String
+  kind: ClientKind
+  cpf: String
+  rg: String
+
+  """
+  Merged into the current address
+  """
+  address: AddressInput
+  birthDate: DateTime
+  deathDate: DateTime
+  isDeceased: Boolean
+  status: ClientStatus
+  occupation: String
+  unionMembership: String
+  notes: String
+  hasPendingLitigation: Boolean
+  hasRenounced: Boolean
+  isQualified: Boolean
+  documentationComplete: Boolean
+}
+
+type Mutation {
+  """
+  Registers a client of the active organization, whose tenant this must be; only who holds
+  `client: create`. A CPF is one client per organization
+  """
+  createClient(input: CreateClientInput!): Client!
+
+  """
+  Only who holds `client: update` in the active organization, whose tenant this must be
+  """
+  updateClient(input: UpdateClientInput!): Client!
+
+  """
+  Only who holds `client: delete` in the active organization, whose tenant this must be. Its Chatwoot
+  contacts are kept, and so are their links, which then name no client
+  """
+  deleteClient(id: ID!): Boolean!
+}

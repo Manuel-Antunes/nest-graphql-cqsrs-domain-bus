@@ -1,0 +1,32 @@
+"""
+A Chatwoot account (tenant). All support data — inboxes, conversations,
+contacts, labels — is scoped to an account. GraphQL requests operate within the
+caller's active account.
+"""
+type Account {
+  """
+  Internal id of the account.
+  """
+  id: ID!
+
+  """
+  Account display name.
+  """
+  name: String!
+
+  """
+  Default locale, stored as an integer index into Chatwoot's configured
+  languages list.
+  """
+  locale: Int
+
+  """
+  Account status, as an integer: 0 = active, 1 = suspended.
+  """
+  status: Int
+
+  """
+  Users (agents and admins) that are members of the account.
+  """
+  users: [Agent!]! @hasMany
+}

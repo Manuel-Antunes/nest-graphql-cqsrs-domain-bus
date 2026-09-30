@@ -10,6 +10,7 @@ import { TEAM_NAME_MAX_LENGTH } from '../../../domain/organization/schemas/team-
 import { Team } from '../../../domain/organization/team.entity';
 import { TeamId } from '../../../domain/organization/vo/team-id';
 import { TeamName } from '../../../domain/organization/vo/team-name';
+import { TeamChatwootSyncTrigger } from '../triggers/chatwoot-sync.triggers';
 import { OrganizationEntitySchema } from './organization-orm.entity';
 
 export const TeamIdType = valueObjectType(TeamId, {
@@ -35,4 +36,5 @@ export const TeamEntitySchema = defineEntity({
     updatedAt: p.datetime().nullable(),
   },
   indexes: [{ properties: ['organization'] }],
+  triggers: [TeamChatwootSyncTrigger],
 });

@@ -1,5 +1,7 @@
 import { OAuthProvider } from '../infrastructure/auth/oauth-provider';
+import { ChatwootApi } from '../infrastructure/chatwoot/chatwoot-api';
 import { AppendFaults } from '../infrastructure/database/append-faults';
+import { ChatwootRecords } from '../infrastructure/database/chatwoot-records';
 import { CredentialRecords } from '../infrastructure/database/credential-records';
 import { Database } from '../infrastructure/database/database';
 import { EventLog } from '../infrastructure/database/event-log';
@@ -25,6 +27,10 @@ export interface InfrastructureFixtures {
   credentialRecords: CredentialRecords;
   organizationRecords: OrganizationRecords;
   notificationRecords: NotificationRecords;
+  /** Chatwoot's mirror of the platform, and the links from its contacts to the platform's clients. */
+  chatwootRecords: ChatwootRecords;
+  /** Chatwoot reached directly, past the web and the gateway. */
+  chatwoot: ChatwootApi;
   appendFaults: AppendFaults;
   /** Every email the stack sent, as Mailpit received it. */
   mailbox: Mailbox;
@@ -75,6 +81,14 @@ export const test = environment.extend<InfrastructureFixtures>({
 
   notificationRecords: async ({ database }, use) => {
     await use(new NotificationRecords(database));
+  },
+
+  chatwootRecords: async ({ database }, use) => {
+    await use(new ChatwootRecords(database));
+  },
+
+  chatwoot: async ({ environment }, use) => {
+    await use(new ChatwootApi(environment.chatwootUrl));
   },
 
   appendFaults: async ({ database }, use) => {

@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "next/*": ["./app/javascript/dashboard/components-next/*"],
+      "components/*": ["./app/javascript/dashboard/components/*"],
+      "dashboard/*": ["./app/javascript/dashboard/*"],
+      "v3/*": ["./app/javascript/v3/*"],
+      "helpers/*": ["./app/javascript/shared/helpers/*"],
+      "shared/*": ["./app/javascript/shared/*"],
+      "survey/*": ["./app/javascript/survey/*"],
+      "widget/*": ["./app/javascript/widget/*"],
+      "assets/*": ["./app/javascript/dashboard/assets/*"]
+    }
+  },
+  "include": ["app/javascript/**/*"]
+}

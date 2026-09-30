@@ -42,12 +42,26 @@ export class Launch {
       Workspace.path('apps', name),
     );
   }
+
+  /** A Rails command of `apps/chatwoot`, through its own locked Gemfile. */
+  static rails(...args: string[]): Launch {
+    return new Launch(
+      'bundle',
+      ['exec', 'rails', ...args],
+      Workspace.path('apps', 'chatwoot'),
+    );
+  }
+
+  /** The Vite dev server Chatwoot's dashboard loads its modules from. */
+  static vite(): Launch {
+    return new Launch('bin/vite', ['dev'], Workspace.path('apps', 'chatwoot'));
+  }
 }
 
 /**
  * One application, running as its own **process**.
  *
- * It is the web alone, on purpose: it is the thing under the browser, and keeping it a process keeps
+ * It is the web and Chatwoot, on purpose: both are under the browser, and keeping them processes keeps
  * a failure one `tail` away instead of one `docker build` away.
  */
 export class Service {
@@ -60,6 +74,18 @@ export class Service {
     private readonly environment: NodeJS.ProcessEnv,
     private readonly logDirectory: string,
   ) {}
+
+  /** Runs to completion — a one-shot, like a database task — and fails with its log when it fails. */
+  async run(): Promise<void> {
+    this.start();
+    const code = await new Promise<number | null>((resolve) =>
+      this.child?.on('exit', resolve),
+    );
+    this.child = undefined;
+    if (code !== 0) {
+      throw new Error(`${this.name} exited with code ${code}\n${this.tail()}`);
+    }
+  }
 
   start(): void {
     mkdirSync(this.logDirectory, { recursive: true });

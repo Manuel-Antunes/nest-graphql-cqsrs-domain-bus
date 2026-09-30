@@ -1,0 +1,320 @@
+/*
+ * Shared Tailwind v4 theme — imported by BOTH the generation entry (tailwind.css)
+ * and the slim @reference target (tailwind-reference.css). Replaces the former
+ * tailwind.config.js / tailwind.reference.config.js `@config` bridge: every theme
+ * token, the class-based `dark` variant, and the [dir]-based ltr/rtl variants are
+ * now v4-native CSS. Token VALUES (the OKLCH/RGB/RGBA triplets referenced via
+ * var(--x)) still live in dashboard/assets/scss/_next-colors.scss.
+ */
+
+/* darkMode: 'class' */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ltr/rtl as [dir=] attribute selectors — v4's default `:dir()` crashes
+ * @vitejs/plugin-vue's scoped-style parser when used via @apply inside SFCs. */
+@custom-variant ltr (&:where([dir="ltr"], [dir="ltr"] *));
+@custom-variant rtl (&:where([dir="rtl"], [dir="rtl"] *));
+
+@theme {
+  /* fonts */
+  --font-sans: -apple-system, system-ui, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Tahoma, Arial, sans-serif !important;
+  --font-inter: Inter, -apple-system, system-ui, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Tahoma, Arial, sans-serif !important;
+  --font-interDisplay: InterDisplay, -apple-system, system-ui, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Tahoma, Arial, sans-serif !important;
+
+  /* radius — driven by --radius (set in _next-colors.scss) */
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+
+  /* breakpoints — adds xs:480px; the rest match v4 defaults */
+  --breakpoint-xs: 480px;
+  --breakpoint-sm: 640px;
+  --breakpoint-md: 768px;
+  --breakpoint-lg: 1024px;
+  --breakpoint-xl: 1280px;
+  --breakpoint-2xl: 1536px;
+
+  /* extra font size (defaults remain built-in) */
+  --text-xxs: 0.625rem;
+
+  /* custom animations (defaults remain built-in) */
+  --animate-accordion-down: accordion-down 0.2s ease-out;
+  --animate-accordion-up: accordion-up 0.2s ease-out;
+  --animate-collapsible-down: collapsible-down 0.2s ease-out;
+  --animate-collapsible-up: collapsible-up 0.2s ease-out;
+  --animate-wiggle: wiggle 0.5s ease-in-out;
+  --animate-fade-in-up: fade-in-up 0.3s ease-out;
+  --animate-loader-pulse: loader-pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  --animate-card-select: card-select 0.25s ease-in-out;
+  --animate-shake: shake 0.3s ease-in-out 0s 2;
+
+  /* colors — generated from theme/colors.js + shadcn semantic tokens.
+   * v3 `/ <alpha-value>` removed; v4 derives alpha via color-mix. */
+  --color-transparent: transparent;
+  --color-white: #fff;
+  --color-current: currentColor;
+  --color-modal-backdrop-light: rgba(0, 0, 0, 0.4);
+  --color-modal-backdrop-dark: rgba(0, 0, 0, 0.6);
+  --color-body: #43484e;
+  --color-woot-25: #f4faff;
+  --color-woot-50: #e6f4fe;
+  --color-woot-75: #d5efff;
+  --color-woot-100: #c2e5ff;
+  --color-woot-200: #8ec8f6;
+  --color-woot-300: #5eb1ef;
+  --color-woot-400: #70b8ff;
+  --color-woot-500: #3b9eff;
+  --color-woot-600: #0090ff;
+  --color-woot-700: #2870bd;
+  --color-woot-800: #104d87;
+  --color-woot-900: #111927;
+  --color-green-50: #b1f1cb;
+  --color-green-100: #adddc0;
+  --color-green-200: #8eceaa;
+  --color-green-300: #5bb98b;
+  --color-green-400: #33b074;
+  --color-green-500: #30a46c;
+  --color-green-600: #2b9a66;
+  --color-green-700: #218358;
+  --color-green-800: #28684a;
+  --color-green-900: #20573e;
+  --color-yellow-50: #fefce9;
+  --color-yellow-100: #fffab8;
+  --color-yellow-200: #ffe770;
+  --color-yellow-300: #ffff57;
+  --color-yellow-400: #ffe629;
+  --color-yellow-500: #f5e147;
+  --color-yellow-600: #d5ae39;
+  --color-yellow-700: #665417;
+  --color-yellow-800: #1b180f;
+  --color-yellow-900: #14120b;
+  --color-slate-25: #f9f9fb;
+  --color-slate-50: #f0f0f3;
+  --color-slate-75: #e8e8ec;
+  --color-slate-100: #e0e1e6;
+  --color-slate-200: #cdced6;
+  --color-slate-300: #b9bbc6;
+  --color-slate-400: #b0b4ba;
+  --color-slate-500: #777b84;
+  --color-slate-600: #60646c;
+  --color-slate-700: #5a6169;
+  --color-slate-800: #272a2d;
+  --color-slate-900: #111113;
+  --color-black-50: #f9f9fb;
+  --color-black-100: #edeef0;
+  --color-black-200: #cdced6;
+  --color-black-300: #b9bbc6;
+  --color-black-400: #b0b4ba;
+  --color-black-500: #8b8d98;
+  --color-black-600: #696e77;
+  --color-black-700: #5a6169;
+  --color-black-800: #43484e;
+  --color-black-900: #18191b;
+  --color-black: #000000;
+  --color-red-50: #ffd1d9;
+  --color-red-100: #fdbdbe;
+  --color-red-200: #eb8e90;
+  --color-red-300: #ff9592;
+  --color-red-400: #ec5d5e;
+  --color-red-500: #e5484d;
+  --color-red-600: #dc3e42;
+  --color-red-700: #ce2c31;
+  --color-red-800: #b54548;
+  --color-red-900: #641723;
+  --color-violet-50: #fdfcfe;
+  --color-violet-100: #e2ddfe;
+  --color-violet-200: #d4cafe;
+  --color-violet-300: #aa99ec;
+  --color-violet-400: #6550b9;
+  --color-violet-500: #6e56cf;
+  --color-violet-600: #6958ad;
+  --color-violet-700: #56468b;
+  --color-violet-800: #473876;
+  --color-violet-900: #2f265f;
+  --color-n-slate-1: rgb(var(--slate-1));
+  --color-n-slate-2: rgb(var(--slate-2));
+  --color-n-slate-3: rgb(var(--slate-3));
+  --color-n-slate-4: rgb(var(--slate-4));
+  --color-n-slate-5: rgb(var(--slate-5));
+  --color-n-slate-6: rgb(var(--slate-6));
+  --color-n-slate-7: rgb(var(--slate-7));
+  --color-n-slate-8: rgb(var(--slate-8));
+  --color-n-slate-9: rgb(var(--slate-9));
+  --color-n-slate-10: rgb(var(--slate-10));
+  --color-n-slate-11: rgb(var(--slate-11));
+  --color-n-slate-12: rgb(var(--slate-12));
+  --color-n-iris-1: rgb(var(--iris-1));
+  --color-n-iris-2: rgb(var(--iris-2));
+  --color-n-iris-3: rgb(var(--iris-3));
+  --color-n-iris-4: rgb(var(--iris-4));
+  --color-n-iris-5: rgb(var(--iris-5));
+  --color-n-iris-6: rgb(var(--iris-6));
+  --color-n-iris-7: rgb(var(--iris-7));
+  --color-n-iris-8: rgb(var(--iris-8));
+  --color-n-iris-9: rgb(var(--iris-9));
+  --color-n-iris-10: rgb(var(--iris-10));
+  --color-n-iris-11: rgb(var(--iris-11));
+  --color-n-iris-12: rgb(var(--iris-12));
+  --color-n-blue-1: rgb(var(--blue-1));
+  --color-n-blue-2: rgb(var(--blue-2));
+  --color-n-blue-3: rgb(var(--blue-3));
+  --color-n-blue-4: rgb(var(--blue-4));
+  --color-n-blue-5: rgb(var(--blue-5));
+  --color-n-blue-6: rgb(var(--blue-6));
+  --color-n-blue-7: rgb(var(--blue-7));
+  --color-n-blue-8: rgb(var(--blue-8));
+  --color-n-blue-9: rgb(var(--blue-9));
+  --color-n-blue-10: rgb(var(--blue-10));
+  --color-n-blue-11: rgb(var(--blue-11));
+  --color-n-blue-12: rgb(var(--blue-12));
+  --color-n-ruby-1: rgb(var(--ruby-1));
+  --color-n-ruby-2: rgb(var(--ruby-2));
+  --color-n-ruby-3: rgb(var(--ruby-3));
+  --color-n-ruby-4: rgb(var(--ruby-4));
+  --color-n-ruby-5: rgb(var(--ruby-5));
+  --color-n-ruby-6: rgb(var(--ruby-6));
+  --color-n-ruby-7: rgb(var(--ruby-7));
+  --color-n-ruby-8: rgb(var(--ruby-8));
+  --color-n-ruby-9: rgb(var(--ruby-9));
+  --color-n-ruby-10: rgb(var(--ruby-10));
+  --color-n-ruby-11: rgb(var(--ruby-11));
+  --color-n-ruby-12: rgb(var(--ruby-12));
+  --color-n-amber-1: rgb(var(--amber-1));
+  --color-n-amber-2: rgb(var(--amber-2));
+  --color-n-amber-3: rgb(var(--amber-3));
+  --color-n-amber-4: rgb(var(--amber-4));
+  --color-n-amber-5: rgb(var(--amber-5));
+  --color-n-amber-6: rgb(var(--amber-6));
+  --color-n-amber-7: rgb(var(--amber-7));
+  --color-n-amber-8: rgb(var(--amber-8));
+  --color-n-amber-9: rgb(var(--amber-9));
+  --color-n-amber-10: rgb(var(--amber-10));
+  --color-n-amber-11: rgb(var(--amber-11));
+  --color-n-amber-12: rgb(var(--amber-12));
+  --color-n-teal-1: rgb(var(--teal-1));
+  --color-n-teal-2: rgb(var(--teal-2));
+  --color-n-teal-3: rgb(var(--teal-3));
+  --color-n-teal-4: rgb(var(--teal-4));
+  --color-n-teal-5: rgb(var(--teal-5));
+  --color-n-teal-6: rgb(var(--teal-6));
+  --color-n-teal-7: rgb(var(--teal-7));
+  --color-n-teal-8: rgb(var(--teal-8));
+  --color-n-teal-9: rgb(var(--teal-9));
+  --color-n-teal-10: rgb(var(--teal-10));
+  --color-n-teal-11: rgb(var(--teal-11));
+  --color-n-teal-12: rgb(var(--teal-12));
+  --color-n-gray-1: rgb(var(--gray-1));
+  --color-n-gray-2: rgb(var(--gray-2));
+  --color-n-gray-3: rgb(var(--gray-3));
+  --color-n-gray-4: rgb(var(--gray-4));
+  --color-n-gray-5: rgb(var(--gray-5));
+  --color-n-gray-6: rgb(var(--gray-6));
+  --color-n-gray-7: rgb(var(--gray-7));
+  --color-n-gray-8: rgb(var(--gray-8));
+  --color-n-gray-9: rgb(var(--gray-9));
+  --color-n-gray-10: rgb(var(--gray-10));
+  --color-n-gray-11: rgb(var(--gray-11));
+  --color-n-gray-12: rgb(var(--gray-12));
+  --color-n-black: #000000;
+  --color-n-brand: #3E63DD;
+  --color-n-background: rgb(var(--background-color));
+  --color-n-solid-1: rgb(var(--solid-1));
+  --color-n-solid-2: rgb(var(--solid-2));
+  --color-n-solid-3: rgb(var(--solid-3));
+  --color-n-solid-active: rgb(var(--solid-active));
+  --color-n-solid-amber: rgb(var(--solid-amber));
+  --color-n-solid-blue: rgb(var(--solid-blue));
+  --color-n-solid-iris: rgb(var(--solid-iris));
+  --color-n-alpha-1: rgba(var(--alpha-1));
+  --color-n-alpha-2: rgba(var(--alpha-2));
+  --color-n-alpha-3: rgba(var(--alpha-3));
+  --color-n-alpha-black1: rgba(var(--black-alpha-1));
+  --color-n-alpha-black2: rgba(var(--black-alpha-2));
+  --color-n-alpha-white: rgba(var(--white-alpha));
+  --color-n-weak: rgb(var(--border-weak));
+  --color-n-container: rgba(var(--border-container));
+  --color-n-strong: rgb(var(--border-strong));
+  --color-n-blue-border: rgba(var(--border-blue));
+  --color-n-blue-text: rgba(var(--text-blue));
+  --color-border: oklch(var(--border));
+  --color-input: oklch(var(--input));
+  --color-ring: oklch(var(--ring));
+  --color-background: oklch(var(--background));
+  --color-foreground: oklch(var(--foreground));
+  --color-primary: oklch(var(--primary));
+  --color-primary-foreground: oklch(var(--primary-foreground));
+  --color-secondary: oklch(var(--secondary));
+  --color-secondary-foreground: oklch(var(--secondary-foreground));
+  --color-destructive: oklch(var(--destructive));
+  --color-destructive-foreground: oklch(var(--destructive-foreground));
+  --color-success: oklch(var(--success));
+  --color-success-foreground: oklch(var(--success-foreground));
+  --color-muted: oklch(var(--muted));
+  --color-muted-foreground: oklch(var(--muted-foreground));
+  --color-accent: oklch(var(--accent));
+  --color-accent-foreground: oklch(var(--accent-foreground));
+  --color-popover: oklch(var(--popover));
+  --color-popover-foreground: oklch(var(--popover-foreground));
+  --color-card: oklch(var(--card));
+  --color-card-foreground: oklch(var(--card-foreground));
+  --color-chart-1: oklch(var(--chart-1));
+  --color-chart-2: oklch(var(--chart-2));
+  --color-chart-3: oklch(var(--chart-3));
+  --color-chart-4: oklch(var(--chart-4));
+  --color-chart-5: oklch(var(--chart-5));
+  --color-sidebar: oklch(var(--sidebar));
+  --color-sidebar-foreground: oklch(var(--sidebar-foreground));
+  --color-sidebar-primary: oklch(var(--sidebar-primary));
+  --color-sidebar-primary-foreground: oklch(var(--sidebar-primary-foreground));
+  --color-sidebar-accent: oklch(var(--sidebar-accent));
+  --color-sidebar-accent-foreground: oklch(var(--sidebar-accent-foreground));
+  --color-sidebar-border: oklch(var(--sidebar-border));
+  --color-sidebar-ring: oklch(var(--sidebar-ring));
+}
+
+@keyframes accordion-down {
+  from { height: 0; }
+  to { height: var(--reka-accordion-content-height); }
+}
+@keyframes accordion-up {
+  from { height: var(--reka-accordion-content-height); }
+  to { height: 0; }
+}
+@keyframes collapsible-down {
+  from { height: 0; }
+  to { height: var(--reka-collapsible-content-height); }
+}
+@keyframes collapsible-up {
+  from { height: var(--reka-collapsible-content-height); }
+  to { height: 0; }
+}
+@keyframes wiggle {
+  0% { transform: translateX(0); }
+  15% { transform: translateX(0.375rem); }
+  30% { transform: translateX(-0.375rem); }
+  45% { transform: translateX(0.375rem); }
+  60% { transform: translateX(-0.375rem); }
+  75% { transform: translateX(0.375rem); }
+  90% { transform: translateX(-0.375rem); }
+  100% { transform: translateX(0); }
+}
+@keyframes fade-in-up {
+  0% { opacity: 0; transform: translateY(0.5rem); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+@keyframes loader-pulse {
+  0% { opacity: 0.4; }
+  50% { opacity: 1; }
+  100% { opacity: 0.4; }
+}
+@keyframes card-select {
+  0%, 100% { transform: translateX(0); }
+  50% { transform: translateX(1px); }
+}
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(0.234375rem); }
+  50% { transform: translateX(-0.234375rem); }
+  75% { transform: translateX(0.234375rem); }
+}
+

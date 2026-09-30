@@ -37,7 +37,8 @@
         "testTargetName": "test",
         "ciTargetName": "test-ci",
         "testMode": "run"
-      }
+      },
+      "exclude": ["apps/chatwoot/**/*"]
     },
     {
       "plugin": "@nx/playwright/plugin",
@@ -57,6 +58,9 @@
           "name": "docker:run"
         }
       }
+    },
+    {
+      "plugin": "nx-ruby-on-rails"
     }
   ],
   "analytics": false,
