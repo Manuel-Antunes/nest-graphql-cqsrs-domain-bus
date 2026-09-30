@@ -1302,6 +1302,17 @@ last section is the design; the essentials:
   cookie reaches it on the one origin with no domain. `infra/aws/README.md` has the rest.
   `db/seeds.rb`'s demo data (the `john@acme.inc` SuperAdmin, the Acme accounts) is development-only:
   the container's `db:chatwoot_prepare` seeds a production database with the installation config alone.
+- **The dashboard boots through Inertia, and its shell is `inertia/layouts/AppShell.vue`.** The Vue
+  Router SPA's `App.vue` and `Dashboard.vue` are no longer mounted, so everything they put around a
+  page lives in the shell: the update, payment and email-verification banners, Cmd+K, Copilot, the
+  call widget, the shortcuts modal, the upgrade page, the network notification and
+  `ReconnectService` (handed the route `useAppNavigation` reads off the URL). The migration had
+  dropped all of it with nothing failing; `AppShell.spec` fails if a piece goes missing again. The
+  update banner is for the platform's super admins alone and names no product. An account is an
+  organization, so "new account" is the platform's: the no-accounts page opens
+  `/settings/organizations` on the web — directly when Chatwoot stands alone, and embedded by posting
+  `PLATFORM_NAVIGATE` to `/atendimento`, which pushes the path only when it is one of its own
+  (`Chatwoot.platformPathOf`).
 - **Clients** (`libs/clients`, posts-api's `client/` slices) are guarded by the organization's
   `client` resource (`CLIENT_RESOURCE`: owners and admins every action, members all but `delete`) and
   the `read:clients`/`write:clients` scopes. The web's `/clients` screen links and creates Chatwoot

@@ -3,7 +3,6 @@ import Banner from 'dashboard/components/ui/Banner.vue';
 import { LOCAL_STORAGE_KEYS } from 'dashboard/constants/localStorage';
 import { LocalStorage } from 'shared/helpers/localStorage';
 import { mapGetters } from 'vuex';
-import { useAdmin } from 'dashboard/composables/useAdmin';
 import { hasAnUpdateAvailable } from './versionCheckHelper';
 
 export default {
@@ -11,17 +10,17 @@ export default {
   props: {
     latestChatwootVersion: { type: String, default: '' },
   },
-  setup() {
-    const { isAdmin } = useAdmin();
-    return {
-      isAdmin,
-    };
-  },
   data() {
     return { userDismissedBanner: false };
   },
   computed: {
-    ...mapGetters({ globalConfig: 'globalConfig/get' }),
+    ...mapGetters({
+      globalConfig: 'globalConfig/get',
+      currentUser: 'getCurrentUser',
+    }),
+    isSuperAdmin() {
+      return this.currentUser?.type === 'SuperAdmin';
+    },
     updateAvailable() {
       return hasAnUpdateAvailable(
         this.latestChatwootVersion,
@@ -39,7 +38,7 @@ export default {
         this.globalConfig.displayManifest &&
         this.updateAvailable &&
         !this.isVersionNotificationDismissed(this.latestChatwootVersion) &&
-        this.isAdmin
+        this.isSuperAdmin
       );
     },
   },
@@ -73,8 +72,6 @@ export default {
     v-if="shouldShowBanner"
     color-scheme="primary"
     :banner-message="bannerMessage"
-    href-link="https://github.com/chatwoot/chatwoot/releases"
-    :href-link-text="$t('GENERAL_SETTINGS.LEARN_MORE')"
     has-close-button
     @close="dismissUpdateBanner"
   />

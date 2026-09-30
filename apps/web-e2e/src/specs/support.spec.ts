@@ -74,12 +74,33 @@ test.describe('Chatwoot, under the platform session', () => {
       'no Chatwoot sign-in in the way',
     ).toHaveCount(0);
     await expect(
+      app.support.commandBar,
+      "the dashboard's shell is mounted around the page",
+    ).toBeAttached();
+    await expect(
       app.page,
       "the web's address follows the dashboard's",
     ).toHaveURL(
       new RegExp(`/atendimento/app/accounts/${account?.id}/`),
       DASHBOARD,
     );
+  });
+
+  test('someone in no organization is offered, inside Support, the platform page that creates one', async ({
+    app,
+    registration,
+    authentication,
+  }) => {
+    const loner = await registration.freshAccount('Loner');
+    await authentication.signIn(loner);
+
+    await app.support.open();
+    await expect
+      .poll(() => app.support.framedPath(), DASHBOARD)
+      .toBe('/app/no-accounts');
+    await app.support.createOrganization.click();
+
+    await expect(app.page).toHaveURL(/\/settings\/organizations$/);
   });
 
   test('Chatwoot has no sign-in of its own: its password form is refused, and its dashboard sends a stranger to the platform', async ({

@@ -28,7 +28,8 @@ class InertiaController < ApplicationController
         features: Current.account&.enabled_features
       },
       permissions: current_page_permissions,
-      installationType: current_installation_type
+      installationType: current_installation_type,
+      platform: { organizationsUrl: ::BetterAuth::Platform.organizations_url }
     }
   end
 

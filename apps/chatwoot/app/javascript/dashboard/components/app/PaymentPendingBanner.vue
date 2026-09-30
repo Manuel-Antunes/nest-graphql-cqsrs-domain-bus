@@ -2,6 +2,7 @@
 import { mapGetters } from 'vuex';
 import { useAdmin } from 'dashboard/composables/useAdmin';
 import { useAccount } from 'dashboard/composables/useAccount';
+import { useAppNavigation } from 'dashboard/composables/useAppNavigation';
 import Banner from 'dashboard/components/ui/Banner.vue';
 
 const EMPTY_SUBSCRIPTION_INFO = {
@@ -15,10 +16,12 @@ export default {
     const { isAdmin } = useAdmin();
 
     const { accountId } = useAccount();
+    const { visit } = useAppNavigation();
 
     return {
       accountId,
       isAdmin,
+      visit,
     };
   },
   computed: {
@@ -46,7 +49,7 @@ export default {
   },
   methods: {
     routeToBilling() {
-      this.$router.push({
+      this.visit({
         name: 'billing_settings_index',
         params: { accountId: this.accountId },
       });

@@ -20,6 +20,16 @@ export class SupportPage extends WebPage {
     return this.page.getByText('Sign in to open support');
   }
 
+  /** Cmd+K, which the dashboard's shell mounts around every page. */
+  get commandBar(): Locator {
+    return this.frame.locator('ninja-keys');
+  }
+
+  /** What the dashboard offers someone who is in no organization — and so has no account. */
+  get createOrganization(): Locator {
+    return this.frame.getByRole('button', { name: 'Criar organização' });
+  }
+
   async openAt(dashboardPath: string): Promise<void> {
     await this.page.goto(`${this.path}${dashboardPath}`);
   }

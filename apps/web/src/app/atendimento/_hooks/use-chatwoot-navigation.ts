@@ -2,6 +2,7 @@
 
 import type { RefObject } from 'react';
 import { useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 
 import { Chatwoot } from '@/lib/chatwoot';
 
@@ -10,6 +11,7 @@ export function useChatwootNavigation(
   origin: string,
   path: string,
 ) {
+  const { push } = useRouter();
   const framedPath = useRef(path);
 
   useEffect(() => {
@@ -23,8 +25,13 @@ export function useChatwootNavigation(
 
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
+      if (event.origin !== origin) return;
+      const platformPath = Chatwoot.platformPathOf(event.data);
+      if (platformPath) {
+        push(platformPath);
+        return;
+      }
       if (
-        event.origin !== origin ||
         event.data?.type !== 'CHATWOOT_URL_CHANGE' ||
         typeof event.data.path !== 'string'
       ) {
@@ -39,5 +46,5 @@ export function useChatwootNavigation(
     };
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [origin]);
+  }, [origin, push]);
 }

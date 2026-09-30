@@ -33,7 +33,16 @@ module BetterAuth
     end
 
     def sign_in_url
-      ENV['PLATFORM_SIGN_IN_URL'].presence || "#{ENV.fetch('WEB_URL', 'http://localhost:4200')}/auth/sign-in"
+      ENV['PLATFORM_SIGN_IN_URL'].presence || "#{web_url}/auth/sign-in"
+    end
+
+    # Where the platform creates an organization — and with it, through the mirror, a Chatwoot account.
+    def organizations_url
+      "#{web_url}/settings/organizations"
+    end
+
+    def web_url
+      ENV.fetch('WEB_URL', 'http://localhost:4200')
     end
 
     def organization_id_of_tenant(tenant)
