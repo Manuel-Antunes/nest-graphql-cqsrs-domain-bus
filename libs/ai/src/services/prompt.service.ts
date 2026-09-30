@@ -1,5 +1,5 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
 import { LangfuseClient } from '@langfuse/client';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 
 /**
  * How long the Langfuse SDK caches a fetched prompt locally before it
@@ -93,8 +93,6 @@ function interpolate(
   variables: Record<string, string>,
 ): string {
   return template.replace(/\{\{(\w+)\}\}/g, (match, key: string) =>
-    Object.prototype.hasOwnProperty.call(variables, key)
-      ? variables[key]
-      : match,
+    Object.hasOwn(variables, key) ? variables[key] : match,
   );
 }

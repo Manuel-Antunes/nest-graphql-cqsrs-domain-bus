@@ -1,4 +1,4 @@
-import { createMiddleware } from 'langchain';
+import { type AnyAgentMiddleware, createMiddleware } from 'langchain';
 
 import type { PromptService } from '../services/prompt.service';
 
@@ -24,7 +24,7 @@ export function systemPromptMiddleware(options: {
   fallback: string;
   /** Injected prompt service. */
   promptService: PromptService;
-}) {
+}): AnyAgentMiddleware {
   const { name, promptName, fallback, promptService } = options;
   return createMiddleware({
     name,

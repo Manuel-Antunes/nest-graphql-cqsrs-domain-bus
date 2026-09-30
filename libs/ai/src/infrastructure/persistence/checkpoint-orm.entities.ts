@@ -1,4 +1,4 @@
-import { defineEntity } from '@acme/database';
+import { defineEntity, TENANT_SCHEMA } from '@nestposts/database';
 
 /**
  * MikroORM mirrors of the LangGraph checkpointer tables that `createTenantScopedPostgresSaver`
@@ -28,7 +28,7 @@ import { defineEntity } from '@acme/database';
 export const CheckpointsSchema = defineEntity({
   name: 'LanggraphCheckpoint',
   tableName: 'checkpoints',
-  schema: '*',
+  schema: TENANT_SCHEMA,
   properties(properties) {
     return {
       threadId: properties.text().name('thread_id').primary(),
@@ -52,7 +52,7 @@ export const CheckpointsSchema = defineEntity({
 export const CheckpointBlobsSchema = defineEntity({
   name: 'LanggraphCheckpointBlob',
   tableName: 'checkpoint_blobs',
-  schema: '*',
+  schema: TENANT_SCHEMA,
   properties(properties) {
     return {
       threadId: properties.text().name('thread_id').primary(),
@@ -72,7 +72,7 @@ export const CheckpointBlobsSchema = defineEntity({
 export const CheckpointWritesSchema = defineEntity({
   name: 'LanggraphCheckpointWrite',
   tableName: 'checkpoint_writes',
-  schema: '*',
+  schema: TENANT_SCHEMA,
   properties(properties) {
     return {
       threadId: properties.text().name('thread_id').primary(),

@@ -1,3 +1,4 @@
+import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
 import { ChatOpenAI } from '@langchain/openai';
 import { FactoryProvider } from '@nestjs/common';
@@ -7,7 +8,7 @@ import type { AiConfig } from '../../config/schema';
 
 export const ImageTranscribeModelFactory = {
   provide: 'IMAGE_TRANSCRIBE_MODEL',
-  useFactory(configService: ConfigService) {
+  useFactory(configService: ConfigService): BaseChatModel {
     const ai = configService.get<AiConfig>('ai')!;
     if (ai.AI_PROVIDER === 'openai') {
       return new ChatOpenAI({

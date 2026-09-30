@@ -54,7 +54,9 @@ describe('McpClientPool — tool-call session recovery', () => {
   });
 
   it('passes a successful call straight through (no reconnect)', async () => {
-    const { build, calls } = fakeClientFactory(async (_a, input) => `ok:${String(input)}`);
+    const { build, calls } = fakeClientFactory(
+      async (_a, input) => `ok:${String(input)}`,
+    );
     const pool = new McpClientPool({ label: 'test', serverKey: 'k', build });
 
     const [tool] = await pool.getTools();
@@ -69,7 +71,9 @@ describe('McpClientPool — tool-call session recovery', () => {
     const pool = new McpClientPool({ label: 'test', serverKey: 'k', build });
 
     const [tool] = await pool.getTools();
-    await expect(tool.invoke('x' as never)).rejects.toThrow('validation failed');
+    await expect(tool.invoke('x' as never)).rejects.toThrow(
+      'validation failed',
+    );
     expect(calls.build).toBe(1); // no reconnect for a non-session error
   });
 
@@ -80,7 +84,9 @@ describe('McpClientPool — tool-call session recovery', () => {
     const pool = new McpClientPool({ label: 'test', serverKey: 'k', build });
 
     const [tool] = await pool.getTools();
-    await expect(tool.invoke('x' as never)).rejects.toThrow('Session not found');
+    await expect(tool.invoke('x' as never)).rejects.toThrow(
+      'Session not found',
+    );
     expect(calls.build).toBe(2); // initial + exactly one reconnect, then it throws
   });
 });
@@ -115,15 +121,24 @@ describe('McpClientPool — connect timeout', () => {
 
   it('retries on the next borrow rather than caching the failure', async () => {
     let hang = true;
-    const tool = { name: 'DoThing', invoke: async () => 'ok' } as unknown as StructuredToolInterface;
+    const tool = {
+      name: 'DoThing',
+      invoke: async () => 'ok',
+    } as unknown as StructuredToolInterface;
     const pool = new McpClientPool({
       label: 'Test',
       serverKey: 'chat',
       connectTimeoutMs: 50,
       build: () =>
         (hang
-          ? { getTools: () => new Promise<never>(() => undefined), close: async () => undefined }
-          : { getTools: async () => [tool], close: async () => undefined }) as unknown as MultiServerMCPClient,
+          ? {
+              getTools: () => new Promise<never>(() => undefined),
+              close: async () => undefined,
+            }
+          : {
+              getTools: async () => [tool],
+              close: async () => undefined,
+            }) as unknown as MultiServerMCPClient,
     });
 
     expect(await pool.getTools('t1')).toEqual([]);
@@ -133,13 +148,19 @@ describe('McpClientPool — connect timeout', () => {
   });
 
   it('does not time out a connect that resolves in time', async () => {
-    const tool = { name: 'Fast', invoke: async () => 'ok' } as unknown as StructuredToolInterface;
+    const tool = {
+      name: 'Fast',
+      invoke: async () => 'ok',
+    } as unknown as StructuredToolInterface;
     const pool = new McpClientPool({
       label: 'Test',
       serverKey: 'chat',
       connectTimeoutMs: 5000,
       build: () =>
-        ({ getTools: async () => [tool], close: async () => undefined }) as unknown as MultiServerMCPClient,
+        ({
+          getTools: async () => [tool],
+          close: async () => undefined,
+        }) as unknown as MultiServerMCPClient,
     });
     expect((await pool.getTools()).map((t) => t.name)).toEqual(['Fast']);
   });

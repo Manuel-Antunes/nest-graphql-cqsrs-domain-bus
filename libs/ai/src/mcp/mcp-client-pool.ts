@@ -25,7 +25,10 @@ export interface McpClientPoolOptions {
    * Optional hook run once a client has connected and loaded its tools — used by
    * the legal stdio pool to pipe the child's stderr into the logger. Best-effort.
    */
-  afterConnect?: (client: MultiServerMCPClient, key: string) => void | Promise<void>;
+  afterConnect?: (
+    client: MultiServerMCPClient,
+    key: string,
+  ) => void | Promise<void>;
   /**
    * Ceiling on a single connect+list-tools attempt, in ms.
    *
@@ -65,7 +68,10 @@ const DEFAULT_CONNECT_TIMEOUT_MS = 15_000;
 export class McpClientPool implements OnModuleDestroy {
   private readonly logger: Logger;
   private readonly entries = new Map<string, PoolEntry>();
-  private readonly inflight = new Map<string, Promise<StructuredToolInterface[]>>();
+  private readonly inflight = new Map<
+    string,
+    Promise<StructuredToolInterface[]>
+  >();
 
   constructor(private readonly opts: McpClientPoolOptions) {
     this.logger = new Logger(opts.label);
@@ -91,7 +97,9 @@ export class McpClientPool implements OnModuleDestroy {
     const existing = this.inflight.get(key);
     if (existing) return existing;
 
-    const pending = this.reconnect(key).finally(() => this.inflight.delete(key));
+    const pending = this.reconnect(key).finally(() =>
+      this.inflight.delete(key),
+    );
     this.inflight.set(key, pending);
     return pending;
   }
@@ -150,9 +158,11 @@ export class McpClientPool implements OnModuleDestroy {
         if (prop !== 'invoke') return Reflect.get(target, prop, receiver);
         return async (input: unknown, config?: unknown) => {
           try {
-            return await (target as unknown as {
-              invoke: (i: unknown, c?: unknown) => Promise<unknown>;
-            }).invoke(input, config);
+            return await (
+              target as unknown as {
+                invoke: (i: unknown, c?: unknown) => Promise<unknown>;
+              }
+            ).invoke(input, config);
           } catch (error) {
             if (!this.isSessionError(error)) throw error;
             this.logger.warn(
@@ -163,9 +173,11 @@ export class McpClientPool implements OnModuleDestroy {
               (t) => t.name === target.name,
             );
             if (!fresh) throw error;
-            return await (fresh as unknown as {
-              invoke: (i: unknown, c?: unknown) => Promise<unknown>;
-            }).invoke(input, config);
+            return await (
+              fresh as unknown as {
+                invoke: (i: unknown, c?: unknown) => Promise<unknown>;
+              }
+            ).invoke(input, config);
           }
         };
       },
@@ -211,7 +223,10 @@ export class McpClientPool implements OnModuleDestroy {
   private async reconnect(key: string): Promise<StructuredToolInterface[]> {
     // Tear down a previous (unhealthy) client first so its child/sockets don't
     // leak when we replace it.
-    await this.entries.get(key)?.client?.close().catch(() => undefined);
+    await this.entries
+      .get(key)
+      ?.client?.close()
+      .catch(() => undefined);
 
     const client = this.opts.build(key, () => this.markUnhealthy(key));
     try {

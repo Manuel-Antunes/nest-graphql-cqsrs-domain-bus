@@ -1,5 +1,7 @@
+import type { BaseCheckpointSaver } from '@langchain/langgraph';
 import { FactoryProvider } from '@nestjs/common';
 import { Pool } from 'pg';
+
 import { createTenantScopedPostgresSaver } from '../checkpoint/tenant-postgres-saver';
 import { CHECKPOINTER_PG_POOL } from './checkpointer-pool.factory';
 
@@ -16,7 +18,7 @@ export const CheckpointerFactory = {
   // accumulates content-addressed blobs (`ON CONFLICT DO NOTHING`), so its
   // load path reassembles channels unchanged by an `interrupt()` step from the
   // prior version — the exact failure `FullStateRedisSaver` worked around.
-  useFactory(pool: Pool) {
+  useFactory(pool: Pool): BaseCheckpointSaver {
     return createTenantScopedPostgresSaver(pool);
   },
   inject: [CHECKPOINTER_PG_POOL],

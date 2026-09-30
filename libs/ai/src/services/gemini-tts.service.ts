@@ -1,6 +1,7 @@
 import { GoogleGenAI } from '@google/genai';
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+
 import { TTSService } from './tts.service';
 
 const SSML_OPTIMIZER_SYSTEM_PROMPT = `# Agente SSML Optimizer - Gemini TTS

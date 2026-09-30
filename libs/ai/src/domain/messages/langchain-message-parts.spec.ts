@@ -32,14 +32,22 @@ describe('toParts', () => {
   it('keeps a non-JSON tool output as raw text', () => {
     const [part] = toParts({
       toolCalls: [
-        { id: 'c', name: 't', args: {}, state: 'output-available', output: 'nao e json' },
+        {
+          id: 'c',
+          name: 't',
+          args: {},
+          state: 'output-available',
+          output: 'nao e json',
+        },
       ],
     });
     expect(part).toMatchObject({ output: 'nao e json' });
   });
 
   it('defaults a call with no result to input-available', () => {
-    const [part] = toParts({ toolCalls: [{ id: 'c', name: 'handoff', args: {} }] });
+    const [part] = toParts({
+      toolCalls: [{ id: 'c', name: 'handoff', args: {} }],
+    });
     expect(part).toMatchObject({ state: 'input-available', output: null });
   });
 
@@ -48,20 +56,35 @@ describe('toParts', () => {
       toParts({
         content: [
           { type: 'text', text: 'olha ' },
-          { type: 'image_url', image_url: { url: 'data:image/png;base64,AAA' } },
+          {
+            type: 'image_url',
+            image_url: { url: 'data:image/png;base64,AAA' },
+          },
           { type: 'text', text: 'isso' },
         ],
       }),
     ).toEqual([
       { type: 'text', text: 'olha isso' },
-      { type: 'file', url: 'data:image/png;base64,AAA', mediaType: 'image/png' },
+      {
+        type: 'file',
+        url: 'data:image/png;base64,AAA',
+        mediaType: 'image/png',
+      },
     ]);
   });
 
   it('emits tool parts before the assistant text, as the clients render them', () => {
     const parts = toParts({
       content: 'Achei.',
-      toolCalls: [{ id: 'c', name: 't', args: {}, state: 'output-available', output: '1' }],
+      toolCalls: [
+        {
+          id: 'c',
+          name: 't',
+          args: {},
+          state: 'output-available',
+          output: '1',
+        },
+      ],
     });
     expect(parts.map((p) => p.type)).toEqual(['tool-invocation', 'text']);
   });
@@ -215,7 +238,10 @@ describe('toParts — attachments', () => {
     // "the upload failed" — and the marker already told the agent to ask for
     // a resend.
     expect(
-      toParts({ content: 'oi', attachments: [{ ...attachment, url: undefined }] }),
+      toParts({
+        content: 'oi',
+        attachments: [{ ...attachment, url: undefined }],
+      }),
     ).toEqual([{ type: 'text', text: 'oi' }]);
   });
 
@@ -249,7 +275,11 @@ describe('toParts — attachments', () => {
     });
 
     expect(parts).toEqual([
-      { type: 'file', url: 'data:image/png;base64,AAAA', mediaType: 'image/png' },
+      {
+        type: 'file',
+        url: 'data:image/png;base64,AAAA',
+        mediaType: 'image/png',
+      },
     ]);
   });
 });

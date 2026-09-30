@@ -62,14 +62,9 @@ export function extractCopyableContent(text: string): {
 } {
   const spans: Span[] = [];
   for (const pattern of COPYABLE_PATTERNS) {
-    pattern.lastIndex = 0;
-    let m: RegExpExecArray | null;
-    while ((m = pattern.exec(text)) !== null) {
-      if (m[0].length === 0) {
-        pattern.lastIndex += 1; // guard against zero-width matches
-        continue;
-      }
-      spans.push({ start: m.index, end: m.index + m[0].length });
+    for (const match of text.matchAll(pattern)) {
+      if (match[0].length === 0) continue;
+      spans.push({ start: match.index, end: match.index + match[0].length });
     }
   }
   if (spans.length === 0) return { stripped: text, tokens: [] };

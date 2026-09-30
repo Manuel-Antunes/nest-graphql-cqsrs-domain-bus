@@ -1,7 +1,6 @@
-import { RequestContext } from '@acme/database';
-import type { SqlEntityManager } from '@acme/database/sql';
 import type { BaseCheckpointSaver } from '@langchain/langgraph';
 import { PostgresSaver } from '@langchain/langgraph-checkpoint-postgres';
+import { RequestContext, ROOT_TENANT_SCHEMA } from '@nestposts/database';
 import type { Pool } from 'pg';
 
 /**
@@ -11,7 +10,7 @@ import type { Pool } from 'pg';
  * a request (e.g. an A2A executor or a unit test) lands in the same template
  * schema the rest of the stack treats as "root".
  */
-export const DEFAULT_TENANT_SCHEMA = 'tenant_root';
+export const DEFAULT_TENANT_SCHEMA = ROOT_TENANT_SCHEMA;
 
 /**
  * Resolves the Postgres schema of the tenant bound to the CURRENT async scope.
@@ -26,10 +25,7 @@ export const DEFAULT_TENANT_SCHEMA = 'tenant_root';
  * Kysely proxy uses to stay tenant-scoped.
  */
 export function resolveTenantSchema(): string {
-  const em = RequestContext.getEntityManager('pg') as
-    | SqlEntityManager
-    | undefined;
-  const schema = em?.schema;
+  const schema = RequestContext.getEntityManager()?.schema;
   return typeof schema === 'string' && schema.length > 0
     ? schema
     : DEFAULT_TENANT_SCHEMA;

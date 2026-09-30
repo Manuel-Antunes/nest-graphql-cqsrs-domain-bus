@@ -1,4 +1,4 @@
-import { registry } from '@langchain/langgraph/zod';
+import { type ReducedZodChannel, registry } from '@langchain/langgraph/zod';
 import { z } from 'zod';
 
 import {
@@ -79,12 +79,12 @@ type AudioPref = {
 const guardedLastValueString = (
   current: string | undefined,
   update: string | undefined,
-): string => (update === undefined ? current ?? '' : update);
+): string => (update === undefined ? (current ?? '') : update);
 
 const guardedLastValueNumber = (
   current: number | undefined,
   update: number | undefined,
-): number => (update === undefined ? current ?? 0 : update);
+): number => (update === undefined ? (current ?? 0) : update);
 
 export const humanizedResponseStateSchema = z.object({
   /**
@@ -231,11 +231,11 @@ export const humanizedResponseStateSchema = z.object({
         fn: (
           current: InboundSource[] | undefined,
           update: InboundSource[] | undefined,
-        ) => (update === undefined ? current ?? [] : update),
+        ) => (update === undefined ? (current ?? []) : update),
       },
       default: () => [] as InboundSource[],
     }),
-});
+} satisfies Record<string, ReducedZodChannel<z.ZodType, z.ZodType>>);
 
 type InboundSource = {
   id: string;
@@ -244,7 +244,9 @@ type InboundSource = {
   type?: string;
 };
 
-export type HumanizedResponseState = z.infer<typeof humanizedResponseStateSchema>;
+export type HumanizedResponseState = z.infer<
+  typeof humanizedResponseStateSchema
+>;
 
 export type AudioConsentInterruptPayload = {
   kind: 'audio_consent';

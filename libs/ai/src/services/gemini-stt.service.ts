@@ -1,5 +1,6 @@
 import { GoogleGenAI } from '@google/genai';
 import { BadRequestException, Injectable } from '@nestjs/common';
+
 import { STTOptions, STTService } from './stt.service';
 
 @Injectable()

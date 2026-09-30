@@ -1,3 +1,4 @@
+import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
 import { ChatOpenAI } from '@langchain/openai';
 import { FactoryProvider } from '@nestjs/common';
@@ -8,7 +9,7 @@ import type { AiConfig } from '../../config/schema';
 
 export const AudioTranscribeModelFactory = {
   provide: 'AUDIO_TRANSCRIBE_MODEL',
-  useFactory(aiConfig: AiConfig) {
+  useFactory(aiConfig: AiConfig): BaseChatModel {
     const ai = aiConfig;
     if (ai.AI_PROVIDER === 'openai') {
       return new ChatOpenAI({

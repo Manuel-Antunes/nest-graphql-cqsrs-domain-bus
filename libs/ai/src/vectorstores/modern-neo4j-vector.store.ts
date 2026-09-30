@@ -1,7 +1,7 @@
+import { randomUUID } from 'node:crypto';
 import { Neo4jVectorStore } from '@langchain/community/vectorstores/neo4j_vector';
 import type { Document } from '@langchain/core/documents';
 import type { EmbeddingsInterface } from '@langchain/core/embeddings';
-import { randomUUID } from 'node:crypto';
 
 interface Neo4jVectorStoreArgs {
   url: string;
@@ -230,9 +230,8 @@ export class ModernNeo4jVectorStore extends Neo4jVectorStore {
       );
     }
     if (searchType === 'hybrid') {
-      const ftsNodeLabel = await store.retrieveExistingFtsIndex(
-        textNodeProperties,
-      );
+      const ftsNodeLabel =
+        await store.retrieveExistingFtsIndex(textNodeProperties);
       if (!ftsNodeLabel) {
         await store.createNewKeywordIndex(textNodeProperties);
       } else if (ftsNodeLabel !== internal.nodeLabel) {

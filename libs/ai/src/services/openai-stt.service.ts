@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import OpenAI, { toFile } from 'openai';
+
 import { STTOptions, STTService } from './stt.service';
 
 @Injectable()
@@ -31,6 +32,8 @@ export class OpenAIWhisperSTTService implements STTService {
       response_format: 'text',
     });
 
-    return typeof result === 'string' ? result : (result as { text: string }).text;
+    return typeof result === 'string'
+      ? result
+      : (result as { text: string }).text;
   }
 }

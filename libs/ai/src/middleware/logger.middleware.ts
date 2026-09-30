@@ -1,7 +1,7 @@
 import { Logger } from '@nestjs/common';
-import { createMiddleware } from 'langchain';
+import { type AnyAgentMiddleware, createMiddleware } from 'langchain';
 
-export const loggerLangchainMiddleware = (logger: Logger) =>
+export const loggerLangchainMiddleware = (logger: Logger): AnyAgentMiddleware =>
   createMiddleware({
     name: 'LoggerMiddleware',
     wrapModelCall: async (request, handler) => {

@@ -1,3 +1,4 @@
+import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
 import { ChatOllama } from '@langchain/ollama';
 import { ChatOpenAI } from '@langchain/openai';
@@ -9,7 +10,7 @@ import { type AiEnvConfig } from '../config/ai.config';
 
 export const ChatModelFactory = {
   provide: 'CHAT_MODEL',
-  useFactory(configService: ConfigService) {
+  useFactory(configService: ConfigService): BaseChatModel {
     const ai = configService.get<AiEnvConfig>('ai')!;
     if (ai.AI_PROVIDER === 'openai') {
       return new ChatOpenAI({

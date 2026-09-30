@@ -1,7 +1,7 @@
 import { ToolMessage } from '@langchain/core/messages';
 import { isGraphBubbleUp } from '@langchain/langgraph';
 import type { Logger } from '@nestjs/common';
-import { createMiddleware } from 'langchain';
+import { type AnyAgentMiddleware, createMiddleware } from 'langchain';
 
 /**
  * Per-tool-call error boundary.
@@ -28,7 +28,9 @@ import { createMiddleware } from 'langchain';
  * Add it FIRST in a middleware array so its `wrapToolCall` is the outermost
  * wrapper and therefore catches errors from every inner middleware + the tool.
  */
-export const toolErrorBoundaryMiddleware = (logger: Logger) =>
+export const toolErrorBoundaryMiddleware = (
+  logger: Logger,
+): AnyAgentMiddleware =>
   createMiddleware({
     name: 'ToolErrorBoundaryMiddleware',
     wrapToolCall: async (request, handler) => {
