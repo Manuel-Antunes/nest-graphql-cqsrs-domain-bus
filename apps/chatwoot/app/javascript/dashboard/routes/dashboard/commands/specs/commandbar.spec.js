@@ -210,9 +210,7 @@ describe('commandbar', () => {
     it('asks what the user is searching for by default', async () => {
       await mountCommandBar();
 
-      expect(element.getAttribute('placeholder')).toBe(
-        'COMMAND_BAR.SEARCH_PLACEHOLDER'
-      );
+      expect(element.getAttribute('placeholder')).toBe('Search or jump to');
     });
 
     it('switches to the snooze prompt inside a snooze menu', async () => {
@@ -222,7 +220,7 @@ describe('commandbar', () => {
       await flushPromises();
 
       expect(element.getAttribute('placeholder')).toBe(
-        'COMMAND_BAR.SNOOZE_PLACEHOLDER'
+        'Type a time e.g. tomorrow, 2 hours, next friday, jan 15...'
       );
     });
   });
@@ -297,9 +295,7 @@ describe('commandbar', () => {
       await flushPromises();
 
       expect(commandIds()).not.toContain('dynamic_snooze_0');
-      expect(element.getAttribute('placeholder')).toBe(
-        'COMMAND_BAR.SEARCH_PLACEHOLDER'
-      );
+      expect(element.getAttribute('placeholder')).toBe('Search or jump to');
     });
   });
 
@@ -326,7 +322,7 @@ describe('commandbar', () => {
       });
 
       expect(element.getAttribute('placeholder')).toBe(
-        'COMMAND_BAR.SNOOZE_PLACEHOLDER'
+        'Type a time e.g. tomorrow, 2 hours, next friday, jan 15...'
       );
     });
   });

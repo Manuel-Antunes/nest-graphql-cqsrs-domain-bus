@@ -20,6 +20,18 @@ vi.mock('vue-i18n', () => ({
 
 const SlotStub = { template: '<div><slot /></div>' };
 
+const NativeSelectStub = {
+  props: ['modelValue', 'options'],
+  emits: ['update:modelValue'],
+  template: `
+    <select :value="modelValue" @change="$emit('update:modelValue', $event.target.value)">
+      <option v-for="option in options" :key="option.value" :value="option.value">
+        {{ option.label }}
+      </option>
+    </select>
+  `,
+};
+
 const mountDialog = () =>
   mount(NewImportDialog, {
     props: { show: true },
@@ -33,6 +45,7 @@ const mountDialog = () =>
         DialogClose: SlotStub,
         Checkbox: true,
         Spinner: true,
+        Select: NativeSelectStub,
       },
       mocks: {
         $t: key => key,

@@ -57,7 +57,11 @@ describe('Popover', () => {
 
   const pressEscape = target =>
     (target || document).dispatchEvent(
-      new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })
+      new KeyboardEvent('keydown', {
+        key: 'Escape',
+        bubbles: true,
+        cancelable: true,
+      })
     );
 
   beforeEach(() => {

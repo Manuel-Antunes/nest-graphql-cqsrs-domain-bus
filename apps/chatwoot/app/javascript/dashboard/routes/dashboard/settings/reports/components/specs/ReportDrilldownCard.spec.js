@@ -39,8 +39,9 @@ vi.mock('shared/helpers/timeHelper', () => ({
   },
   shortTimestamp: time => {
     const timestamps = {
-      '2 minutes ago': '2m',
-      '4 days ago': '4d',
+      1621103500: '2m',
+      1621103400: '4d',
+      1621103700: '4d',
     };
     return timestamps[time] || 'now';
   },

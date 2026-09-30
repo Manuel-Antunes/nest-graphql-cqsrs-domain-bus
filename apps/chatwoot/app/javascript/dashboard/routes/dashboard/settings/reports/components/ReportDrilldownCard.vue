@@ -8,7 +8,7 @@ import fromUnixTime from 'date-fns/fromUnixTime';
 import Icon from 'dashboard/components-next/icon/Icon.vue';
 import TimeAgo from 'dashboard/components/ui/TimeAgo.vue';
 import { frontendURL, conversationUrl } from 'dashboard/helper/URLHelper';
-import { dynamicTime, shortTimestamp } from 'shared/helpers/timeHelper';
+import { shortTimestamp } from 'shared/helpers/timeHelper';
 
 const props = defineProps({
   record: {
@@ -39,7 +39,7 @@ const formatTimestamp = timestamp => {
 const compactTimestamp = timestamp => {
   if (!timestamp) return '';
 
-  return shortTimestamp(dynamicTime(timestamp)).trim();
+  return shortTimestamp(timestamp).trim();
 };
 
 const metricValue = computed(() => {

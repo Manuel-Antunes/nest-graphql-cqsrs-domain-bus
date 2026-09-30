@@ -43,7 +43,8 @@ const emit = defineEmits(['show', 'hide']);
 
 const popoverId = useId();
 const isActive = ref(false);
-const triggerRef = ref(null);
+let triggerElement = null;
+const triggerTop = () => triggerElement?.getBoundingClientRect().top ?? 0;
 
 const breakpoints = useBreakpoints(breakpointsTailwind);
 const belowMd = breakpoints.smaller('md');
@@ -64,7 +65,10 @@ const triggerTopAtOpen = ref(0);
 const show = () => {
   if (isActive.value) return;
   isActive.value = true;
-  triggerTopAtOpen.value = triggerRef.value?.getBoundingClientRect().top ?? 0;
+  triggerElement = document.querySelector(
+    `[data-popover-trigger="${popoverId}"]`
+  );
+  triggerTopAtOpen.value = triggerTop();
   emit('show');
 };
 
@@ -92,8 +96,9 @@ useEventListener(
   event => {
     if (!props.closeOnScroll || !showPopover.value) return;
     if (event.target?.closest?.(`[data-popover-id="${popoverId}"]`)) return;
-    const top = triggerRef.value?.getBoundingClientRect().top ?? 0;
-    if (Math.abs(top - triggerTopAtOpen.value) > SCROLL_CLOSE_THRESHOLD) {
+    if (
+      Math.abs(triggerTop() - triggerTopAtOpen.value) > SCROLL_CLOSE_THRESHOLD
+    ) {
       hide();
     }
   },
@@ -124,7 +129,7 @@ defineExpose({ show, hide, toggle });
 <template>
   <Popover :open="showPopover" @update:open="handleOpenChange">
     <PopoverTrigger as-child>
-      <span ref="triggerRef" class="inline-flex">
+      <span :data-popover-trigger="popoverId" class="inline-flex">
         <slot :is-open="isActive" />
       </span>
     </PopoverTrigger>

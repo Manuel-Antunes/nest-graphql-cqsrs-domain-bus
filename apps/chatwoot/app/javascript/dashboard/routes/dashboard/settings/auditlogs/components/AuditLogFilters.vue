@@ -186,7 +186,7 @@ const handleFilterAction = ({ action, value }) => {
     />
     <Button v-else variant="outline" size="sm" @click="openDatePicker">
       <Icon icon="i-lucide-calendar-range" class="shrink-0 size-4" />
-      {{ $t('AUDIT_LOGS.FILTERS.DATE_RANGE') }}
+      {{ t('AUDIT_LOGS.FILTERS.DATE_RANGE') }}
     </Button>
     <div v-for="menu in filterMenus" :key="menu.key" class="relative">
       <DropdownMenu
