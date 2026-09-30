@@ -9,8 +9,10 @@ class Conversations::TypingStatusManager
     @params = params
   end
 
+  # The actor is a user or an agent bot, and nobody's typing is announced without one.
   def trigger_typing_event(event, is_private)
-    user = @user.presence || @resource
+    return if user.blank?
+
     Rails.configuration.dispatcher.dispatch(event, Time.zone.now, conversation: @conversation, user: user, is_private: is_private)
   end
 
