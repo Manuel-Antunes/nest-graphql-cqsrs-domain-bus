@@ -1,6 +1,8 @@
 /// <reference path="../../../.sst/platform/config.d.ts" />
 
+import { dns, stageDomain } from '../edge/domain';
 import { vpc } from '../network';
+import { Neo4j } from './neo4j/components/neo4j';
 
 /**
  * **One database, two schemas** — `posts` and `tagging`, exactly as `docker-compose.yml` serves
@@ -63,3 +65,17 @@ export const redisUrl = $resolve({
   ({ username, password, host, port }) =>
     `rediss://${encodeURIComponent(username)}:${encodeURIComponent(password ?? '')}@${host}:${port}`,
 );
+
+/**
+ * **The lexical graph `libs/ai` indexes documents into** — Neo4j, as a Fargate service of its own
+ * behind a network load balancer on Bolt (`Neo4j`, `neo4j/components`). The password is the
+ * `Neo4jKey` secret, mirrored into SSM so another stage can reference this one with `Neo4j.get` and
+ * the load balancer's ARN. A stage with a domain reaches it at `neo4j.<its domain>`. What connects to
+ * it reads `NEO4J_URI`, `NEO4J_USER`, `NEO4J_PASSWORD` and `NEO4J_DATABASE` (`libs/ai`'s config),
+ * which are `graph.connectionInfo()`.
+ */
+export const graph = new Neo4j('Neo4j', {
+  vpc,
+  domain:
+    dns && stageDomain ? { name: `neo4j.${stageDomain}`, dns } : undefined,
+});
