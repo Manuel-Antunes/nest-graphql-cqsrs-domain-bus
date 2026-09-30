@@ -2,10 +2,12 @@
 import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { dynamicTime } from 'shared/helpers/timeHelper';
+import { useExactTimestamp } from 'shared/composables/useExactTimestamp';
 
 import CardLayout from 'dashboard/components-next/CardLayout.vue';
 import { Button } from 'dashboard/components-next/ui/button';
 import Icon from 'dashboard/components-next/icon/Icon.vue';
+import { Switch } from 'dashboard/components-next/ui/switch';
 import Policy from 'dashboard/components/policy.vue';
 import {
   Popover,
@@ -30,6 +32,14 @@ const props = defineProps({
     type: String,
     default: 'none',
   },
+  enabled: {
+    type: Boolean,
+    default: true,
+  },
+  isUpdating: {
+    type: Boolean,
+    default: false,
+  },
   updatedAt: {
     type: Number,
     required: true,
@@ -40,11 +50,24 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(['action']);
+const emit = defineEmits(['action', 'toggle']);
+
+const exactTimestamp = useExactTimestamp();
 
 const { t } = useI18n();
 
 const isOpen = ref(false);
+
+const enabledState = computed({
+  get: () => props.enabled,
+  set: enabled => emit('toggle', { id: props.id, enabled }),
+});
+
+const statusLabel = computed(() =>
+  props.enabled
+    ? t('CAPTAIN.CUSTOM_TOOLS.STATUS.ENABLED')
+    : t('CAPTAIN.CUSTOM_TOOLS.STATUS.DISABLED')
+);
 
 const menuItems = computed(() => [
   {
@@ -84,6 +107,21 @@ const authTypeLabel = computed(() => {
         {{ title }}
       </span>
       <div class="flex items-center gap-2">
+        <span class="text-xs text-n-slate-11">
+          {{ statusLabel }}
+        </span>
+        <Policy
+          as="span"
+          :permissions="['administrator']"
+          class="inline-flex items-center"
+        >
+          <Switch
+            v-model="enabledState"
+            :disabled="isUpdating"
+            :aria-label="t('CAPTAIN.CUSTOM_TOOLS.STATUS.TOGGLE', { title })"
+            :class="{ 'opacity-50 cursor-not-allowed': isUpdating }"
+          />
+        </Policy>
         <Policy :permissions="['administrator']">
           <Popover v-model:open="isOpen">
             <PopoverTrigger as-child>
@@ -124,12 +162,9 @@ const authTypeLabel = computed(() => {
         </Policy>
       </div>
     </div>
-    <div class="flex items-center justify-between w-full gap-4">
-      <div class="flex items-center gap-3 flex-1">
-        <span
-          v-if="description"
-          class="text-sm truncate text-n-slate-11 flex-1"
-        >
+    <div class="flex items-center justify-between w-full gap-4 min-w-0">
+      <div class="flex items-center gap-3 flex-1 min-w-0">
+        <span v-if="description" class="text-sm truncate text-n-slate-11">
           {{ description }}
         </span>
         <span
@@ -140,7 +175,13 @@ const authTypeLabel = computed(() => {
           {{ authTypeLabel }}
         </span>
       </div>
-      <span class="text-sm text-n-slate-11 line-clamp-1 shrink-0">
+      <span
+        v-tooltip.top="{
+          content: exactTimestamp(updatedAt || createdAt),
+          delay: { show: 500, hide: 0 },
+        }"
+        class="text-sm text-n-slate-11 line-clamp-1 shrink-0"
+      >
         {{ timestamp }}
       </span>
     </div>

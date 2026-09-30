@@ -5,10 +5,14 @@ import { useAppNavigation } from 'dashboard/composables/useAppNavigation';
 import AppLink from 'dashboard/components-next/AppLink.vue';
 import Icon from '../icon/Icon.vue';
 
-defineProps({
+const props = defineProps({
   hasAssistants: {
     type: Boolean,
     default: false,
+  },
+  canSuggestReply: {
+    type: Boolean,
+    default: true,
   },
 });
 
@@ -25,6 +29,7 @@ const routePromptMap = {
     {
       label: 'CAPTAIN.COPILOT.PROMPTS.SUGGEST.LABEL',
       prompt: 'CAPTAIN.COPILOT.PROMPTS.SUGGEST.CONTENT',
+      requestType: 'reply_suggestion',
     },
     {
       label: 'CAPTAIN.COPILOT.PROMPTS.RATE.LABEL',
@@ -52,11 +57,19 @@ const getCurrentRoute = () => {
 
 const promptOptions = computed(() => {
   const currentRoute = getCurrentRoute();
-  return routePromptMap[currentRoute] || routePromptMap.conversations;
+  const prompts = routePromptMap[currentRoute] || routePromptMap.conversations;
+
+  return prompts.filter(
+    prompt => prompt.requestType !== 'reply_suggestion' || props.canSuggestReply
+  );
 });
 
 const handleSuggestion = opt => {
-  emit('useSuggestion', t(opt.prompt));
+  const message = t(opt.prompt);
+  emit(
+    'useSuggestion',
+    opt.requestType ? { message, requestType: opt.requestType } : message
+  );
 };
 </script>
 

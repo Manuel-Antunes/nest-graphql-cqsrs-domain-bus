@@ -35,13 +35,13 @@ const onClickClose = () => {
       <div class="flex items-center gap-3">
         <h5 class="text-sm font-medium text-n-slate-11">{{ title }}</h5>
         <span class="h-3 w-px bg-n-weak" />
-        <Button variant="ghost" @click="onAddClick">{{
-          t('CAPTAIN.ASSISTANTS.GUARDRAILS.ADD.SUGGESTED.ADD')
-        }}</Button>
+        <Button variant="ghost" @click="onAddClick">
+          {{ t('CAPTAIN.ASSISTANTS.GUARDRAILS.ADD.SUGGESTED.ADD') }}
+        </Button>
       </div>
-      <Button variant="ghost" size="icon" @click="onClickClose"
-        ><Icon :icon="'i-lucide-x'"
-      /></Button>
+      <Button variant="ghost" size="icon" @click="onClickClose">
+        <Icon icon="i-lucide-x" />
+      </Button>
     </div>
     <div
       class="flex flex-col items-start divide-y divide-n-strong divide-dashed w-full"

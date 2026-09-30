@@ -156,7 +156,9 @@ is already one of that project's inputs.
   (`config.i18n.default_locale = :en` in `test.rb`): `SwitchLocale` renders every request in the
   installation's default locale, which is `pt_BR` everywhere else. `pnpm test` reaches
   it like any other project; CI runs it as a job of its own, `chatwoot`, beside `test`, which
-  excludes it.
+  excludes it — and that job first runs `build:frontend`, the dashboard's production Vite bundle,
+  because a missing import in a page only a deploy would build fails nowhere else: Vitest loads
+  only what a spec imports, and the e2e's `vite dev` compiles only the pages it opens.
 - **What ESLint had and Biome does not ship is `tools/biome`**, three GritQL plugins wired by path
   in the `biome.json` of the project each one checks — `playwright.grit` in `apps/web-e2e`,
   `graphql-operations.grit` and `tailwind.grit` in `apps/web`.
@@ -481,7 +483,7 @@ apps/web-e2e             the whole system through a BROWSER: Playwright over thr
 apps/web                 a Next.js client of the GATEWAY (not part of the saga). It boots a Nest
                          CONTAINER of its own, holds the same Better Auth and serves its screens —
                          better-auth-ui's — and PUBLISHES the emails they send — see below
-apps/chatwoot            a vendored Chatwoot 4.10 fork (Rails, Vue): the `chatwoot` subgraph and
+apps/chatwoot            a vendored Chatwoot 4.18 fork (Rails, Vue): the `chatwoot` subgraph and
                          the support dashboard the web embeds at /atendimento. Same Postgres,
                          schema `chatwoot`; no sign-in of its own. See "Chatwoot" below
 ```
@@ -1313,6 +1315,21 @@ last section is the design; the essentials:
   `/settings/organizations` on the web — directly when Chatwoot stands alone, and embedded by posting
   `PLATFORM_NAVIGATE` to `/atendimento`, which pushes the path only when it is one of its own
   (`Chatwoot.platformPathOf`).
+- **An upstream release is merged, not cherry-picked, and its screens are re-done.** The fork is
+  upstream 4.18 underneath: the backend is upstream's whole, and upstream's frontend is taken
+  wherever it does not fight the fork — no vue-router (`useAppNavigation`, `AppLink`), shadcn-vue
+  (`components-next/ui`) instead of the old `components-next` kit, and every screen an Inertia page
+  (`inertia/pages/**`, a controller under `app/controllers/inertia/**`, a line in `config/routes.rb`
+  and in `routes/registry.js`). Two things an upgrade must redo by hand: the `feature_flags` and
+  `feature_flags_ext_1` a mirrored account starts with (`CHATWOOT_DEFAULT_FEATURE_FLAGS*` in
+  `libs/organizations`, a system migration to recreate the trigger) — `chatwoot-default-features.spec`
+  reads `features.yml` and fails until they match — and a `pt_BR` text for every new `en` key, in
+  `config/locales` and in the dashboard's JSON, because `pt_BR` is the installation's locale and
+  production falls back to nothing else. Left out of 4.18 on purpose, because the platform owns
+  what they manage: the onboarding screens (an account is an organization, never a Chatwoot
+  sign-up), the profile's active-sessions list (a session is Better Auth's), and upstream's own
+  Playwright suite and GitHub workflows. The legacy `/notifications` page upstream removed
+  redirects to the inbox view.
 - **Clients** (`libs/clients`, posts-api's `client/` slices) are guarded by the organization's
   `client` resource (`CLIENT_RESOURCE`: owners and admins every action, members all but `delete`) and
   the `read:clients`/`write:clients` scopes. The web's `/clients` screen links and creates Chatwoot

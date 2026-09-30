@@ -584,17 +584,23 @@ importers:
       '@chatwoot/ninja-keys':
         specifier: 1.2.3
         version: 1.2.3
+      '@chatwoot/pico-search':
+        specifier: 0.6.2
+        version: 0.6.2
       '@chatwoot/prosemirror-schema':
-        specifier: 1.3.5
-        version: 1.3.5
+        specifier: 1.4.5
+        version: 1.4.5
       '@chatwoot/utils':
-        specifier: ^0.0.51
-        version: 0.0.51
+        specifier: ^0.0.57
+        version: 0.0.57
+      '@chatwoot/viz':
+        specifier: ^0.1.5
+        version: 0.1.6(vue@3.5.43(typescript@5.9.3))
       '@formkit/core':
-        specifier: ^1.6.7
+        specifier: ^1.7.2
         version: 1.7.2
       '@formkit/vue':
-        specifier: ^1.6.7
+        specifier: ^1.7.2
         version: 1.7.2(vue@3.5.43(typescript@5.9.3))
       '@hcaptcha/vue3-hcaptcha':
         specifier: ^1.3.0
@@ -602,6 +608,12 @@ importers:
       '@highlightjs/vue-plugin':
         specifier: ^2.1.0
         version: 2.1.0(highlight.js@11.12.0)(vue@3.5.43(typescript@5.9.3))
+      '@hotwired/turbo-rails':
+        specifier: ^8.0.13
+        version: 8.0.23
+      '@iconify-json/fluent':
+        specifier: ^1.2.32
+        version: 1.2.59
       '@iconify-json/material-symbols':
         specifier: ^1.2.10
         version: 1.2.93
@@ -636,7 +648,7 @@ importers:
         specifier: 2.2.1
         version: 2.2.1
       '@tailwindcss/typography':
-        specifier: ^0.5.15
+        specifier: ^0.5.19
         version: 0.5.20(tailwindcss@4.1.4)
       '@tanstack/vue-table':
         specifier: ^8.20.5
@@ -654,7 +666,7 @@ importers:
         specifier: ^4.15.1
         version: 4.15.1(vue@3.5.43(typescript@5.9.3))(zod@4.5.4)
       '@vitejs/plugin-vue':
-        specifier: ^5.1.4
+        specifier: ^5.2.4
         version: 5.2.4(vite@5.4.21(@types/node@26.5.0)(less@4.8.1)(lightningcss@1.33.0)(sass-embedded@1.105.0)(sass@1.105.0)(terser@5.51.2))(vue@3.5.43(typescript@5.9.3))
       '@vue/apollo-composable':
         specifier: ^4.2.2
@@ -681,7 +693,7 @@ importers:
         specifier: ^5.2.6
         version: 5.2.8
       axios:
-        specifier: ^1.13.2
+        specifier: ^1.15.0
         version: 1.18.1
       camelcase-keys:
         specifier: ^9.1.3
@@ -714,8 +726,8 @@ importers:
         specifier: ^1.3.3
         version: 1.3.8(date-fns@2.21.1)
       dompurify:
-        specifier: 3.2.4
-        version: 3.2.4
+        specifier: 3.4.13
+        version: 3.4.13
       embla-carousel-vue:
         specifier: ^8.6.0
         version: 8.6.0(vue@3.5.43(typescript@5.9.3))
@@ -747,14 +759,14 @@ importers:
         specifier: ^2.0.5
         version: 2.0.5
       lettersanitizer:
-        specifier: ^1.0.6
+        specifier: ^1.0.8
         version: 1.0.9
       libphonenumber-js:
         specifier: ^1.11.9
         version: 1.13.12
       markdown-it:
-        specifier: ^13.0.2
-        version: 13.0.2
+        specifier: ^14.1.1
+        version: 14.3.2
       markdown-it-link-attributes:
         specifier: ^4.0.1
         version: 4.0.1
@@ -819,14 +831,17 @@ importers:
         specifier: ^4.15.1
         version: 4.15.1(vue@3.5.43(typescript@5.9.3))
       video.js:
-        specifier: 7.18.1
-        version: 7.18.1
+        specifier: 7.21.1
+        version: 7.21.1
       videojs-record:
         specifier: 4.5.0
         version: 4.5.0
       videojs-wavesurfer:
         specifier: 3.8.0
         version: 3.8.0
+      virtua:
+        specifier: ^0.48.6
+        version: 0.48.8(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(vue@3.5.43(typescript@5.9.3))
       vue:
         specifier: ^3.5.12
         version: 3.5.43(typescript@5.9.3)
@@ -837,13 +852,13 @@ importers:
         specifier: ^1.0.3
         version: 1.0.3(vue@3.5.43(typescript@5.9.3))
       vue-dompurify-html:
-        specifier: ^5.1.0
+        specifier: ^5.3.0
         version: 5.3.0(vue@3.5.43(typescript@5.9.3))
       vue-i18n:
         specifier: 9.14.5
         version: 9.14.5(vue@3.5.43(typescript@5.9.3))
       vue-letter:
-        specifier: ^0.2.1
+        specifier: ^0.2.2
         version: 0.2.2
       vue-multiselect:
         specifier: 3.1.0
@@ -880,7 +895,7 @@ importers:
         version: 4.5.4
     devDependencies:
       '@egoist/tailwindcss-icons':
-        specifier: ^1.9.0
+        specifier: ^1.9.2
         version: 1.9.2(tailwindcss@4.1.4)
       '@histoire/plugin-vue':
         specifier: 0.17.15
@@ -903,6 +918,9 @@ importers:
       '@intlify/eslint-plugin-vue-i18n':
         specifier: ^3.2.0
         version: 3.2.0(eslint@8.57.1)
+      '@rollup/plugin-yaml':
+        specifier: ^4.1.2
+        version: 4.1.2(rollup@4.63.4)
       '@size-limit/file':
         specifier: ^8.2.4
         version: 8.2.6(size-limit@8.2.6)
@@ -958,7 +976,7 @@ importers:
         specifier: ^16.2.7
         version: 16.4.0
       postcss:
-        specifier: ^8.4.47
+        specifier: ^8.5.23
         version: 8.5.28
       postcss-import:
         specifier: ^15.1.0
@@ -982,7 +1000,7 @@ importers:
         specifier: ^5.4.21
         version: 5.4.21(@types/node@26.5.0)(less@4.8.1)(lightningcss@1.33.0)(sass-embedded@1.105.0)(sass@1.105.0)(terser@5.51.2)
       vite-plugin-ruby:
-        specifier: ^5.0.0
+        specifier: ^5.2.1
         version: 5.2.5(vite@5.4.21(@types/node@26.5.0)(less@4.8.1)(lightningcss@1.33.0)(sass-embedded@1.105.0)(sass@1.105.0)(terser@5.51.2))
       vitest:
         specifier: 3.0.5
@@ -4176,12 +4194,21 @@ packages:
   '@chatwoot/ninja-keys@1.2.3':
     resolution: {integrity: sha512-xM8d9P5ikDMZm2WbaCTk/TW5HFauylrU3cJ75fq5je6ixKwyhl/0kZbVN/vbbZN4+AUX/OaSIn6IJbtCgIF67g==}
 
-  '@chatwoot/prosemirror-schema@1.3.5':
-    resolution: {integrity: sha512-3Koj3jwO1qOxJG84D4FqPOJ6o8k6ehZi1zedO3vKRERATm2Cy1p+ET6FEvVYWUpoBvDwR6hNVScXrcNNVobhsA==}
+  '@chatwoot/pico-search@0.6.2':
+    resolution: {integrity: sha512-uZnt/c06sN3epXv42uzweoqKLCY94s+h9vpbw/1SYCPTww4kCo18vUUD3QZ7tPPSBQB130Fjc79tLQMSWoGt4w==}
 
-  '@chatwoot/utils@0.0.51':
-    resolution: {integrity: sha512-WlEmWfOTzR7YZRUWzn5Wpm15/BRudpwqoNckph8TohyDbiim1CP4UZGa+qjajxTbNGLLhtKlm0Xl+X16+5Wceg==}
+  '@chatwoot/prosemirror-schema@1.4.5':
+    resolution: {integrity: sha512-+s9aKNjoxbT57qs1VAElPfwx3KVO714H5A9sWTJ9E4wsX9pr3SXvs4acWChDcfprGFCm16ybe/XS0161Ax6raA==}
+
+  '@chatwoot/utils@0.0.57':
+    resolution: {integrity: sha512-L4QrCmimkULY9ZQk0MJRLfwry3Pqq2e7psETqoZGYopMZ+8DSWe4t6cModSjTCBnDjqgp/gTl0oorntCYrDE8w==}
     engines: {node: '>=10'}
+
+  '@chatwoot/viz@0.1.6':
+    resolution: {integrity: sha512-ckd82E+d0caLvt/60LQB71eE2I9CgYMKyQZqEqjZjEBssleOZhG+5UGJDZhEuuMyp+J7NNMpY5jcsn0ozCrLEw==}
+    engines: {node: '>=24.4.1'}
+    peerDependencies:
+      vue: ^3.5.0
 
   '@clack/core@1.4.3':
     resolution: {integrity: sha512-/kr3UWNtdJfxZtPgDqUOmG2pvwlmcLGheex5yiZKdwbzZJxhV+HMNR9QNmyY5cGwTNV6LrR7Jtp+KjhUAP1qBQ==}
@@ -5442,6 +5469,13 @@ packages:
       zod:
         optional: true
 
+  '@hotwired/turbo-rails@8.0.23':
+    resolution: {integrity: sha512-iBILwda3qmQC7FYM70+4s6kEQ7Fx9dJ6+yGxjPyrz9a5JDx1+y7OAA5TA7GGVOZJoicMLrKGdFDNorl40X35lw==}
+
+  '@hotwired/turbo@8.0.23':
+    resolution: {integrity: sha512-GZ7cijxEZ6Ig71u7rD6LHaRv/wcE/hNsc+nEfiWOkLNqUgLOwo5MNGWOy5ZV9ZUDSiQx1no7YxjTNnT4O6//cQ==}
+    engines: {node: '>= 18'}
+
   '@humanfs/core@0.19.2':
     resolution: {integrity: sha512-UhXNm+CFMWcbChXywFwkmhqjs3PRCmcSa/hfBgLIb7oQ5HNb1wS0icWsGtSAUNgefHeI+eBrA8I1fxmbHsGdvA==}
     engines: {node: '>=18.18.0'}
@@ -5470,6 +5504,9 @@ packages:
   '@humanwhocodes/retry@0.4.3':
     resolution: {integrity: sha512-bV0Tgo9K4hfPCek+aMAn81RppFKv2ySDQeMoSZuvTASywNTnVJCArCZE2FWqpvIatKu7VMRLWlR1EazvVhDyhQ==}
     engines: {node: '>=18.18'}
+
+  '@iconify-json/fluent@1.2.59':
+    resolution: {integrity: sha512-fxed71Y7Tg6aXZCZeVyOevFQdMgbPPrIV+pE/3gTLxFlVLTtDkAsK/B/WZzkLUYxJ3cdoP0ex2a23Oi6ePhWkA==}
 
   '@iconify-json/logos@1.2.15':
     resolution: {integrity: sha512-87zwqEFatvpcK7lIIp0RnCbDAPWcG8bTK5hZI5SuD71za+opSuqtGvFUiSNt6wiyuY+nolrW/JW1K4/mBczWhQ==}
@@ -8292,6 +8329,9 @@ packages:
   '@rails/actioncable@6.1.3':
     resolution: {integrity: sha512-m02524MR9cTnUNfGz39Lkx9jVvuL0tle4O7YgvouJ7H83FILxzG1nQ5jw8pAjLAr9XQGu+P1sY4SKE3zyhCNjw==}
 
+  '@rails/actioncable@8.1.400':
+    resolution: {integrity: sha512-Qffc3/I9xcpeaal12hmi9EPRV3hz9FvakUHBR7kL0jpZviWwO9dyaG8F1ltcjkHIdFxQ5QqzRyequAWHMq17xQ==}
+
   '@rails/ujs@7.1.600':
     resolution: {integrity: sha512-ntMYJ8++n1zcIJ1g75or7Va9IU3ueCHgp9IJk7Ny7eFEbu0Kx40EHZ2FNhoxoUEjlF5NifCFCbvoK5rDK5HpIQ==}
 
@@ -8434,6 +8474,15 @@ packages:
     engines: {node: '>=16.0.0 || 14 >= 14.17'}
     peerDependencies:
       rollup: ^2.68.0||^3.0.0||^4.0.0
+    peerDependenciesMeta:
+      rollup:
+        optional: true
+
+  '@rollup/plugin-yaml@4.1.2':
+    resolution: {integrity: sha512-RpupciIeZMUqhgFE97ba0s98mOFS7CWzN3EJNhJkqSv9XLlWYtwVdtE6cDw6ASOF/sZVFS7kRJXftaqM2Vakdw==}
+    engines: {node: '>=14.0.0'}
+    peerDependencies:
+      rollup: ^1.20.0||^2.0.0||^3.0.0||^4.0.0
     peerDependenciesMeta:
       rollup:
         optional: true
@@ -9976,15 +10025,11 @@ packages:
       '@opentelemetry/sdk-metrics': '>=2.0.0 <3.0.0'
       '@opentelemetry/sdk-trace-base': '>=2.0.0 <3.0.0'
 
-  '@videojs/http-streaming@2.13.1':
-    resolution: {integrity: sha512-1x3fkGSPyL0+iaS3/lTvfnPTtfqzfgG+ELQtPPtTvDwqGol9Mx3TNyZwtSTdIufBrqYRn7XybB/3QNMsyjq13A==}
+  '@videojs/http-streaming@2.15.1':
+    resolution: {integrity: sha512-/uuN3bVkEeJAdrhu5Hyb19JoUo3CMys7yf2C1vUjeL1wQaZ4Oe8JrZzRrnWZ0rjvPgKfNLPXQomsRtgrMoRMJQ==}
     engines: {node: '>=8', npm: '>=5'}
     peerDependencies:
       video.js: ^6 || ^7
-
-  '@videojs/vhs-utils@3.0.4':
-    resolution: {integrity: sha512-hui4zOj2I1kLzDgf8QDVxD3IzrwjS/43KiS8IHQO0OeeSsb4pB/lgNt1NG7Dv0wMQfCccUpMVLGcK618s890Yg==}
-    engines: {node: '>=8', npm: '>=5'}
 
   '@videojs/vhs-utils@3.0.5':
     resolution: {integrity: sha512-PKVgdo8/GReqdx512F+ombhS+Bzogiofy1LgAj4tN8PfdBx3HSS7V5WfJotKTqtOWGwVfSWsrYN/t09/DSryrw==}
@@ -10330,10 +10375,9 @@ packages:
     resolution: {integrity: sha512-FNoYzHawTMk/6KMQoEG5O4PuioX19UbwdQKF44yw0nLfOypfQdjtfZzo/UIJWAJ23sNIFbD1Ug9lbaDGMwbqQA==}
     engines: {node: '>=8'}
 
-  '@xmldom/xmldom@0.7.13':
-    resolution: {integrity: sha512-lm2GW5PkosIzccsaZIz7tp8cPADSIlIHWDFTR1N0SzfinhhYgeIQjFMz4rYzanCScr3DqQLeomUDArp6MWKm+g==}
+  '@xmldom/xmldom@0.8.15':
+    resolution: {integrity: sha512-/5NV/vDALVFDXgLmfsy9TRCBlKwO2LNBFzpzvb9iIj+jR+eSc6DLYYvVOdivT/jm7MtU6TebYuRmzEOI7w40UA==}
     engines: {node: '>=10.0.0'}
-    deprecated: this version has critical issues, please update to the latest version
 
   '@xmldom/xmldom@0.9.12':
     resolution: {integrity: sha512-5AXjrcMClTryPe9LgZrygpB1lj7s0S9E0+W+AHaVKAVyHanafK86iPSvG5xHVSp/jC+VH1UXu0TAEmY279xH7A==}
@@ -10415,8 +10459,8 @@ packages:
     resolution: {integrity: sha512-XNAb/a6TCqou+TufU8/u11HCu9x1gYvOoxLwtlXgIqmkrYQADVv6ljyW2zwiPhHz9R1gItAWpuDrdJMmrOBFEA==}
     engines: {node: '>= 16.0.0'}
 
-  aes-decrypter@3.1.2:
-    resolution: {integrity: sha512-42nRwfQuPRj9R1zqZBdoxnaAmnIFyDi0MNyTVhjdFOd8fifXKKRfwIHIZ6AMn1or4x5WONzjwRTbTWcsIQ0O4A==}
+  aes-decrypter@3.1.3:
+    resolution: {integrity: sha512-VkG9g4BbhMBy+N5/XodDeV6F02chEk9IpgRTq/0bS80y4dzy79VH2Gtms02VXomf3HmyRe3yyJYkJ990ns+d6A==}
 
   agent-base@6.0.2:
     resolution: {integrity: sha512-RZNwNclF7+MS/8bDg70amg32dyeZGZxiDuQmZxKLAlQjr3jGyLx+4Kkk58UO7D2QdgFIQCovuSuZESne6RG6XQ==}
@@ -12076,11 +12120,8 @@ packages:
     resolution: {integrity: sha512-cgwlv/1iFQiFnU96XXgROh8xTeetsnJiDsTc7TYCLFd9+/WNkIqPTxiM/8pSd8VIrhXGTf1Ny1q1hquVqDJB5w==}
     engines: {node: '>= 4'}
 
-  dompurify@3.2.4:
-    resolution: {integrity: sha512-ysFSFEDVduQpyhzAob/kkuJjf5zWkZD8/A9ywSp1byueyuCfHamrCBa14/Oc2iiB0e51B+NpxSl5gmzn+Ms/mg==}
-
-  dompurify@3.4.16:
-    resolution: {integrity: sha512-sqo+pNp3qRhCIpbgRi1y8Tgk27Bo2Ry7w0dC1NBeNTdZChWjz9Xb/KOoZbRP/R6pQZ80Qw8YhXw13hWWBbMRnQ==}
+  dompurify@3.4.13:
+    resolution: {integrity: sha512-2vmYIoqjze2d+kakP8S/nS5shfsl587kzwEjcGlTdiksUVgFHnFCsLYDVj/JNqJVOQZGSYBTmuycv0PodwmnMQ==}
 
   domutils@2.8.0:
     resolution: {integrity: sha512-w96Cjofp72M5IIhpjgobBimYEfoPjx1Vx0BSX9P30WBdZW2WIKU0T1Bd0kz2eNZ9ikjKgHbEyKx8BB6H1L3h3A==}
@@ -14506,9 +14547,6 @@ packages:
   linkify-it@3.0.3:
     resolution: {integrity: sha512-ynTsyrFSdE5oZ/O9GEf00kPngmOfVwazR5GKDq6EYfhlpFug3J2zybX56a2PRRpc9P+FuSoGNAwjlbDs9jJBPQ==}
 
-  linkify-it@4.0.1:
-    resolution: {integrity: sha512-C7bfi1UZmoj8+PQx22XyeXCuBlokoyWQL5pWSP+EI6nzRylyThouddufc2c1NDIcP9k5agmN9fLpA7VNJfIiqw==}
-
   linkify-it@5.0.2:
     resolution: {integrity: sha512-ONTm2jCMAVZjgQa/Fy1kScXsuOoF5NPTsoFBdE1KVIZ2vAh/r9+Bqo+0jINCBYnavTPQZz38QzFTme79ENoN3Q==}
 
@@ -14693,8 +14731,8 @@ packages:
     resolution: {integrity: sha512-h5bgJWpxJNswbU7qCrV0tIKQCaS3blPDrqKWx+QxzuzL1zGUzij9XCWLrSLsJPu5t+eWA/ycetzYAO5IOMcWAQ==}
     hasBin: true
 
-  m3u8-parser@4.7.0:
-    resolution: {integrity: sha512-48l/OwRyjBm+QhNNigEEcRcgbRvnUjL7rxs597HmW9QSNbyNvt+RcZ9T/d9vxi9A9z7EZrB1POtZYhdRlwYQkQ==}
+  m3u8-parser@4.8.0:
+    resolution: {integrity: sha512-UqA2a/Pw3liR6Df3gwxrqghCP17OpPlQj6RBPLYygf/ZSQ4MoSgvdvhvt35qV+3NaaA0FSZx93Ix+2brT1U7cA==}
 
   magic-string@0.30.17:
     resolution: {integrity: sha512-sNPKHvyjVf7gyjwS4xGTaW/mCnF8wnjtifKBEhxfZ7E/S8tQ0rssrwGNn6q8JH/ohItJfSQp9mBtQYuTlH5QnA==}
@@ -14768,10 +14806,6 @@ packages:
 
   markdown-it@12.3.2:
     resolution: {integrity: sha512-TchMembfxfNVpHkbtriWltGWc+m3xszaRD0CZup7GFFhzIgQqxIfn3eGj1yZpfuflzPvfkt611B2Q/Bsk1YnGg==}
-    hasBin: true
-
-  markdown-it@13.0.2:
-    resolution: {integrity: sha512-FtwnEuuK+2yVU7goGn/MJ0WBZMM9ZPgU9spqlFs7/A/pDIUNSOQZhUgOqYCficIuR2QaFnrt8LHqBWsbTAoI5w==}
     hasBin: true
 
   markdown-it@14.3.2:
@@ -15147,8 +15181,8 @@ packages:
       react-dom:
         optional: true
 
-  mpd-parser@0.21.0:
-    resolution: {integrity: sha512-NbpMJ57qQzFmfCiP1pbL7cGMbVTD0X1hqNgL0VYP1wLlZXLf/HtmvQpNkOA1AHkPVeGQng+7/jEtSvNUzV7Gdg==}
+  mpd-parser@0.22.1:
+    resolution: {integrity: sha512-fwBebvpyPUU8bOzvhX0VQZgSohncbgYwUyJJoTSNpmy7ccD2ryiCvM7oRkn/xQH5cv73/xU7rJSNCLjdGFor0Q==}
     hasBin: true
 
   mri@1.2.0:
@@ -17871,6 +17905,10 @@ packages:
     resolution: {integrity: sha512-605uxS6bcYxGXw9qi62XyrV6Q3xwbndjachmNxu8HWTtVPxZfEJN9fd/SZS1Q54Sn2y0TMyMxFj/cJINqGHrKw==}
     hasBin: true
 
+  tosource@2.0.0-alpha.3:
+    resolution: {integrity: sha512-KAB2lrSS48y91MzFPFuDg4hLbvDiyTjOVgaK7Erw+5AmZXNq4sFRVn8r6yxSLuNs15PaokrDRpS61ERY9uZOug==}
+    engines: {node: '>=10'}
+
   totalist@3.0.1:
     resolution: {integrity: sha512-sf4i37nQ2LBx4m3wB74y+ubopq6W/dIzXg0FDGjsYnZHVa1Da8FH853wlL2gtUhg+xJXjfk3kUZS3BRoQeoQBQ==}
     engines: {node: '>=6'}
@@ -18315,8 +18353,8 @@ packages:
   victory-vendor@37.3.6:
     resolution: {integrity: sha512-SbPDPdDBYp+5MJHhBCAyI7wKM3d5ivekigc2Dk2s7pgbZ9wIgIBYGVw4zGHBml/qTFbexrofXW6Gu4noGxrOwQ==}
 
-  video.js@7.18.1:
-    resolution: {integrity: sha512-mnXdmkVcD5qQdKMZafDjqdhrnKGettZaGSVkExjACiylSB4r2Yt5W1bchsKmjFpfuNfszsMjTUnnoIWSSqoe/Q==}
+  video.js@7.21.1:
+    resolution: {integrity: sha512-AvHfr14ePDHCfW5Lx35BvXk7oIonxF6VGhSxocmTyqotkQpxwYdmt4tnQSV7MYzNrYHb0GI8tJMt20NDkCQrxg==}
 
   videojs-font@3.2.0:
     resolution: {integrity: sha512-g8vHMKK2/JGorSfqAZQUmYYNnXmfec4MLhwtEFS+mMs2IDY398GLysy6BH6K+aS1KMNu/xWZ8Sue/X/mdQPliA==}
@@ -18329,6 +18367,26 @@ packages:
 
   videojs-wavesurfer@3.8.0:
     resolution: {integrity: sha512-qHucCBiEW+4dZ0Zp1k4R1elprUOV+QDw87UDA9QRXtO7GK/MrSdoe/TMFxP9SLnJCiX9xnYdf4OQgrmvJ9UVVw==}
+
+  virtua@0.48.8:
+    resolution: {integrity: sha512-jpsxOw5V4B6hg44JePRLo9DL0TV7N1lBEVtPjKpAJebXyhI2s9lfiXJESaLapNtr3vtiSk/pWHiLf7B2a6UcgQ==}
+    peerDependencies:
+      react: '>=16.14.0'
+      react-dom: '>=16.14.0'
+      solid-js: '>=1.0'
+      svelte: '>=5.0'
+      vue: '>=3.2'
+    peerDependenciesMeta:
+      react:
+        optional: true
+      react-dom:
+        optional: true
+      solid-js:
+        optional: true
+      svelte:
+        optional: true
+      vue:
+        optional: true
 
   vite-node@0.34.7:
     resolution: {integrity: sha512-0Yzb96QzHmqIKIs/x2q/sqG750V/EF6yDkS2p1WjJc1W2bgRSuQjf5vB9HY8h2nVb5j4pO5paS5Npcv3s69YUg==}
@@ -21722,8 +21780,12 @@ snapshots:
       hotkeys-js: 3.8.7
       lit: 2.2.6
 
-  '@chatwoot/prosemirror-schema@1.3.5':
+  '@chatwoot/pico-search@0.6.2': {}
+
+  '@chatwoot/prosemirror-schema@1.4.5':
     dependencies:
+      linkify-it: 5.0.2
+      markdown-it: 14.3.2
       markdown-it-sup: 2.0.0
       prosemirror-commands: 1.7.2
       prosemirror-dropcursor: 1.8.4
@@ -21740,9 +21802,13 @@ snapshots:
       prosemirror-utils: 1.2.2(prosemirror-model@1.25.12)(prosemirror-state@1.4.4)
       prosemirror-view: 1.42.6
 
-  '@chatwoot/utils@0.0.51':
+  '@chatwoot/utils@0.0.57':
     dependencies:
       date-fns: 2.30.0
+
+  '@chatwoot/viz@0.1.6(vue@3.5.43(typescript@5.9.3))':
+    dependencies:
+      vue: 3.5.43(typescript@5.9.3)
 
   '@clack/core@1.4.3':
     dependencies:
@@ -23173,6 +23239,13 @@ snapshots:
       class-validator: 0.15.1
       zod: 4.5.4
 
+  '@hotwired/turbo-rails@8.0.23':
+    dependencies:
+      '@hotwired/turbo': 8.0.23
+      '@rails/actioncable': 8.1.400
+
+  '@hotwired/turbo@8.0.23': {}
+
   '@humanfs/core@0.19.2':
     dependencies:
       '@humanfs/types': 0.15.0
@@ -23198,6 +23271,10 @@ snapshots:
   '@humanwhocodes/object-schema@2.0.3': {}
 
   '@humanwhocodes/retry@0.4.3': {}
+
+  '@iconify-json/fluent@1.2.59':
+    dependencies:
+      '@iconify/types': 2.0.0
 
   '@iconify-json/logos@1.2.15':
     dependencies:
@@ -26545,6 +26622,8 @@ snapshots:
 
   '@rails/actioncable@6.1.3': {}
 
+  '@rails/actioncable@8.1.400': {}
+
   '@rails/ujs@7.1.600': {}
 
   '@react-email/render@2.1.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
@@ -26638,6 +26717,14 @@ snapshots:
       is-reference: 1.2.1
       magic-string: 0.30.21
       picomatch: 4.0.7
+    optionalDependencies:
+      rollup: 4.63.4
+
+  '@rollup/plugin-yaml@4.1.2(rollup@4.63.4)':
+    dependencies:
+      '@rollup/pluginutils': 5.4.0(rollup@4.63.4)
+      js-yaml: 4.3.2
+      tosource: 2.0.0-alpha.3
     optionalDependencies:
       rollup: 4.63.4
 
@@ -28223,22 +28310,16 @@ snapshots:
       '@opentelemetry/sdk-metrics': 2.11.0(@opentelemetry/api@1.9.1)
       '@opentelemetry/sdk-trace-base': 2.11.0(@opentelemetry/api@1.9.1)
 
-  '@videojs/http-streaming@2.13.1(video.js@7.18.1)':
+  '@videojs/http-streaming@2.15.1(video.js@7.21.1)':
     dependencies:
       '@babel/runtime': 7.29.7
-      '@videojs/vhs-utils': 3.0.4
-      aes-decrypter: 3.1.2
+      '@videojs/vhs-utils': 3.0.5
+      aes-decrypter: 3.1.3
       global: 4.4.0
-      m3u8-parser: 4.7.0
-      mpd-parser: 0.21.0
+      m3u8-parser: 4.8.0
+      mpd-parser: 0.22.1
       mux.js: 6.0.1
-      video.js: 7.18.1
-
-  '@videojs/vhs-utils@3.0.4':
-    dependencies:
-      '@babel/runtime': 7.29.7
-      global: 4.4.0
-      url-toolkit: 2.2.5
+      video.js: 7.21.1
 
   '@videojs/vhs-utils@3.0.5':
     dependencies:
@@ -28730,7 +28811,7 @@ snapshots:
     dependencies:
       tslib: 2.8.1
 
-  '@xmldom/xmldom@0.7.13': {}
+  '@xmldom/xmldom@0.8.15': {}
 
   '@xmldom/xmldom@0.9.12':
     optional: true
@@ -28803,7 +28884,7 @@ snapshots:
 
   address@2.0.3: {}
 
-  aes-decrypter@3.1.2:
+  aes-decrypter@3.1.3:
     dependencies:
       '@babel/runtime': 7.29.7
       '@videojs/vhs-utils': 3.0.5
@@ -30659,11 +30740,7 @@ snapshots:
     dependencies:
       domelementtype: 2.3.0
 
-  dompurify@3.2.4:
-    optionalDependencies:
-      '@types/trusted-types': 2.0.7
-
-  dompurify@3.4.16:
+  dompurify@3.4.13:
     optionalDependencies:
       '@types/trusted-types': 2.0.7
 
@@ -30822,7 +30899,8 @@ snapshots:
   entities@2.2.0:
     optional: true
 
-  entities@3.0.1: {}
+  entities@3.0.1:
+    optional: true
 
   entities@4.5.0: {}
 
@@ -33618,10 +33696,6 @@ snapshots:
     dependencies:
       uc.micro: 1.0.6
 
-  linkify-it@4.0.1:
-    dependencies:
-      uc.micro: 1.0.6
-
   linkify-it@5.0.2:
     dependencies:
       uc.micro: 2.1.0
@@ -33804,7 +33878,7 @@ snapshots:
 
   lz-string@1.5.0: {}
 
-  m3u8-parser@4.7.0:
+  m3u8-parser@4.8.0:
     dependencies:
       '@babel/runtime': 7.29.7
       '@videojs/vhs-utils': 3.0.5
@@ -33923,14 +33997,6 @@ snapshots:
       argparse: 2.0.1
       entities: 2.1.0
       linkify-it: 3.0.3
-      mdurl: 1.0.1
-      uc.micro: 1.0.6
-
-  markdown-it@13.0.2:
-    dependencies:
-      argparse: 2.0.1
-      entities: 3.0.1
-      linkify-it: 4.0.1
       mdurl: 1.0.1
       uc.micro: 1.0.6
 
@@ -34618,11 +34684,11 @@ snapshots:
       react: 19.2.8
       react-dom: 19.2.8(react@19.2.8)
 
-  mpd-parser@0.21.0:
+  mpd-parser@0.22.1:
     dependencies:
       '@babel/runtime': 7.29.7
       '@videojs/vhs-utils': 3.0.5
-      '@xmldom/xmldom': 0.7.13
+      '@xmldom/xmldom': 0.8.15
       global: 4.4.0
 
   mri@1.2.0: {}
@@ -37851,6 +37917,8 @@ snapshots:
     dependencies:
       commander: 2.20.3
 
+  tosource@2.0.0-alpha.3: {}
+
   totalist@3.0.1: {}
 
   tough-cookie@4.1.4:
@@ -38269,17 +38337,17 @@ snapshots:
       d3-time: 3.1.0
       d3-timer: 3.0.1
 
-  video.js@7.18.1:
+  video.js@7.21.1:
     dependencies:
       '@babel/runtime': 7.29.7
-      '@videojs/http-streaming': 2.13.1(video.js@7.18.1)
+      '@videojs/http-streaming': 2.15.1(video.js@7.21.1)
       '@videojs/vhs-utils': 3.0.5
       '@videojs/xhr': 2.6.0
-      aes-decrypter: 3.1.2
+      aes-decrypter: 3.1.3
       global: 4.4.0
       keycode: 2.2.1
-      m3u8-parser: 4.7.0
-      mpd-parser: 0.21.0
+      m3u8-parser: 4.8.0
+      mpd-parser: 0.22.1
       mux.js: 6.0.1
       safe-json-parse: 4.0.0
       videojs-font: 3.2.0
@@ -38290,7 +38358,7 @@ snapshots:
   videojs-record@4.5.0:
     dependencies:
       recordrtc: 5.6.2
-      video.js: 7.18.1
+      video.js: 7.21.1
       videojs-wavesurfer: 3.8.0
       webrtc-adapter: 9.0.6
 
@@ -38300,8 +38368,14 @@ snapshots:
 
   videojs-wavesurfer@3.8.0:
     dependencies:
-      video.js: 7.18.1
+      video.js: 7.21.1
       wavesurfer.js: 7.8.6
+
+  virtua@0.48.8(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(vue@3.5.43(typescript@5.9.3)):
+    optionalDependencies:
+      react: 19.2.8
+      react-dom: 19.2.8(react@19.2.8)
+      vue: 3.5.43(typescript@5.9.3)
 
   vite-node@0.34.7(@types/node@26.5.0)(less@4.8.1)(lightningcss@1.33.0)(sass-embedded@1.105.0)(sass@1.105.0)(terser@5.51.2):
     dependencies:
@@ -38497,7 +38571,7 @@ snapshots:
 
   vue-dompurify-html@5.3.0(vue@3.5.43(typescript@5.9.3)):
     dependencies:
-      dompurify: 3.4.16
+      dompurify: 3.4.13
       vue: 3.5.43(typescript@5.9.3)
 
   vue-eslint-parser@9.4.3(eslint@8.57.1):

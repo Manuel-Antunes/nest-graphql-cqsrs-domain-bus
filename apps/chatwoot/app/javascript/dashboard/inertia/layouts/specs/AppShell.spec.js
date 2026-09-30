@@ -40,6 +40,12 @@ vi.mock('dashboard/components/app/UpdateBanner.vue', () =>
 vi.mock('dashboard/components/app/PaymentPendingBanner.vue', () =>
   stubOf('PaymentPendingBanner')
 );
+vi.mock('dashboard/components/app/StatusBanner.vue', () =>
+  stubOf('StatusBanner')
+);
+vi.mock('dashboard/components/app/LowBackupCodesBanner.vue', () =>
+  stubOf('LowBackupCodesBanner')
+);
 vi.mock('dashboard/components/app/PendingEmailVerificationBanner.vue', () =>
   stubOf('PendingEmailVerificationBanner')
 );
@@ -56,9 +62,9 @@ vi.mock('dashboard/components/copilot/CopilotContainer.vue', () =>
   stubOf('CopilotContainer')
 );
 vi.mock('dashboard/routes/dashboard/commands/commandbar.vue', () =>
-  stubOf('CommandBar')
+  stubOf('CommandBar', ['isPaywalled'])
 );
-vi.mock('dashboard/components/widgets/FloatingCallWidget.vue', () =>
+vi.mock('dashboard/components-next/call/FloatingCallWidget.vue', () =>
   stubOf('FloatingCallWidget')
 );
 vi.mock('dashboard/routes/dashboard/upgrade/UpgradePage.vue', () => ({
@@ -66,7 +72,10 @@ vi.mock('dashboard/routes/dashboard/upgrade/UpgradePage.vue', () => ({
     name: 'UpgradePage',
     props: ['bypassUpgradePage'],
     setup(_, { expose }) {
-      expose({ shouldShowUpgradePage: shell.upgradePage });
+      expose({
+        shouldShowUpgradePage: shell.upgradePage,
+        isAccountPaywalled: shell.upgradePage,
+      });
     },
     template: '<div data-test="UpgradePage"><slot /></div>',
   },
@@ -126,6 +135,8 @@ describe('AppShell', () => {
       'UpdateBanner',
       'PendingEmailVerificationBanner',
       'PaymentPendingBanner',
+      'StatusBanner',
+      'LowBackupCodesBanner',
       'CommandBar',
       'CopilotLauncher',
       'CopilotContainer',
@@ -186,7 +197,10 @@ describe('AppShell', () => {
     const wrapper = await mountShell();
 
     expect(has(wrapper, 'page')).toBe(false);
-    expect(has(wrapper, 'CommandBar')).toBe(false);
     expect(has(wrapper, 'UpgradePage')).toBe(true);
+    expect(
+      wrapper.findComponent({ name: 'CommandBar' }).props('isPaywalled'),
+      'Cmd+K stays, limited to what a paywalled account may reach'
+    ).toBe(true);
   });
 });

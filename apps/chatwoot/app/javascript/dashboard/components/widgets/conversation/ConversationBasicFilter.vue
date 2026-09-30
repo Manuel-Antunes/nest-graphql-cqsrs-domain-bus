@@ -25,6 +25,10 @@ defineProps({
     type: Boolean,
     required: true,
   },
+  showStatusFilter: {
+    type: Boolean,
+    default: true,
+  },
 });
 
 const emit = defineEmits(['changeFilter']);
@@ -88,12 +92,20 @@ const chatSortOptions = computed(() => [
     value: 'created_at_asc',
   },
   {
+    label: t('CHAT_LIST.SORT_ORDER_ITEMS.unread.TEXT'),
+    value: 'unread',
+  },
+  {
     label: t('CHAT_LIST.SORT_ORDER_ITEMS.priority_desc.TEXT'),
     value: 'priority_desc',
   },
   {
     label: t('CHAT_LIST.SORT_ORDER_ITEMS.priority_asc.TEXT'),
     value: 'priority_asc',
+  },
+  {
+    label: t('CHAT_LIST.SORT_ORDER_ITEMS.priority_desc_created_at_asc.TEXT'),
+    value: 'priority_desc_created_at_asc',
   },
   {
     label: t('CHAT_LIST.SORT_ORDER_ITEMS.waiting_since_asc.TEXT'),
@@ -147,14 +159,17 @@ const handleSortChange = value => {
         variant="ghost"
         size="icon"
       >
-        <Icon :icon="'i-lucide-arrow-up-down'" />
+        <Icon icon="i-lucide-arrow-up-down" />
       </Button>
     </PopoverTrigger>
     <PopoverContent
       :align="isOnExpandedLayout ? 'end' : 'start'"
       class="flex flex-col gap-2 w-auto max-w-xl"
     >
-      <div class="flex items-center justify-between gap-2">
+      <div
+        v-if="showStatusFilter"
+        class="flex items-center justify-between gap-2"
+      >
         <Label>
           {{ $t('CHAT_LIST.CHAT_SORT.STATUS') }}
         </Label>

@@ -43,13 +43,18 @@ const props = defineProps({
     type: Number,
     default: 0,
   },
+  showAnalytics: {
+    type: Boolean,
+    default: false,
+  },
 });
 
-const emit = defineEmits(['edit', 'delete']);
+const emit = defineEmits(['edit', 'delete', 'analytics']);
 
 const { t } = useI18n();
 
 const STATUS_COMPLETED = 'completed';
+const STATUS_PROCESSING = 'processing';
 
 const { formatMessage } = useMessageFormatter();
 
@@ -69,16 +74,26 @@ const campaignStatus = computed(() => {
       : t('CAMPAIGN.LIVE_CHAT.CARD.STATUS.DISABLED');
   }
 
-  return props.status === STATUS_COMPLETED
-    ? t('CAMPAIGN.SMS.CARD.STATUS.COMPLETED')
-    : t('CAMPAIGN.SMS.CARD.STATUS.SCHEDULED');
+  if (props.status === STATUS_COMPLETED) {
+    return t('CAMPAIGN.SMS.CARD.STATUS.COMPLETED');
+  }
+
+  if (props.status === STATUS_PROCESSING) {
+    return t('CAMPAIGN.SMS.CARD.STATUS.PROCESSING');
+  }
+
+  return t('CAMPAIGN.SMS.CARD.STATUS.SCHEDULED');
 });
 
 const inboxName = computed(() => props.inbox?.name || '');
 
 const inboxIcon = computed(() => {
-  const { medium, channel_type: type } = props.inbox;
-  return getInboxIconByType(type, medium);
+  const {
+    medium,
+    channel_type: type,
+    voice_enabled: voiceEnabled,
+  } = props.inbox;
+  return getInboxIconByType(type, medium, 'fill', voiceEnabled);
 });
 </script>
 
@@ -118,6 +133,16 @@ const inboxIcon = computed(() => {
       </div>
     </div>
     <div class="flex items-center justify-end w-20 gap-2">
+      <Button
+        v-if="showAnalytics"
+        v-tooltip.top="t('CAMPAIGN.WHATSAPP.CARD.ANALYTICS')"
+        variant="outline"
+        size="icon"
+        :title="t('CAMPAIGN.WHATSAPP.CARD.ANALYTICS')"
+        @click="emit('analytics')"
+      >
+        <Icon icon="i-lucide-chart-no-axes-column" />
+      </Button>
       <Button v-if="isLiveChatType" size="icon" @click="emit('edit')">
         <Icon icon="i-lucide-sliders-vertical" />
       </Button>

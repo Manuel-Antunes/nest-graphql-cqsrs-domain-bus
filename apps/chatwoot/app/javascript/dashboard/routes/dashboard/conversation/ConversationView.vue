@@ -56,7 +56,8 @@ export default {
   },
   setup(props) {
     const store = useStore();
-    const { uiSettings, updateUISettings } = useUISettings();
+    const { uiSettings, updateUISettings, isOnExpandedLayout } =
+      useUISettings();
     const { accountId } = useAccount();
     const { currentPath } = useAppNavigation();
 
@@ -76,6 +77,7 @@ export default {
     return {
       uiSettings,
       updateUISettings,
+      isOnExpandedLayout,
       accountId,
       currentPath,
       clearSelectedStateOnce,
@@ -97,15 +99,6 @@ export default {
     showMessageView() {
       return this.conversationId ? true : !this.isOnExpandedLayout;
     },
-    isOnExpandedLayout() {
-      const {
-        LAYOUT_TYPES: { CONDENSED },
-      } = wootConstants;
-      const { conversation_display_type: conversationDisplayType = CONDENSED } =
-        this.uiSettings;
-      return conversationDisplayType !== CONDENSED;
-    },
-
     shouldShowSidebar() {
       if (!this.currentChat.id) {
         return false;

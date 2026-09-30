@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { toTypedSchema } from '@vee-validate/zod';
 import * as z from 'zod';
 import { useStore, useMapGetter } from 'dashboard/composables/store';
@@ -15,7 +15,6 @@ import { Spinner } from 'dashboard/components-next/ui/spinner';
 import AccountId from './components/AccountId.vue';
 import BuildInfo from './components/BuildInfo.vue';
 import AccountDelete from './components/AccountDelete.vue';
-import AutoResolve from './components/AutoResolve.vue';
 import AudioTranscription from './components/AudioTranscription.vue';
 import SectionLayout from './components/SectionLayout.vue';
 import { Input } from 'dashboard/components-next/ui/input';
@@ -68,12 +67,6 @@ const initialValues = {
   supportEmail: '',
 };
 
-const showAutoResolutionConfig = computed(() =>
-  isFeatureEnabledonAccount.value(
-    accountId.value,
-    FEATURE_FLAGS.AUTO_RESOLVE_CONVERSATIONS
-  )
-);
 const showAudioTranscriptionConfig = computed(() =>
   isFeatureEnabledonAccount.value(accountId.value, FEATURE_FLAGS.CAPTAIN)
 );
@@ -95,6 +88,8 @@ const featureCustomReplyEmailEnabled = computed(
   () => featureInboundEmailEnabled.value && !!features.value.custom_reply_email
 );
 
+const currentAccount = computed(() => getAccount.value(accountId.value) || {});
+
 const initializeAccount = () => {
   try {
     const {
@@ -106,7 +101,10 @@ const initializeAccount = () => {
       features: accountFeatures,
     } = getAccount.value(accountId.value);
 
-    locale.value = uiSettings.value?.locale || accountLocale;
+    const effectiveLocale = uiSettings.value?.locale || accountLocale;
+    if (effectiveLocale) {
+      locale.value = effectiveLocale;
+    }
     accountRecordId.value = id;
     features.value = accountFeatures;
     accountForm.value?.setValues({
@@ -120,8 +118,21 @@ const initializeAccount = () => {
   }
 };
 
+watch(
+  () => currentAccount.value.id,
+  id => {
+    if (id) {
+      initializeAccount();
+    }
+  },
+  { flush: 'post' }
+);
+
 onMounted(() => {
-  initializeAccount();
+  // Account already in the store (navigated in): seed immediately.
+  if (currentAccount.value.id) {
+    initializeAccount();
+  }
 });
 
 const updateAccount = async formValues => {
@@ -133,11 +144,9 @@ const updateAccount = async formValues => {
       support_email: formValues.supportEmail,
     });
     // If user locale is set, update the locale with user locale
-    if (uiSettings.value?.locale) {
-      locale.value = uiSettings.value.locale;
-    } else {
-      // If user locale is not set, update the locale with account locale
-      locale.value = formValues.locale;
+    const updatedLocale = uiSettings.value?.locale || formValues.locale;
+    if (updatedLocale) {
+      locale.value = updatedLocale;
     }
     getAccount.value(accountRecordId.value).locale = formValues.locale;
     useAlert(t('GENERAL_SETTINGS.UPDATE.SUCCESS'));
@@ -152,12 +161,13 @@ const onInvalidSubmit = () => {
 </script>
 
 <template>
-  <div class="flex flex-col max-w-2xl mx-auto w-full">
+  <div class="flex flex-col w-full max-w-2xl ltr:mr-auto rtl:ml-auto">
     <BaseSettingsHeader :title="$t('GENERAL_SETTINGS.TITLE')" />
     <div class="flex-grow flex-shrink min-w-0 mt-3">
       <SectionLayout
         :title="$t('GENERAL_SETTINGS.FORM.GENERAL_SECTION.TITLE')"
         :description="$t('GENERAL_SETTINGS.FORM.GENERAL_SECTION.NOTE')"
+        class="!pt-0"
       >
         <Form
           v-if="!uiFlags.isFetchingItem"
@@ -170,9 +180,9 @@ const onInvalidSubmit = () => {
         >
           <FormField v-slot="{ componentField }" name="name">
             <FormItem class="w-full">
-              <FormLabel>{{
-                $t('GENERAL_SETTINGS.FORM.NAME.LABEL')
-              }}</FormLabel>
+              <FormLabel>
+                {{ $t('GENERAL_SETTINGS.FORM.NAME.LABEL') }}
+              </FormLabel>
               <FormControl>
                 <Input
                   v-bind="componentField"
@@ -266,9 +276,9 @@ const onInvalidSubmit = () => {
           <div>
             <Button :disabled="isUpdating" type="submit">
               <Spinner v-if="isUpdating" class="size-4 flex-shrink-0" />
-              <template v-if="!isUpdating">{{
-                $t('GENERAL_SETTINGS.SUBMIT')
-              }}</template>
+              <template v-if="!isUpdating">
+                {{ $t('GENERAL_SETTINGS.SUBMIT') }}
+              </template>
             </Button>
           </div>
         </Form>
@@ -276,7 +286,6 @@ const onInvalidSubmit = () => {
 
       <woot-loading-state v-if="uiFlags.isFetchingItem" />
     </div>
-    <AutoResolve v-if="showAutoResolutionConfig" />
     <AudioTranscription v-if="showAudioTranscriptionConfig" />
     <AccountId />
     <div v-if="!uiFlags.isFetchingItem && isOnChatwootCloud">

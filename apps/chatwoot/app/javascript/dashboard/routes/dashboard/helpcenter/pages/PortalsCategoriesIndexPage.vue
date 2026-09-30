@@ -9,7 +9,7 @@ import CategoriesPage from 'dashboard/components-next/HelpCenter/Pages/CategoryP
 const store = useStore();
 const { currentParams } = useAppNavigation();
 
-const categories = useMapGetter('categories/allCategories');
+const categories = useMapGetter('categories/allCategoriesSortedByPosition');
 
 const selectedPortalSlug = computed(() => currentParams.value.portalSlug);
 const getPortalBySlug = useMapGetter('portals/portalBySlug');

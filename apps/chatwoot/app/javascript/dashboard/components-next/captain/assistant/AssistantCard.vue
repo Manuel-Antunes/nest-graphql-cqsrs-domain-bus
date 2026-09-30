@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { dynamicTime } from 'shared/helpers/timeHelper';
+import { useExactTimestamp } from 'shared/composables/useExactTimestamp';
 import { usePolicy } from 'dashboard/composables/usePolicy';
 
 import CardLayout from 'dashboard/components-next/CardLayout.vue';
@@ -33,6 +34,9 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['action']);
+
+const exactTimestamp = useExactTimestamp();
+
 const { checkPermissions } = usePolicy();
 
 const { t } = useI18n();
@@ -128,7 +132,13 @@ const handleAction = ({ action, value }) => {
       <span class="text-sm truncate text-n-slate-11">
         {{ description || 'Description not available' }}
       </span>
-      <span class="text-sm text-n-slate-11 line-clamp-1 shrink-0">
+      <span
+        v-tooltip.top="{
+          content: exactTimestamp(updatedAt),
+          delay: { show: 500, hide: 0 },
+        }"
+        class="text-sm text-n-slate-11 line-clamp-1 shrink-0"
+      >
         {{ lastUpdatedAt }}
       </span>
     </div>

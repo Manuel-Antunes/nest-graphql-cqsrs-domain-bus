@@ -1,6 +1,6 @@
 <script setup>
 import { useI18n } from 'vue-i18n';
-import { computed, ref } from 'vue';
+import { computed } from 'vue';
 import LinkIssue from './LinkIssue.vue';
 import CreateIssue from './CreateIssue.vue';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from 'next/ui/tabs';
@@ -40,8 +40,12 @@ const onClose = () => {
     </p>
     <Tabs default-value="create">
       <TabsList>
-        <TabsTrigger value="create">{{ $t('INTEGRATION_SETTINGS.LINEAR.CREATE') }}</TabsTrigger>
-        <TabsTrigger value="link">{{ $t('INTEGRATION_SETTINGS.LINEAR.LINK.TITLE') }}</TabsTrigger>
+        <TabsTrigger value="create">
+          {{ $t('INTEGRATION_SETTINGS.LINEAR.CREATE') }}
+        </TabsTrigger>
+        <TabsTrigger value="link">
+          {{ $t('INTEGRATION_SETTINGS.LINEAR.LINK.TITLE') }}
+        </TabsTrigger>
       </TabsList>
       <TabsContent value="create" class="pt-4">
         <CreateIssue

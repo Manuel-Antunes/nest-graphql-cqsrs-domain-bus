@@ -96,9 +96,9 @@ defineExpose({ dialogRef: { open, close } });
     <DialogContent class="overflow-y-auto">
       <DialogHeader>
         <DialogTitle>{{ t(`${i18nKey}.TITLE`) }}</DialogTitle>
-        <DialogDescription>{{
-          t('CAPTAIN.ASSISTANTS.FORM_DESCRIPTION')
-        }}</DialogDescription>
+        <DialogDescription>
+          {{ t('CAPTAIN.ASSISTANTS.FORM_DESCRIPTION') }}
+        </DialogDescription>
       </DialogHeader>
       <AssistantForm
         ref="assistantForm"

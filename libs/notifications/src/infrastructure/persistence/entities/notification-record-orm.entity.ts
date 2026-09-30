@@ -9,17 +9,15 @@ import type { NotificationData } from '../../../domain/notification/notification
 import { NotificationRecord } from '../../../domain/notification/notification-record.entity';
 import { NotificationId } from '../../../domain/notification/vo/notification-id';
 
-const NotificationIdType = valueObjectType(NotificationId, {
-  columnType: 'varchar(36)',
-});
-
 export const NotificationRecordEntitySchema = defineEntity({
   class: NotificationRecord,
   tableName: 'notifications',
   schema: TENANT_SCHEMA,
   forceConstructor: true,
   properties: {
-    id: p.type(NotificationIdType).primary(),
+    id: p
+      .type(valueObjectType(NotificationId, { columnType: 'varchar(36)' }))
+      .primary(),
     type: p.string(),
     notifiableType: p.string(),
     notifiableId: p.string(),

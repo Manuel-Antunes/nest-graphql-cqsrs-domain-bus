@@ -3,6 +3,7 @@
 import { mapGetters } from 'vuex';
 import { useAlert } from 'dashboard/composables';
 import { useBranding } from 'shared/composables/useBranding';
+import { picoSearch } from '@chatwoot/pico-search';
 import { Button } from 'dashboard/components-next/ui/button';
 import Icon from 'dashboard/components-next/icon/Icon.vue';
 import {
@@ -15,9 +16,12 @@ import {
   AlertDialogCancel,
   AlertDialogAction,
 } from 'next/ui/alert-dialog';
+import { BaseTable } from 'dashboard/components-next/table';
+import { FEATURE_FLAGS } from 'dashboard/featureFlags';
 import NewWebhook from './NewWebHook.vue';
 import EditWebhook from './EditWebHook.vue';
 import WebhookRow from './WebhookRow.vue';
+import WebhookPaywall from './WebhookPaywall.vue';
 import BaseSettingsHeader from '../../components/BaseSettingsHeader.vue';
 import SettingsLayout from '../../SettingsLayout.vue';
 
@@ -27,9 +31,11 @@ export default {
     Button,
     Icon,
     BaseSettingsHeader,
+    BaseTable,
     NewWebhook,
     EditWebhook,
     WebhookRow,
+    WebhookPaywall,
     AlertDialog,
     AlertDialogContent,
     AlertDialogHeader,
@@ -50,15 +56,33 @@ export default {
       showEditPopup: false,
       showDeleteConfirmationPopup: false,
       selectedWebHook: {},
+      searchQuery: '',
     };
   },
   computed: {
     ...mapGetters({
       records: 'webhooks/getWebhooks',
       uiFlags: 'webhooks/getUIFlags',
+      accountId: 'getCurrentAccountId',
+      isFeatureEnabledonAccount: 'accounts/isFeatureEnabledonAccount',
+      isOnChatwootCloud: 'globalConfig/isOnChatwootCloud',
     }),
+    apiAndWebhooksEnabled() {
+      return (
+        !this.isOnChatwootCloud ||
+        this.isFeatureEnabledonAccount(
+          this.accountId,
+          FEATURE_FLAGS.API_AND_WEBHOOKS
+        )
+      );
+    },
     integration() {
       return this.$store.getters['integrations/getIntegration']('webhook');
+    },
+    filteredRecords() {
+      const query = this.searchQuery.trim();
+      if (!query) return this.records;
+      return picoSearch(this.records, query, ['name', 'url']);
     },
     tableHeaders() {
       return [
@@ -69,14 +93,16 @@ export default {
       ];
     },
   },
+  watch: {
+    apiAndWebhooksEnabled: {
+      immediate: true,
+      handler(enabled) {
+        if (enabled) this.$store.dispatch('webhooks/get');
+      },
+    },
+  },
   mounted() {
-    // The header (title/description) + "Add webhook" button are gated on the
-    // `webhook` integration's metadata from the integrations store. Slack/Linear/
-    // etc. fetch it in their own mounted; this page only fetched the webhook list,
-    // so on a direct load (Inertia full page load, no prior visit to the
-    // integrations index that preloads it) the header vanished. Fetch both.
-    this.$store.dispatch('integrations/get');
-    this.$store.dispatch('webhooks/get');
+    this.$store.dispatch('integrations/get', 'webhook');
   },
   methods: {
     openAddPopup() {
@@ -122,21 +148,34 @@ export default {
 
 <template>
   <SettingsLayout
-    :is-loading="uiFlags.fetchingList"
+    :is-loading="apiAndWebhooksEnabled && uiFlags.fetchingList"
     :loading-message="$t('INTEGRATION_SETTINGS.WEBHOOK.LOADING')"
     :no-records-message="$t('INTEGRATION_SETTINGS.WEBHOOK.LIST.404')"
-    :no-records-found="!records.length"
+    :no-records-found="apiAndWebhooksEnabled && !records.length"
   >
     <template #header>
       <BaseSettingsHeader
         v-if="integration.name"
+        v-model:search-query="searchQuery"
         :title="integration.name"
         :description="replaceInstallationName(integration.description)"
         :link-text="$t('INTEGRATION_SETTINGS.WEBHOOK.LEARN_MORE')"
+        :search-placeholder="
+          apiAndWebhooksEnabled
+            ? $t('INTEGRATION_SETTINGS.WEBHOOK.SEARCH_PLACEHOLDER')
+            : ''
+        "
         feature-name="webhook"
         :back-button-label="$t('INTEGRATION_SETTINGS.HEADER')"
       >
-        <template #actions>
+        <template v-if="apiAndWebhooksEnabled && records?.length" #count>
+          <span class="text-body-main text-n-slate-11">
+            {{
+              $t('INTEGRATION_SETTINGS.WEBHOOK.COUNT', { n: records.length })
+            }}
+          </span>
+        </template>
+        <template v-if="apiAndWebhooksEnabled" #actions>
           <Button @click="openAddPopup">
             <Icon icon="i-lucide-circle-plus" />
             {{ $t('INTEGRATION_SETTINGS.WEBHOOK.HEADER_BTN_TXT') }}
@@ -145,69 +184,70 @@ export default {
       </BaseSettingsHeader>
     </template>
     <template #body>
-      <table class="min-w-full divide-y divide-n-weak">
-        <thead>
-          <th
-            v-for="thHeader in tableHeaders"
-            :key="thHeader"
-            class="py-4 ltr:pr-4 rtl:pl-4 text-left font-semibold text-n-slate-11 last:text-right last:pr-4"
-          >
-            {{ thHeader }}
-          </th>
-        </thead>
-        <tbody class="divide-y divide-n-weak flex-1 text-n-slate-12">
+      <WebhookPaywall v-if="!apiAndWebhooksEnabled" />
+      <BaseTable
+        v-else
+        :headers="tableHeaders"
+        :items="filteredRecords"
+        :no-data-message="
+          searchQuery ? $t('INTEGRATION_SETTINGS.WEBHOOK.NO_RESULTS') : ''
+        "
+      >
+        <template #row="{ items }">
           <WebhookRow
-            v-for="(webHookItem, index) in records"
+            v-for="(webHookItem, index) in items"
             :key="webHookItem.id"
             :index="index"
             :webhook="webHookItem"
             @edit="openEditPopup"
             @delete="openDeletePopup"
           />
-        </tbody>
-      </table>
+        </template>
+      </BaseTable>
     </template>
-    <NewWebhook
-      v-if="showAddPopup"
-      :open="showAddPopup"
-      :on-close="hideAddPopup"
-      @close="hideAddPopup"
-    />
+    <template v-if="apiAndWebhooksEnabled">
+      <NewWebhook
+        v-if="showAddPopup"
+        :open="showAddPopup"
+        :on-close="hideAddPopup"
+        @close="hideAddPopup"
+      />
 
-    <EditWebhook
-      v-if="showEditPopup"
-      :id="selectedWebHook.id"
-      :open="showEditPopup"
-      :value="selectedWebHook"
-      :on-close="hideEditPopup"
-      @close="hideEditPopup"
-    />
-    <AlertDialog
-      :open="showDeleteConfirmationPopup"
-      @update:open="showDeleteConfirmationPopup = $event"
-    >
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>
-            {{ $t('INTEGRATION_SETTINGS.WEBHOOK.DELETE.CONFIRM.TITLE') }}
-          </AlertDialogTitle>
-          <AlertDialogDescription>
-            {{
-              $t('INTEGRATION_SETTINGS.WEBHOOK.DELETE.CONFIRM.MESSAGE', {
-                webhookURL: selectedWebHook.url,
-              })
-            }}
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel @click="closeDeletePopup">
-            {{ $t('INTEGRATION_SETTINGS.WEBHOOK.DELETE.CONFIRM.NO') }}
-          </AlertDialogCancel>
-          <AlertDialogAction variant="destructive" @click="confirmDeletion">
-            {{ $t('INTEGRATION_SETTINGS.WEBHOOK.DELETE.CONFIRM.YES') }}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+      <EditWebhook
+        v-if="showEditPopup"
+        :id="selectedWebHook.id"
+        :open="showEditPopup"
+        :value="selectedWebHook"
+        :on-close="hideEditPopup"
+        @close="hideEditPopup"
+      />
+      <AlertDialog
+        :open="showDeleteConfirmationPopup"
+        @update:open="showDeleteConfirmationPopup = $event"
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {{ $t('INTEGRATION_SETTINGS.WEBHOOK.DELETE.CONFIRM.TITLE') }}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {{
+                $t('INTEGRATION_SETTINGS.WEBHOOK.DELETE.CONFIRM.MESSAGE', {
+                  webhookURL: selectedWebHook.url,
+                })
+              }}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel @click="closeDeletePopup">
+              {{ $t('INTEGRATION_SETTINGS.WEBHOOK.DELETE.CONFIRM.NO') }}
+            </AlertDialogCancel>
+            <AlertDialogAction variant="destructive" @click="confirmDeletion">
+              {{ $t('INTEGRATION_SETTINGS.WEBHOOK.DELETE.CONFIRM.YES') }}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </template>
   </SettingsLayout>
 </template>

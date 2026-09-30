@@ -1,5 +1,5 @@
 <script setup>
-import { ref, defineProps, defineEmits } from 'vue';
+import { ref } from 'vue';
 import { Button } from 'dashboard/components-next/ui/button';
 
 const props = defineProps({
@@ -55,7 +55,8 @@ const getStarClass = value => {
       @click="selectRating(value)"
       @mouseenter="onHoverRating(value)"
       @mouseleave="onHoverRating(0)"
-      ><span
+    >
+      <span
         :class="getStarClass(value)"
         class="transition-all duration-500 text-2xl"
       />

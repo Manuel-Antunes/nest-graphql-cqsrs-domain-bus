@@ -1,4 +1,8 @@
-import { isOnMentionsView, isOnFoldersView } from '../actionHelpers';
+import {
+  isOnMentionsView,
+  isOnFoldersView,
+  isOnParticipatingView,
+} from '../actionHelpers';
 
 const visit = path => window.history.pushState({}, '', path);
 
@@ -24,5 +28,18 @@ describe('#isOnFoldersView', () => {
 
     visit('/app/accounts/1/conversations/9');
     expect(isOnFoldersView()).toBe(false);
+  });
+});
+
+describe('#isOnParticipatingView', () => {
+  it('reads the view from the URL', () => {
+    visit('/app/accounts/1/participating/conversations');
+    expect(isOnParticipatingView()).toBe(true);
+
+    visit('/app/accounts/1/participating/conversations/9');
+    expect(isOnParticipatingView()).toBe(true);
+
+    visit('/app/accounts/1/conversations/9');
+    expect(isOnParticipatingView()).toBe(false);
   });
 });

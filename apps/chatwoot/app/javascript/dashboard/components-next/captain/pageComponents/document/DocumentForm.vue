@@ -168,11 +168,11 @@ const handleSubmit = async () => {
           class="hidden"
           @change="handleFileChange"
         />
-        <!-- TODO: dynamic color/variant – review manually -->
         <Button
           type="button"
-          variant="default"
+          variant="outline"
           class="!w-full !h-auto !justify-between !py-4"
+          :class="hasPdfFileError ? '!border-n-ruby-9' : 'bg-n-alpha-2'"
           @click="openFileDialog"
         >
           <div class="flex gap-2 items-center">
@@ -217,7 +217,7 @@ const handleSubmit = async () => {
       <Button
         type="button"
         variant="outline"
-        class="w-full bg-n-alpha-2 text-n-blue-text hover:bg-n-alpha-3"
+        class="w-full bg-n-alpha-2 text-n-blue-11 hover:bg-n-alpha-3"
         @click="handleCancel"
       >
         {{ t('CAPTAIN.FORM.CANCEL') }}

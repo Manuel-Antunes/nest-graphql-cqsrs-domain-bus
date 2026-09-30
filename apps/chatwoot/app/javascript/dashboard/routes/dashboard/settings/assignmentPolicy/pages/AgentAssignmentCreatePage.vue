@@ -16,27 +16,55 @@ import {
 import SettingsLayout from 'dashboard/routes/dashboard/settings/SettingsLayout.vue';
 import AssignmentPolicyForm from 'dashboard/routes/dashboard/settings/assignmentPolicy/pages/components/AgentAssignmentPolicyForm.vue';
 
-const { visit } = useAppNavigation();
+const { visit, resolvePath } = useAppNavigation();
 const store = useStore();
 const { t } = useI18n();
 
 const formRef = ref(null);
 const uiFlags = useMapGetter('assignmentPolicies/getUIFlags');
 
-const breadcrumbItems = computed(() => [
-  {
-    label: t('ASSIGNMENT_POLICY.AGENT_ASSIGNMENT_POLICY.INDEX.HEADER.TITLE'),
-    routeName: 'agent_assignment_policy_index',
-  },
-  {
-    label: t('ASSIGNMENT_POLICY.AGENT_ASSIGNMENT_POLICY.CREATE.HEADER.TITLE'),
-  },
-]);
+const inboxIdFromQuery = computed(() => {
+  const id = new URLSearchParams(window.location.search).get('inboxId');
+  return id ? Number(id) : null;
+});
+
+const breadcrumbItems = computed(() => {
+  if (inboxIdFromQuery.value) {
+    return [
+      {
+        label: t('INBOX_MGMT.SETTINGS'),
+        routeName: 'settings_inbox_show',
+        params: { inboxId: inboxIdFromQuery.value },
+      },
+      {
+        label: t(
+          'ASSIGNMENT_POLICY.AGENT_ASSIGNMENT_POLICY.CREATE.HEADER.TITLE'
+        ),
+      },
+    ];
+  }
+  return [
+    {
+      label: t('ASSIGNMENT_POLICY.AGENT_ASSIGNMENT_POLICY.INDEX.HEADER.TITLE'),
+      routeName: 'agent_assignment_policy_index',
+    },
+    {
+      label: t('ASSIGNMENT_POLICY.AGENT_ASSIGNMENT_POLICY.CREATE.HEADER.TITLE'),
+    },
+  ];
+});
 
 const handleBreadcrumbClick = item => {
-  visit({
-    name: item.routeName,
-  });
+  if (item.params) {
+    visit({
+      name: 'settings_inbox_show',
+      params: { inboxId: item.params.inboxId, tab: 'collaborators' },
+    });
+  } else {
+    visit({
+      name: item.routeName,
+    });
+  }
 };
 
 const handleSubmit = async formState => {
@@ -47,12 +75,18 @@ const handleSubmit = async formState => {
     );
     formRef.value?.resetForm();
 
-    visit({
+    const editPath = resolvePath({
       name: 'agent_assignment_policy_edit',
       params: {
         id: policy.id,
       },
     });
+    // Pass inboxId to edit page to show link prompt
+    visit(
+      inboxIdFromQuery.value
+        ? `${editPath}?inboxId=${inboxIdFromQuery.value}`
+        : editPath
+    );
   } catch (error) {
     useAlert(
       t('ASSIGNMENT_POLICY.AGENT_ASSIGNMENT_POLICY.CREATE.API.ERROR_MESSAGE')
@@ -62,9 +96,9 @@ const handleSubmit = async formState => {
 </script>
 
 <template>
-  <SettingsLayout class="xl:px-44">
+  <SettingsLayout class="w-full max-w-2xl ltr:mr-auto rtl:ml-auto">
     <template #header>
-      <div class="flex items-center gap-2 w-full justify-between">
+      <div class="flex items-center gap-2 w-full justify-between mb-4 min-h-10">
         <BreadcrumbRoot>
           <BreadcrumbList>
             <template v-for="(item, index) in breadcrumbItems" :key="index">

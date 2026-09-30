@@ -3,6 +3,8 @@ import { useI18n } from 'vue-i18n';
 import { useAccount } from 'dashboard/composables/useAccount';
 import { useAppNavigation } from 'dashboard/composables/useAppNavigation';
 import { usePolicy } from 'dashboard/composables/usePolicy';
+import { useMapGetter } from 'dashboard/composables/store';
+import { FEATURE_FLAGS } from 'dashboard/featureFlags';
 
 // Where the rail's Settings button lands, and the first entry of the settings sidebar.
 export const SETTINGS_ENTRY_ROUTE = 'profile_settings_index';
@@ -23,9 +25,15 @@ export const isSettingsPath = path =>
  */
 export function useSettingsMenu() {
   const { t } = useI18n();
-  const { accountScopedRoute } = useAccount();
+  const { accountId, accountScopedRoute } = useAccount();
   const { resolveMeta } = useAppNavigation();
   const { shouldShow } = usePolicy();
+  const isFeatureEnabledonAccount = useMapGetter(
+    'accounts/isFeatureEnabledonAccount'
+  );
+
+  const isFeatureEnabled = flag =>
+    isFeatureEnabledonAccount.value(accountId.value, flag);
 
   const items = computed(() => [
     {
@@ -46,17 +54,44 @@ export function useSettingsMenu() {
       icon: 'i-lucide-users',
       to: accountScopedRoute('agent_list'),
     },
-    {
-      name: 'Settings Agent Assignment',
-      label: t('SIDEBAR.AGENT_ASSIGNMENT'),
-      icon: 'i-lucide-git-branch',
-      to: accountScopedRoute('assignment_policy_index'),
-    },
+    ...(isFeatureEnabled(FEATURE_FLAGS.ADVANCED_ASSIGNMENT)
+      ? [
+          {
+            name: 'Settings Agent Assignment',
+            label: t('SIDEBAR.AGENT_ASSIGNMENT'),
+            icon: 'i-lucide-git-branch',
+            activeOn: [
+              'assignment_policy_index',
+              'agent_assignment_policy_index',
+              'agent_assignment_policy_create',
+              'agent_assignment_policy_edit',
+              'agent_capacity_policy_index',
+              'agent_capacity_policy_create',
+              'agent_capacity_policy_edit',
+            ],
+            to: accountScopedRoute('assignment_policy_index'),
+          },
+        ]
+      : []),
     {
       name: 'Settings Inboxes',
       label: t('SIDEBAR.INBOXES'),
       icon: 'i-lucide-mailbox',
+      activeOn: [
+        'settings_inbox_list',
+        'settings_inbox_show',
+        'settings_inbox_new',
+        'settings_inbox_finish',
+        'settings_inboxes_page_channel',
+        'settings_inboxes_add_agents',
+      ],
       to: accountScopedRoute('settings_inbox_list'),
+    },
+    {
+      name: 'Settings Templates',
+      label: t('SIDEBAR.WHATSAPP_TEMPLATES'),
+      icon: 'i-lucide-layout-template',
+      to: accountScopedRoute('settings_templates'),
     },
     {
       name: 'Settings Labels',
@@ -100,11 +135,28 @@ export function useSettingsMenu() {
       icon: 'i-lucide-plug',
       to: accountScopedRoute('settings_applications'),
     },
+    ...(isFeatureEnabled(FEATURE_FLAGS.DATA_IMPORT)
+      ? [
+          {
+            name: 'Settings Data',
+            label: t('SIDEBAR.DATA'),
+            icon: 'i-lucide-database',
+            activeOn: ['settings_data_imports', 'settings_data_import_show'],
+            to: accountScopedRoute('settings_data_imports'),
+          },
+        ]
+      : []),
     {
       name: 'Settings Audit Logs',
       label: t('SIDEBAR.AUDIT_LOGS'),
       icon: 'i-lucide-scroll-text',
       to: accountScopedRoute('auditlogs_list'),
+    },
+    {
+      name: 'Conversation Workflow',
+      label: t('SIDEBAR.CONVERSATION_WORKFLOW'),
+      icon: 'i-lucide-list-checks',
+      to: accountScopedRoute('conversation_workflow_index'),
     },
     {
       name: 'Settings Billing',

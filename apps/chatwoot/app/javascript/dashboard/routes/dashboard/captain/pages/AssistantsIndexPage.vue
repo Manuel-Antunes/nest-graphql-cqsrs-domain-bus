@@ -52,6 +52,7 @@ const routeToLastActiveAssistant = () => {
 
   const { navigationPath } = currentParams.value;
   const isAValidRoute = [
+    'captain_assistants_overview_index', // Overview page
     'captain_assistants_responses_index', // Faq page
     'captain_assistants_documents_index', // Document page
     'captain_assistants_scenarios_index', // Scenario page
@@ -63,7 +64,7 @@ const routeToLastActiveAssistant = () => {
 
   const navigateTo = isAValidRoute
     ? navigationPath
-    : 'captain_assistants_responses_index';
+    : 'captain_assistants_overview_index';
 
   return routeToView(navigateTo, {
     accountId: currentParams.value.accountId,
@@ -81,7 +82,7 @@ onMounted(() => performRouting());
 
 <template>
   <div
-    class="flex items-center justify-center w-full bg-n-background text-n-slate-11"
+    class="flex items-center justify-center w-full bg-n-surface-1 text-n-slate-11"
   >
     <Spinner class="size-6" />
   </div>

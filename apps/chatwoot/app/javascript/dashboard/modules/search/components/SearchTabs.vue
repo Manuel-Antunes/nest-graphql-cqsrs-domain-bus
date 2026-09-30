@@ -1,9 +1,6 @@
 <script setup>
 import { computed, watch, ref } from 'vue';
-import { useI18n } from 'vue-i18n';
 import TabBar from 'dashboard/components-next/tabbar/TabBar.vue';
-import { Button } from 'dashboard/components-next/ui/button';
-import Icon from 'dashboard/components-next/icon/Icon.vue';
 
 const props = defineProps({
   tabs: {
@@ -17,8 +14,6 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['tabChange']);
-
-const { t } = useI18n();
 
 const activeTab = ref(props.selectedTab);
 
@@ -52,10 +47,5 @@ const onTabChange = selectedTab => {
       :initial-active-tab="activeTab"
       @tab-changed="onTabChange"
     />
-
-    <Button variant="link">
-      <Icon icon="i-lucide-arrow-up-down" />
-      {{ t('SEARCH.SORT_BY.RELEVANCE') }}
-    </Button>
   </div>
 </template>

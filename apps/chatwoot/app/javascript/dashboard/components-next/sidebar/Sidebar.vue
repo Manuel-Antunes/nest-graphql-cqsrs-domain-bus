@@ -1,7 +1,8 @@
 <script setup>
-import { h, ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { provideSidebarContext } from './provider';
 import { useAccount } from 'dashboard/composables/useAccount';
+import { useConfig } from 'dashboard/composables/useConfig';
 import { useMapGetter } from 'dashboard/composables/store';
 import { useStore } from 'vuex';
 import { useAppNavigation } from 'dashboard/composables/useAppNavigation';
@@ -15,6 +16,14 @@ import {
   SETTINGS_ENTRY_ROUTE,
 } from './settingsMenu';
 import { vOnClickOutside } from '@vueuse/components';
+import { FEATURE_FLAGS } from 'dashboard/featureFlags';
+import { getInboxIdentifier } from 'dashboard/helper/inbox';
+import {
+  SIDEBAR_SORT_SECTIONS,
+  getSidebarSortOptions,
+  resolveSidebarSort,
+  sortSidebarItems,
+} from 'dashboard/helper/sidebarSort';
 
 import {
   NavigationMenu,
@@ -26,6 +35,8 @@ import {
 } from 'next/ui/navigation-menu';
 import Icon from 'next/icon/Icon.vue';
 import ChannelIcon from 'dashboard/components-next/icon/ChannelIcon.vue';
+import EmojiIcon from 'dashboard/components-next/emoji-icon-picker/EmojiIcon.vue';
+import SidebarSortMenu from './SidebarSortMenu.vue';
 
 const props = defineProps({
   isMobileSidebarOpen: {
@@ -41,12 +52,40 @@ const emit = defineEmits([
   'closeMobileSidebar',
 ]);
 
-const { accountScopedRoute } = useAccount();
+const { accountId, accountScopedRoute, isOnChatwootCloud } = useAccount();
+const { isEnterprise } = useConfig();
 const store = useStore();
 // Dual-mode navigation (vue-router on the SPA, Inertia + registry under Inertia).
 const { resolveMeta, visit, currentRouteName, currentPath } =
   useAppNavigation();
 const { t } = useI18n();
+
+// Calls run on the enterprise-only API (cloud runs enterprise); hide the entry
+// on community so it doesn't lead to a dashboard/CTA the backend can't serve.
+const isCallsAvailable = computed(
+  () => isOnChatwootCloud.value || isEnterprise
+);
+
+const currentUserId = useMapGetter('getCurrentUserID');
+const isFeatureEnabledonAccount = useMapGetter(
+  'accounts/isFeatureEnabledonAccount'
+);
+
+const hasConversationUnreadCounts = computed(() =>
+  isFeatureEnabledonAccount.value(
+    accountId.value,
+    FEATURE_FLAGS.CONVERSATION_UNREAD_COUNTS
+  )
+);
+
+const hasFilteredUnreadCounts = computed(
+  () =>
+    hasConversationUnreadCounts.value &&
+    isFeatureEnabledonAccount.value(
+      accountId.value,
+      FEATURE_FLAGS.UNREAD_COUNT_FOR_FILTERS
+    )
+);
 
 // Clicking a rail icon navigates to that section's default destination
 // (Conversations -> all conversations, Contacts -> all contacts, …) while
@@ -83,17 +122,55 @@ const totalUnreadConversations = useMapGetter(
 );
 const unreadCountByInbox = useMapGetter('conversations/getUnreadCountByInbox');
 const unreadCountByTeam = useMapGetter('conversations/getUnreadCountByTeam');
+const allUnreadCount = useMapGetter(
+  'conversationUnreadCounts/getAllUnreadCount'
+);
+const getInboxUnreadCount = useMapGetter(
+  'conversationUnreadCounts/getInboxUnreadCount'
+);
+const getLabelUnreadCount = useMapGetter(
+  'conversationUnreadCounts/getLabelUnreadCount'
+);
+const getTeamUnreadCount = useMapGetter(
+  'conversationUnreadCounts/getTeamUnreadCount'
+);
+const getFolderUnreadCount = useMapGetter(
+  'conversationUnreadCounts/getFolderUnreadCount'
+);
+const mentionsUnreadCount = useMapGetter(
+  'conversationUnreadCounts/getMentionsUnreadCount'
+);
+const participatingUnreadCount = useMapGetter(
+  'conversationUnreadCounts/getParticipatingUnreadCount'
+);
+const unattendedUnreadCount = useMapGetter(
+  'conversationUnreadCounts/getUnattendedUnreadCount'
+);
 
 // Null-safe accessors: never let a missing/undefined getter throw inside the
 // menuItems computed (which would wipe the whole rail + flyouts).
-const inboxUnread = id =>
-  typeof unreadCountByInbox.value === 'function'
+const inboxUnread = id => {
+  if (hasConversationUnreadCounts.value) return getInboxUnreadCount.value(id);
+  return typeof unreadCountByInbox.value === 'function'
     ? unreadCountByInbox.value(id)
     : 0;
-const teamUnread = id =>
-  typeof unreadCountByTeam.value === 'function'
+};
+const teamUnread = id => {
+  if (hasConversationUnreadCounts.value) return getTeamUnreadCount.value(id);
+  return typeof unreadCountByTeam.value === 'function'
     ? unreadCountByTeam.value(id)
     : 0;
+};
+const labelUnread = id =>
+  hasConversationUnreadCounts.value ? getLabelUnreadCount.value(id) : 0;
+const folderUnread = id =>
+  hasFilteredUnreadCounts.value ? getFolderUnreadCount.value(id) : 0;
+const filterUnread = count => (hasFilteredUnreadCounts.value ? count : 0);
+const totalUnread = computed(() =>
+  hasConversationUnreadCounts.value
+    ? allUnreadCount.value
+    : totalUnreadConversations.value
+);
 
 // Aggregate unread shown on each rail icon: notifications for Inbox, total
 // unread conversations for Conversation, and total unread across inboxes for
@@ -101,7 +178,7 @@ const teamUnread = id =>
 const railUnreadCount = item => {
   if (item.name === 'Inbox') return unreadNotificationCount.value || 0;
   if (item.name === 'Conversation' || item.name === 'Inboxes') {
-    return totalUnreadConversations.value || 0;
+    return totalUnread.value || 0;
   }
   return 0;
 };
@@ -109,6 +186,9 @@ const teams = useMapGetter('teams/getMyTeams');
 const contactCustomViews = useMapGetter('customViews/getContactCustomViews');
 const conversationCustomViews = useMapGetter(
   'customViews/getConversationCustomViews'
+);
+const getSidebarSectionSort = useMapGetter(
+  'sidebarSortPreferences/getSectionSort'
 );
 
 onMounted(() => {
@@ -121,8 +201,80 @@ onMounted(() => {
   store.dispatch('customViews/get', 'contact');
 });
 
+watch(
+  [accountId, hasConversationUnreadCounts],
+  ([currentAccountId, isEnabled]) => {
+    if (!currentAccountId) return;
+    if (!isEnabled) {
+      store.dispatch('conversationUnreadCounts/clear');
+      return;
+    }
+    store.dispatch('conversationUnreadCounts/get');
+  },
+  { immediate: true }
+);
+
+watch(
+  [accountId, currentUserId],
+  ([currentAccountId, userId]) => {
+    if (!currentAccountId || !userId) return;
+    store.dispatch('sidebarSortPreferences/initialize');
+  },
+  { immediate: true }
+);
+
+const hasUnreadCountsForSection = section =>
+  section === SIDEBAR_SORT_SECTIONS.FOLDERS
+    ? hasFilteredUnreadCounts.value
+    : hasConversationUnreadCounts.value;
+
+const getSortForSection = section =>
+  resolveSidebarSort(section, getSidebarSectionSort.value(section), {
+    hasUnreadCounts: hasUnreadCountsForSection(section),
+  });
+
+const buildSortConfig = section => ({
+  sortOptions: getSidebarSortOptions(section, {
+    hasUnreadCounts: hasUnreadCountsForSection(section),
+  }),
+  activeSort: getSortForSection(section),
+  onSortChange: sortBy =>
+    store.dispatch('sidebarSortPreferences/setSectionSort', {
+      section,
+      sortBy,
+    }),
+});
+
+const sortedFolders = computed(() =>
+  sortSidebarItems(conversationCustomViews.value, {
+    sortBy: getSortForSection(SIDEBAR_SORT_SECTIONS.FOLDERS),
+    labelKey: view => view.name,
+    unreadCountKey: view => folderUnread(view.id),
+  })
+);
+
+const sortedTeams = computed(() =>
+  sortSidebarItems(teams.value, {
+    sortBy: getSortForSection(SIDEBAR_SORT_SECTIONS.TEAMS),
+    labelKey: team => team.name,
+    unreadCountKey: team => teamUnread(team.id),
+  })
+);
+
 const sortedInboxes = computed(() =>
-  inboxes.value.slice().sort((a, b) => a.name.localeCompare(b.name))
+  sortSidebarItems(inboxes.value, {
+    sortBy: getSortForSection(SIDEBAR_SORT_SECTIONS.CHANNELS),
+    labelKey: inbox => inbox.name,
+    unreadCountKey: inbox => inboxUnread(inbox.id),
+  })
+);
+
+const sortedLabels = computed(() =>
+  sortSidebarItems(labels.value, {
+    sortBy: getSortForSection(SIDEBAR_SORT_SECTIONS.LABELS),
+    labelKey: label => label.title,
+    unreadCountKey: label => labelUnread(label.id),
+  })
 );
 
 const closeMobileSidebar = () => {
@@ -148,28 +300,41 @@ const menuItems = computed(() => {
         {
           name: 'All',
           label: t('SIDEBAR.ALL_CONVERSATIONS'),
+          count: totalUnread.value,
           activeOn: ['inbox_conversation'],
           to: accountScopedRoute('home'),
         },
         {
           name: 'Mentions',
           label: t('SIDEBAR.MENTIONED_CONVERSATIONS'),
+          count: filterUnread(mentionsUnreadCount.value),
           activeOn: ['conversation_through_mentions'],
           to: accountScopedRoute('conversation_mentions'),
+        },
+        {
+          name: 'Participating',
+          label: t('SIDEBAR.PARTICIPATING_CONVERSATIONS'),
+          count: filterUnread(participatingUnreadCount.value),
+          activeOn: ['conversation_through_participating'],
+          to: accountScopedRoute('conversation_participating'),
         },
         {
           name: 'Unattended',
           activeOn: ['conversation_through_unattended'],
           label: t('SIDEBAR.UNATTENDED_CONVERSATIONS'),
+          count: filterUnread(unattendedUnreadCount.value),
           to: accountScopedRoute('conversation_unattended'),
         },
         {
           name: 'Folders',
           label: t('SIDEBAR.CUSTOM_VIEWS_FOLDER'),
           icon: 'i-lucide-folder',
-          children: conversationCustomViews.value.map(view => ({
+          activeOn: ['conversations_through_folders'],
+          ...buildSortConfig(SIDEBAR_SORT_SECTIONS.FOLDERS),
+          children: sortedFolders.value.map(view => ({
             name: `${view.name}-${view.id}`,
             label: view.name,
+            count: folderUnread(view.id),
             to: accountScopedRoute('folder_conversations', { id: view.id }),
           })),
         },
@@ -177,10 +342,14 @@ const menuItems = computed(() => {
           name: 'Teams',
           label: t('SIDEBAR.TEAMS'),
           icon: 'i-lucide-users',
-          children: teams.value.map(team => ({
+          activeOn: ['conversations_through_team'],
+          ...buildSortConfig(SIDEBAR_SORT_SECTIONS.TEAMS),
+          children: sortedTeams.value.map(team => ({
             name: `${team.name}-${team.id}`,
             label: team.name,
             icon: 'i-lucide-users',
+            emoji: team.icon,
+            emojiColor: team.icon_color,
             count: teamUnread(team.id),
             to: accountScopedRoute('team_conversations', { teamId: team.id }),
           })),
@@ -189,10 +358,13 @@ const menuItems = computed(() => {
           name: 'Labels',
           label: t('SIDEBAR.LABELS'),
           icon: 'i-lucide-tag',
-          children: labels.value.map(label => ({
+          activeOn: ['conversations_through_label'],
+          ...buildSortConfig(SIDEBAR_SORT_SECTIONS.LABELS),
+          children: sortedLabels.value.map(label => ({
             name: `${label.title}-${label.id}`,
             label: label.title,
             swatch: label.color,
+            count: labelUnread(label.id),
             to: accountScopedRoute('label_conversations', {
               label: label.title,
             }),
@@ -211,15 +383,28 @@ const menuItems = computed(() => {
           })
         : null,
       activeOn: ['conversation_through_inbox'],
+      ...buildSortConfig(SIDEBAR_SORT_SECTIONS.CHANNELS),
       children: sortedInboxes.value.map(inbox => ({
         name: `${inbox.name}-${inbox.id}`,
         label: inbox.name,
         inbox,
+        identifier: getInboxIdentifier(inbox),
         count: inboxUnread(inbox.id),
         to: accountScopedRoute('inbox_dashboard', { inbox_id: inbox.id }),
       })),
     },
-    // Divider in the rail is rendered before Contacts (after Inboxes).
+    ...(isCallsAvailable.value
+      ? [
+          {
+            name: 'Calls',
+            label: t('SIDEBAR.CALLS'),
+            icon: 'i-lucide-phone',
+            to: accountScopedRoute('calls_dashboard_index'),
+            activeOn: ['calls_dashboard_index'],
+          },
+        ]
+      : []),
+    // Divider in the rail is rendered before Contacts.
     {
       name: 'Contacts',
       label: t('SIDEBAR.CONTACTS'),
@@ -258,6 +443,10 @@ const menuItems = computed(() => {
               { segmentId: view.id },
               { page: 1 }
             ),
+            activeOn: [
+              'contacts_dashboard_segments_index',
+              'contacts_edit_segment',
+            ],
           })),
         },
         {
@@ -273,6 +462,10 @@ const menuItems = computed(() => {
               { label: label.title },
               { page: 1, search: undefined }
             ),
+            activeOn: [
+              'contacts_dashboard_labels_index',
+              'contacts_edit_label',
+            ],
           })),
         },
       ],
@@ -286,7 +479,7 @@ const menuItems = computed(() => {
         {},
         { page: 1, search: undefined }
       ),
-      activeOn: ['companies_dashboard_index'],
+      activeOn: ['companies_dashboard_index', 'companies_dashboard_show'],
     },
   ];
 });
@@ -312,6 +505,8 @@ const sectionMatchesRoute = section => {
 // meta.featureFlag / meta.installationTypes). Dynamic, data-driven children
 // (teams, labels, inboxes, segments, folders) carry no special gating.
 const { shouldShow } = usePolicy();
+
+const IDENTIFIER_SEPARATOR = '·';
 
 const isAllowed = to => {
   if (!to) return true;
@@ -353,6 +548,9 @@ const flyoutGroups = section => {
           id: child.name,
           label: child.label,
           items: child.children,
+          sortOptions: child.sortOptions,
+          activeSort: child.activeSort,
+          onSortChange: child.onSortChange,
         });
       }
     } else if (isAllowed(child.to)) {
@@ -446,20 +644,38 @@ const flyoutGroups = section => {
                 class="absolute top-0 ltr:left-full rtl:right-full ltr:ml-2 rtl:mr-2 w-64 max-h-[70vh] overflow-y-auto rounded-xl border border-n-weak bg-n-solid-1 p-1.5 shadow-lg z-50 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0"
               >
                 <header
-                  class="flex items-center gap-2 px-2 py-1.5 mb-1 text-base font-semibold text-n-slate-12"
+                  class="flex items-center gap-2 px-2 py-1.5 mb-1 text-base font-semibold text-n-slate-12 group/sidebar-section"
                 >
                   <Icon
                     :icon="item.icon"
                     class="size-4 shrink-0 text-n-slate-11"
                   />
-                  {{ item.label }}
+                  <span class="flex-1 min-w-0 truncate">{{ item.label }}</span>
+                  <SidebarSortMenu
+                    v-if="item.sortOptions?.length"
+                    :active-sort="item.activeSort"
+                    :options="item.sortOptions"
+                    :open-on-hover="false"
+                    @sort="item.onSortChange"
+                  />
                 </header>
                 <template v-for="group in flyoutGroups(item)" :key="group.id">
                   <div
                     v-if="group.label"
-                    class="px-2 pt-2 pb-1 text-xs font-medium tracking-wide uppercase text-n-slate-10"
+                    class="flex items-center gap-2 px-2 pt-2 pb-1 group/sidebar-section"
                   >
-                    {{ group.label }}
+                    <span
+                      class="flex-1 min-w-0 text-xs font-medium tracking-wide uppercase truncate text-n-slate-10"
+                    >
+                      {{ group.label }}
+                    </span>
+                    <SidebarSortMenu
+                      v-if="group.sortOptions?.length"
+                      :active-sort="group.activeSort"
+                      :options="group.sortOptions"
+                      :open-on-hover="false"
+                      @sort="group.onSortChange"
+                    />
                   </div>
                   <NavigationMenuLink
                     v-for="leaf in group.items"
@@ -480,14 +696,35 @@ const flyoutGroups = section => {
                         :inbox="leaf.inbox"
                         class="size-4 shrink-0"
                       />
+                      <EmojiIcon
+                        v-else-if="leaf.emoji"
+                        :value="leaf.emoji"
+                        :color="leaf.emojiColor"
+                        class="size-4 shrink-0"
+                      />
                       <Icon
                         v-else-if="typeof leaf.icon === 'string'"
                         :icon="leaf.icon"
                         class="size-4 shrink-0 text-n-slate-11"
                       />
-                      <span class="flex-1 min-w-0 truncate">{{
-                        leaf.label
-                      }}</span>
+                      <span
+                        class="flex-1 min-w-0 truncate"
+                        :title="
+                          leaf.identifier
+                            ? `${leaf.label} ${IDENTIFIER_SEPARATOR} ${leaf.identifier}`
+                            : leaf.label
+                        "
+                      >
+                        {{ leaf.label }}
+                        <template v-if="leaf.identifier">
+                          <span aria-hidden="true" class="mx-0.5 text-n-slate-9">
+                            {{ IDENTIFIER_SEPARATOR }}
+                          </span>
+                          <bdi dir="auto" class="text-n-slate-9">
+                            {{ leaf.identifier }}
+                          </bdi>
+                        </template>
+                      </span>
                       <span
                         v-if="leaf.count > 0"
                         class="shrink-0 min-w-[18px] h-[18px] px-1 rounded-full bg-n-brand text-white text-[10px] font-bold leading-[18px] text-center"

@@ -1,38 +1,97 @@
 <script setup>
+import { computed, onMounted, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
+import { useDebounceFn } from '@vueuse/core';
 import { useAlert } from 'dashboard/composables';
-import { messageTimestamp } from 'shared/helpers/timeHelper';
 import { useStoreGetters, useStore } from 'dashboard/composables/store';
-import TableFooter from 'dashboard/components/widgets/TableFooter.vue';
+import { useAppNavigation } from 'dashboard/composables/useAppNavigation';
+import { messageTimestamp } from 'shared/helpers/timeHelper';
+import {
+  BaseTable,
+  BaseTableRow,
+  BaseTableCell,
+} from 'dashboard/components-next/table';
+import { Button } from 'dashboard/components-next/ui/button';
+import Icon from 'dashboard/components-next/icon/Icon.vue';
+import PaginationFooter from 'dashboard/components-next/pagination/PaginationFooter.vue';
 import BaseSettingsHeader from '../components/BaseSettingsHeader.vue';
+import SettingsLayout from '../SettingsLayout.vue';
+import AuditLogFilters from './components/AuditLogFilters.vue';
 import {
   generateTranslationPayload,
   generateLogActionKey,
+  auditLogFiltersFromQuery,
+  buildAuditLogRouteQuery,
 } from 'dashboard/helper/auditlogHelper';
-import { computed, onMounted, watch } from 'vue';
-import { useI18n } from 'vue-i18n';
-import { useAppNavigation } from 'dashboard/composables/useAppNavigation';
+import { FEATURE_FLAGS } from 'dashboard/featureFlags';
+
+const SEARCH_DEBOUNCE_DELAY = 500;
+const MIN_SEARCH_LENGTH = 3;
 
 const getters = useStoreGetters();
 const store = useStore();
-const { visit } = useAppNavigation();
+const { currentRouteName } = useAppNavigation();
+const { t } = useI18n();
+
 const records = computed(() => getters['auditlogs/getAuditLogs'].value);
 const uiFlags = computed(() => getters['auditlogs/getUIFlags'].value);
 const meta = computed(() => getters['auditlogs/getMeta'].value);
 const agentList = computed(() => getters['agents/getAgents'].value);
 
-const { t } = useI18n();
+const readQuery = () =>
+  Object.fromEntries(new URLSearchParams(window.location.search));
 
-const routerPage = computed(() =>
-  Number(new URLSearchParams(window.location.search).get('page') ?? 1)
-);
+const routeQuery = ref(readQuery());
 
-const fetchAuditLogs = page => {
+const writeQuery = query => {
+  routeQuery.value = query;
+  const queryString = new URLSearchParams(query).toString();
+  window.history.replaceState(
+    window.history.state,
+    '',
+    `${window.location.pathname}${queryString ? `?${queryString}` : ''}`
+  );
+};
+
+const searchQuery = ref(routeQuery.value.q ?? '');
+// The search term this page last put in the URL. Echoes of our own navigation
+// must not overwrite a term the admin is still typing.
+const pushedSearch = ref(searchQuery.value);
+
+const filters = computed(() => auditLogFiltersFromQuery(routeQuery.value));
+
+const hasActiveFilters = computed(() => {
+  const { q, types, since, sort } = filters.value;
+  return Boolean(q || types || since || sort);
+});
+
+const fetchAuditLogs = async () => {
   try {
-    store.dispatch('auditlogs/fetch', { page });
+    await store.dispatch('auditlogs/fetch', filters.value);
   } catch (error) {
     const errorMessage = error?.message || t('AUDIT_LOGS.API.ERROR_MESSAGE');
     useAlert(errorMessage);
   }
+};
+
+const updateQuery = partial => {
+  // a debounced search can land after the admin has moved to another page
+  if (currentRouteName.value !== 'auditlogs_list') return;
+  writeQuery(buildAuditLogRouteQuery({ ...routeQuery.value, ...partial }));
+};
+
+const onFiltersUpdate = partial => {
+  updateQuery({ ...partial, page: undefined });
+};
+
+const onPageChange = page => {
+  updateQuery({ page });
+};
+
+const clearFilters = () => {
+  pushedSearch.value = '';
+  searchQuery.value = '';
+  writeQuery({});
 };
 
 const generateLogText = auditLogItem => {
@@ -51,88 +110,132 @@ const generateLogText = auditLogItem => {
   return t(translationKey, mergedPayload);
 };
 
-const onPageChange = page => {
-  visit({ name: 'auditlogs_list', query: { page: page } });
-};
-
-onMounted(() => {
-  store.dispatch('agents/get');
-  fetchAuditLogs(routerPage.value);
-});
-
-watch(routerPage, (newPage, oldPage) => {
-  if (newPage !== oldPage) {
-    fetchAuditLogs(newPage);
-  }
-});
+const showsRawIpAddress = computed(() =>
+  getters['accounts/isFeatureEnabledonAccount'].value(
+    getters.getCurrentAccountId.value,
+    FEATURE_FLAGS.AUDIT_LOG_IP_ADDRESS
+  )
+);
 
 const tableHeaders = computed(() => {
   return [
     t('AUDIT_LOGS.LIST.TABLE_HEADER.ACTIVITY'),
     t('AUDIT_LOGS.LIST.TABLE_HEADER.TIME'),
-    t('AUDIT_LOGS.LIST.TABLE_HEADER.IP_ADDRESS'),
+    showsRawIpAddress.value
+      ? t('AUDIT_LOGS.LIST.TABLE_HEADER.IP_ADDRESS')
+      : t('AUDIT_LOGS.LIST.TABLE_HEADER.LOCATION'),
   ];
+});
+
+const commitSearch = useDebounceFn(() => {
+  const typed = searchQuery.value.trim();
+  const term = typed.length < MIN_SEARCH_LENGTH ? '' : typed;
+  if (term === pushedSearch.value) return;
+  pushedSearch.value = term;
+  onFiltersUpdate({ q: term || undefined });
+}, SEARCH_DEBOUNCE_DELAY);
+
+watch(searchQuery, () => commitSearch());
+
+watch(routeQuery, () => {
+  if (currentRouteName.value === 'auditlogs_list') fetchAuditLogs();
+});
+
+onMounted(() => {
+  store.dispatch('agents/get');
+  fetchAuditLogs();
 });
 </script>
 
 <template>
-  <div class="flex-1 overflow-auto">
-    <BaseSettingsHeader
-      :title="$t('AUDIT_LOGS.HEADER')"
-      :description="$t('AUDIT_LOGS.DESCRIPTION')"
-      :link-text="$t('AUDIT_LOGS.LEARN_MORE')"
-      feature-name="audit_logs"
-    />
-
-    <div class="mt-6 flex-1 text-n-slate-11">
-      <woot-loading-state
-        v-if="uiFlags.fetchingList"
-        :message="$t('AUDIT_LOGS.LOADING')"
-      />
-      <p
-        v-else-if="!records.length"
-        class="flex flex-col items-center justify-center h-full text-base p-8"
+  <SettingsLayout
+    :is-loading="uiFlags.fetchingList"
+    :loading-message="$t('AUDIT_LOGS.LOADING')"
+    :no-records-found="!records.length"
+    :no-records-message="
+      hasActiveFilters ? $t('AUDIT_LOGS.SEARCH_404') : $t('AUDIT_LOGS.LIST.404')
+    "
+  >
+    <template #header>
+      <BaseSettingsHeader
+        v-model:search-query="searchQuery"
+        :title="$t('AUDIT_LOGS.HEADER')"
+        :description="$t('AUDIT_LOGS.DESCRIPTION')"
+        :link-text="$t('AUDIT_LOGS.LEARN_MORE')"
+        :search-placeholder="$t('AUDIT_LOGS.FILTERS.SEARCH_PLACEHOLDER')"
+        feature-name="audit_logs"
       >
-        {{ $t('AUDIT_LOGS.LIST.404') }}
-      </p>
-      <div v-else class="min-w-full overflow-x-auto">
-        <table class="divide-y divide-n-weak">
-          <thead>
-            <th
-              v-for="thHeader in tableHeaders"
-              :key="thHeader"
-              class="py-4 ltr:pr-4 rtl:pl-4 text-left font-semibold text-n-slate-11"
+        <template #tabs>
+          <AuditLogFilters
+            :type="filters.types?.[0]"
+            :range="routeQuery.range"
+            :since="filters.since"
+            :until="filters.until"
+            :sort="filters.sort"
+            @update="onFiltersUpdate"
+          />
+        </template>
+        <template v-if="meta.totalEntries" #count>
+          <span class="text-body-main text-n-slate-11 whitespace-nowrap">
+            {{ $t('AUDIT_LOGS.COUNT', { n: meta.totalEntries }) }}
+          </span>
+        </template>
+        <template v-if="hasActiveFilters" #actions>
+          <Button variant="ghost" size="sm" @click="clearFilters">
+            <Icon icon="i-lucide-x" class="size-4" />
+            {{ $t('AUDIT_LOGS.FILTERS.CLEAR_ALL') }}
+          </Button>
+        </template>
+      </BaseSettingsHeader>
+    </template>
+    <template #body>
+      <div class="flex flex-col">
+        <BaseTable :headers="tableHeaders" :items="records">
+          <template #row="{ items }">
+            <BaseTableRow
+              v-for="auditLogItem in items"
+              :key="auditLogItem.id"
+              :item="auditLogItem"
             >
-              {{ thHeader }}
-            </th>
-          </thead>
-          <tbody class="divide-y divide-n-weak text-n-slate-11">
-            <tr v-for="auditLogItem in records" :key="auditLogItem.id">
-              <td class="py-4 ltr:pr-4 rtl:pl-4 break-all whitespace-nowrap">
-                {{ generateLogText(auditLogItem) }}
-              </td>
-              <td class="py-4 ltr:pr-4 rtl:pl-4 break-all whitespace-nowrap">
-                {{
-                  messageTimestamp(
-                    auditLogItem.created_at,
-                    'MMM dd, yyyy hh:mm a'
-                  )
-                }}
-              </td>
-              <td class="py-4 w-[8.75rem]">
-                {{ auditLogItem.remote_address }}
-              </td>
-            </tr>
-          </tbody>
-        </table>
-        <TableFooter
+              <template #default>
+                <BaseTableCell>
+                  <span
+                    class="text-body-main text-n-slate-12 whitespace-nowrap"
+                  >
+                    {{ generateLogText(auditLogItem) }}
+                  </span>
+                </BaseTableCell>
+
+                <BaseTableCell>
+                  <span
+                    class="text-body-main text-n-slate-11 whitespace-nowrap"
+                  >
+                    {{
+                      messageTimestamp(
+                        auditLogItem.created_at,
+                        'MMM dd, yyyy hh:mm a'
+                      )
+                    }}
+                  </span>
+                </BaseTableCell>
+
+                <BaseTableCell class="w-36">
+                  <span class="text-body-main text-n-slate-11">
+                    {{ auditLogItem.location || auditLogItem.remote_address }}
+                  </span>
+                </BaseTableCell>
+              </template>
+            </BaseTableRow>
+          </template>
+        </BaseTable>
+        <PaginationFooter
           :current-page="Number(meta.currentPage)"
-          :total-count="meta.totalEntries"
-          :page-size="meta.perPage"
-          class="border-n-weak border-t !px-0 py-4"
-          @page-change="onPageChange"
+          :total-items="meta.totalEntries"
+          :items-per-page="meta.perPage"
+          class="!px-0"
+          @update:current-page="onPageChange"
         />
       </div>
-    </div>
-  </div>
+    </template>
+  </SettingsLayout>
 </template>

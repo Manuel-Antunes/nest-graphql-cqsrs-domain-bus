@@ -5,6 +5,8 @@
 #  id                :bigint           not null, primary key
 #  allow_auto_assign :boolean          default(TRUE)
 #  description       :text
+#  icon              :string           default("")
+#  icon_color        :string           default("")
 #  name              :string           not null
 #  created_at        :datetime         not null
 #  updated_at        :datetime         not null
@@ -25,6 +27,9 @@ class Team < ApplicationRecord
   # Team-scoped business hours (platform calendar). Inbox working hours are a
   # separate set (WorkingHour belongs to inbox XOR team).
   has_many :working_hours, dependent: :destroy_async
+
+  before_destroy :capture_filtered_unread_count_member_ids, prepend: true
+  after_destroy_commit :invalidate_filtered_unread_counts_after_destroy
 
   validates :name,
             presence: { message: I18n.t('errors.validations.presence') },
@@ -66,8 +71,22 @@ class Team < ApplicationRecord
     {
       id: id,
       name: name,
-      platform_team_id: try(:platform_team_id)
+      platform_team_id: try(:platform_team_id),
+      icon: icon,
+      icon_color: icon_color
     }
+  end
+
+  private
+
+  def capture_filtered_unread_count_member_ids
+    @filtered_unread_count_member_ids = team_members.pluck(:user_id)
+  end
+
+  def invalidate_filtered_unread_counts_after_destroy
+    invalidator = ::Conversations::UnreadCounts::FilteredCountInvalidator.new(account)
+    invalidator.conversation_changed!
+    invalidator.users_visibility_changed!(user_ids: @filtered_unread_count_member_ids)
   end
 end
 

@@ -59,7 +59,7 @@ const removeAttachment = id => {
           size="icon"
           @click="removeAttachment(attachment.resource.id)"
         >
-          <Icon :icon="'i-lucide-trash'" />
+          <Icon icon="i-lucide-trash" />
         </Button>
       </div>
     </div>
@@ -77,12 +77,12 @@ const removeAttachment = id => {
         </span>
         <Button
           variant="ghost"
-          icon="i-lucide-x"
-          color="slate"
-          size="xs"
+          size="icon-xs"
           class="shrink-0 !h-5 !w-5"
           @click="removeAttachment(attachment.resource.id)"
-        />
+        >
+          <Icon icon="i-lucide-x" />
+        </Button>
       </div>
     </div>
   </div>

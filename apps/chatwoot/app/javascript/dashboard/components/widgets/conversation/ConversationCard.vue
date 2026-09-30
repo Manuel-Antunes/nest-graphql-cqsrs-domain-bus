@@ -1,116 +1,70 @@
 <script setup>
-import { computed, ref } from 'vue';
-import { useAppNavigation } from 'dashboard/composables/useAppNavigation';
-import { useStore, useMapGetter } from 'dashboard/composables/store';
+import { computed, ref, watch } from 'vue';
 import { getLastMessage } from 'dashboard/helper/conversationHelper';
-import { frontendURL, conversationUrl } from 'dashboard/helper/URLHelper';
 import Avatar from 'next/avatar/Avatar.vue';
+import Icon from 'dashboard/components-next/icon/Icon.vue';
 import MessagePreview from './MessagePreview.vue';
 import InboxName from '../InboxName.vue';
-import ConversationContextMenu from './contextMenu/Index.vue';
 import TimeAgo from 'dashboard/components/ui/TimeAgo.vue';
 import CardLabels from './conversationCardComponents/CardLabels.vue';
-import PriorityMark from './PriorityMark.vue';
+import CardPriorityIcon from 'dashboard/components-next/Conversation/ConversationCard/CardPriorityIcon.vue';
+import UnreadBadge from 'dashboard/components-next/Conversation/ConversationCard/UnreadBadge.vue';
 import SLACardLabel from './components/SLACardLabel.vue';
-import {
-  ContextMenu,
-  ContextMenuTrigger,
-  ContextMenuContent,
-} from 'dashboard/components-next/ui/context-menu';
-import { Checkbox } from 'dashboard/components-next/ui/checkbox';
 import VoiceCallStatus from './VoiceCallStatus.vue';
+import { Checkbox } from 'dashboard/components-next/ui/checkbox';
 
 const props = defineProps({
-  activeLabel: { type: String, default: '' },
-  chat: { type: Object, default: () => ({}) },
-  hideInboxName: { type: Boolean, default: false },
-  hideThumbnail: { type: Boolean, default: false },
-  teamId: { type: [String, Number], default: 0 },
-  foldersId: { type: [String, Number], default: 0 },
-  showAssignee: { type: Boolean, default: false },
-  conversationType: { type: String, default: '' },
+  chat: { type: Object, required: true },
+  currentContact: { type: Object, required: true },
+  assignee: { type: Object, default: () => ({}) },
+  inbox: { type: Object, default: () => ({}) },
   selected: { type: Boolean, default: false },
+  isActiveChat: { type: Boolean, default: false },
+  showAssignee: { type: Boolean, default: false },
+  showInboxName: { type: Boolean, default: false },
+  hideThumbnail: { type: Boolean, default: false },
   compact: { type: Boolean, default: false },
-  enableContextMenu: { type: Boolean, default: false },
-  allowedContextMenuOptions: { type: Array, default: () => [] },
 });
 
 const emit = defineEmits([
-  'contextMenuToggle',
-  'assignAgent',
-  'assignLabel',
-  'assignTeam',
-  'markAsUnread',
-  'markAsRead',
-  'assignPriority',
-  'updateConversationStatus',
-  'deleteConversation',
+  'click',
+  'contextmenu',
   'selectConversation',
   'deSelectConversation',
 ]);
 
-const { visit } = useAppNavigation();
-const store = useStore();
-
 const hovered = ref(false);
 
-const currentChat = useMapGetter('getSelectedChat');
-const inboxesList = useMapGetter('inboxes/getInboxes');
-const activeInbox = useMapGetter('getSelectedInbox');
-const accountId = useMapGetter('getCurrentAccountId');
-
-const chatMetadata = computed(() => props.chat.meta || {});
-
-const assignee = computed(() => chatMetadata.value.assignee || {});
-
-const senderId = computed(() => chatMetadata.value.sender?.id);
-
-const currentContact = computed(() => {
-  return senderId.value
-    ? store.getters['contacts/getContact'](senderId.value)
-    : {};
-});
-
-const isActiveChat = computed(() => {
-  return currentChat.value.id === props.chat.id;
-});
-
 const unreadCount = computed(() => props.chat.unread_count);
-
 const hasUnread = computed(() => unreadCount.value > 0);
-
-const isInboxNameVisible = computed(() => !activeInbox.value);
-
 const lastMessageInChat = computed(() => getLastMessage(props.chat));
 
-const voiceCallData = computed(() => ({
-  status: props.chat.additional_attributes?.call_status,
-  direction: props.chat.additional_attributes?.call_direction,
-}));
-
-const inboxId = computed(() => props.chat.inbox_id);
-
-const inbox = computed(() => {
-  return inboxId.value ? store.getters['inboxes/getInbox'](inboxId.value) : {};
-});
-
-const showInboxName = computed(() => {
-  return (
-    !props.hideInboxName &&
-    isInboxNameVisible.value &&
-    inboxesList.value.length > 1
-  );
+const voiceCallData = computed(() => {
+  const last = lastMessageInChat.value;
+  if (last?.content_type !== 'voice_call' || !last.call) {
+    return { status: null, direction: null };
+  }
+  return {
+    status: last.call.status,
+    direction: last.call.direction === 'outgoing' ? 'outbound' : 'inbound',
+  };
 });
 
 const showMetaSection = computed(() => {
   return (
-    showInboxName.value ||
-    (props.showAssignee && assignee.value.name) ||
+    props.showInboxName ||
+    (props.showAssignee && props.assignee.name) ||
     props.chat.priority
   );
 });
 
-const hasSlaPolicyId = computed(() => props.chat?.sla_policy_id);
+const isAIAssignee = computed(() =>
+  ['AgentBot', 'Captain::Assistant'].includes(props.chat?.meta?.assignee_type)
+);
+
+const hasSlaPolicyId = computed(
+  () => props.chat?.applied_sla?.id && !props.currentContact?.blocked
+);
 
 const showLabelsSection = computed(() => {
   return props.chat.labels?.length > 0 || hasSlaPolicyId.value;
@@ -124,41 +78,6 @@ const messagePreviewClass = computed(() => {
   ];
 });
 
-const conversationPath = computed(() => {
-  return frontendURL(
-    conversationUrl({
-      accountId: accountId.value,
-      activeInbox: activeInbox.value,
-      id: props.chat.id,
-      label: props.activeLabel,
-      teamId: props.teamId,
-      conversationType: props.conversationType,
-      foldersId: props.foldersId,
-    })
-  );
-});
-
-const onCardClick = e => {
-  const path = conversationPath.value;
-  if (!path) return;
-
-  // Handle Ctrl/Cmd + Click for new tab
-  if (e.metaKey || e.ctrlKey) {
-    e.preventDefault();
-    window.open(
-      `${window.chatwootConfig.hostURL}${path}`,
-      '_blank',
-      'noopener,noreferrer'
-    );
-    return;
-  }
-
-  // Skip if already active
-  if (isActiveChat.value) return;
-
-  visit(path);
-};
-
 const onThumbnailHover = () => {
   hovered.value = !props.hideThumbnail;
 };
@@ -169,208 +88,160 @@ const onThumbnailLeave = () => {
 
 const onSelectConversation = checked => {
   if (checked) {
-    emit('selectConversation', props.chat.id, inbox.value.id);
+    emit('selectConversation', props.chat.id, props.inbox.id);
   } else {
-    emit('deSelectConversation', props.chat.id, inbox.value.id);
+    emit('deSelectConversation', props.chat.id, props.inbox.id);
   }
 };
 
-const onContextMenuOpenChange = isOpen => {
-  emit('contextMenuToggle', isOpen);
-};
+const selectedModel = computed({
+  get: () => props.selected,
+  set: value => onSelectConversation(value),
+});
 
-const onUpdateConversation = (status, snoozedUntil) => {
-  emit('updateConversationStatus', props.chat.id, status, snoozedUntil);
-};
-
-const onAssignAgent = agent => {
-  emit('assignAgent', agent, [props.chat.id]);
-};
-
-const onAssignLabel = label => {
-  emit('assignLabel', [label.title], [props.chat.id]);
-};
-
-const onAssignTeam = team => {
-  emit('assignTeam', team, props.chat.id);
-};
-
-const markAsUnread = () => {
-  emit('markAsUnread', props.chat.id);
-};
-
-const markAsRead = () => {
-  emit('markAsRead', props.chat.id);
-};
-
-const assignPriority = priority => {
-  emit('assignPriority', priority, props.chat.id);
-};
-
-const deleteConversation = () => {
-  emit('deleteConversation', props.chat.id);
-};
+watch(
+  () => props.chat.id,
+  () => {
+    hovered.value = false;
+  }
+);
 </script>
 
 <template>
-  <ContextMenu @update:open="onContextMenuOpenChange">
-    <ContextMenuTrigger as-child :disabled="!enableContextMenu">
-      <div
-        class="relative flex items-start flex-grow-0 flex-shrink-0 w-auto max-w-full py-0 border-t-0 border-b-0 border-l-0 border-r-0 border-transparent border-solid cursor-pointer conversation hover:bg-n-alpha-1 dark:hover:bg-n-alpha-3 group"
-        :class="{
-          'active animate-card-select bg-n-alpha-1 dark:bg-n-alpha-3 border-n-weak':
-            isActiveChat,
-          'bg-n-slate-2 dark:bg-n-slate-3': selected,
-          'px-0': compact,
-          'px-3': !compact,
-        }"
-        @click="onCardClick"
+  <div
+    class="relative flex items-start flex-grow-0 flex-shrink-0 w-auto max-w-full py-0 cursor-pointer conversation border-b border-n-slate-3 hover:border-n-surface-1 hover:bg-n-alpha-1 dark:hover:bg-n-alpha-3 group hover:z-[1] before:content-[none] before:absolute before:-top-px before:inset-x-0 before:h-px before:bg-n-surface-1 before:pointer-events-none hover:before:content-['']"
+    :class="{
+      'active animate-card-select bg-n-background !border-n-surface-1':
+        isActiveChat,
+      'selected bg-n-slate-2 !border-n-surface-1': selected,
+      'px-0': compact,
+      'px-3': !compact,
+    }"
+    @click="$emit('click', $event)"
+    @contextmenu="$emit('contextmenu', $event)"
+  >
+    <div
+      class="relative"
+      @mouseenter="onThumbnailHover"
+      @mouseleave="onThumbnailLeave"
+    >
+      <Avatar
+        v-if="!hideThumbnail"
+        :name="currentContact.name"
+        :src="currentContact.thumbnail"
+        :size="32"
+        :status="currentContact.availability_status"
+        :class="!showInboxName ? 'mt-4' : 'mt-8'"
+        hide-offline-status
       >
-        <div
-          class="relative"
-          @mouseenter="onThumbnailHover"
-          @mouseleave="onThumbnailLeave"
-        >
-          <Avatar
-            v-if="!hideThumbnail"
-            :name="currentContact.name"
-            :src="currentContact.thumbnail"
-            :size="32"
-            :status="currentContact.availability_status"
-            :class="!showInboxName ? 'mt-4' : 'mt-8'"
-            hide-offline-status
-            rounded-full
+        <template #overlay="{ size }">
+          <label
+            v-if="hovered || selected"
+            class="flex items-center justify-center rounded-full cursor-pointer absolute inset-0 z-10 backdrop-blur-[2px]"
+            :style="{ width: `${size}px`, height: `${size}px` }"
+            @click.stop
           >
-            <template #overlay="{ size }">
-              <label
-                v-if="hovered || selected"
-                class="flex items-center justify-center rounded-full cursor-pointer absolute inset-0 z-10 backdrop-blur-[2px]"
-                :style="{ width: `${size}px`, height: `${size}px` }"
-                @click.stop
-              >
-                <Checkbox
-                  :checked="selected"
-                  class="!m-0 cursor-pointer data-[state=unchecked]:bg-n-background dark:data-[state=unchecked]:bg-n-background"
-                  @update:checked="onSelectConversation"
-                />
-              </label>
-            </template>
-          </Avatar>
-        </div>
-        <div
-          class="px-0 py-3 border-b group-hover:border-transparent flex-1 border-n-slate-3 min-w-0"
-        >
-          <div
-            v-if="showMetaSection"
-            class="flex items-center min-w-0 gap-1"
-            :class="{
-              'ltr:ml-2 rtl:mr-2': !compact,
-              'mx-2': compact,
-            }"
-          >
-            <InboxName
-              v-if="showInboxName"
-              :inbox="inbox"
-              class="flex-1 min-w-0"
+            <Checkbox
+              v-model:checked="selectedModel"
+              class="!m-0 cursor-pointer data-[state=unchecked]:bg-n-background dark:data-[state=unchecked]:bg-n-background"
             />
-            <div
-              class="flex items-center gap-2 flex-shrink-0"
-              :class="{
-                'flex-1 justify-between': !showInboxName,
-              }"
-            >
-              <span
-                v-if="showAssignee && assignee.name"
-                class="text-n-slate-11 text-xs font-medium leading-3 py-0.5 px-0 inline-flex items-center truncate"
-              >
-                <fluent-icon icon="person" size="12" class="text-n-slate-11" />
-                {{ assignee.name }}
-              </span>
-              <PriorityMark :priority="chat.priority" class="flex-shrink-0" />
-            </div>
-          </div>
-          <h4
-            class="conversation--user text-sm my-0 mx-2 capitalize pt-0.5 text-ellipsis overflow-hidden whitespace-nowrap flex-1 min-w-0 ltr:pr-16 rtl:pl-16 text-n-slate-12"
-            :class="hasUnread ? 'font-semibold' : 'font-medium'"
+          </label>
+        </template>
+      </Avatar>
+    </div>
+    <div class="px-0 py-3 flex-1 min-w-0 border-line">
+      <div
+        v-if="showMetaSection"
+        class="flex items-center min-w-0 gap-1"
+        :class="{
+          'ltr:ml-2 rtl:mr-2': !compact,
+          'mx-2': compact,
+        }"
+      >
+        <InboxName v-if="showInboxName" :inbox="inbox" class="flex-1 min-w-0" />
+        <div
+          class="flex items-baseline gap-2 flex-shrink-0"
+          :class="{
+            'flex-1 justify-between': !showInboxName,
+          }"
+        >
+          <span
+            v-if="showAssignee && assignee.name"
+            class="text-n-slate-11 text-xs font-medium leading-3 py-0.5 px-0 inline-flex items-center gap-px truncate"
           >
-            {{ currentContact.name }}
-          </h4>
-          <VoiceCallStatus
-            v-if="voiceCallData.status"
-            key="voice-status-row"
-            :status="voiceCallData.status"
-            :direction="voiceCallData.direction"
-            :message-preview-class="messagePreviewClass"
-          />
-          <MessagePreview
-            v-else-if="lastMessageInChat"
-            key="message-preview"
-            :message="lastMessageInChat"
-            class="my-0 mx-2 leading-6 h-6 flex-1 min-w-0 text-sm"
-            :class="messagePreviewClass"
-          />
-          <p
-            v-else
-            key="no-messages"
-            class="text-n-slate-11 text-sm my-0 mx-2 leading-6 h-6 flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap"
-            :class="messagePreviewClass"
-          >
-            <fluent-icon
-              size="16"
-              class="-mt-0.5 align-middle inline-block text-n-slate-10"
-              icon="info"
+            <Icon
+              :icon="isAIAssignee ? 'i-lucide-bot' : 'i-lucide-user-round'"
+              class="size-3 text-n-slate-11 flex-shrink-0"
             />
-            <span class="mx-0.5">
-              {{ $t(`CHAT_LIST.NO_MESSAGES`) }}
-            </span>
-          </p>
-          <div
-            class="absolute flex flex-col ltr:right-3 rtl:left-3"
-            :class="showMetaSection ? 'top-8' : 'top-4'"
-          >
-            <span class="ml-auto font-normal leading-4 text-xxs">
-              <TimeAgo
-                :last-activity-timestamp="chat.timestamp"
-                :created-at-timestamp="chat.created_at"
-              />
-            </span>
-            <span
-              class="shadow-lg rounded-full text-xxs font-semibold h-4 leading-4 ltr:ml-auto rtl:mr-auto mt-1 min-w-[1rem] px-1 py-0 text-center text-white bg-n-teal-9"
-              :class="hasUnread ? 'block' : 'hidden'"
-            >
-              {{ unreadCount > 9 ? '9+' : unreadCount }}
-            </span>
-          </div>
-          <CardLabels
-            v-if="showLabelsSection"
-            :conversation-labels="chat.labels"
-            class="mt-0.5 mx-2 mb-0"
-          >
-            <template v-if="hasSlaPolicyId" #before>
-              <SLACardLabel :chat="chat" class="ltr:mr-1 rtl:ml-1" />
-            </template>
-          </CardLabels>
+            <span class="truncate">{{ assignee.name }}</span>
+          </span>
+          <CardPriorityIcon
+            :priority="chat.priority"
+            class="flex-shrink-0 !size-3.5"
+          />
         </div>
       </div>
-    </ContextMenuTrigger>
-    <ContextMenuContent class="w-56">
-      <ConversationContextMenu
-        :status="chat.status"
-        :inbox-id="inbox.id"
-        :priority="chat.priority"
-        :chat-id="chat.id"
-        :has-unread-messages="hasUnread"
-        :conversation-url="conversationPath"
-        :allowed-options="allowedContextMenuOptions"
-        @update-conversation="onUpdateConversation"
-        @assign-agent="onAssignAgent"
-        @assign-label="onAssignLabel"
-        @assign-team="onAssignTeam"
-        @mark-as-unread="markAsUnread"
-        @mark-as-read="markAsRead"
-        @assign-priority="assignPriority"
-        @delete-conversation="deleteConversation"
+      <h4
+        class="conversation--user text-sm my-0 mx-2 capitalize pt-0.5 text-ellipsis overflow-hidden whitespace-nowrap flex-1 min-w-0 ltr:pr-16 rtl:pl-16 text-n-slate-12"
+        :class="hasUnread ? 'font-semibold' : 'font-medium'"
+      >
+        {{ currentContact.name }}
+      </h4>
+      <VoiceCallStatus
+        v-if="voiceCallData.status"
+        key="voice-status-row"
+        :status="voiceCallData.status"
+        :direction="voiceCallData.direction"
+        :message-preview-class="messagePreviewClass"
       />
-    </ContextMenuContent>
-  </ContextMenu>
+      <MessagePreview
+        v-else-if="lastMessageInChat"
+        key="message-preview"
+        :message="lastMessageInChat"
+        class="my-0 mx-2 leading-6 h-6 flex-1 min-w-0 text-sm"
+        :class="messagePreviewClass"
+      />
+      <p
+        v-else
+        key="no-messages"
+        class="text-n-slate-11 text-sm my-0 mx-2 leading-6 h-6 flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap"
+        :class="messagePreviewClass"
+      >
+        <fluent-icon
+          size="16"
+          class="-mt-0.5 align-middle inline-block text-n-slate-10"
+          icon="info"
+        />
+        <span class="mx-0.5">
+          {{ $t(`CHAT_LIST.NO_MESSAGES`) }}
+        </span>
+      </p>
+      <div
+        class="absolute flex flex-col ltr:right-3 rtl:left-3"
+        :class="showMetaSection ? 'top-8' : 'top-4'"
+      >
+        <span class="ml-auto font-normal leading-4 text-xxs">
+          <TimeAgo
+            :last-activity-timestamp="chat.timestamp"
+            :created-at-timestamp="chat.created_at"
+            :conversation-id="chat.id"
+          />
+        </span>
+        <UnreadBadge
+          v-if="hasUnread"
+          :count="unreadCount"
+          class="ltr:ml-auto rtl:mr-auto mt-1"
+        />
+      </div>
+      <CardLabels
+        v-if="showLabelsSection"
+        :conversation-labels="chat.labels"
+        class="mt-0.5 mx-2 mb-0"
+      >
+        <template v-if="hasSlaPolicyId" #before>
+          <SLACardLabel :chat="chat" class="ltr:mr-1 rtl:ml-1" />
+        </template>
+      </CardLabels>
+    </div>
+  </div>
 </template>

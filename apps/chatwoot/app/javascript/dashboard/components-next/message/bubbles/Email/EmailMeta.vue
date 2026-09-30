@@ -71,7 +71,10 @@ const showMeta = computed(() => {
     :class="hasError ? 'text-n-ruby-11' : 'text-current/70'"
   >
     <template v-if="showMeta">
-      <div v-if="fromEmail[0]" :class="hasError ? 'text-n-ruby-11' : 'text-current'">
+      <div
+        v-if="fromEmail[0]"
+        :class="hasError ? 'text-n-ruby-11' : 'text-current'"
+      >
         <template v-if="senderName">
           <span>
             {{ senderName }}

@@ -3,7 +3,11 @@
 import { mapGetters } from 'vuex';
 import { useAlert } from 'dashboard/composables';
 import { useAppNavigation } from 'dashboard/composables/useAppNavigation';
-import { dynamicTime } from 'shared/helpers/timeHelper';
+import {
+  DuplicateContactException,
+  ExceptionWithMessage,
+} from 'shared/helpers/CustomErrors';
+import { useExactTimestamp } from 'shared/composables/useExactTimestamp';
 import {
   AlertDialog,
   AlertDialogTrigger,
@@ -17,6 +21,7 @@ import {
 } from 'next/ui/alert-dialog';
 import { useAdmin } from 'dashboard/composables/useAdmin';
 import ContactInfoRow from './ContactInfoRow.vue';
+import ViewAllConversations from './ViewAllConversations.vue';
 import Avatar from 'next/avatar/Avatar.vue';
 import SocialIcons from './SocialIcons.vue';
 import EditContact from './EditContact.vue';
@@ -26,6 +31,7 @@ import { Button } from 'dashboard/components-next/ui/button';
 import Icon from 'dashboard/components-next/icon/Icon.vue';
 import VoiceCallButton from 'dashboard/components-next/Contacts/VoiceCallButton.vue';
 import ContactClientBadges from '../Client/ContactClientBadges.vue';
+import InlineInput from 'dashboard/components-next/inline-input/InlineInput.vue';
 
 import {
   isAConversationRoute,
@@ -38,6 +44,7 @@ export default {
     Button,
     Icon,
     ContactInfoRow,
+    ViewAllConversations,
     EditContact,
     Avatar,
     ComposeConversation,
@@ -45,6 +52,7 @@ export default {
     ContactMergeModal,
     VoiceCallButton,
     ContactClientBadges,
+    InlineInput,
     AlertDialog,
     AlertDialogTrigger,
     AlertDialogContent,
@@ -71,13 +79,23 @@ export default {
     const { currentParams, currentRouteName, visit } = useAppNavigation();
     return {
       isAdmin,
+      exactTimestamp: useExactTimestamp(),
       currentParams,
       currentRouteName,
       visit,
     };
   },
+  data() {
+    return {
+      isEditingName: false,
+      editName: '',
+    };
+  },
   computed: {
-    ...mapGetters({ uiFlags: 'contacts/getUIFlags' }),
+    ...mapGetters({
+      uiFlags: 'contacts/getUIFlags',
+      currentChat: 'getSelectedChat',
+    }),
     contactProfileLink() {
       return `/app/accounts/${this.currentParams.accountId}/contacts/${this.contact.id}`;
     },
@@ -103,11 +121,26 @@ export default {
         screen_name: twitterScreenName,
         social_telegram_user_name: telegramUsername,
       } = this.additionalAttributes;
+
+      const telegram = socialProfiles?.telegram || telegramUsername || '';
+      const twitter = socialProfiles?.twitter || twitterScreenName || '';
+
       return {
-        twitter: twitterScreenName,
-        telegram: telegramUsername,
         ...(socialProfiles || {}),
+        twitter,
+        telegram,
       };
+    },
+    whatsappUsername() {
+      const username =
+        this.socialProfiles.whatsapp ||
+        this.additionalAttributes.social_whatsapp_user_name ||
+        '';
+
+      return username.toString().replace(/^@+/, '');
+    },
+    formattedWhatsappUsername() {
+      return this.whatsappUsername ? `@${this.whatsappUsername}` : '';
     },
     // Delete Modal
     confirmDeleteMessage() {
@@ -123,7 +156,6 @@ export default {
     },
   },
   methods: {
-    dynamicTime,
     confirmDeletion() {
       this.deleteContact(this.contact);
     },
@@ -153,9 +185,9 @@ export default {
           this.visit({
             name: 'inbox_view',
           });
-        } else if (this.currentRouteName !== 'contacts_dashboard') {
+        } else if (this.currentRouteName !== 'contacts_dashboard_index') {
           this.visit({
-            name: 'contacts_dashboard',
+            name: 'contacts_dashboard_index',
           });
         }
       } catch (error) {
@@ -164,6 +196,58 @@ export default {
             ? error.message
             : this.$t('DELETE_CONTACT.API.ERROR_MESSAGE')
         );
+      }
+    },
+    startEditingName() {
+      this.editName = this.contact.name || '';
+      this.isEditingName = true;
+      this.$nextTick(() => {
+        this.$refs.nameInput?.focus();
+      });
+    },
+    saveNameEdit() {
+      if (!this.isEditingName) return;
+      this.isEditingName = false;
+      const trimmed = this.editName.trim();
+      if (trimmed && trimmed !== this.contact.name) {
+        this.updateContactField({ name: trimmed });
+      }
+    },
+    cancelNameEdit() {
+      this.isEditingName = false;
+    },
+    onFieldUpdate(field, value) {
+      this.updateContactField({ [field]: value });
+    },
+    async updateContactField(attrs) {
+      const contactId = this.contact.id;
+      try {
+        await this.$store.dispatch('contacts/update', {
+          id: contactId,
+          ...attrs,
+        });
+        useAlert(this.$t('CONTACT_FORM.SUCCESS_MESSAGE'));
+        await this.$store.dispatch('contacts/fetchContactableInbox', contactId);
+      } catch (error) {
+        if (error instanceof DuplicateContactException) {
+          const detail = error.contactErrorDetail;
+          if (detail) {
+            useAlert(detail);
+          } else {
+            const invalidAttrs = Array.isArray(error.data) ? error.data : [];
+            if (invalidAttrs.includes('email')) {
+              useAlert(this.$t('CONTACT_FORM.FORM.EMAIL_ADDRESS.DUPLICATE'));
+            } else if (invalidAttrs.includes('phone_number')) {
+              useAlert(this.$t('CONTACT_FORM.FORM.PHONE_NUMBER.DUPLICATE'));
+            } else {
+              useAlert(this.$t('CONTACT_FORM.ERROR_MESSAGE'));
+            }
+          }
+        } else if (error instanceof ExceptionWithMessage) {
+          useAlert(error.data);
+        } else {
+          useAlert(error.message || this.$t('CONTACT_FORM.ERROR_MESSAGE'));
+        }
       }
     },
   },
@@ -190,16 +274,45 @@ export default {
           v-if="showAvatar"
           class="flex items-center justify-center w-full min-w-0 gap-3"
         >
-          <h3
-            class="flex-shrink max-w-full min-w-0 my-0 text-lg font-semibold capitalize break-words text-n-slate-12"
-          >
-            {{ contact.name }}
-          </h3>
+          <div class="group/name flex items-center min-w-0 gap-2">
+            <InlineInput
+              v-if="isEditingName"
+              ref="nameInput"
+              v-model="editName"
+              custom-input-class="!text-lg !font-semibold !w-auto max-w-full [field-sizing:content]"
+              class="!w-fit min-w-0"
+              @enter-press="saveNameEdit"
+              @escape-press="cancelNameEdit"
+              @blur="saveNameEdit"
+            />
+            <h3
+              v-else
+              class="flex-shrink max-w-full min-w-0 my-0 text-lg font-semibold capitalize break-words text-n-slate-12 cursor-pointer hover:text-n-slate-12/80"
+              :title="$t('CONTACT_PANEL.CLICK_TO_EDIT')"
+              @click="startEditingName"
+            >
+              {{ contact.name }}
+            </h3>
+            <Button
+              variant="ghost"
+              size="icon"
+              :title="$t('CONTACT_PANEL.CLICK_TO_EDIT')"
+              class="flex-shrink-0 -mx-1 opacity-0 transition-opacity"
+              :class="
+                isEditingName
+                  ? 'invisible'
+                  : 'group-hover/name:opacity-100 focus-visible:opacity-100'
+              "
+              @click="startEditingName"
+            >
+              <Icon icon="i-lucide-pencil" />
+            </Button>
+          </div>
           <div class="flex flex-row items-center gap-2">
             <span
               v-if="contact.created_at"
               v-tooltip.left="
-                `${$t('CONTACT_PANEL.CREATED_AT_LABEL')} ${dynamicTime(
+                `${$t('CONTACT_PANEL.CREATED_AT_LABEL')} ${exactTimestamp(
                   contact.created_at
                 )}`
               "
@@ -230,6 +343,8 @@ export default {
             emoji="✉️"
             :title="$t('CONTACT_PANEL.EMAIL_ADDRESS')"
             show-copy
+            editable
+            @update="value => onFieldUpdate('email', value)"
           />
           <ContactInfoRow
             :href="contact.phone_number ? `tel:${contact.phone_number}` : ''"
@@ -237,6 +352,16 @@ export default {
             icon="call"
             emoji="📞"
             :title="$t('CONTACT_PANEL.PHONE_NUMBER')"
+            show-copy
+            editable
+            @update="value => onFieldUpdate('phone_number', value)"
+          />
+          <ContactInfoRow
+            v-if="formattedWhatsappUsername"
+            :value="formattedWhatsappUsername"
+            icon="brand-whatsapp"
+            emoji="💬"
+            :title="$t('CONTACT_PANEL.WHATSAPP_USERNAME')"
             show-copy
           />
           <ContactInfoRow
@@ -251,6 +376,16 @@ export default {
             icon="building-bank"
             emoji="🏢"
             :title="$t('CONTACT_PANEL.COMPANY')"
+            editable
+            @update="
+              value =>
+                updateContactField({
+                  additional_attributes: {
+                    ...additionalAttributes,
+                    company_name: value,
+                  },
+                })
+            "
           />
           <ContactInfoRow
             v-if="location || additionalAttributes.location"
@@ -264,21 +399,22 @@ export default {
       </div>
       <div class="flex items-center justify-center w-full mt-0.5 gap-2">
         <ComposeConversation :contact-id="String(contact.id)" is-modal>
-          <template #trigger="{ toggle }">
+          <template #trigger>
             <Button
               v-tooltip.top-end="$t('CONTACT_PANEL.NEW_MESSAGE')"
               variant="outline"
               size="icon"
-              @click="toggle"
             >
               <Icon icon="i-ph-chat-circle-dots" />
             </Button>
           </template>
         </ComposeConversation>
+        <ViewAllConversations :contact="contact" />
         <VoiceCallButton
           :phone="contact.phone_number"
           :contact-id="contact.id"
-          icon="i-ri-phone-fill"
+          :conversation-id="currentChat?.id"
+          icon="i-lucide-phone"
           size="sm"
           :tooltip-label="$t('CONTACT_PANEL.CALL')"
           slate

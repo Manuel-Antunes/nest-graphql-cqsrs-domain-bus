@@ -1,4 +1,5 @@
 <script setup>
+import { ref, defineAsyncComponent } from 'vue';
 import { toTypedSchema } from '@vee-validate/zod';
 import * as z from 'zod';
 import { useI18n } from 'vue-i18n';
@@ -9,6 +10,9 @@ import { Checkbox } from 'dashboard/components-next/ui/checkbox';
 import { Label } from 'dashboard/components-next/ui/label';
 import { Spinner } from 'dashboard/components-next/ui/spinner';
 import { Form, FormField } from 'dashboard/components-next/ui/form';
+import Popover from 'dashboard/components-next/popover/Popover.vue';
+import EmojiIcon from 'dashboard/components-next/emoji-icon-picker/EmojiIcon.vue';
+import Icon from 'dashboard/components-next/icon/Icon.vue';
 
 const props = defineProps({
   onSubmit: {
@@ -29,6 +33,11 @@ const props = defineProps({
   },
 });
 
+const EmojiIconPicker = defineAsyncComponent(
+  () =>
+    import('dashboard/components-next/emoji-icon-picker/EmojiIconPicker.vue')
+);
+
 const { t } = useI18n();
 
 const validationSchema = toTypedSchema(
@@ -45,11 +54,30 @@ const initialValues = {
   allowAutoAssign: props.formData?.allow_auto_assign ?? true,
 };
 
+const icon = ref(props.formData?.icon || '');
+const iconColor = ref(props.formData?.icon_color || '');
+
+const onSelectIcon = ({ type, value, color }) => {
+  icon.value = value;
+  iconColor.value = type === 'icon' ? color : '';
+};
+
+const onColorChange = color => {
+  iconColor.value = color;
+};
+
+const onRemoveIcon = () => {
+  icon.value = '';
+  iconColor.value = '';
+};
+
 const handleSubmit = values => {
   props.onSubmit({
     description: values.description,
     name: values.title,
     allow_auto_assign: values.allowAutoAssign,
+    icon: icon.value,
+    icon_color: iconColor.value,
   });
 };
 </script>
@@ -64,15 +92,57 @@ const handleSubmit = values => {
       @submit="handleSubmit"
     >
       <FormField v-slot="{ componentField, errorMessage }" name="title">
-        <FormInput
-          v-bind="componentField"
-          name="title"
-          spacing="compact"
-          :label="$t('TEAMS_SETTINGS.FORM.NAME.LABEL')"
-          :placeholder="$t('TEAMS_SETTINGS.FORM.NAME.PLACEHOLDER')"
-          :has-error="!!errorMessage"
-          :error-message="errorMessage"
-        />
+        <div class="relative">
+          <FormInput
+            v-bind="componentField"
+            class="!ps-12"
+            name="title"
+            spacing="compact"
+            :label="$t('TEAMS_SETTINGS.FORM.NAME.LABEL')"
+            :placeholder="$t('TEAMS_SETTINGS.FORM.NAME.PLACEHOLDER')"
+            :has-error="!!errorMessage"
+            :error-message="errorMessage"
+          />
+          <div class="absolute top-[1.75rem] start-0">
+            <Popover align="start" disable-mobile-view>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                class="text-lg ltr:rounded-r-none rtl:rounded-l-none"
+              >
+                <EmojiIcon
+                  v-if="icon"
+                  :value="icon"
+                  :color="iconColor"
+                  class="size-5 text-xl !leading-5"
+                />
+                <Icon v-else icon="i-lucide-smile-plus" class="size-4" />
+              </Button>
+              <template #content="{ hide }">
+                <EmojiIconPicker
+                  class="!static !shadow-none !outline-none"
+                  :value="icon"
+                  :color="iconColor"
+                  show-remove-button
+                  @select="
+                    event => {
+                      onSelectIcon(event);
+                      hide();
+                    }
+                  "
+                  @color-change="onColorChange"
+                  @remove="
+                    () => {
+                      onRemoveIcon();
+                      hide();
+                    }
+                  "
+                />
+              </template>
+            </Popover>
+          </div>
+        </div>
       </FormField>
 
       <FormField v-slot="{ componentField, errorMessage }" name="description">

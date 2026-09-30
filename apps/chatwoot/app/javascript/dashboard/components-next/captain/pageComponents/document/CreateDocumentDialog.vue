@@ -21,7 +21,7 @@ defineProps({
   },
 });
 
-const emit = defineEmits(['close']);
+const emit = defineEmits(['close', 'createSuccess']);
 const { t } = useI18n();
 const store = useStore();
 
@@ -40,6 +40,7 @@ const i18nKey = 'CAPTAIN.DOCUMENTS.CREATE';
 const handleSubmit = async newDocument => {
   try {
     await store.dispatch('captainDocuments/create', newDocument);
+    emit('createSuccess');
     useAlert(t(`${i18nKey}.SUCCESS_MESSAGE`));
     close();
   } catch (error) {
@@ -68,9 +69,9 @@ defineExpose({ dialogRef: { open, close } });
     <DialogContent>
       <DialogHeader>
         <DialogTitle>{{ $t(`${i18nKey}.TITLE`) }}</DialogTitle>
-        <DialogDescription>{{
-          $t('CAPTAIN.DOCUMENTS.FORM_DESCRIPTION')
-        }}</DialogDescription>
+        <DialogDescription>
+          {{ $t('CAPTAIN.DOCUMENTS.FORM_DESCRIPTION') }}
+        </DialogDescription>
       </DialogHeader>
       <DocumentForm
         :assistant-id="assistantId"

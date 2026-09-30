@@ -1,15 +1,29 @@
 <script setup>
-import { ref, computed } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useAppNavigation } from 'dashboard/composables/useAppNavigation';
 import { useI18n, I18nT } from 'vue-i18n';
 import Twilio from './Twilio.vue';
 import ThreeSixtyDialogWhatsapp from './360DialogWhatsapp.vue';
 import CloudWhatsapp from './CloudWhatsapp.vue';
+import WhatsappManualSetup from './WhatsappManualSetup.vue';
 import WhatsappEmbeddedSignup from './WhatsappEmbeddedSignup.vue';
+import WhatsappAccessRequestDialog from '../components/WhatsappAccessRequestDialog.vue';
 import ChannelSelector from 'dashboard/components/ChannelSelector.vue';
+import Banner from 'dashboard/components-next/banner/Banner.vue';
+import { Button } from 'dashboard/components-next/ui/button';
+import Icon from 'dashboard/components-next/icon/Icon.vue';
+import { useAccount } from 'dashboard/composables/useAccount';
+import { FEATURE_FLAGS } from 'dashboard/featureFlags';
+import { META_RESTRICTION_STATUS_URL } from 'dashboard/constants/globals';
 
 const { currentPath } = useAppNavigation();
 const { t } = useI18n();
+const accessRequestDialogRef = ref(null);
+const {
+  isCloudFeatureEnabled,
+  isOnChatwootCloud,
+  isMetaInboxCreationDisabled,
+} = useAccount();
 
 const PROVIDER_TYPES = {
   WHATSAPP: 'whatsapp',
@@ -28,24 +42,53 @@ const hasWhatsappAppId = computed(() => {
 });
 
 // Dual-mode reactive query access (no vue-router). window.location is the source of
-// truth in both modes; currentPath (Inertia page.url / SPA path) recomputes on
-// navigation, and urlVersion recomputes on our own in-place pushState below.
-const urlVersion = ref(0);
-const selectedProvider = computed(() => {
-  void currentPath.value;
-  void urlVersion.value;
-  return new URLSearchParams(window.location.search).get('provider');
+// truth in both modes; it is re-read when currentPath (Inertia page.url / SPA path)
+// changes on navigation, and set directly on our own in-place pushState below.
+const readSelectedProvider = () =>
+  new URLSearchParams(window.location.search).get('provider');
+const selectedProvider = ref(readSelectedProvider());
+watch(currentPath, () => {
+  selectedProvider.value = readSelectedProvider();
 });
 
 const showProviderSelection = computed(() => !selectedProvider.value);
 
 const showConfiguration = computed(() => Boolean(selectedProvider.value));
+const isWhatsappEmbeddedSignupDisabled = computed(
+  () => isMetaInboxCreationDisabled.value
+);
+
+const isWhatsappEmbeddedSignupFeatureEnabled = computed(
+  () =>
+    !isOnChatwootCloud.value ||
+    isCloudFeatureEnabled(FEATURE_FLAGS.WHATSAPP_EMBEDDED_SIGNUP_FLOW)
+);
+
+const shouldShowWhatsappEmbeddedSignup = computed(() => {
+  return (
+    selectedProvider.value === PROVIDER_TYPES.WHATSAPP &&
+    hasWhatsappAppId.value &&
+    isWhatsappEmbeddedSignupFeatureEnabled.value
+  );
+});
+
+const shouldShowEmbeddedSignupAccessRequest = computed(() => {
+  return (
+    selectedProvider.value === PROVIDER_TYPES.WHATSAPP &&
+    isOnChatwootCloud.value &&
+    hasWhatsappAppId.value &&
+    !isWhatsappEmbeddedSignupFeatureEnabled.value &&
+    !isWhatsappEmbeddedSignupDisabled.value
+  );
+});
 
 const availableProviders = computed(() => [
   {
     key: PROVIDER_TYPES.WHATSAPP,
     title: t('INBOX_MGMT.ADD.WHATSAPP.PROVIDERS.WHATSAPP_CLOUD'),
-    description: t('INBOX_MGMT.ADD.WHATSAPP.PROVIDERS.WHATSAPP_CLOUD_DESC'),
+    description: isWhatsappEmbeddedSignupDisabled.value
+      ? t('INBOX_MGMT.ADD.WHATSAPP.PROVIDERS.WHATSAPP_CLOUD_MANUAL_SETUP_DESC')
+      : t('INBOX_MGMT.ADD.WHATSAPP.PROVIDERS.WHATSAPP_CLOUD_DESC'),
     icon: 'i-woot-whatsapp',
   },
   {
@@ -56,37 +99,126 @@ const availableProviders = computed(() => [
   },
 ]);
 
+const providerSelectionDescription = computed(() =>
+  isWhatsappEmbeddedSignupDisabled.value
+    ? t('INBOX_MGMT.ADD.WHATSAPP.SELECT_PROVIDER.RESTRICTION_DESCRIPTION')
+    : t('INBOX_MGMT.ADD.WHATSAPP.SELECT_PROVIDER.DESCRIPTION')
+);
+
 const selectProvider = providerValue => {
+  const targetProvider =
+    providerValue === PROVIDER_TYPES.WHATSAPP &&
+    isWhatsappEmbeddedSignupDisabled.value
+      ? PROVIDER_TYPES.WHATSAPP_MANUAL
+      : providerValue;
+
   // Stay on the current channel page, just set ?provider=… in place (adds a history
-  // entry like the original navigation) and bump urlVersion so selectedProvider
-  // recomputes — no vue-router, works under Inertia and the legacy SPA alike.
+  // entry like the original navigation) and update selectedProvider — no
+  // vue-router, works under Inertia and the legacy SPA alike.
   const url = new URL(window.location.href);
-  url.searchParams.set('provider', providerValue);
+  url.searchParams.set('provider', targetProvider);
   window.history.pushState({}, '', url);
-  urlVersion.value += 1;
+  selectedProvider.value = targetProvider;
 };
 
 const shouldShowCloudWhatsapp = provider => {
   return (
     provider === PROVIDER_TYPES.WHATSAPP_MANUAL ||
-    (provider === PROVIDER_TYPES.WHATSAPP && !hasWhatsappAppId.value)
+    (provider === PROVIDER_TYPES.WHATSAPP &&
+      !shouldShowWhatsappEmbeddedSignup.value)
   );
 };
+
+const isManualSetup = computed(
+  () =>
+    showConfiguration.value && shouldShowCloudWhatsapp(selectedProvider.value)
+);
 
 const handleManualLinkClick = () => {
   selectProvider(PROVIDER_TYPES.WHATSAPP_MANUAL);
 };
+
+const requestEmbeddedSignupAccess = () => {
+  accessRequestDialogRef.value.open();
+};
 </script>
 
 <template>
-  <div class="overflow-auto col-span-6 p-6 w-full h-full">
-    <div v-if="showProviderSelection">
+  <div class="col-span-6 w-full h-full min-h-0 overflow-y-auto p-6">
+    <WhatsappAccessRequestDialog ref="accessRequestDialogRef" />
+    <div v-if="isManualSetup">
+      <div
+        v-if="shouldShowEmbeddedSignupAccessRequest"
+        class="w-full p-5 mb-6 border rounded-xl border-n-weak bg-n-surface-2 text-start"
+      >
+        <div class="flex flex-wrap items-center gap-3">
+          <div
+            class="flex items-center justify-center flex-shrink-0 rounded-lg size-7 bg-n-slate-3"
+          >
+            <Icon icon="i-woot-whatsapp" class="size-5 text-n-slate-11" />
+          </div>
+          <span class="flex-1 min-w-0 text-heading-2 text-n-slate-12">
+            {{
+              $t('INBOX_MGMT.ADD.WHATSAPP.EMBEDDED_SIGNUP.ACCESS_REQUEST.TITLE')
+            }}
+          </span>
+          <Button
+            size="sm"
+            class="flex-shrink-0"
+            @click="requestEmbeddedSignupAccess"
+          >
+            <Icon icon="i-lucide-life-buoy" class="size-4" />
+            {{
+              $t(
+                'INBOX_MGMT.ADD.WHATSAPP.EMBEDDED_SIGNUP.ACCESS_REQUEST.BUTTON'
+              )
+            }}
+          </Button>
+        </div>
+        <p class="mt-2 ms-10 max-w-3xl text-body-main text-n-slate-11">
+          {{
+            $t(
+              'INBOX_MGMT.ADD.WHATSAPP.EMBEDDED_SIGNUP.ACCESS_REQUEST.DESCRIPTION'
+            )
+          }}
+        </p>
+      </div>
+      <Banner
+        v-if="
+          isWhatsappEmbeddedSignupDisabled &&
+          selectedProvider === PROVIDER_TYPES.WHATSAPP_MANUAL
+        "
+        color="amber"
+        class="w-full mb-6"
+      >
+        <div class="flex items-start gap-3 text-start">
+          <Icon
+            icon="i-lucide-triangle-alert"
+            class="flex-shrink-0 size-4 mt-0.5"
+          />
+          <span>
+            {{ $t('INBOX_MGMT.ADD.WHATSAPP.API.MANUAL_RESTRICTION_WARNING') }}
+            <a
+              :href="META_RESTRICTION_STATUS_URL"
+              class="link underline"
+              rel="noopener noreferrer nofollow"
+              target="_blank"
+            >
+              {{ $t('INBOX_MGMT.ADD.WHATSAPP.API.STATUS_LINK') }}
+            </a>
+          </span>
+        </div>
+      </Banner>
+      <WhatsappManualSetup />
+    </div>
+
+    <div v-else-if="showProviderSelection">
       <div class="mb-10 text-left">
         <h1 class="mb-2 text-lg font-medium text-n-slate-12">
           {{ $t('INBOX_MGMT.ADD.WHATSAPP.SELECT_PROVIDER.TITLE') }}
         </h1>
         <p class="text-sm leading-relaxed text-n-slate-11">
-          {{ $t('INBOX_MGMT.ADD.WHATSAPP.SELECT_PROVIDER.DESCRIPTION') }}
+          {{ providerSelectionDescription }}
         </p>
       </div>
 
@@ -104,13 +236,12 @@ const handleManualLinkClick = () => {
 
     <div v-else-if="showConfiguration">
       <div class="px-6 py-5 rounded-2xl border border-n-weak">
-        <!-- Show embedded signup if app ID is configured -->
-        <div
-          v-if="
-            hasWhatsappAppId && selectedProvider === PROVIDER_TYPES.WHATSAPP
-          "
-        >
-          <WhatsappEmbeddedSignup />
+        <div v-if="shouldShowWhatsappEmbeddedSignup">
+          <WhatsappEmbeddedSignup
+            :is-disabled="isWhatsappEmbeddedSignupDisabled"
+            :show-restriction-alert="isWhatsappEmbeddedSignupDisabled"
+            :restriction-status-url="META_RESTRICTION_STATUS_URL"
+          />
 
           <!-- Manual setup fallback option -->
           <div class="pt-6 mt-6 border-t border-n-weak">
@@ -135,9 +266,6 @@ const handleManualLinkClick = () => {
             </I18nT>
           </div>
         </div>
-
-        <!-- Show manual setup -->
-        <CloudWhatsapp v-else-if="shouldShowCloudWhatsapp(selectedProvider)" />
 
         <!-- Other providers -->
         <Twilio

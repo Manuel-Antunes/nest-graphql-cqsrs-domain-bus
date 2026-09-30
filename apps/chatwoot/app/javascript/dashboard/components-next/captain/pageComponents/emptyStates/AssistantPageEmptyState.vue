@@ -44,7 +44,7 @@ const onClick = () => {
     </template>
     <template #actions>
       <Button @click="onClick">
-        <Icon :icon="'i-lucide-plus'" class="size-4" />
+        <Icon icon="i-lucide-plus" class="size-4" />
         {{ $t('CAPTAIN.ASSISTANTS.ADD_NEW') }}
       </Button>
     </template>

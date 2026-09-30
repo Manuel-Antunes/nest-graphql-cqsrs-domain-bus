@@ -3,7 +3,7 @@
 import LabelDropdownItem from './LabelDropdownItem.vue';
 import Hotkey from 'dashboard/components/base/Hotkey.vue';
 import AddLabelModal from 'dashboard/routes/dashboard/settings/labels/AddLabel.vue';
-import { picoSearch } from '@scmmishra/pico-search';
+import { picoSearch } from '@chatwoot/pico-search';
 import { sanitizeLabel } from 'shared/helpers/sanitizeData';
 import { Button } from 'dashboard/components-next/ui/button';
 import Icon from 'dashboard/components-next/icon/Icon.vue';
@@ -49,9 +49,7 @@ export default {
     filteredActiveLabels() {
       if (!this.search) return this.accountLabels;
 
-      return picoSearch(this.accountLabels, this.search, ['title'], {
-        threshold: 0.9,
-      });
+      return picoSearch(this.accountLabels, this.search, ['title']);
     },
 
     noResult() {

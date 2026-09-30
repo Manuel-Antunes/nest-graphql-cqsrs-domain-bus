@@ -1,8 +1,11 @@
-<script>
-import { mapGetters } from 'vuex';
+<script setup>
+import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { useI18n } from 'vue-i18n';
+import { useMapGetter } from 'dashboard/composables/store.js';
 import { getUnixTime } from 'date-fns';
 import { findSnoozeTime } from 'dashboard/helper/snoozeHelpers';
 import { emitter } from 'shared/helpers/mitt';
+import { useBulkActions } from 'dashboard/composables/chatlist/useBulkActions.js';
 import wootConstants from 'dashboard/constants/globals';
 import {
   CMD_BULK_ACTION_SNOOZE_CONVERSATION,
@@ -11,353 +14,174 @@ import {
 } from 'dashboard/helper/commandbar/events';
 
 import { Button } from 'dashboard/components-next/ui/button';
-import Icon from 'dashboard/components-next/icon/Icon.vue';
-import {
-  Command,
-  CommandInput,
-  CommandList,
-  CommandEmpty,
-  CommandGroup,
-  CommandItem,
-} from 'dashboard/components-next/ui/command';
-import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
-  DropdownMenuItem,
-} from 'dashboard/components-next/ui/dropdown-menu';
-import {
-  Popover,
-  PopoverTrigger,
-  PopoverContent,
-} from 'dashboard/components-next/ui/popover';
 import { Card, CardContent } from 'dashboard/components-next/ui/card';
 import { Checkbox } from 'dashboard/components-next/ui/checkbox';
-import LabelActions from './LabelActions.vue';
+import BulkAgentActions from './BulkAgentActions.vue';
+import BulkUpdateActions from './BulkUpdateActions.vue';
+import BulkLabelActions from './BulkLabelActions.vue';
+import BulkTeamActions from './BulkTeamActions.vue';
 import CustomSnoozeModal from 'dashboard/components/CustomSnoozeModal.vue';
 
-export default {
-  components: {
-    LabelActions,
-    CustomSnoozeModal,
-    Button,
-    Icon,
-    Card,
-    CardContent,
-    Checkbox,
-    Command,
-    CommandInput,
-    CommandList,
-    CommandEmpty,
-    CommandGroup,
-    CommandItem,
-    DropdownMenu,
-    DropdownMenuTrigger,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    Popover,
-    PopoverTrigger,
-    PopoverContent,
+const props = defineProps({
+  conversations: {
+    type: Array,
+    default: () => [],
   },
-  props: {
-    conversations: {
-      type: Array,
-      default: () => [],
-    },
-    allConversationsSelected: {
-      type: Boolean,
-      default: false,
-    },
-    selectedInboxes: {
-      type: Array,
-      default: () => [],
-    },
-    showOpenAction: {
-      type: Boolean,
-      default: false,
-    },
-    showResolvedAction: {
-      type: Boolean,
-      default: false,
-    },
-    showSnoozedAction: {
-      type: Boolean,
-      default: false,
-    },
+  allConversationsSelected: {
+    type: Boolean,
+    default: false,
   },
-  emits: [
-    'selectAllConversations',
-    'assignAgent',
-    'updateConversations',
-    'assignLabels',
-    'assignTeam',
-    'resolveConversations',
-  ],
-  data() {
-    return {
-      showLabelActions: false,
-      showAgentsList: false,
-      showTeamsList: false,
-      showCustomTimeSnoozeModal: false,
-    };
+  selectedInboxes: {
+    type: Array,
+    default: () => [],
   },
-  computed: {
-    ...mapGetters({
-      teams: 'teams/getTeams',
-    }),
-    assignableAgents() {
-      return this.$store.getters['inboxAssignableAgents/getAssignableAgents'](
-        this.selectedInboxes.join(',')
-      );
-    },
-    agentOptions() {
-      return [{ id: null, name: 'None' }, ...this.assignableAgents];
-    },
-    teamOptions() {
-      return [
-        { id: 0, name: this.$t('BULK_ACTION.TEAMS.NONE') },
-        ...this.teams,
-      ];
-    },
+  showOpenAction: {
+    type: Boolean,
+    default: false,
   },
-  watch: {
-    selectedInboxes(inboxes) {
-      this.$store.dispatch('inboxAssignableAgents/fetch', inboxes);
-    },
+  showResolvedAction: {
+    type: Boolean,
+    default: false,
   },
-  mounted() {
-    this.$store.dispatch('inboxAssignableAgents/fetch', this.selectedInboxes);
-    emitter.on(
-      CMD_BULK_ACTION_SNOOZE_CONVERSATION,
-      this.onCmdSnoozeConversation
-    );
-    emitter.on(
-      CMD_BULK_ACTION_REOPEN_CONVERSATION,
-      this.onCmdReopenConversation
-    );
-    emitter.on(
-      CMD_BULK_ACTION_RESOLVE_CONVERSATION,
-      this.onCmdResolveConversation
-    );
+  showSnoozedAction: {
+    type: Boolean,
+    default: false,
   },
-  unmounted() {
-    emitter.off(
-      CMD_BULK_ACTION_SNOOZE_CONVERSATION,
-      this.onCmdSnoozeConversation
-    );
-    emitter.off(
-      CMD_BULK_ACTION_REOPEN_CONVERSATION,
-      this.onCmdReopenConversation
-    );
-    emitter.off(
-      CMD_BULK_ACTION_RESOLVE_CONVERSATION,
-      this.onCmdResolveConversation
-    );
-  },
-  methods: {
-    onCmdSnoozeConversation(snoozeType) {
-      if (snoozeType === wootConstants.SNOOZE_OPTIONS.UNTIL_CUSTOM_TIME) {
-        this.showCustomTimeSnoozeModal = true;
-      } else {
-        this.$emit(
-          'updateConversations',
-          'snoozed',
-          findSnoozeTime(snoozeType) || null
-        );
-      }
-    },
-    onCmdReopenConversation() {
-      this.$emit('updateConversations', 'open', null);
-    },
-    onCmdResolveConversation() {
-      this.$emit('updateConversations', 'resolved', null);
-    },
-    customSnoozeTime(customSnoozedTime) {
-      this.showCustomTimeSnoozeModal = false;
-      if (customSnoozedTime) {
-        this.$emit(
-          'updateConversations',
-          'snoozed',
-          getUnixTime(customSnoozedTime)
-        );
-      }
-    },
-    hideCustomSnoozeModal() {
-      this.showCustomTimeSnoozeModal = false;
-    },
-    selectAll(checked) {
-      this.$emit('selectAllConversations', checked);
-    },
-    triggerSnooze() {
-      const ninja = document.querySelector('ninja-keys');
-      ninja?.open({ parent: 'bulk_action_snooze_conversation' });
-    },
-    onAgentSelect(agent) {
-      this.$emit('assignAgent', agent);
-      this.showAgentsList = false;
-    },
-    onTeamSelect(team) {
-      this.$emit('assignTeam', team);
-      this.showTeamsList = false;
-    },
-    assignLabels(labels) {
-      this.$emit('assignLabels', labels);
-      this.showLabelActions = false;
-    },
-  },
+});
+
+const emit = defineEmits(['selectAllConversations']);
+
+const { t } = useI18n();
+
+const {
+  selectedConversations,
+  onAssignAgent,
+  onAssignLabels,
+  onRemoveLabels,
+  onAssignTeamsForBulk: onAssignTeam,
+  onUpdateConversations,
+} = useBulkActions();
+
+const getConversationById = useMapGetter('getConversationById');
+
+const appliedLabelsForSelection = computed(() => {
+  const applied = new Set();
+  selectedConversations.value.forEach(id => {
+    const conversation = getConversationById.value(id);
+    (conversation?.labels || []).forEach(label => applied.add(label));
+  });
+  return Array.from(applied);
+});
+
+const selectedLabel = computed(() =>
+  t('BULK_ACTION.CONVERSATIONS_SELECTED', {
+    conversationCount: props.conversations.length,
+  })
+);
+
+const showCustomTimeSnoozeModal = ref(false);
+
+function onCmdSnoozeConversation(snoozeType) {
+  if (snoozeType === wootConstants.SNOOZE_OPTIONS.UNTIL_CUSTOM_TIME) {
+    showCustomTimeSnoozeModal.value = true;
+  } else if (typeof snoozeType === 'number') {
+    onUpdateConversations('snoozed', snoozeType);
+  } else {
+    onUpdateConversations('snoozed', findSnoozeTime(snoozeType) || null);
+  }
+}
+
+function onCmdReopenConversation() {
+  onUpdateConversations('open', null);
+}
+
+function onCmdResolveConversation() {
+  onUpdateConversations('resolved', null);
+}
+
+function customSnoozeTime(customSnoozedTime) {
+  showCustomTimeSnoozeModal.value = false;
+  if (customSnoozedTime) {
+    onUpdateConversations('snoozed', getUnixTime(customSnoozedTime));
+  }
+}
+
+function hideCustomSnoozeModal() {
+  showCustomTimeSnoozeModal.value = false;
+}
+
+const selectAll = checked => {
+  emit('selectAllConversations', checked === true);
 };
+
+onMounted(() => {
+  emitter.on(CMD_BULK_ACTION_SNOOZE_CONVERSATION, onCmdSnoozeConversation);
+  emitter.on(CMD_BULK_ACTION_REOPEN_CONVERSATION, onCmdReopenConversation);
+  emitter.on(CMD_BULK_ACTION_RESOLVE_CONVERSATION, onCmdResolveConversation);
+});
+
+onUnmounted(() => {
+  emitter.off(CMD_BULK_ACTION_SNOOZE_CONVERSATION, onCmdSnoozeConversation);
+  emitter.off(CMD_BULK_ACTION_REOPEN_CONVERSATION, onCmdReopenConversation);
+  emitter.off(CMD_BULK_ACTION_RESOLVE_CONVERSATION, onCmdResolveConversation);
+});
 </script>
 
+<!-- eslint-disable-next-line vue/no-root-v-if -->
 <template>
-  <div class="border-b flex flex-col gap-2 p-3">
+  <div v-if="conversations.length > 0" class="border-b flex flex-col gap-2 p-3">
     <div class="flex items-center justify-between gap-2">
-      <label class="flex items-center justify-between bulk-action__panel">
-        <Checkbox
-          :checked="allConversationsSelected ? true : 'indeterminate'"
-          @update:checked="selectAll"
-        >
-          <span
-            :class="
-              allConversationsSelected ? 'i-lucide-check' : 'i-lucide-minus'
-            "
-            class="size-3.5"
+      <div class="flex items-center gap-1 min-w-0">
+        <label class="flex items-center gap-1.5 min-w-0 cursor-pointer">
+          <Checkbox
+            :checked="allConversationsSelected ? true : 'indeterminate'"
+            class="flex-shrink-0"
+            @update:checked="selectAll"
           />
-        </Checkbox>
-        <span>
-          {{
-            $t('BULK_ACTION.CONVERSATIONS_SELECTED', {
-              conversationCount: conversations.length,
-            })
-          }}
-        </span>
-      </label>
+          <span :title="selectedLabel" class="text-xs truncate">
+            {{ selectedLabel }}
+          </span>
+        </label>
+        <Button
+          variant="link"
+          size="sm"
+          class="flex-shrink-0 h-6 px-1"
+          @click="selectAll(false)"
+        >
+          {{ $t('BULK_ACTION.CLEAR_SELECTION') }}
+        </Button>
+      </div>
 
-      <div class="flex items-center gap-1 bulk-action__actions">
-        <!-- Labels -->
-        <Popover v-model:open="showLabelActions">
-          <PopoverTrigger as-child>
-            <Button
-              v-tooltip="$t('BULK_ACTION.LABELS.ASSIGN_LABELS')"
-              variant="outline"
-              size="icon"
-            >
-              <Icon icon="i-lucide-tags" />
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent align="end" class="w-60">
-            <LabelActions @assign="assignLabels" />
-          </PopoverContent>
-        </Popover>
-
-        <!-- Status update -->
-        <DropdownMenu>
-          <DropdownMenuTrigger as-child>
-            <Button
-              v-tooltip="$t('BULK_ACTION.UPDATE.CHANGE_STATUS')"
-              variant="outline"
-              size="icon"
-            >
-              <Icon icon="i-lucide-repeat" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem
-              v-if="!showResolvedAction"
-              @click="$emit('updateConversations', 'resolved', null)"
-            >
-              <Icon icon="i-lucide-check" />
-              {{ $t('CONVERSATION.HEADER.RESOLVE_ACTION') }}
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              v-if="!showOpenAction"
-              @click="$emit('updateConversations', 'open', null)"
-            >
-              <Icon icon="i-lucide-redo" />
-              {{ $t('CONVERSATION.HEADER.REOPEN_ACTION') }}
-            </DropdownMenuItem>
-            <DropdownMenuItem v-if="!showSnoozedAction" @click="triggerSnooze">
-              <Icon icon="i-lucide-alarm-clock" />
-              {{ $t('BULK_ACTION.UPDATE.SNOOZE_UNTIL') }}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-
-        <!-- Agent assign -->
-        <Popover v-model:open="showAgentsList">
-          <PopoverTrigger as-child>
-            <Button
-              v-tooltip="$t('BULK_ACTION.ASSIGN_AGENT_TOOLTIP')"
-              variant="outline"
-              size="icon"
-            >
-              <Icon icon="i-lucide-user-round-plus" />
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent align="end" class="w-56 p-0">
-            <Command>
-              <CommandInput
-                :placeholder="$t('BULK_ACTION.SEARCH_INPUT_PLACEHOLDER')"
-              />
-              <CommandList>
-                <CommandEmpty>
-                  {{ $t('BULK_ACTION.AGENT_LIST_LOADING') }}
-                </CommandEmpty>
-                <CommandGroup>
-                  <CommandItem
-                    v-for="agent in agentOptions"
-                    :key="String(agent.id)"
-                    :value="agent.name"
-                    @select="onAgentSelect(agent)"
-                  >
-                    {{ agent.name }}
-                  </CommandItem>
-                </CommandGroup>
-              </CommandList>
-            </Command>
-          </PopoverContent>
-        </Popover>
-
-        <!-- Team assign -->
-        <Popover v-model:open="showTeamsList">
-          <PopoverTrigger as-child>
-            <Button
-              v-tooltip="$t('BULK_ACTION.ASSIGN_TEAM_TOOLTIP')"
-              variant="outline"
-              size="icon"
-            >
-              <Icon icon="i-lucide-users-round" />
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent align="end" class="w-56 p-0">
-            <Command>
-              <CommandInput
-                :placeholder="$t('BULK_ACTION.SEARCH_INPUT_PLACEHOLDER')"
-              />
-              <CommandList>
-                <CommandEmpty>
-                  {{ $t('BULK_ACTION.TEAMS.NO_TEAMS_AVAILABLE') }}
-                </CommandEmpty>
-                <CommandGroup>
-                  <CommandItem
-                    v-for="team in teamOptions"
-                    :key="String(team.id)"
-                    :value="team.name"
-                    @select="onTeamSelect(team)"
-                  >
-                    {{ team.name }}
-                  </CommandItem>
-                </CommandGroup>
-              </CommandList>
-            </Command>
-          </PopoverContent>
-        </Popover>
+      <div class="flex items-center gap-1 flex-shrink-0">
+        <BulkLabelActions @assign="onAssignLabels" />
+        <BulkLabelActions
+          action="remove"
+          :applied-labels="appliedLabelsForSelection"
+          @remove="onRemoveLabels"
+        />
+        <BulkUpdateActions
+          :show-resolve="!showResolvedAction"
+          :show-reopen="!showOpenAction"
+          :show-snooze="!showSnoozedAction"
+          @update="status => onUpdateConversations(status, null)"
+        />
+        <BulkAgentActions
+          :selected-inboxes="selectedInboxes"
+          :conversation-count="conversations.length"
+          @select="onAssignAgent"
+        />
+        <BulkTeamActions
+          :conversation-count="conversations.length"
+          @select="onAssignTeam"
+        />
       </div>
     </div>
 
     <Card
+      v-if="allConversationsSelected"
       class="bg-n-amber-3 text-amber-950 py-3 text-xs shadow-amber-200 border-amber-100"
     >
-      <CardContent v-if="allConversationsSelected">
+      <CardContent>
         {{ $t('BULK_ACTION.ALL_CONVERSATIONS_SELECTED_ALERT') }}
       </CardContent>
     </Card>
@@ -369,13 +193,3 @@ export default {
     />
   </div>
 </template>
-
-<style scoped lang="scss">
-.bulk-action__panel {
-  @apply cursor-pointer;
-
-  span {
-    @apply text-xs my-0 mx-1;
-  }
-}
-</style>

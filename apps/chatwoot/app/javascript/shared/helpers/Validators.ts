@@ -83,6 +83,24 @@ export const getRegexp = (regexPatternValue: string): RegExp => {
 };
 
 /**
+ * Normalises a user-entered regex pattern into canonical `/source/flags` form.
+ * Strips `/.../flags` wrapping if the user included it, so `new RegExp` does
+ * not double-escape the slashes on save.
+ *
+ * @param pattern - Raw pattern string from the form.
+ * @returns Canonical `/source/flags` string, or null when empty.
+ */
+export const normalizeRegexPattern = (
+  pattern: string | null | undefined
+): string | null => {
+  if (!pattern) return null;
+  const match = pattern.match(/^\/(.+)\/([gimsuy]*)$/);
+  const source = match ? match[1] : pattern;
+  const flags = match ? match[2] : '';
+  return new RegExp(source, flags).toString();
+};
+
+/**
  * Checks if a string is a valid slug (letters, numbers, hyphens only, no spaces or other symbols).
  */
 export const isValidSlug = (value: string): boolean =>

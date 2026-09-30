@@ -104,7 +104,7 @@ onMounted(() => {
     "
   >
     <template #header>
-      <div class="flex items-center gap-2 w-full justify-between">
+      <div class="flex items-center gap-2 w-full justify-between min-h-10">
         <BreadcrumbRoot>
           <BreadcrumbList>
             <template v-for="(item, index) in breadcrumbItems" :key="index">
@@ -127,7 +127,7 @@ onMounted(() => {
           </BreadcrumbList>
         </BreadcrumbRoot>
         <Button variant="default" @click="onClickCreatePolicy">
-          <Icon :icon="'i-lucide-plus'" class="size-4" />
+          <Icon icon="i-lucide-plus" class="size-4" />
           {{
             $t(
               'ASSIGNMENT_POLICY.AGENT_ASSIGNMENT_POLICY.INDEX.HEADER.CREATE_POLICY'
@@ -137,7 +137,7 @@ onMounted(() => {
       </div>
     </template>
     <template #body>
-      <div class="flex flex-col gap-4 pt-8">
+      <div class="flex flex-col gap-4 pt-4">
         <AssignmentPolicyCard
           v-for="policy in agentAssignmentsPolicies"
           :key="policy.id"

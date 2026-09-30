@@ -3,7 +3,7 @@ import { ref, computed, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { debounce } from '@chatwoot/utils';
 import { useMapGetter } from 'dashboard/composables/store.js';
-import { searchContacts } from 'dashboard/components-next/NewConversation/helpers/composeConversationHelper';
+import { createContactSearcher } from 'dashboard/components-next/NewConversation/helpers/composeConversationHelper';
 import { useCamelCase } from 'dashboard/composables/useTransformKeys';
 import { fetchContactDetails } from '../helpers/searchHelper';
 
@@ -30,6 +30,8 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['change']);
+
+const searchContacts = createContactSearcher();
 
 const FROM_TYPE = {
   CONTACT: 'contact',
@@ -128,10 +130,10 @@ const debouncedSearch = debounce(async query => {
   }
 
   try {
-    const contacts = await searchContacts({
-      keys: ['name', 'email', 'phone_number'],
-      query,
-    });
+    const contacts = await searchContacts(query, { skipMinLength: true });
+
+    // null means the request was aborted (a newer search is in-flight),
+    if (contacts === null) return;
 
     // Add selected contact to top if not already in results
     const allContacts = selectedContact.value
@@ -142,9 +144,8 @@ const debouncedSearch = debounce(async query => {
       : contacts;
 
     searchedContacts.value = allContacts;
+    isSearching.value = false;
   } catch {
-    // Ignore error
-  } finally {
     isSearching.value = false;
   }
 }, 300);

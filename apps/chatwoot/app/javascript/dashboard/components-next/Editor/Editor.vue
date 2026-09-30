@@ -30,7 +30,7 @@ const props = defineProps({
   medium: { type: String, default: '' },
 });
 
-const emit = defineEmits(['update:modelValue']);
+const emit = defineEmits(['update:modelValue', 'executeCopilotAction']);
 
 const slots = useSlots();
 
@@ -98,6 +98,9 @@ watch(
         :channel-type="channelType"
         :medium="medium"
         @input="handleInput"
+        @execute-copilot-action="
+          (...args) => emit('executeCopilotAction', ...args)
+        "
       />
       <InputGroupAddon
         v-if="showCharacterCount || slots.actions"
@@ -125,38 +128,36 @@ watch(
 
 <style lang="scss" scoped>
 .editor-wrapper {
-  ::v-deep {
-    .ProseMirror-menubar-wrapper {
-      @apply min-w-0 max-w-full;
+  :deep(.ProseMirror-menubar-wrapper) {
+    @apply min-w-0 max-w-full;
 
-      .ProseMirror.ProseMirror-woot-style {
-        @apply min-w-0 break-words;
+    .ProseMirror.ProseMirror-woot-style {
+      @apply min-w-0 break-words;
 
-        // Long unbroken tokens (URLs, etc.) must wrap instead of widening
-        // the editor and overflowing the layout.
-        overflow-wrap: anywhere;
+      // Long unbroken tokens (URLs, etc.) must wrap instead of widening
+      // the editor and overflowing the layout.
+      overflow-wrap: anywhere;
 
-        p {
-          @apply first:mt-0! break-words;
-        }
-
-        .empty-node {
-          @apply m-0!;
-
-          &::before {
-            // dark variant was redundant (same colour); kept variant-free so
-            // @apply doesn't emit nested rules inside a ::before pseudo-element.
-            @apply text-n-slate-11;
-          }
-        }
+      p {
+        @apply first:mt-0! break-words;
       }
 
-      .ProseMirror-menubar {
-        width: fit-content !important;
-        position: relative !important;
-        top: unset !important;
-        @apply ltr:left-[-0.188rem]! rtl:right-[-0.188rem]!;
+      .empty-node {
+        @apply m-0!;
+
+        &::before {
+          // dark variant was redundant (same colour); kept variant-free so
+          // @apply doesn't emit nested rules inside a ::before pseudo-element.
+          @apply text-n-slate-11;
+        }
       }
+    }
+
+    .ProseMirror-menubar {
+      width: fit-content !important;
+      position: relative !important;
+      top: unset !important;
+      @apply ltr:left-[-0.188rem]! rtl:right-[-0.188rem]!;
     }
   }
 }

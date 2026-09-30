@@ -44,6 +44,7 @@ import {
 import { setupInertiaIframeBridge } from 'dashboard/helper/inertiaIframeBridge';
 
 import 'floating-vue/dist/style.css';
+import '@chatwoot/viz/style.css';
 
 import AppShell from 'dashboard/inertia/layouts/AppShell.vue';
 
@@ -108,6 +109,20 @@ createInertiaApp({
       instantMove: true,
       arrowOverflow: false,
       disposeTimeout: 5000000,
+      // Append poppers to the app root instead of the body so they inherit its
+      // `dir`, the way `TeleportWithDirection` does for teleported components.
+      // Without it an RTL popper is laid out in an LTR paragraph and reordered.
+      // Inertia mounts into `#app` and the layout's root carries `dir`, so match on it.
+      container: '#app > [dir]',
+      // Use the `fixed` strategy so tooltips are positioned relative to the viewport.
+      // With the default `absolute` strategy, a hidden tooltip lingers at a stale offset
+      // and adds to the page's scroll height, letting the whole dashboard over-scroll.
+      // Fixed elements never affect scroll height, so this can't happen.
+      themes: {
+        tooltip: {
+          strategy: 'fixed',
+        },
+      },
     });
     app.use(hljsVuePlugin);
 

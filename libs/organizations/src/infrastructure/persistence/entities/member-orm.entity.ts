@@ -14,24 +14,26 @@ import { MemberRole } from '../../../domain/organization/vo/member-role';
 import { MemberChatwootSyncTrigger } from '../triggers/chatwoot-sync.triggers';
 import { OrganizationEntitySchema } from './organization-orm.entity';
 
-const MemberIdType = valueObjectType(MemberId, {
-  columnType: `varchar(${MEMBER_ID_MAX_LENGTH})`,
-});
-
-export const MemberRoleType = valueObjectType(MemberRole, {
-  columnType: `varchar(${MEMBER_ROLE_MAX_LENGTH})`,
-});
-
 export const MemberEntitySchema = defineEntity({
   class: Member,
   tableName: 'member',
   schema: SYSTEM_SCHEMA,
   forceConstructor: true,
   properties: {
-    id: p.type(MemberIdType).primary(),
+    id: p
+      .type(
+        valueObjectType(MemberId, {
+          columnType: `varchar(${MEMBER_ID_MAX_LENGTH})`,
+        }),
+      )
+      .primary(),
     organization: () => p.manyToOne(OrganizationEntitySchema).ref(),
     user: () => p.manyToOne(AuthUserEntitySchema).ref(),
-    role: p.type(MemberRoleType),
+    role: p.type(
+      valueObjectType(MemberRole, {
+        columnType: `varchar(${MEMBER_ROLE_MAX_LENGTH})`,
+      }),
+    ),
     createdAt: p.datetime(),
   },
   indexes: [{ properties: ['organization', 'user'] }],

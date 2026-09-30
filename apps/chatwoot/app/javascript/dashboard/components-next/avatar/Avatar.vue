@@ -112,6 +112,19 @@ const containerStyles = computed(() => ({
   height: `${props.size}px`,
 }));
 
+const borderRadiusClass = computed(() => {
+  if (props.roundedFull) {
+    return 'rounded-full';
+  }
+
+  // Approximates 25% of size
+  if (props.size <= 16) return 'rounded'; // 4px
+  if (props.size <= 24) return 'rounded-md'; // 6px
+  if (props.size <= 32) return 'rounded-lg'; // 8px
+  if (props.size <= 48) return 'rounded-xl'; // 12px
+  return 'rounded-2xl'; // 16px
+});
+
 // Colours apply to the fallback (initials/icon); when an image is present the
 // reka AvatarImage covers them once loaded. So they can be set unconditionally
 // whenever we have a name to derive a colour from.
@@ -174,7 +187,7 @@ const handleDismiss = event => {
 
 <template>
   <span
-    class="relative inline-flex group/avatar z-0 flex-shrink-0"
+    class="relative inline-flex group/avatar z-0 flex-shrink-0 align-middle"
     :style="containerStyles"
   >
     <!-- Status Badge -->
@@ -206,9 +219,9 @@ const handleDismiss = event => {
     <!-- Avatar Container (reka-ui AvatarRoot — the shadcn-vue avatar engine) -->
     <AvatarRoot
       role="img"
-      class="relative inline-flex items-center justify-center overflow-hidden font-medium"
+      class="relative inline-flex items-center justify-center overflow-hidden font-medium outline outline-1 -outline-offset-1 outline-[rgb(0_0_0_/_0.03)] dark:outline-[rgb(255_255_255_/_0.04)]"
       :class="[
-        roundedFull ? 'rounded-full' : 'rounded-xl',
+        borderRadiusClass,
         {
           'dark:!bg-[var(--dark-bg)] dark:!text-[var(--dark-text)]':
             !showDefaultAvatar,
@@ -255,7 +268,9 @@ const handleDismiss = event => {
         :handle-image-upload="handleImageUpload"
       >
         <div
-          class="absolute inset-0 z-10 flex items-center justify-center invisible w-full h-full transition-all duration-300 ease-in-out opacity-0 rounded-xl bg-n-alpha-black1 group-hover/avatar:visible group-hover/avatar:opacity-100"
+          v-if="allowUpload"
+          class="absolute inset-0 z-10 flex items-center justify-center invisible w-full h-full transition-all duration-300 ease-in-out opacity-0 bg-n-alpha-black1 group-hover/avatar:visible group-hover/avatar:opacity-100"
+          :class="borderRadiusClass"
           @click="handleUploadAvatar"
         >
           <Icon
@@ -264,7 +279,6 @@ const handleDismiss = event => {
             :style="{ width: `${size / 2}px`, height: `${size / 2}px` }"
           />
           <input
-            v-if="allowUpload"
             ref="fileInput"
             type="file"
             accept="image/png, image/jpeg, image/jpg, image/gif, image/webp"

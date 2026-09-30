@@ -5,6 +5,7 @@ import { useMapGetter } from 'dashboard/composables/store';
 import { useI18n } from 'vue-i18n';
 import { Button } from 'next/ui/button';
 import Icon from 'next/icon/Icon.vue';
+import Logo from 'next/icon/Logo.vue';
 
 import {
   DropdownContainer,
@@ -12,6 +13,13 @@ import {
   DropdownSection,
   DropdownItem,
 } from 'next/dropdown-menu/base';
+
+defineProps({
+  isCollapsed: {
+    type: Boolean,
+    default: false,
+  },
+});
 
 const emit = defineEmits(['showCreateAccountModal']);
 
@@ -45,7 +53,19 @@ const emitNewAccount = () => {
 <template>
   <DropdownContainer>
     <template #trigger="{ toggle, isOpen }">
+      <!-- Collapsed view: Logo trigger -->
       <button
+        v-if="isCollapsed"
+        class="grid flex-shrink-0 place-content-center p-2 rounded-lg cursor-pointer hover:bg-n-alpha-1"
+        :class="{ 'bg-n-alpha-1': isOpen }"
+        :title="currentAccount.name"
+        @click="toggle"
+      >
+        <Logo class="size-7" />
+      </button>
+      <!-- Expanded view: Account name trigger -->
+      <button
+        v-else
         id="sidebar-account-switcher"
         :data-account-id="accountId"
         aria-haspopup="listbox"

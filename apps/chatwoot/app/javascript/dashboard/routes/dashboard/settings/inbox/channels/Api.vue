@@ -58,7 +58,9 @@ const createChannel = async values => {
       },
     });
   } catch (error) {
-    useAlert(t('INBOX_MGMT.ADD.API_CHANNEL.API.ERROR_MESSAGE'));
+    useAlert(
+      error.message || t('INBOX_MGMT.ADD.API_CHANNEL.API.ERROR_MESSAGE')
+    );
   }
 };
 </script>
@@ -117,9 +119,9 @@ const createChannel = async values => {
       <div class="w-full mt-4">
         <Button type="submit" :disabled="uiFlags.isCreating">
           <Spinner v-if="uiFlags.isCreating" class="size-4 flex-shrink-0" />
-          <template v-if="!uiFlags.isCreating">{{
-            $t('INBOX_MGMT.ADD.API_CHANNEL.SUBMIT_BUTTON')
-          }}</template>
+          <template v-if="!uiFlags.isCreating">
+            {{ $t('INBOX_MGMT.ADD.API_CHANNEL.SUBMIT_BUTTON') }}
+          </template>
         </Button>
       </div>
     </Form>

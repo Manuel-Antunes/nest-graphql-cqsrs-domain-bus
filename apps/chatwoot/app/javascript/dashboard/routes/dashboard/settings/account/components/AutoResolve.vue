@@ -4,9 +4,8 @@ import { useMapGetter } from 'dashboard/composables/store';
 import { useI18n } from 'vue-i18n';
 import { useAccount } from 'dashboard/composables/useAccount';
 import { useAlert } from 'dashboard/composables';
-import SectionLayout from './SectionLayout.vue';
 import WithLabel from 'v3/components/Form/WithLabel.vue';
-import { Textarea } from 'dashboard/components-next/ui/textarea';
+import Editor from 'next/Editor/Editor.vue';
 import { Switch } from 'dashboard/components-next/ui/switch';
 import { Button } from 'dashboard/components-next/ui/button';
 import { Spinner } from 'dashboard/components-next/ui/spinner';
@@ -132,96 +131,110 @@ const toggleAutoResolve = async () => {
 </script>
 
 <template>
-  <SectionLayout
-    :title="t('GENERAL_SETTINGS.FORM.AUTO_RESOLVE.TITLE')"
-    :description="t('GENERAL_SETTINGS.FORM.AUTO_RESOLVE.NOTE')"
-    :hide-content="!isEnabled"
-    with-border
+  <div
+    class="flex flex-col w-full outline-1 outline outline-n-container rounded-xl bg-n-solid-2 divide-y divide-n-weak"
   >
-    <template #headerActions>
-      <div class="flex justify-end">
-        <Switch v-model="isEnabled" @update:model-value="toggleAutoResolve" />
+    <div class="flex flex-col gap-2 items-start px-5 py-4">
+      <div class="flex justify-between items-center w-full">
+        <h3 class="text-heading-2 text-n-slate-12">
+          {{ t('GENERAL_SETTINGS.FORM.AUTO_RESOLVE.TITLE') }}
+        </h3>
+        <div class="flex justify-end">
+          <Switch v-model="isEnabled" @update:model-value="toggleAutoResolve" />
+        </div>
       </div>
-    </template>
+      <p class="mb-0 text-body-para text-n-slate-11">
+        {{ t('GENERAL_SETTINGS.FORM.AUTO_RESOLVE.NOTE') }}
+      </p>
+    </div>
 
-    <form class="grid gap-5" @submit.prevent="handleSubmit">
-      <WithLabel
-        :label="t('GENERAL_SETTINGS.FORM.AUTO_RESOLVE.DURATION.LABEL')"
-        :help-message="t('GENERAL_SETTINGS.FORM.AUTO_RESOLVE.DURATION.HELP')"
-      >
-        <div class="w-full">
-          <!-- allow 10 mins to 999 days -->
-          <DurationInput
-            v-model="duration"
-            v-model:unit="unit"
-            min="0"
-            max="1438560"
-          />
-        </div>
-      </WithLabel>
-      <WithLabel
-        :label="t('GENERAL_SETTINGS.FORM.AUTO_RESOLVE.MESSAGE.LABEL')"
-        :help-message="t('GENERAL_SETTINGS.FORM.AUTO_RESOLVE.MESSAGE.HELP')"
-      >
-        <Textarea
-          v-model="message"
-          class="w-full max-h-20 mb-0"
-          :placeholder="
-            t('GENERAL_SETTINGS.FORM.AUTO_RESOLVE.MESSAGE.PLACEHOLDER')
-          "
-        />
-      </WithLabel>
-      <WithLabel :label="t('GENERAL_SETTINGS.FORM.AUTO_RESOLVE.PREFERENCES')">
-        <div
-          class="rounded-xl border border-n-weak bg-n-solid-1 w-full text-sm text-n-slate-12 divide-y divide-n-weak"
+    <div v-if="isEnabled" class="px-5 py-4">
+      <form class="grid gap-5" @submit.prevent="handleSubmit">
+        <WithLabel
+          :label="t('GENERAL_SETTINGS.FORM.AUTO_RESOLVE.DURATION.LABEL')"
+          :help-message="t('GENERAL_SETTINGS.FORM.AUTO_RESOLVE.DURATION.HELP')"
         >
-          <div class="p-3 h-12 flex items-center justify-between">
-            <span>
-              {{ t('GENERAL_SETTINGS.FORM.AUTO_RESOLVE.IGNORE_WAITING.LABEL') }}
-            </span>
-            <Switch v-model="ignoreWaiting" />
+          <div class="w-full">
+            <!-- allow 10 mins to 999 days -->
+            <DurationInput
+              v-model="duration"
+              v-model:unit="unit"
+              min="0"
+              max="1438560"
+            />
           </div>
-          <div class="p-3 h-12 flex items-center justify-between">
-            <span>
-              {{ t('GENERAL_SETTINGS.FORM.AUTO_RESOLVE.LABEL.LABEL') }}
-            </span>
-            <Select
-              :model-value="
-                labelToApply?.id != null ? String(labelToApply.id) : ''
-              "
-              @update:model-value="
-                v =>
-                  (labelToApply =
-                    labelOptions.find(o => String(o.id) === v) ?? {})
-              "
-            >
-              <SelectTrigger>
-                <SelectValue
-                  :placeholder="
-                    $t('GENERAL_SETTINGS.FORM.AUTO_RESOLVE.LABEL.PLACEHOLDER')
-                  "
-                />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem
-                  v-for="option in labelOptions"
-                  :key="String(option.id)"
-                  :value="String(option.id)"
-                  >{{ option.name }}</SelectItem
-                >
-              </SelectContent>
-            </Select>
+        </WithLabel>
+        <WithLabel
+          :label="t('GENERAL_SETTINGS.FORM.AUTO_RESOLVE.MESSAGE.LABEL')"
+          :help-message="t('GENERAL_SETTINGS.FORM.AUTO_RESOLVE.MESSAGE.HELP')"
+        >
+          <Editor
+            v-model="message"
+            class="w-full"
+            channel-type="Context::NoToolbar"
+            enable-variables
+            :enable-canned-responses="false"
+            :show-character-count="false"
+            :placeholder="
+              t('GENERAL_SETTINGS.FORM.AUTO_RESOLVE.MESSAGE.PLACEHOLDER')
+            "
+          />
+        </WithLabel>
+        <WithLabel :label="t('GENERAL_SETTINGS.FORM.AUTO_RESOLVE.PREFERENCES')">
+          <div
+            class="rounded-xl border border-n-weak bg-n-solid-1 w-full text-sm text-n-slate-12 divide-y divide-n-weak"
+          >
+            <div class="p-3 h-12 flex items-center justify-between">
+              <span>
+                {{
+                  t('GENERAL_SETTINGS.FORM.AUTO_RESOLVE.IGNORE_WAITING.LABEL')
+                }}
+              </span>
+              <Switch v-model="ignoreWaiting" />
+            </div>
+            <div class="p-3 h-12 flex items-center justify-between">
+              <span>
+                {{ t('GENERAL_SETTINGS.FORM.AUTO_RESOLVE.LABEL.LABEL') }}
+              </span>
+              <Select
+                :model-value="
+                  labelToApply?.id != null ? String(labelToApply.id) : ''
+                "
+                @update:model-value="
+                  v =>
+                    (labelToApply =
+                      labelOptions.find(o => String(o.id) === v) ?? {})
+                "
+              >
+                <SelectTrigger>
+                  <SelectValue
+                    :placeholder="
+                      $t('GENERAL_SETTINGS.FORM.AUTO_RESOLVE.LABEL.PLACEHOLDER')
+                    "
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem
+                    v-for="option in labelOptions"
+                    :key="String(option.id)"
+                    :value="String(option.id)"
+                  >
+                    {{ option.name }}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
+        </WithLabel>
+        <div class="flex gap-2">
+          <Button variant="default" type="submit" :disabled="isSubmitting">
+            <Spinner v-if="isSubmitting" class="size-4 flex-shrink-0" />
+            <template v-if="!isSubmitting">
+              {{ t('GENERAL_SETTINGS.FORM.AUTO_RESOLVE.UPDATE_BUTTON') }}
+            </template>
+          </Button>
         </div>
-      </WithLabel>
-      <div class="flex gap-2">
-        <Button variant="default" type="submit" :disabled="isSubmitting">
-          <Spinner v-if="isSubmitting" class="size-4 flex-shrink-0" />
-          <template v-if="!isSubmitting">{{
-            t('GENERAL_SETTINGS.FORM.AUTO_RESOLVE.UPDATE_BUTTON')
-          }}</template>
-        </Button>
-      </div>
-    </form>
-  </SectionLayout>
+      </form>
+    </div>
+  </div>
 </template>

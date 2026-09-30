@@ -16,17 +16,14 @@ import { Button } from 'dashboard/components-next/ui/button';
 import { Spinner } from 'dashboard/components-next/ui/spinner';
 import CreditPackageCard from './CreditPackageCard.vue';
 import EnterpriseAccountAPI from 'dashboard/api/enterprise/account';
+import {
+  formatCurrencyAmount,
+  DEFAULT_BILLING_CURRENCY,
+} from 'dashboard/constants/billing';
 
-const emit = defineEmits(['close', 'success']);
+const emit = defineEmits(['success']);
 
 const { t } = useI18n();
-
-const TOPUP_OPTIONS = [
-  { credits: 1000, amount: 20.0, currency: 'usd' },
-  { credits: 2500, amount: 50.0, currency: 'usd' },
-  { credits: 6000, amount: 100.0, currency: 'usd' },
-  { credits: 12000, amount: 200.0, currency: 'usd' },
-];
 
 const POPULAR_CREDITS_AMOUNT = 6000;
 const STEP_SELECT = 'select';
@@ -37,16 +34,20 @@ const selectedCredits = ref(null);
 const isLoading = ref(false);
 const currentStep = ref(STEP_SELECT);
 
+// Topup packages come from the backend for the account's billing currency.
+const topupOptions = ref([]);
+const optionsCurrency = ref(DEFAULT_BILLING_CURRENCY);
+const isFetchingOptions = ref(false);
+const fetchError = ref(false);
+
 const selectedOption = computed(() => {
-  return TOPUP_OPTIONS.find(o => o.credits === selectedCredits.value);
+  return topupOptions.value.find(o => o.credits === selectedCredits.value);
 });
 
 const formattedAmount = computed(() => {
   if (!selectedOption.value) return '';
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: selectedOption.value.currency.toUpperCase(),
-  }).format(selectedOption.value.amount);
+  const { amount, currency } = selectedOption.value;
+  return formatCurrencyAmount(amount, currency || optionsCurrency.value);
 });
 
 const formattedCredits = computed(() => {
@@ -74,24 +75,44 @@ const handlePackageSelect = credits => {
   selectedCredits.value = credits;
 };
 
+const selectDefaultOption = () => {
+  const popularOption = topupOptions.value.find(
+    o => o.credits === POPULAR_CREDITS_AMOUNT
+  );
+  selectedCredits.value =
+    popularOption?.credits || topupOptions.value[0]?.credits || null;
+};
+
+const fetchOptions = async () => {
+  isFetchingOptions.value = true;
+  fetchError.value = false;
+  try {
+    const { data } = await EnterpriseAccountAPI.getTopupOptions();
+    topupOptions.value = data.options ?? [];
+    optionsCurrency.value = (
+      data.currency || DEFAULT_BILLING_CURRENCY
+    ).toLowerCase();
+    selectDefaultOption();
+  } catch {
+    fetchError.value = true;
+    topupOptions.value = [];
+  } finally {
+    isFetchingOptions.value = false;
+  }
+};
+
 // Reset the modal to its initial state whenever it opens (replaces the old
 // imperative open() — the trigger now drives `dialogOpen` directly).
 watch(dialogOpen, isOpen => {
   if (!isOpen) return;
-  const popularOption = TOPUP_OPTIONS.find(
-    o => o.credits === POPULAR_CREDITS_AMOUNT
-  );
-  selectedCredits.value = popularOption?.credits || TOPUP_OPTIONS[0]?.credits;
   currentStep.value = STEP_SELECT;
   isLoading.value = false;
+  selectedCredits.value = null;
+  fetchOptions();
 });
 
 const close = () => {
   dialogOpen.value = false;
-};
-
-const handleClose = () => {
-  emit('close');
 };
 
 const goToConfirmStep = () => {
@@ -130,15 +151,7 @@ const handlePurchase = async () => {
 </script>
 
 <template>
-  <Dialog
-    :open="dialogOpen"
-    @update:open="
-      val => {
-        dialogOpen = val;
-        if (!val) handleClose();
-      }
-    "
-  >
+  <Dialog :open="dialogOpen" @update:open="dialogOpen = $event">
     <DialogTrigger as-child>
       <slot name="trigger" />
     </DialogTrigger>
@@ -151,29 +164,53 @@ const handlePurchase = async () => {
       </DialogHeader>
 
       <!-- Step 1: Select Credits Package -->
-      <template v-if="currentStep === 'select'">
-        <div class="grid grid-cols-2 gap-4">
-          <CreditPackageCard
-            v-for="option in TOPUP_OPTIONS"
-            :key="option.credits"
-            name="credit-package"
-            :credits="option.credits"
-            :amount="option.amount"
-            :currency="option.currency"
-            :is-popular="option.credits === POPULAR_CREDITS_AMOUNT"
-            :is-selected="selectedCredits === option.credits"
-            @select="handlePackageSelect(option.credits)"
-          />
+      <template v-if="currentStep === STEP_SELECT">
+        <div
+          v-if="isFetchingOptions"
+          class="flex items-center justify-center gap-2 py-10"
+        >
+          <Spinner class="size-4" />
+          <span class="text-sm text-n-slate-11">{{
+            $t('BILLING_SETTINGS.TOPUP.LOADING')
+          }}</span>
         </div>
 
-        <div class="p-4 mt-6 rounded-lg bg-n-solid-2 border border-n-weak">
-          <p class="text-sm text-muted-foreground">
-            <span class="font-semibold text-n-slate-12">{{
-              $t('BILLING_SETTINGS.TOPUP.NOTE_TITLE')
-            }}</span>
-            {{ $t('BILLING_SETTINGS.TOPUP.NOTE_DESCRIPTION') }}
+        <div
+          v-else-if="fetchError"
+          class="flex flex-col items-center justify-center gap-3 py-10"
+        >
+          <p class="text-sm text-n-slate-11">
+            {{ $t('BILLING_SETTINGS.TOPUP.FETCH_ERROR') }}
           </p>
+          <Button variant="outline" @click="fetchOptions">
+            {{ $t('BILLING_SETTINGS.TOPUP.RETRY') }}
+          </Button>
         </div>
+
+        <template v-else>
+          <div class="grid grid-cols-2 gap-4">
+            <CreditPackageCard
+              v-for="option in topupOptions"
+              :key="option.credits"
+              name="credit-package"
+              :credits="option.credits"
+              :amount="option.amount"
+              :currency="option.currency"
+              :is-popular="option.credits === POPULAR_CREDITS_AMOUNT"
+              :is-selected="selectedCredits === option.credits"
+              @select="handlePackageSelect(option.credits)"
+            />
+          </div>
+
+          <div class="p-4 mt-6 rounded-lg bg-n-solid-2 border border-n-weak">
+            <p class="text-sm text-muted-foreground">
+              <span class="font-semibold text-n-slate-12">{{
+                $t('BILLING_SETTINGS.TOPUP.NOTE_TITLE')
+              }}</span>
+              {{ $t('BILLING_SETTINGS.TOPUP.NOTE_DESCRIPTION') }}
+            </p>
+          </div>
+        </template>
       </template>
 
       <!-- Step 2: Confirm Purchase -->
@@ -199,7 +236,7 @@ const handlePurchase = async () => {
       <!-- Footer (was #footer slot, now inline content) -->
       <!-- Step 1 Footer -->
       <DialogFooter
-        v-if="currentStep === 'select'"
+        v-if="currentStep === STEP_SELECT"
         class="flex items-center justify-between w-full gap-3"
       >
         <DialogClose as-child>
@@ -210,7 +247,7 @@ const handlePurchase = async () => {
         <Button
           variant="default"
           class="w-full"
-          :disabled="!selectedCredits"
+          :disabled="!selectedCredits || isFetchingOptions || fetchError"
           @click="goToConfirmStep"
         >
           {{ $t('BILLING_SETTINGS.TOPUP.PURCHASE') }}

@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n';
 import { generateLabelForContactableInboxesList } from 'dashboard/components-next/NewConversation/helpers/composeConversationHelper.js';
 
 import { Button } from 'dashboard/components-next/ui/button';
+import { Spinner } from 'dashboard/components-next/ui/spinner';
 import Icon from 'dashboard/components-next/icon/Icon.vue';
 import {
   Popover,
@@ -29,6 +30,10 @@ const props = defineProps({
     default: () => [],
   },
   hasErrors: {
+    type: Boolean,
+    default: false,
+  },
+  isFetchingInboxes: {
     type: Boolean,
     default: false,
   },
@@ -70,6 +75,7 @@ const localOpen = computed({
         <Icon icon="i-lucide-x" />
       </Button>
     </div>
+    <Spinner v-else-if="isFetchingInboxes" class="size-4" />
     <Popover
       v-else-if="contactableInboxesList?.length > 0"
       v-model:open="localOpen"
@@ -84,13 +90,21 @@ const localOpen = computed({
           {{ t('COMPOSE_NEW_CONVERSATION.FORM.INBOX_SELECTOR.BUTTON') }}
         </Button>
       </PopoverTrigger>
-      <PopoverContent side="bottom" align="end" class="flex flex-col p-1 w-auto min-w-36">
+      <PopoverContent
+        side="bottom"
+        align="end"
+        class="flex flex-col p-1 w-auto min-w-36"
+      >
         <Button
           v-for="item in contactableInboxesList"
           :key="item.value"
           variant="ghost"
           class="justify-start"
-          :class="item.action === 'delete' ? 'text-destructive hover:text-destructive' : ''"
+          :class="
+            item.action === 'delete'
+              ? 'text-destructive hover:text-destructive'
+              : ''
+          "
           :disabled="item.disabled"
           @click="
             () => {
@@ -99,7 +113,11 @@ const localOpen = computed({
             }
           "
         >
-          <Icon v-if="item.icon" :icon="item.icon" class="size-3.5 flex-shrink-0" />
+          <Icon
+            v-if="item.icon"
+            :icon="item.icon"
+            class="size-3.5 flex-shrink-0"
+          />
           <span v-if="item.emoji" class="flex-shrink-0">{{ item.emoji }}</span>
           {{ item.label }}
         </Button>

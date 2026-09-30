@@ -17,6 +17,8 @@ import NextSidebar from 'next/sidebar/Sidebar.vue';
 import MobileSidebarLauncher from 'dashboard/components-next/sidebar/MobileSidebarLauncher.vue';
 import LoadingState from 'dashboard/components/widgets/LoadingState.vue';
 import UpdateBanner from 'dashboard/components/app/UpdateBanner.vue';
+import StatusBanner from 'dashboard/components/app/StatusBanner.vue';
+import LowBackupCodesBanner from 'dashboard/components/app/LowBackupCodesBanner.vue';
 import PaymentPendingBanner from 'dashboard/components/app/PaymentPendingBanner.vue';
 import PendingEmailVerificationBanner from 'dashboard/components/app/PendingEmailVerificationBanner.vue';
 import NetworkNotification from 'dashboard/components/NetworkNotification.vue';
@@ -27,6 +29,7 @@ import CopilotContainer from 'dashboard/components/copilot/CopilotContainer.vue'
 import vueActionCable from 'dashboard/helper/actionCable';
 import ReconnectService from 'dashboard/helper/ReconnectService';
 import { setupThemeSync } from 'dashboard/helper/themeHelper';
+import { isUpgradePageBypassRoute } from 'dashboard/helper/routeHelpers';
 import { Toaster } from 'next/ui/sonner';
 import 'vue-sonner/style.css';
 
@@ -34,15 +37,8 @@ const CommandBar = defineAsyncComponent(
   () => import('dashboard/routes/dashboard/commands/commandbar.vue')
 );
 const FloatingCallWidget = defineAsyncComponent(
-  () => import('dashboard/components/widgets/FloatingCallWidget.vue')
+  () => import('dashboard/components-next/call/FloatingCallWidget.vue')
 );
-
-const UPGRADE_PAGE_BYPASS_ROUTES = [
-  'billing_settings_index',
-  'settings_inbox_list',
-  'general_settings_index',
-  'agent_list',
-];
 
 const store = useStore();
 const { locale } = useI18n({ useScope: 'global' });
@@ -61,8 +57,11 @@ const upgradePageRef = ref(null);
 const showUpgradePage = computed(
   () => upgradePageRef.value?.shouldShowUpgradePage
 );
+const isAccountPaywalled = computed(
+  () => upgradePageRef.value?.isAccountPaywalled
+);
 const bypassUpgradePage = computed(() =>
-  UPGRADE_PAGE_BYPASS_ROUTES.includes(currentRouteName.value)
+  isUpgradePageBypassRoute(currentRouteName.value)
 );
 
 const hasCall = computed(
@@ -162,9 +161,11 @@ onMounted(async () => {
   >
     <template v-if="isReady">
       <UpdateBanner :latest-chatwoot-version="latestVersion" />
+      <StatusBanner />
       <template v-if="accountId">
         <PendingEmailVerificationBanner />
         <PaymentPendingBanner />
+        <LowBackupCodesBanner />
       </template>
       <div class="flex flex-1 w-full min-h-0 overflow-hidden">
         <NextSidebar
@@ -175,7 +176,9 @@ onMounted(async () => {
         />
         <!-- Mirrors Dashboard.vue's <main>: overflow-hidden (pages own their scroll) +
              min-w-0 so flex children shrink instead of forcing a page-wide x-scroll. -->
-        <main class="flex flex-1 w-full h-full min-w-0 min-h-0 overflow-hidden">
+        <main
+          class="flex flex-1 w-full h-full min-w-0 min-h-0 overflow-hidden bg-n-surface-1"
+        >
           <UpgradePage
             v-show="showUpgradePage"
             ref="upgradePageRef"
@@ -188,7 +191,6 @@ onMounted(async () => {
           </UpgradePage>
           <template v-if="!showUpgradePage">
             <slot />
-            <CommandBar />
             <CopilotLauncher />
             <MobileSidebarLauncher
               :is-mobile-sidebar-open="isMobileSidebarOpen"
@@ -197,6 +199,7 @@ onMounted(async () => {
             <CopilotContainer />
             <FloatingCallWidget v-if="hasCall" />
           </template>
+          <CommandBar :is-paywalled="isAccountPaywalled" />
         </main>
       </div>
       <WootKeyShortcutModal

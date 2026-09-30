@@ -6,6 +6,7 @@ import { useI18n } from 'vue-i18n';
 import { useAlert } from 'dashboard/composables';
 import { useAppNavigation } from 'dashboard/composables/useAppNavigation';
 import { isPhoneE164OrEmpty, isNumber } from 'shared/helpers/Validators';
+import InboxesAPI from 'dashboard/api/inboxes';
 
 import { Button } from 'dashboard/components-next/ui/button';
 import { Input } from 'dashboard/components-next/ui/input';
@@ -18,6 +19,13 @@ import {
   FormLabel,
   FormMessage,
 } from 'dashboard/components-next/ui/form';
+
+const props = defineProps({
+  enableCallingOnComplete: {
+    type: Boolean,
+    default: false,
+  },
+});
 
 const store = useStore();
 const { t } = useI18n();
@@ -70,6 +78,14 @@ const createChannel = async values => {
         },
       },
     });
+
+    if (props.enableCallingOnComplete) {
+      try {
+        await InboxesAPI.enableWhatsappCalling(whatsappChannel.id);
+      } catch (_) {
+        useAlert(t('INBOX_MGMT.WHATSAPP_CALLING.ENABLE_FAILED'));
+      }
+    }
 
     visit({
       name: 'settings_inboxes_add_agents',
@@ -180,9 +196,9 @@ const createChannel = async values => {
     <div class="w-full mt-4">
       <Button variant="default" type="submit" :disabled="uiFlags.isCreating">
         <Spinner v-if="uiFlags.isCreating" class="size-4 flex-shrink-0" />
-        <template v-if="!uiFlags.isCreating">{{
-          $t('INBOX_MGMT.ADD.WHATSAPP.SUBMIT_BUTTON')
-        }}</template>
+        <template v-if="!uiFlags.isCreating">
+          {{ $t('INBOX_MGMT.ADD.WHATSAPP.SUBMIT_BUTTON') }}
+        </template>
       </Button>
     </div>
   </Form>

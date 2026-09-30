@@ -27,7 +27,7 @@ const isCopilotPanelOpen = computed(
   () => uiSettings.value.is_copilot_panel_open
 );
 
-const toggleConversationSidebarToggle = () => {
+const handleConversationSidebarToggle = () => {
   updateUISettings({
     is_contact_sidebar_open: !isContactSidebarOpen.value,
     is_copilot_panel_open: false,
@@ -37,13 +37,13 @@ const toggleConversationSidebarToggle = () => {
 const handleCopilotSidebarToggle = () => {
   updateUISettings({
     is_contact_sidebar_open: false,
-    is_copilot_panel_open: true,
+    is_copilot_panel_open: !isCopilotPanelOpen.value,
   });
 };
 
 const keyboardEvents = {
   'Alt+KeyO': {
-    action: toggleConversationSidebarToggle,
+    action: handleConversationSidebarToggle,
   },
 };
 useKeyboardEvents(keyboardEvents);
@@ -52,7 +52,7 @@ useKeyboardEvents(keyboardEvents);
 <template>
   <ButtonGroup
     v-if="showCopilotTab"
-    class="flex flex-col justify-center items-center absolute top-36 xl:top-24 ltr:right-2 rtl:left-2 bg-n-solid-2/90 backdrop-blur-lg border border-n-weak/50 rounded-full gap-1.5 p-1.5 shadow-sm transition-shadow duration-200 hover:shadow"
+    class="flex flex-col justify-center items-center absolute top-36 xl:top-24 ltr:right-2 rtl:left-2 bg-n-solid-2/90 backdrop-blur-lg border border-n-weak/50 rounded-full gap-1.5 p-1.5 shadow-sm transition-shadow duration-200 hover:shadow !z-20"
   >
     <Button
       v-tooltip.bottom="$t('CONVERSATION.SIDEBAR.COPILOT')"
@@ -65,7 +65,7 @@ useKeyboardEvents(keyboardEvents);
       }"
       @click="handleCopilotSidebarToggle"
     >
-      <Icon :icon="'i-woot-captain'" class="size-4" />
+      <Icon icon="i-woot-captain" class="size-4" />
     </Button>
   </ButtonGroup>
 </template>

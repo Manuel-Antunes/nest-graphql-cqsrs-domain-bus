@@ -1,6 +1,6 @@
 module Inertia
   module Helpcenter
-    # Multi-route help-center group: the ten named portal routes share one controller.
+    # Multi-route help-center group: the named portal routes share one controller.
     # Every page component navigates internally via useAppNavigation (dual-mode) and
     # reads portalSlug/locale/categorySlug/tab/articleSlug/navigationPath from the URL
     # via useAppNavigation().currentParams — so NO data props here, just authorize +
@@ -41,6 +41,10 @@ module Inertia
 
       # portals_articles_new
       def articles_new
+        render inertia: 'HelpCenter/ArticleNew/Index'
+      end
+
+      def categories_articles_new
         render inertia: 'HelpCenter/ArticleNew/Index'
       end
 

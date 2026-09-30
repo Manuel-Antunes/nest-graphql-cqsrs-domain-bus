@@ -1,0 +1,176 @@
+<script setup>
+import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
+import { useAppNavigation } from 'dashboard/composables/useAppNavigation';
+
+import { Spinner } from 'dashboard/components-next/ui/spinner';
+import DeliveryStatusBadge from './DeliveryStatusBadge.vue';
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+  TableEmpty,
+} from 'dashboard/components-next/ui/table';
+
+const props = defineProps({
+  deliveries: {
+    type: Array,
+    default: () => [],
+  },
+  loading: {
+    type: Boolean,
+    default: false,
+  },
+  noDataMessage: {
+    type: String,
+    default: '',
+  },
+});
+
+const { t } = useI18n();
+const { resolvePath } = useAppNavigation();
+
+const headers = computed(() => [
+  t('CAMPAIGN.WHATSAPP.ANALYTICS.TABLE.CONTACT'),
+  t('CAMPAIGN.WHATSAPP.ANALYTICS.TABLE.STATUS'),
+  t('CAMPAIGN.WHATSAPP.ANALYTICS.TABLE.MESSAGE'),
+  t('CAMPAIGN.WHATSAPP.ANALYTICS.TABLE.REASON'),
+]);
+
+const errorReason = delivery =>
+  delivery.error_message || delivery.error_title || delivery.error_code || '';
+
+const errorCode = delivery =>
+  delivery.error_code &&
+  String(delivery.error_code) !== String(errorReason(delivery))
+    ? delivery.error_code
+    : '';
+
+const messageContent = delivery =>
+  delivery.message_content ||
+  t('CAMPAIGN.WHATSAPP.ANALYTICS.TABLE.MESSAGE_NOT_GENERATED');
+
+const contactDetailsPath = contactId =>
+  resolvePath({ name: 'contacts_edit', params: { contactId } });
+
+const isEmpty = computed(() => props.deliveries.length === 0);
+</script>
+
+<template>
+  <div class="w-full border rounded-xl border-n-weak bg-n-solid-1">
+    <div
+      class="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
+    >
+      <span class="text-heading-2 text-n-slate-12">
+        {{ t('CAMPAIGN.WHATSAPP.ANALYTICS.TABLE.TITLE') }}
+      </span>
+      <div class="min-w-0 p-1 -m-1 overflow-x-auto no-scrollbar">
+        <slot name="filters" />
+      </div>
+    </div>
+    <div
+      v-if="loading"
+      class="flex items-center justify-center py-20 border-t text-n-slate-11 border-n-weak"
+    >
+      <Spinner class="size-6" />
+    </div>
+    <div
+      v-else
+      class="overflow-x-auto [&_th:first-child]:ps-5 [&_td:first-child]:ps-5 [&_th:last-child]:pe-5 [&_td:last-child]:pe-5"
+      :class="{ 'border-t border-n-weak': isEmpty }"
+    >
+      <Table class="min-w-full">
+        <TableHeader v-if="!isEmpty">
+          <TableRow class="hover:bg-transparent border-n-weak">
+            <TableHead
+              v-for="(header, index) in headers"
+              :key="index"
+              class="h-auto py-4 text-start capitalize text-heading-3 text-n-slate-12"
+            >
+              {{ header }}
+            </TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody class="text-n-slate-11">
+          <TableRow
+            v-for="delivery in deliveries"
+            :key="delivery.contact.id"
+            class="border-n-weak"
+          >
+            <TableCell class="py-3 text-body-main">
+              <div class="flex flex-col gap-0.5 py-1">
+                <a
+                  :href="contactDetailsPath(delivery.contact.id)"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="inline-flex items-center max-w-full gap-1 transition-colors w-fit text-heading-3 text-n-slate-12 hover:text-n-blue-11 hover:underline underline-offset-2"
+                  :title="t('CONTACTS_LAYOUT.CARD.VIEW_DETAILS')"
+                >
+                  <span class="truncate">
+                    {{ delivery.contact.name || '-' }}
+                  </span>
+                  <span
+                    aria-hidden="true"
+                    class="i-lucide-arrow-up-right size-3.5 shrink-0"
+                  />
+                </a>
+                <span
+                  class="tabular-nums truncate text-label-small text-n-slate-11"
+                >
+                  {{ delivery.contact.phone_number || '-' }}
+                </span>
+              </div>
+            </TableCell>
+            <TableCell class="py-3 text-body-main">
+              <DeliveryStatusBadge :status="delivery.status" />
+            </TableCell>
+            <TableCell class="py-3 text-body-main">
+              <span
+                class="block max-w-48 lg:max-w-md whitespace-pre-line line-clamp-2 text-body-main"
+                :class="
+                  delivery.message_content
+                    ? 'text-n-slate-11'
+                    : 'italic text-n-slate-10'
+                "
+              >
+                {{ messageContent(delivery) }}
+              </span>
+            </TableCell>
+            <TableCell class="py-3 text-body-main">
+              <div
+                v-if="errorReason(delivery)"
+                class="flex flex-col gap-0.5 max-w-40 lg:max-w-56"
+              >
+                <span class="line-clamp-2 text-body-main text-n-slate-11">
+                  {{ errorReason(delivery) }}
+                </span>
+                <span
+                  v-if="errorCode(delivery)"
+                  class="tabular-nums text-label-small text-n-slate-10"
+                >
+                  {{
+                    t('CAMPAIGN.WHATSAPP.ANALYTICS.TABLE.ERROR_CODE', {
+                      code: errorCode(delivery),
+                    })
+                  }}
+                </span>
+              </div>
+              <span v-else class="text-body-main text-n-slate-10">-</span>
+            </TableCell>
+          </TableRow>
+          <TableEmpty
+            v-if="isEmpty && noDataMessage"
+            :colspan="headers.length"
+            class="text-base text-center text-n-slate-11"
+          >
+            {{ noDataMessage }}
+          </TableEmpty>
+        </TableBody>
+      </Table>
+    </div>
+    <slot name="footer" />
+  </div>
+</template>

@@ -67,6 +67,14 @@ const isIntegrationDialogflow = computed(
   () => integration.value.id === 'dialogflow'
 );
 
+const submitButtonLabel = computed(() => {
+  if (integration.value.id === 'openai' && uiFlags.value.isCreatingHook) {
+    return t('INTEGRATION_APPS.ADD.FORM.VALIDATING_OPENAI');
+  }
+
+  return t('INTEGRATION_APPS.ADD.FORM.SUBMIT');
+});
+
 const connectedDialogflowInboxIds = computed(() => {
   if (!isIntegrationDialogflow.value) return [];
   return integration.value.hooks.map(hook => hook.inbox?.id);
@@ -357,9 +365,7 @@ const submitForm = async values => {
               v-if="uiFlags.isCreatingHook"
               class="size-4 flex-shrink-0"
             />
-            <template v-if="!uiFlags.isCreatingHook">
-              {{ $t('INTEGRATION_APPS.ADD.FORM.SUBMIT') }}
-            </template>
+            {{ submitButtonLabel }}
           </Button>
         </DialogFooter>
       </Form>

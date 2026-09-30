@@ -76,7 +76,7 @@ const toggleBlock = () => {
 
 <template>
   <section
-    class="flex w-full h-full overflow-hidden justify-evenly bg-n-background"
+    class="flex w-full h-full overflow-hidden justify-evenly bg-n-surface-1"
   >
     <div class="flex flex-col w-full h-full">
       <header class="sticky top-0 z-10 px-6 3xl:px-0">
@@ -129,8 +129,8 @@ const toggleBlock = () => {
                 size="sm"
               />
               <ComposeConversation :contact-id="contactId">
-                <template #trigger="{ toggle }">
-                  <Button variant="default" @click="toggle">
+                <template #trigger>
+                  <Button variant="default">
                     {{ $t('CONTACTS_LAYOUT.HEADER.SEND_MESSAGE') }}
                   </Button>
                 </template>
@@ -143,12 +143,17 @@ const toggleBlock = () => {
                 </SheetTrigger>
                 <SheetContent
                   side="right"
-                  class="w-full max-w-96 sm:max-w-xl overflow-y-auto py-6 pt-12"
+                  class="w-full max-w-96 sm:max-w-xl gap-0 pt-12"
                 >
                   <SheetTitle class="sr-only">
                     {{ selectedContactName }}
                   </SheetTitle>
-                  <slot name="sidebar" />
+                  <div class="shrink-0">
+                    <slot name="sidebarHeader" />
+                  </div>
+                  <div class="flex-1 min-h-0 overflow-y-auto pb-6 pt-3">
+                    <slot name="sidebar" />
+                  </div>
                 </SheetContent>
               </Sheet>
             </div>

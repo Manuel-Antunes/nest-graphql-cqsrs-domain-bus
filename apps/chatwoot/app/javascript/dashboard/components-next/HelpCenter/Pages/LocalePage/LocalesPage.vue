@@ -1,10 +1,14 @@
 <script setup>
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { useMapGetter } from 'dashboard/composables/store.js';
+
+import { useI18n } from 'vue-i18n';
 
 import HelpCenterLayout from 'dashboard/components-next/HelpCenter/HelpCenterLayout.vue';
 import { Button } from 'dashboard/components-next/ui/button';
 import Icon from 'dashboard/components-next/icon/Icon.vue';
+import Input from 'dashboard/components-next/input/Input.vue';
+import EmptyStateLayout from 'dashboard/components-next/EmptyStateLayout.vue';
 import { Spinner } from 'dashboard/components-next/ui/spinner';
 import LocaleList from 'dashboard/components-next/HelpCenter/Pages/LocalePage/LocaleList.vue';
 import AddLocaleDialog from 'dashboard/components-next/HelpCenter/Pages/LocalePage/AddLocaleDialog.vue';
@@ -20,13 +24,33 @@ const props = defineProps({
   },
 });
 
+const { t } = useI18n();
+
+const searchQuery = ref('');
+
 const isSwitchingPortal = useMapGetter('portals/isSwitchingPortal');
 
 const localeCount = computed(() => props.locales?.length);
+
+const filteredLocales = computed(() => {
+  const query = searchQuery.value.trim().toLowerCase();
+  if (!query) return props.locales;
+  return props.locales.filter(
+    locale =>
+      locale.name?.toLowerCase().includes(query) ||
+      locale.code?.toLowerCase().includes(query)
+  );
+});
+
+const isSearching = computed(() => searchQuery.value.trim().length > 0);
+const hasResults = computed(() => filteredLocales.value?.length > 0);
 </script>
 
 <template>
-  <HelpCenterLayout :show-pagination-footer="false">
+  <HelpCenterLayout
+    :show-pagination-footer="false"
+    :breadcrumb-label="$t('HELP_CENTER.BREADCRUMB.LOCALES')"
+  >
     <template #header-actions>
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-4">
@@ -34,14 +58,23 @@ const localeCount = computed(() => props.locales?.length);
             {{ $t('HELP_CENTER.LOCALES_PAGE.LOCALES_COUNT', localeCount) }}
           </span>
         </div>
-        <AddLocaleDialog :portal="portal">
-          <template #trigger>
-            <Button variant="default">
-              <Icon icon="i-lucide-plus" class="mr-1" />
-              {{ $t('HELP_CENTER.LOCALES_PAGE.NEW_LOCALE_BUTTON_TEXT') }}
-            </Button>
-          </template>
-        </AddLocaleDialog>
+        <div class="flex items-center gap-2">
+          <Input
+            v-model="searchQuery"
+            :placeholder="$t('HELP_CENTER.LOCALES_PAGE.SEARCH_PLACEHOLDER')"
+            type="search"
+            size="sm"
+            class="w-48"
+          />
+          <AddLocaleDialog :portal="portal">
+            <template #trigger>
+              <Button variant="default">
+                <Icon icon="i-lucide-plus" class="mr-1" />
+                {{ $t('HELP_CENTER.LOCALES_PAGE.NEW_LOCALE_BUTTON_TEXT') }}
+              </Button>
+            </template>
+          </AddLocaleDialog>
+        </div>
       </div>
     </template>
     <template #content>
@@ -51,7 +84,13 @@ const localeCount = computed(() => props.locales?.length);
       >
         <Spinner class="size-6" />
       </div>
-      <LocaleList v-else :locales="locales" :portal="portal" />
+      <EmptyStateLayout
+        v-else-if="isSearching && !hasResults"
+        :title="t('HELP_CENTER.LOCALES_PAGE.SEARCH_EMPTY_STATE.TITLE')"
+        :subtitle="t('HELP_CENTER.LOCALES_PAGE.SEARCH_EMPTY_STATE.SUBTITLE')"
+        :show-backdrop="false"
+      />
+      <LocaleList v-else :locales="filteredLocales" :portal="portal" />
     </template>
   </HelpCenterLayout>
 </template>

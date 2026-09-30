@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n';
 import { useStore, useStoreGetters } from 'dashboard/composables/store';
 import { useEmitter } from 'dashboard/composables/emitter';
 import { useKeyboardEvents } from 'dashboard/composables/useKeyboardEvents';
+import { useConversationRequiredAttributes } from 'dashboard/composables/useConversationRequiredAttributes';
 
 import wootConstants from 'dashboard/constants/globals';
 import {
@@ -21,13 +22,16 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from 'dashboard/components-next/ui/dropdown-menu';
+import ConversationResolveAttributesModal from 'dashboard/components-next/ConversationWorkflow/ConversationResolveAttributesModal.vue';
 
 const store = useStore();
 const getters = useStoreGetters();
 const { t } = useI18n();
+const { checkMissingAttributes } = useConversationRequiredAttributes();
 
 const arrowDownButtonRef = ref(null);
 const isLoading = ref(false);
+const resolveAttributesModalRef = ref(null);
 
 const currentChat = computed(() => getters.getSelectedChat.value);
 
@@ -77,18 +81,35 @@ const openSnoozeModal = () => {
   ninja.open({ parent: 'snooze_conversation' });
 };
 
-const toggleStatus = (status, snoozedUntil) => {
+const toggleStatus = (status, snoozedUntil, customAttributes = null) => {
   isLoading.value = true;
-  store
-    .dispatch('toggleStatus', {
-      conversationId: currentChat.value.id,
-      status,
-      snoozedUntil,
-    })
-    .then(() => {
-      useAlert(t('CONVERSATION.CHANGE_STATUS'));
-      isLoading.value = false;
-    });
+
+  const payload = {
+    conversationId: currentChat.value.id,
+    status,
+    snoozedUntil,
+  };
+
+  if (customAttributes) {
+    payload.customAttributes = customAttributes;
+  }
+
+  store.dispatch('toggleStatus', payload).then(() => {
+    useAlert(t('CONVERSATION.CHANGE_STATUS'));
+    isLoading.value = false;
+  });
+};
+
+const handleResolveWithAttributes = ({ attributes, context }) => {
+  if (context) {
+    const currentCustomAttributes = currentChat.value.custom_attributes || {};
+    const mergedAttributes = { ...currentCustomAttributes, ...attributes };
+    toggleStatus(
+      wootConstants.STATUS_TYPE.RESOLVED,
+      context.snoozedUntil,
+      mergedAttributes
+    );
+  }
 };
 
 const onCmdOpenConversation = () => {
@@ -96,7 +117,24 @@ const onCmdOpenConversation = () => {
 };
 
 const onCmdResolveConversation = () => {
-  toggleStatus(wootConstants.STATUS_TYPE.RESOLVED);
+  const currentCustomAttributes = currentChat.value.custom_attributes || {};
+  const { hasMissing, missing } = checkMissingAttributes(
+    currentCustomAttributes
+  );
+
+  if (hasMissing) {
+    const conversationContext = {
+      id: currentChat.value.id,
+      snoozedUntil: null,
+    };
+    resolveAttributesModalRef.value?.open(
+      missing,
+      currentCustomAttributes,
+      conversationContext
+    );
+  } else {
+    toggleStatus(wootConstants.STATUS_TYPE.RESOLVED);
+  }
 };
 
 const keyboardEvents = {
@@ -105,14 +143,19 @@ const keyboardEvents = {
     allowOnFocusedInput: true,
   },
   'Alt+KeyE': {
-    action: async () => {
-      await toggleStatus(wootConstants.STATUS_TYPE.RESOLVED);
+    action: async event => {
+      // Chrome on Windows treats Alt+E as a legacy shortcut for its own
+      // menu (Alt+E / Alt+F both open "Customize and control Google
+      // Chrome"). Without preventDefault, our resolve action still runs,
+      // but Chrome's menu also opens on top of it.
+      event.preventDefault();
+      onCmdResolveConversation();
     },
   },
   '$mod+Alt+KeyE': {
     action: async event => {
       const { all, activeIndex, lastIndex } = getConversationParams();
-      await toggleStatus(wootConstants.STATUS_TYPE.RESOLVED);
+      onCmdResolveConversation();
 
       if (activeIndex < lastIndex) {
         all[activeIndex + 1].click();
@@ -189,5 +232,9 @@ useEmitter(CMD_RESOLVE_CONVERSATION, onCmdResolveConversation);
         </DropdownMenuContent>
       </DropdownMenu>
     </div>
+    <ConversationResolveAttributesModal
+      ref="resolveAttributesModalRef"
+      @submit="handleResolveWithAttributes"
+    />
   </div>
 </template>

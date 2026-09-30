@@ -43,18 +43,22 @@ export default plugin(() => {}, {
             },
             hr: { marginTop: '1.5em', marginBottom: '1.5em' },
             a: { color: 'rgb(var(--slate-12))', textDecoration: 'underline' },
-            ul: { paddingInlineStart: '0.625em' },
-            ol: { paddingInlineStart: '0.625em' },
-            'ul li': {
-              margin: '0 0 0.5em 1em',
+            ul: { paddingInlineStart: '0', listStylePosition: 'inside' },
+            ol: { paddingInlineStart: '0', listStylePosition: 'inside' },
+            'ul > li': {
+              marginBlockEnd: '0.5em',
               listStyleType: 'disc',
-              '[dir="rtl"] &': { margin: '0 1em 0.5em 0' },
+              paddingInlineStart: '1.5em',
+              textIndent: '-1.5em',
             },
-            'ol li': {
-              margin: '0 0 0.5em 1em',
+            'ol > li': {
+              marginBlockEnd: '0.5em',
               listStyleType: 'decimal',
-              '[dir="rtl"] &': { margin: '0 1em 0.5em 0' },
+              paddingInlineStart: '1.5em',
+              textIndent: '-1.5em',
             },
+            'li > p:first-child': { display: 'inline' },
+            'li > *': { textIndent: '0' },
             blockquote: {
               color: 'rgb(var(--slate-11))',
               borderLeft: '4px solid rgb(var(--black-alpha-1))',

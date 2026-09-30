@@ -8,24 +8,7 @@ import ResponseCard from 'dashboard/components-next/captain/assistant/ResponseCa
 import FeatureSpotlight from 'dashboard/components-next/feature-spotlight/FeatureSpotlight.vue';
 import { responsesList } from 'dashboard/components-next/captain/pageComponents/emptyStates/captainEmptyStateContent.js';
 
-import { computed } from 'vue';
-
-const props = defineProps({
-  variant: {
-    type: String,
-    default: 'approved',
-    validator: value => ['approved', 'pending'].includes(value),
-  },
-  hasActiveFilters: {
-    type: Boolean,
-    default: false,
-  },
-});
-
-const emit = defineEmits(['click', 'clearFilters']);
-
-const isApproved = computed(() => props.variant === 'approved');
-const isPending = computed(() => props.variant === 'pending');
+const emit = defineEmits(['click']);
 
 const { isOnChatwootCloud } = useAccount();
 const { replaceInstallationName } = useBranding();
@@ -33,15 +16,10 @@ const { replaceInstallationName } = useBranding();
 const onClick = () => {
   emit('click');
 };
-
-const onClearFilters = () => {
-  emit('clearFilters');
-};
 </script>
 
 <template>
   <FeatureSpotlight
-    v-if="isApproved"
     :title="$t('CAPTAIN.RESPONSES.EMPTY_STATE.FEATURE_SPOTLIGHT.TITLE')"
     :note="$t('CAPTAIN.RESPONSES.EMPTY_STATE.FEATURE_SPOTLIGHT.NOTE')"
     fallback-thumbnail="/assets/images/dashboard/captain/faqs-light.svg"
@@ -51,16 +29,12 @@ const onClearFilters = () => {
     class="mb-8"
   />
   <EmptyStateLayout
-    :title="
-      isPending
-        ? $t('CAPTAIN.RESPONSES.EMPTY_STATE.NO_PENDING_TITLE')
-        : $t('CAPTAIN.RESPONSES.EMPTY_STATE.TITLE')
-    "
-    :subtitle="isApproved ? $t('CAPTAIN.RESPONSES.EMPTY_STATE.SUBTITLE') : ''"
+    :title="$t('CAPTAIN.RESPONSES.EMPTY_STATE.TITLE')"
+    :subtitle="$t('CAPTAIN.RESPONSES.EMPTY_STATE.SUBTITLE')"
     :action-perms="['administrator']"
-    :show-backdrop="isApproved"
+    show-backdrop
   >
-    <template v-if="isApproved" #empty-state-item>
+    <template #empty-state-item>
       <div class="grid grid-cols-1 gap-4 p-px overflow-hidden">
         <ResponseCard
           v-for="(response, index) in responsesList.slice(0, 5)"
@@ -77,19 +51,9 @@ const onClearFilters = () => {
     </template>
     <template #actions>
       <div class="flex flex-col items-center gap-3">
-        <Button
-          v-if="isApproved"
-          @click="onClick"
-        >
+        <Button @click="onClick">
           <Icon icon="i-lucide-plus" class="size-4" />
           {{ $t('CAPTAIN.RESPONSES.ADD_NEW') }}
-        </Button>
-        <Button
-          v-else-if="isPending && hasActiveFilters"
-          variant="link"
-          @click="onClearFilters"
-        >
-          {{ $t('CAPTAIN.RESPONSES.EMPTY_STATE.CLEAR_SEARCH') }}
         </Button>
       </div>
     </template>

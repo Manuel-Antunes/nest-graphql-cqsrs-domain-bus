@@ -57,7 +57,7 @@ RSpec.describe Inbox do
 
     context 'when assignment_v2 is enabled with capacity policies' do
       before do
-        account.enable_features('assignment_v2')
+        account.enable_features('assignment_v2', 'advanced_assignment')
         account.save!
 
         create(:inbox_capacity_limit, agent_capacity_policy: agent_capacity_policy, inbox: v2_inbox, conversation_limit: 1)
@@ -92,13 +92,30 @@ RSpec.describe Inbox do
 
     context 'when assignment_v2 is enabled without capacity policies' do
       before do
-        account.enable_features('assignment_v2')
+        account.enable_features('assignment_v2', 'advanced_assignment')
         account.save!
       end
 
       it 'returns all online agents' do
         result = v2_inbox.member_ids_with_assignment_capacity
         expect(result).to contain_exactly(agent1.id, agent2.id)
+      end
+    end
+
+    context 'when advanced_assignment is disabled (downgraded account with stale policies)' do
+      before do
+        account.enable_features('assignment_v2')
+        account.save!
+
+        create(:inbox_capacity_limit, agent_capacity_policy: agent_capacity_policy, inbox: v2_inbox, conversation_limit: 1)
+        agent1.account_users.find_by(account: account).update!(agent_capacity_policy: agent_capacity_policy)
+
+        create(:conversation, inbox: v2_inbox, account: account, assignee: agent1, status: :open)
+      end
+
+      it 'does not enforce capacity limits' do
+        result = v2_inbox.member_ids_with_assignment_capacity
+        expect(result).to include(agent1.id)
       end
     end
 
@@ -113,6 +130,29 @@ RSpec.describe Inbox do
         result = v2_inbox.member_ids_with_assignment_capacity
         expect(result).not_to include(agent1.id)
         expect(result).to include(agent2.id)
+      end
+    end
+  end
+
+  describe 'validations' do
+    describe 'account inbox limit' do
+      let(:account) { create(:account, limits: { inboxes: 1 }) }
+
+      before do
+        create(:inbox, account: account)
+      end
+
+      it 'prevents saving inboxes beyond the account limit' do
+        new_inbox = build(:inbox, account: account)
+
+        expect { new_inbox.save! }.to raise_error(CustomExceptions::Inbox::LimitExceeded, 'Account limit exceeded. Upgrade to a higher plan')
+      end
+
+      it 'does not block updates to existing inboxes when the account is at the limit' do
+        inbox = account.inboxes.first
+        inbox.name = 'Updated Inbox'
+
+        expect(inbox).to be_valid
       end
     end
   end

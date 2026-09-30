@@ -10,14 +10,7 @@ import { useAccount } from 'dashboard/composables/useAccount';
 import { useUISettings } from 'dashboard/composables/useUISettings';
 import { FEATURE_FLAGS } from 'dashboard/featureFlags';
 
-import {
-  Dialog,
-  DialogContent,
-  DialogTitle,
-  DialogClose,
-} from 'next/ui/dialog';
-import { Button } from 'dashboard/components-next/ui/button';
-import Icon from 'dashboard/components-next/icon/Icon.vue';
+import { Dialog, DialogContent, DialogTitle } from 'next/ui/dialog';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from 'next/ui/tabs';
 
 import ContactConversations from './ContactConversations.vue';
@@ -27,6 +20,7 @@ import ContactInfo from './contact/ContactInfo.vue';
 import ContactNotes from './contact/ContactNotes.vue';
 import ConversationInfo from './ConversationInfo.vue';
 import CustomAttributes from './customAttributes/CustomAttributes.vue';
+import SharedFiles from './SharedFiles.vue';
 import MacrosList from './Macros/List.vue';
 import ShopifyOrdersList from 'dashboard/components/widgets/conversation/ShopifyOrdersList.vue';
 import LinearIssuesList from 'dashboard/components/widgets/conversation/linear/IssuesList.vue';
@@ -46,7 +40,7 @@ const props = defineProps({
 
 const { t } = useI18n();
 const store = useStore();
-const { uiSettings, updateUISettings } = useUISettings();
+const { uiSettings, updateUISettings, isOnExpandedLayout } = useUISettings();
 const { isCloudFeatureEnabled } = useAccount();
 
 const isOpen = computed(() => !!uiSettings.value.is_contact_sidebar_open);
@@ -106,6 +100,14 @@ const contactAdditionalAttributes = computed(
   () => contact.value.additional_attributes || {}
 );
 
+const appliedContactFilter = useMapGetter('getAppliedContactFilter');
+
+const isListScopedToContact = computed(
+  () =>
+    !isOnExpandedLayout.value &&
+    appliedContactFilter.value?.id === contactId.value
+);
+
 const availableTabs = [
   {
     key: 'service_information',
@@ -122,6 +124,10 @@ const availableTabs = [
   {
     key: 'contact_notes',
     label: t('CONVERSATION_SIDEBAR.ACCORDION.CONTACT_NOTES'),
+  },
+  {
+    key: 'shared_files',
+    label: t('CONVERSATION_SIDEBAR.ACCORDION.SHARED_FILES'),
   },
 ];
 
@@ -148,7 +154,9 @@ onMounted(() => {
 
 <template>
   <Dialog :open="isOpen" @update:open="onOpenChange">
-    <DialogContent class="flex flex-col sm:max-w-2xl lg:max-w-4xl max-h-[85vh] overflow-hidden">
+    <DialogContent
+      class="flex flex-col sm:max-w-2xl lg:max-w-4xl max-h-[85vh] overflow-hidden"
+    >
       <DialogTitle>
         {{ $t('CONVERSATION.SIDEBAR.CONTACT') }}
       </DialogTitle>
@@ -158,7 +166,11 @@ onMounted(() => {
 
         <Tabs :default-value="defaultTab" class="flex flex-col gap-4">
           <TabsList class="flex flex-wrap justify-center w-full h-auto gap-1">
-            <TabsTrigger v-for="tab in availableTabs" :key="tab.key" :value="tab.key">
+            <TabsTrigger
+              v-for="tab in availableTabs"
+              :key="tab.key"
+              :value="tab.key"
+            >
               {{ tab.label }}
             </TabsTrigger>
           </TabsList>
@@ -167,34 +179,53 @@ onMounted(() => {
             <ClientInformationItem :contact="contact" />
           </TabsContent>
 
-          <TabsContent value="service_information" class="grid grid-cols-1 gap-6 lg:grid-cols-2 lg:items-start">
-            <section class="flex flex-col gap-2 pb-2 lg:col-span-2 border-b border-n-weak">
+          <TabsContent
+            value="service_information"
+            class="grid grid-cols-1 gap-6 lg:grid-cols-2 lg:items-start"
+          >
+            <section
+              class="flex flex-col gap-2 pb-2 lg:col-span-2 border-b border-n-weak"
+            >
               <h3 class="text-base font-medium">
                 {{ $t('CONVERSATION_SIDEBAR.ACCORDION.CONVERSATION_ACTIONS') }}
               </h3>
-              <ConversationAction :conversation-id="conversationId" :inbox-id="inboxId" />
+              <ConversationAction
+                :conversation-id="conversationId"
+                :inbox-id="inboxId"
+              />
             </section>
 
             <section class="flex flex-col gap-2 border-b border-n-weak">
               <h3 class="text-base font-medium">
                 {{ $t('CONVERSATION_PARTICIPANTS.SIDEBAR_TITLE') }}
               </h3>
-              <ConversationParticipant :conversation-id="conversationId" :inbox-id="inboxId" />
+              <ConversationParticipant
+                :conversation-id="conversationId"
+                :inbox-id="inboxId"
+              />
             </section>
 
             <section class="flex flex-col gap-2 border-b border-n-weak">
               <h3 class="text-base font-medium">
                 {{ $t('CONVERSATION_SIDEBAR.ACCORDION.CONVERSATION_INFO') }}
               </h3>
-              <ConversationInfo :conversation-attributes="conversationAdditionalAttributes"
-                :contact-attributes="contactAdditionalAttributes" />
+              <ConversationInfo
+                :conversation-attributes="conversationAdditionalAttributes"
+                :contact-attributes="contactAdditionalAttributes"
+              />
             </section>
 
-            <section v-if="contact.id" class="flex flex-col gap-2 border-b border-n-weak">
+            <section
+              v-if="contact.id && !isListScopedToContact"
+              class="flex flex-col gap-2 border-b border-n-weak"
+            >
               <h3 class="text-base font-medium">
                 {{ $t('CONVERSATION_SIDEBAR.ACCORDION.PREVIOUS_CONVERSATION') }}
               </h3>
-              <ContactConversations :contact-id="contact.id" :conversation-id="conversationId" />
+              <ContactConversations
+                :contact-id="contact.id"
+                :conversation-id="conversationId"
+              />
             </section>
 
             <section v-if="isMacrosEnabled" class="flex flex-col gap-2">
@@ -204,8 +235,10 @@ onMounted(() => {
               <MacrosList :conversation-id="conversationId" />
             </section>
 
-            <section v-if="isLinearFeatureEnabled && isLinearClientIdConfigured"
-              class="flex flex-col gap-2 border-b border-n-weak">
+            <section
+              v-if="isLinearFeatureEnabled && isLinearClientIdConfigured"
+              class="flex flex-col gap-2 border-b border-n-weak"
+            >
               <h3 class="text-base font-medium">
                 {{ $t('CONVERSATION_SIDEBAR.ACCORDION.LINEAR_ISSUES') }}
               </h3>
@@ -213,7 +246,10 @@ onMounted(() => {
               <LinearIssuesList v-else :conversation-id="conversationId" />
             </section>
 
-            <section v-if="isShopifyFeatureEnabled" class="flex flex-col gap-2 border-b border-n-weak">
+            <section
+              v-if="isShopifyFeatureEnabled"
+              class="flex flex-col gap-2 border-b border-n-weak"
+            >
               <h3 class="text-base font-medium">
                 {{ $t('CONVERSATION_SIDEBAR.ACCORDION.SHOPIFY_ORDERS') }}
               </h3>
@@ -222,13 +258,23 @@ onMounted(() => {
           </TabsContent>
 
           <TabsContent value="contact_attributes">
-            <CustomAttributes grid-layout attribute-type="contact_attribute" attribute-from="conversation_contact_panel"
-              :contact-id="contact.id" :empty-state-message="$t('CONVERSATION_CUSTOM_ATTRIBUTES.NO_RECORDS_FOUND')
-                " />
+            <CustomAttributes
+              grid-layout
+              attribute-type="contact_attribute"
+              attribute-from="conversation_contact_panel"
+              :contact-id="contact.id"
+              :empty-state-message="
+                $t('CONVERSATION_CUSTOM_ATTRIBUTES.NO_RECORDS_FOUND')
+              "
+            />
           </TabsContent>
 
           <TabsContent value="contact_notes">
             <ContactNotes :contact-id="contactId" />
+          </TabsContent>
+
+          <TabsContent value="shared_files">
+            <SharedFiles />
           </TabsContent>
         </Tabs>
       </div>

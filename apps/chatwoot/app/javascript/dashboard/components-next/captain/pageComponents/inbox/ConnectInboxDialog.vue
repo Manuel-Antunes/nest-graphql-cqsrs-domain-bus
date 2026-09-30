@@ -66,9 +66,9 @@ defineExpose({ dialogRef: { open, close } });
     <DialogContent>
       <DialogHeader>
         <DialogTitle>{{ $t(`${i18nKey}.TITLE`) }}</DialogTitle>
-        <DialogDescription>{{
-          $t('CAPTAIN.INBOXES.FORM_DESCRIPTION')
-        }}</DialogDescription>
+        <DialogDescription>
+          {{ $t('CAPTAIN.INBOXES.FORM_DESCRIPTION') }}
+        </DialogDescription>
       </DialogHeader>
       <ConnectInboxForm
         ref="connectForm"

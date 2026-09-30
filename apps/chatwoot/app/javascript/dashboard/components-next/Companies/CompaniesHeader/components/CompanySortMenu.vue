@@ -46,6 +46,10 @@ const sortMenus = [
     value: 'created_at',
   },
   {
+    label: t('COMPANIES.SORT_BY.OPTIONS.LAST_ACTIVITY_AT'),
+    value: 'last_activity_at',
+  },
+  {
     label: t('COMPANIES.SORT_BY.OPTIONS.CONTACTS_COUNT'),
     value: 'contacts_count',
   },
@@ -54,16 +58,22 @@ const sortMenus = [
 const orderingMenus = [
   {
     label: t('COMPANIES.ORDER.OPTIONS.ASCENDING'),
-    value: '',
+    value: 'asc',
   },
   {
     label: t('COMPANIES.ORDER.OPTIONS.DESCENDING'),
-    value: '-',
+    value: 'desc',
   },
 ];
 
+const orderKeyToPrefix = key => (key === 'desc' ? '-' : '');
+const orderPrefixToKey = prefix => (prefix === '-' ? 'desc' : 'asc');
+
 const activeSort = toRef(props, 'activeSort');
 const activeOrdering = toRef(props, 'activeOrdering');
+const activeOrderingKey = computed(() =>
+  orderPrefixToKey(activeOrdering.value)
+);
 
 const activeSortLabel = computed(() => {
   const selectedMenu = sortMenus.find(menu => menu.value === activeSort.value);
@@ -72,7 +82,7 @@ const activeSortLabel = computed(() => {
 
 const activeOrderingLabel = computed(() => {
   const selectedMenu = orderingMenus.find(
-    menu => menu.value === activeOrdering.value
+    menu => menu.value === activeOrderingKey.value
   );
   return selectedMenu?.label || t('COMPANIES.ORDER.LABEL');
 });
@@ -82,7 +92,10 @@ const handleSortChange = value => {
 };
 
 const handleOrderChange = value => {
-  emit('update:sort', { sort: props.activeSort, order: value });
+  emit('update:sort', {
+    sort: props.activeSort,
+    order: orderKeyToPrefix(value),
+  });
 };
 </script>
 
@@ -99,6 +112,7 @@ const handleOrderChange = value => {
           {{ t('COMPANIES.SORT_BY.LABEL') }}
         </span>
         <Select
+          :modal="false"
           :model-value="activeSort"
           @update:model-value="handleSortChange"
         >
@@ -121,7 +135,8 @@ const handleOrderChange = value => {
           {{ t('COMPANIES.ORDER.LABEL') }}
         </span>
         <Select
-          :model-value="activeOrdering"
+          :modal="false"
+          :model-value="activeOrderingKey"
           @update:model-value="handleOrderChange"
         >
           <SelectTrigger class="max-w-40">

@@ -2,6 +2,8 @@
 import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { dynamicTime } from 'shared/helpers/timeHelper';
+import { useExactTimestamp } from 'shared/composables/useExactTimestamp';
+import { usePolicy } from 'dashboard/composables/usePolicy';
 
 import CardLayout from 'dashboard/components-next/CardLayout.vue';
 import { Button } from 'dashboard/components-next/ui/button';
@@ -51,6 +53,10 @@ const props = defineProps({
     type: Number,
     required: true,
   },
+  usedInConversationsCount: {
+    type: Number,
+    default: null,
+  },
   isSelected: {
     type: Boolean,
     default: false,
@@ -69,9 +75,18 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(['action', 'navigate', 'select', 'hover']);
+const emit = defineEmits([
+  'action',
+  'navigate',
+  'select',
+  'hover',
+  'viewConversations',
+]);
+
+const exactTimestamp = useExactTimestamp();
 
 const { t } = useI18n();
+const { checkPermissions } = usePolicy();
 
 const isOpen = ref(false);
 
@@ -113,6 +128,20 @@ const menuItems = computed(() => [
 const timestamp = computed(() =>
   dynamicTime(props.updatedAt || props.createdAt)
 );
+const canManage = computed(() => checkPermissions(['administrator']));
+const hasConversationUsage = computed(
+  () =>
+    props.documentable?.type === 'User' &&
+    props.usedInConversationsCount !== null
+);
+const usedInConversationsLabel = computed(() =>
+  t('CAPTAIN.DOCUMENTS.USED_IN_CONVERSATIONS', {
+    n: props.usedInConversationsCount,
+  })
+);
+const usedInConversationsCountText = computed(() =>
+  String(props.usedInConversationsCount)
+);
 
 const handleAssistantAction = ({ action, value }) => {
   isOpen.value = false;
@@ -124,6 +153,12 @@ const handleDocumentableClick = () => {
     id: props.documentable.id,
     type: props.documentable.type,
   });
+};
+
+const handleViewConversations = () => {
+  if (!props.usedInConversationsCount) return;
+
+  emit('viewConversations', props.id);
 };
 </script>
 
@@ -289,11 +324,30 @@ const handleDocumentableClick = () => {
             </span>
           </div>
         </div>
-        <div
-          class="shrink-0 text-sm text-n-slate-11 line-clamp-1 inline-flex items-center gap-1"
-        >
-          <Icon icon="i-ph-calendar-dot" class="size-3.5" />
-          {{ timestamp }}
+        <div class="inline-flex shrink-0 items-center gap-3">
+          <Button
+            v-if="canManage && hasConversationUsage"
+            v-tooltip.top="usedInConversationsLabel"
+            variant="link"
+            size="xs"
+            class="!px-0 text-n-slate-11"
+            :aria-label="usedInConversationsLabel"
+            :disabled="!usedInConversationsCount"
+            @click.stop="handleViewConversations"
+          >
+            <Icon icon="i-lucide-messages-square" class="size-3.5" />
+            {{ usedInConversationsCountText }}
+          </Button>
+          <div
+            v-tooltip.top="{
+              content: exactTimestamp(updatedAt || createdAt),
+              delay: { show: 500, hide: 0 },
+            }"
+            class="shrink-0 text-sm text-n-slate-11 line-clamp-1 inline-flex items-center gap-1"
+          >
+            <Icon icon="i-ph-calendar-dot" class="size-3.5" />
+            {{ timestamp }}
+          </div>
         </div>
       </div>
     </div>

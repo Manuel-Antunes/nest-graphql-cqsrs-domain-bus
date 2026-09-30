@@ -34,6 +34,7 @@ const startConversation = () => {
     <Button
       variant="link"
       class="justify-start px-0 self-start"
+      :style="{ color: widgetColor }"
       @click="startConversation"
     >
       <span>
@@ -43,7 +44,7 @@ const startConversation = () => {
             : $t('START_CONVERSATION')
         }}
       </span>
-      <i class="i-lucide-chevron-right size-5 mt-px" />
+      <i class="i-lucide-chevron-right size-5 mt-px rtl:rotate-180" />
     </Button>
   </div>
 </template>

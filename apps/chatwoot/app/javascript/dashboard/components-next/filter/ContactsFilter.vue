@@ -17,7 +17,7 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['applyFilter', 'updateSegment', 'clearFilters']);
-const { filterTypes } = useContactFilterContext();
+const { attributeFilterTypes } = useContactFilterContext();
 
 const filters = defineModel({
   type: Array,
@@ -90,7 +90,7 @@ const filterModalHeaderTitle = computed(() => {
 </script>
 
 <template>
-  <div class="min-w-96 lg:w-[750px] grid gap-6 p-6">
+  <div class="w-[min(34rem,calc(100vw-2rem))] lg:w-[750px] grid gap-6 p-6">
     <h3 class="text-base font-medium leading-6 text-n-slate-12">
       {{ filterModalHeaderTitle }}
     </h3>
@@ -103,7 +103,7 @@ const filterModalHeaderTitle = computed(() => {
         />
       </div>
     </div>
-    <ul class="grid gap-4 list-none">
+    <ul class="grid gap-4 list-none min-w-0">
       <template v-for="(filter, index) in filters" :key="index">
         <ConditionRow
           v-if="index === 0"
@@ -111,7 +111,7 @@ const filterModalHeaderTitle = computed(() => {
           v-model:attribute-key="filter.attributeKey"
           v-model:filter-operator="filter.filterOperator"
           v-model:values="filter.values"
-          :filter-types="filterTypes"
+          :filter-types="attributeFilterTypes"
           :show-query-operator="false"
           @remove="removeFilter(index)"
         />
@@ -123,7 +123,7 @@ const filterModalHeaderTitle = computed(() => {
           v-model:query-operator="filters[index - 1].queryOperator"
           v-model:values="filter.values"
           show-query-operator
-          :filter-types="filterTypes"
+          :filter-types="attributeFilterTypes"
           @remove="removeFilter(index)"
         />
       </template>

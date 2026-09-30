@@ -1,15 +1,19 @@
 <script setup>
 import { toTypedSchema } from '@vee-validate/zod';
 import * as z from 'zod';
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import wootConstants from 'dashboard/constants/globals';
 import { getI18nKey } from 'dashboard/routes/dashboard/settings/helper/settingsHelper';
+import { copyTextToClipboard } from 'shared/helpers/clipboard';
+import { useAlert } from 'dashboard/composables';
+import { useConfig } from 'dashboard/composables/useConfig';
 import { Button } from 'dashboard/components-next/ui/button';
 import { Checkbox } from 'dashboard/components-next/ui/checkbox';
 import { Input } from 'dashboard/components-next/ui/input';
 import { Label } from 'dashboard/components-next/ui/label';
 import { Spinner } from 'dashboard/components-next/ui/spinner';
+import Icon from 'dashboard/components-next/icon/Icon.vue';
 import {
   Form,
   FormControl,
@@ -38,7 +42,7 @@ const emit = defineEmits(['submit', 'cancel']);
 
 const { EXAMPLE_WEBHOOK_URL } = wootConstants;
 
-const supportedWebhookEvents = [
+const SUPPORTED_WEBHOOK_EVENTS = [
   'conversation_created',
   'conversation_status_changed',
   'conversation_updated',
@@ -52,6 +56,14 @@ const supportedWebhookEvents = [
 ];
 
 const { t } = useI18n();
+const { inboxEventsEnabled } = useConfig();
+
+const supportedWebhookEvents = inboxEventsEnabled
+  ? [...SUPPORTED_WEBHOOK_EVENTS, 'inbox_updated']
+  : SUPPORTED_WEBHOOK_EVENTS;
+
+const secretVisible = ref(false);
+const hasSecret = computed(() => !!props.value.secret);
 
 const webhookURLInputPlaceholder = computed(() =>
   t('INTEGRATION_SETTINGS.WEBHOOK.FORM.END_POINT.PLACEHOLDER', {
@@ -91,6 +103,11 @@ const toggleSubscription = (event, checked, current, setFieldValue) => {
       list.filter(item => item !== event)
     );
   }
+};
+
+const copySecret = async () => {
+  await copyTextToClipboard(props.value.secret);
+  useAlert(t('INTEGRATION_SETTINGS.WEBHOOK.SECRET.COPY_SUCCESS'));
 };
 
 const onSubmit = formValues => {
@@ -141,6 +158,43 @@ const onSubmit = formValues => {
         <FormMessage />
       </FormItem>
     </FormField>
+
+    <div v-if="hasSecret" class="flex flex-col gap-1 w-full">
+      <Label>{{ $t('INTEGRATION_SETTINGS.WEBHOOK.SECRET.LABEL') }}</Label>
+      <div class="flex items-center gap-2">
+        <Input
+          :model-value="
+            secretVisible ? value.secret : '••••••••••••••••••••••••••••••••'
+          "
+          type="text"
+          readonly
+          class="font-mono"
+        />
+        <Button
+          v-tooltip.top="$t('INTEGRATION_SETTINGS.WEBHOOK.SECRET.TOGGLE')"
+          type="button"
+          variant="outline"
+          size="icon"
+          class="flex-shrink-0"
+          @click="secretVisible = !secretVisible"
+        >
+          <Icon
+            :icon="secretVisible ? 'i-lucide-eye-off' : 'i-lucide-eye'"
+            class="size-4"
+          />
+        </Button>
+        <Button
+          v-tooltip.top="$t('INTEGRATION_SETTINGS.WEBHOOK.SECRET.COPY')"
+          type="button"
+          variant="outline"
+          size="icon"
+          class="flex-shrink-0"
+          @click="copySecret"
+        >
+          <Icon icon="i-lucide-copy" class="size-4" />
+        </Button>
+      </div>
+    </div>
 
     <div class="w-full">
       <Label class="mb-2">

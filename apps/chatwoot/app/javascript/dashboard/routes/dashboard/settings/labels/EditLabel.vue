@@ -164,10 +164,8 @@ const editLabel = async values => {
 <style lang="scss" scoped>
 // Label API supports only lowercase letters
 .label-name--input {
-  ::v-deep {
-    input {
-      @apply lowercase;
-    }
+  :deep(input) {
+    @apply lowercase;
   }
 }
 </style>

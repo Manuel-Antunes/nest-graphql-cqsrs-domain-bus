@@ -11,6 +11,12 @@ export function useAccount() {
   const page = usePage();
   const getAccountFn = useMapGetter('accounts/getAccount');
   const isOnChatwootCloud = useMapGetter('globalConfig/isOnChatwootCloud');
+  const isMetaInboxCreationDisabled = useMapGetter(
+    'globalConfig/isMetaInboxCreationDisabled'
+  );
+  const isMetaMessageSendingDisabled = useMapGetter(
+    'globalConfig/isMetaMessageSendingDisabled'
+  );
   const isFeatureEnabledonAccount = useMapGetter(
     'accounts/isFeatureEnabledonAccount'
   );
@@ -58,6 +64,10 @@ export function useAccount() {
     });
   };
 
+  const finishOnboarding = async data => {
+    await store.dispatch('accounts/finishOnboarding', data);
+  };
+
   return {
     accountId,
     // Kept for API compatibility; always undefined post-vue-router (Inertia has no route
@@ -68,6 +78,9 @@ export function useAccount() {
     accountScopedRoute,
     isCloudFeatureEnabled,
     isOnChatwootCloud,
+    isMetaInboxCreationDisabled,
+    isMetaMessageSendingDisabled,
     updateAccount,
+    finishOnboarding,
   };
 }

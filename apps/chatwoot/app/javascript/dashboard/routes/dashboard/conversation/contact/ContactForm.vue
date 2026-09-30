@@ -1,4 +1,5 @@
 <script>
+/* eslint-disable vue/no-reserved-component-names -- shadcn Input/Label component names */
 import { useAlert } from 'dashboard/composables';
 import {
   DuplicateContactException,
@@ -12,12 +13,14 @@ import parsePhoneNumber from 'libphonenumber-js';
 import Avatar from 'next/avatar/Avatar.vue';
 import { Input } from 'dashboard/components-next/ui/input';
 import { Label } from 'dashboard/components-next/ui/label';
+import { AsyncSelect } from 'dashboard/components-next/ui/async-select';
 
 export default {
   components: {
     Avatar,
     Input,
     Label,
+    AsyncSelect,
   },
   props: {
     contact: {
@@ -54,12 +57,15 @@ export default {
         twitter: '',
         linkedin: '',
         github: '',
+        telegram: '',
       },
       socialProfileKeys: [
         { key: 'facebook', prefixURL: 'https://facebook.com/' },
         { key: 'twitter', prefixURL: 'https://twitter.com/' },
         { key: 'linkedin', prefixURL: 'https://linkedin.com/' },
         { key: 'github', prefixURL: 'https://github.com/' },
+        { key: 'telegram', prefixURL: 'https://t.me/' },
+        { key: 'whatsapp', prefixURL: '@' },
         { key: 'tiktok', prefixURL: 'https://tiktok.com/@' },
       ],
     };
@@ -120,6 +126,9 @@ export default {
     this.setDialCode();
   },
   methods: {
+    normalizeWhatsAppUsername(value) {
+      return value?.toString().replace(/^@+/, '') || '';
+    },
     onSuccess() {
       this.$emit('success');
     },
@@ -127,6 +136,12 @@ export default {
       if (!id) return name;
       if (!name && !id) return '';
       return `${name} (${id})`;
+    },
+    onCountryChange(value) {
+      const selected = this.countries.find(c => c.id === value);
+      this.country = selected
+        ? { id: selected.id, name: selected.name }
+        : { id: '', name: '' };
     },
     setDialCode() {
       if (
@@ -162,13 +177,21 @@ export default {
       const {
         social_profiles: socialProfiles = {},
         screen_name: twitterScreenName,
+        social_telegram_user_name: telegramUserName,
+        social_whatsapp_user_name: whatsappUserName,
       } = additionalAttributes;
       this.socialProfileUserNames = {
+        ...socialProfiles,
         twitter: socialProfiles.twitter || twitterScreenName || '',
         facebook: socialProfiles.facebook || '',
         linkedin: socialProfiles.linkedin || '',
         github: socialProfiles.github || '',
+        telegram: socialProfiles.telegram || telegramUserName || '',
         instagram: socialProfiles.instagram || '',
+        tiktok: socialProfiles.tiktok || '',
+        whatsapp: this.normalizeWhatsAppUsername(
+          socialProfiles.whatsapp || whatsappUserName || ''
+        ),
       };
     },
     getContactObject() {
@@ -178,6 +201,12 @@ export default {
           name: '',
         };
       }
+      const socialProfileUserNames = {
+        ...this.socialProfileUserNames,
+        whatsapp: this.normalizeWhatsAppUsername(
+          this.socialProfileUserNames.whatsapp
+        ),
+      };
       const contactObject = {
         id: this.contact.id,
         name: this.name,
@@ -194,7 +223,7 @@ export default {
               ? ''
               : this.country.name,
           city: this.city,
-          social_profiles: this.socialProfileUserNames,
+          social_profiles: socialProfileUserNames,
         },
       };
       if (this.avatarFile) {
@@ -359,26 +388,22 @@ export default {
         :placeholder="$t('CONTACT_FORM.FORM.COMPANY_NAME.PLACEHOLDER')"
       />
     </div>
-    <div>
-      <div class="w-full">
-        <label>
-          {{ $t('CONTACT_FORM.FORM.COUNTRY.LABEL') }}
-        </label>
-        <multiselect
-          v-model="country"
-          track-by="id"
-          label="name"
-          :placeholder="$t('CONTACT_FORM.FORM.COUNTRY.PLACEHOLDER')"
-          selected-label
-          :select-label="$t('CONTACT_FORM.FORM.COUNTRY.SELECT_PLACEHOLDER')"
-          :deselect-label="$t('CONTACT_FORM.FORM.COUNTRY.REMOVE')"
-          :custom-label="countryNameWithCode"
-          :max-height="160"
-          :options="countries"
-          allow-empty
-          :option-height="104"
-        />
-      </div>
+    <div class="w-full mb-4">
+      <label>
+        {{ $t('CONTACT_FORM.FORM.COUNTRY.LABEL') }}
+      </label>
+      <AsyncSelect
+        :model-value="country.id"
+        :options="
+          countries.map(c => ({
+            value: c.id,
+            label: countryNameWithCode(c),
+          }))
+        "
+        :placeholder="$t('CONTACT_FORM.FORM.COUNTRY.PLACEHOLDER')"
+        :search-placeholder="$t('CONTACT_FORM.FORM.COUNTRY.SELECT_PLACEHOLDER')"
+        @update:model-value="onCountryChange"
+      />
     </div>
     <div class="flex flex-col w-full gap-1 mb-4">
       <Label>{{ $t('CONTACT_FORM.FORM.CITY.LABEL') }}</Label>
@@ -409,11 +434,3 @@ export default {
     </div>
   </form>
 </template>
-
-<style scoped lang="scss">
-::v-deep {
-  .multiselect .multiselect__tags .multiselect__single {
-    @apply pl-0;
-  }
-}
-</style>

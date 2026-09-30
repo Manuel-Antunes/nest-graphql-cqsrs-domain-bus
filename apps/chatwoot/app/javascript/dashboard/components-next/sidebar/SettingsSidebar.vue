@@ -16,6 +16,10 @@ const { visibleItems } = useSettingsMenu();
 
 // Closing settings means leaving the section — there is no panel to hide anymore.
 const closeTo = accountScopedRoute('home');
+
+const isActive = item =>
+  currentRouteName.value === item.to?.name ||
+  !!item.activeOn?.includes(currentRouteName.value);
 </script>
 
 <template>
@@ -49,7 +53,7 @@ const closeTo = accountScopedRoute('home');
         :to="item.to"
         class="flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm text-n-slate-12 hover:bg-n-alpha-1 transition-colors min-w-0"
         :class="{
-          'bg-n-brand/10 text-n-brand': currentRouteName === item.to?.name,
+          'bg-n-brand/10 text-n-brand': isActive(item),
         }"
       >
         <Icon

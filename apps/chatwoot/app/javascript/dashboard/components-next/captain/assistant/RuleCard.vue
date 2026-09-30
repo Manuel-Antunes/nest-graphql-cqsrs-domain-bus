@@ -81,12 +81,12 @@ const saveEdit = () => {
     </span>
     <div class="flex items-center gap-2">
       <Button variant="outline" @click="startEdit">
-        <Icon :icon="'i-lucide-pen'" />
+        <Icon icon="i-lucide-pen" />
       </Button>
       <span class="w-px h-4 bg-n-weak" />
-      <Button variant="ghost" @click="emit('delete', id)"
-        ><Icon :icon="'i-lucide-trash'"
-      /></Button>
+      <Button variant="ghost" @click="emit('delete', id)">
+        <Icon icon="i-lucide-trash" />
+      </Button>
     </div>
   </CardLayout>
 </template>

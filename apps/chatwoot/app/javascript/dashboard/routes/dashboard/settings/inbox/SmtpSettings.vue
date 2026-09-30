@@ -5,7 +5,7 @@ import * as z from 'zod';
 import { useStore, useMapGetter } from 'dashboard/composables/store';
 import { useI18n } from 'vue-i18n';
 import { useAlert } from 'dashboard/composables';
-import SettingsSection from 'dashboard/components/SettingsSection.vue';
+import SettingsFieldSection from 'dashboard/components-next/Settings/SettingsFieldSection.vue';
 import InputRadioGroup from './components/InputRadioGroup.vue';
 import SingleSelectDropdown from './components/SingleSelectDropdown.vue';
 import { Button } from 'dashboard/components-next/ui/button';
@@ -183,130 +183,133 @@ const updateInbox = async values => {
     await store.dispatch('inboxes/updateInboxSMTP', payload);
     useAlert(t('INBOX_MGMT.SMTP.EDIT.SUCCESS_MESSAGE'));
   } catch (error) {
-    useAlert(t('INBOX_MGMT.SMTP.EDIT.ERROR_MESSAGE'));
+    useAlert(error.message || t('INBOX_MGMT.SMTP.EDIT.ERROR_MESSAGE'));
   }
 };
 </script>
 
 <template>
-  <div class="mx-8">
-    <SettingsSection
-      :title="$t('INBOX_MGMT.SMTP.TITLE')"
-      :sub-title="$t('INBOX_MGMT.SMTP.SUBTITLE')"
+  <SettingsFieldSection
+    :label="$t('INBOX_MGMT.SMTP.TITLE')"
+    :help-text="$t('INBOX_MGMT.SMTP.SUBTITLE')"
+    class="[&>div]:!items-start [&>div>label]:mt-1 mb-4"
+  >
+    <Form
+      ref="smtpForm"
+      v-slot="{ values, meta }"
+      :validation-schema="validationSchema"
+      :initial-values="initialValues"
+      @submit="updateInbox"
     >
-      <Form
-        ref="smtpForm"
-        v-slot="{ values, meta }"
-        :validation-schema="validationSchema"
-        :initial-values="initialValues"
-        @submit="updateInbox"
-      >
-        <FormField v-slot="{ value, handleChange }" name="isSMTPEnabled">
-          <div class="flex items-center gap-2">
-            <Checkbox :checked="value" @update:checked="handleChange" />
-            <Label class="mb-0 font-normal">
-              {{ $t('INBOX_MGMT.SMTP.TOGGLE_AVAILABILITY') }}
-            </Label>
-          </div>
-        </FormField>
-        <p>{{ $t('INBOX_MGMT.SMTP.TOGGLE_HELP') }}</p>
-
-        <div v-if="values.isSMTPEnabled" class="mb-6 flex flex-col gap-4 mt-4">
-          <FormField v-slot="{ componentField }" name="address">
-            <FormItem class="flex flex-col gap-1 max-w-[75%] w-full">
-              <FormLabel>{{ $t('INBOX_MGMT.SMTP.ADDRESS.LABEL') }}</FormLabel>
-              <FormControl>
-                <Input
-                  v-bind="componentField"
-                  :placeholder="$t('INBOX_MGMT.SMTP.ADDRESS.PLACE_HOLDER')"
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          </FormField>
-
-          <FormField v-slot="{ componentField }" name="port">
-            <FormItem class="flex flex-col gap-1 max-w-[75%] w-full">
-              <FormLabel>{{ $t('INBOX_MGMT.SMTP.PORT.LABEL') }}</FormLabel>
-              <FormControl>
-                <Input
-                  v-bind="componentField"
-                  type="number"
-                  :placeholder="$t('INBOX_MGMT.SMTP.PORT.PLACE_HOLDER')"
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          </FormField>
-
-          <FormField v-slot="{ componentField }" name="login">
-            <FormItem class="flex flex-col gap-1 max-w-[75%] w-full">
-              <FormLabel>{{ $t('INBOX_MGMT.SMTP.LOGIN.LABEL') }}</FormLabel>
-              <FormControl>
-                <Input
-                  v-bind="componentField"
-                  :placeholder="$t('INBOX_MGMT.SMTP.LOGIN.PLACE_HOLDER')"
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          </FormField>
-
-          <FormField v-slot="{ componentField }" name="password">
-            <FormItem class="flex flex-col gap-1 max-w-[75%] w-full">
-              <FormLabel>{{ $t('INBOX_MGMT.SMTP.PASSWORD.LABEL') }}</FormLabel>
-              <FormControl>
-                <Input
-                  v-bind="componentField"
-                  type="password"
-                  :placeholder="$t('INBOX_MGMT.SMTP.PASSWORD.PLACE_HOLDER')"
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          </FormField>
-
-          <FormField v-slot="{ componentField }" name="domain">
-            <FormItem class="flex flex-col gap-1 max-w-[75%] w-full">
-              <FormLabel>{{ $t('INBOX_MGMT.SMTP.DOMAIN.LABEL') }}</FormLabel>
-              <FormControl>
-                <Input
-                  v-bind="componentField"
-                  :placeholder="$t('INBOX_MGMT.SMTP.DOMAIN.PLACE_HOLDER')"
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          </FormField>
-
-          <InputRadioGroup
-            :label="$t('INBOX_MGMT.SMTP.ENCRYPTION')"
-            :items="encryptionProtocols"
-            :action="handleEncryptionChange"
+      <FormField v-slot="{ value, handleChange }" name="isSMTPEnabled">
+        <div class="flex items-center gap-2">
+          <Checkbox
+            id="toggle-enable-smtp"
+            :checked="value"
+            @update:checked="handleChange"
           />
-          <SingleSelectDropdown
-            class="max-w-[75%] w-full"
-            :label="$t('INBOX_MGMT.SMTP.OPEN_SSL_VERIFY_MODE')"
-            :selected="openSSLVerifyMode"
-            :options="openSSLVerifyModes"
-            :action="handleSSLModeChange"
-          />
-          <SingleSelectDropdown
-            class="max-w-[75%] w-full"
-            :label="$t('INBOX_MGMT.SMTP.AUTH_MECHANISM')"
-            :selected="authMechanism"
-            :options="authMechanisms"
-            :action="handleAuthMechanismChange"
-          />
+          <Label for="toggle-enable-smtp" class="mb-0 font-normal">
+            {{ $t('INBOX_MGMT.SMTP.TOGGLE_AVAILABILITY') }}
+          </Label>
         </div>
+      </FormField>
+      <p>{{ $t('INBOX_MGMT.SMTP.TOGGLE_HELP') }}</p>
 
-        <Button type="submit" :disabled="!meta.valid || uiFlags.isUpdatingSMTP">
-          <Spinner v-if="uiFlags.isUpdatingSMTP" class="size-4 flex-shrink-0" />
-          <template v-if="!uiFlags.isUpdatingSMTP">{{
-            $t('INBOX_MGMT.SMTP.UPDATE')
-          }}</template>
-        </Button>
-      </Form>
-    </SettingsSection>
-  </div>
+      <div v-if="values.isSMTPEnabled" class="mb-6 flex flex-col gap-4 mt-4">
+        <FormField v-slot="{ componentField }" name="address">
+          <FormItem class="flex flex-col gap-1 w-full">
+            <FormLabel>{{ $t('INBOX_MGMT.SMTP.ADDRESS.LABEL') }}</FormLabel>
+            <FormControl>
+              <Input
+                v-bind="componentField"
+                :placeholder="$t('INBOX_MGMT.SMTP.ADDRESS.PLACE_HOLDER')"
+              />
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        </FormField>
+
+        <FormField v-slot="{ componentField }" name="port">
+          <FormItem class="flex flex-col gap-1 w-full">
+            <FormLabel>{{ $t('INBOX_MGMT.SMTP.PORT.LABEL') }}</FormLabel>
+            <FormControl>
+              <Input
+                v-bind="componentField"
+                type="number"
+                :placeholder="$t('INBOX_MGMT.SMTP.PORT.PLACE_HOLDER')"
+              />
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        </FormField>
+
+        <FormField v-slot="{ componentField }" name="login">
+          <FormItem class="flex flex-col gap-1 w-full">
+            <FormLabel>{{ $t('INBOX_MGMT.SMTP.LOGIN.LABEL') }}</FormLabel>
+            <FormControl>
+              <Input
+                v-bind="componentField"
+                :placeholder="$t('INBOX_MGMT.SMTP.LOGIN.PLACE_HOLDER')"
+              />
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        </FormField>
+
+        <FormField v-slot="{ componentField }" name="password">
+          <FormItem class="flex flex-col gap-1 w-full">
+            <FormLabel>{{ $t('INBOX_MGMT.SMTP.PASSWORD.LABEL') }}</FormLabel>
+            <FormControl>
+              <Input
+                v-bind="componentField"
+                type="password"
+                :placeholder="$t('INBOX_MGMT.SMTP.PASSWORD.PLACE_HOLDER')"
+              />
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        </FormField>
+
+        <FormField v-slot="{ componentField }" name="domain">
+          <FormItem class="flex flex-col gap-1 w-full">
+            <FormLabel>{{ $t('INBOX_MGMT.SMTP.DOMAIN.LABEL') }}</FormLabel>
+            <FormControl>
+              <Input
+                v-bind="componentField"
+                :placeholder="$t('INBOX_MGMT.SMTP.DOMAIN.PLACE_HOLDER')"
+              />
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        </FormField>
+
+        <InputRadioGroup
+          :label="$t('INBOX_MGMT.SMTP.ENCRYPTION')"
+          :items="encryptionProtocols"
+          :action="handleEncryptionChange"
+        />
+        <SingleSelectDropdown
+          class="w-full"
+          :label="$t('INBOX_MGMT.SMTP.OPEN_SSL_VERIFY_MODE')"
+          :selected="openSSLVerifyMode"
+          :options="openSSLVerifyModes"
+          :action="handleSSLModeChange"
+        />
+        <SingleSelectDropdown
+          class="w-full"
+          :label="$t('INBOX_MGMT.SMTP.AUTH_MECHANISM')"
+          :selected="authMechanism"
+          :options="authMechanisms"
+          :action="handleAuthMechanismChange"
+        />
+      </div>
+
+      <Button type="submit" :disabled="!meta.valid || uiFlags.isUpdatingSMTP">
+        <Spinner v-if="uiFlags.isUpdatingSMTP" class="size-4 flex-shrink-0" />
+        <template v-if="!uiFlags.isUpdatingSMTP">
+          {{ $t('INBOX_MGMT.SMTP.UPDATE') }}
+        </template>
+      </Button>
+    </Form>
+  </SettingsFieldSection>
 </template>

@@ -65,6 +65,7 @@ const botAvatarUrl = ref('');
 
 const [showAccessToken, toggleAccessToken] = useToggle();
 const accessToken = ref('');
+const botSecret = ref('');
 
 const botTypeOptions = computed(() => [
   { value: BOT_TYPES.WEBHOOK, label: t('AGENT_BOTS.TYPES.WEBHOOK') },
@@ -227,14 +228,21 @@ const handleSubmit = async values => {
         : t('AGENT_BOTS.EDIT.API.SUCCESS_MESSAGE')
     );
 
-    // Show access token after creation
+    // Show access token and secret after creation
     if (isCreate) {
-      const { access_token: responseAccessToken, id } = response || {};
+      const {
+        access_token: responseAccessToken,
+        secret: responseSecret,
+        id,
+      } = response || {};
+
       if (id && responseAccessToken) {
         accessToken.value = responseAccessToken;
+        botSecret.value = responseSecret || '';
         toggleAccessToken(true);
       } else {
         accessToken.value = '';
+        botSecret.value = '';
         isOpen.value = false;
       }
     } else {
@@ -256,8 +264,9 @@ const handleSubmit = async values => {
 const syncFromSelectedBot = () => {
   const bot = props.selectedBot || {};
   botAvatarUrl.value = bot.thumbnail || '';
-  if (bot.access_token && props.type === MODAL_TYPES.EDIT) {
-    accessToken.value = bot.access_token;
+  if (props.type === MODAL_TYPES.EDIT) {
+    if (bot.access_token) accessToken.value = bot.access_token;
+    if (bot.secret) botSecret.value = bot.secret;
   }
   botForm.value?.setValues(buildValues());
 };
@@ -265,6 +274,24 @@ const syncFromSelectedBot = () => {
 const onCopyToken = async value => {
   await copyTextToClipboard(value);
   useAlert(t('AGENT_BOTS.ACCESS_TOKEN.COPY_SUCCESSFUL'));
+};
+
+const onCopySecret = async value => {
+  await copyTextToClipboard(value || botSecret.value);
+  useAlert(t('AGENT_BOTS.SECRET.COPY_SUCCESS'));
+};
+
+const onResetSecret = async () => {
+  const response = await store.dispatch(
+    'agentBots/resetSecret',
+    props.selectedBot.id
+  );
+  if (response) {
+    botSecret.value = response.secret;
+    useAlert(t('AGENT_BOTS.SECRET.RESET_SUCCESS'));
+  } else {
+    useAlert(t('AGENT_BOTS.SECRET.RESET_ERROR'));
+  }
 };
 
 const onResetToken = async () => {
@@ -282,6 +309,7 @@ const onResetToken = async () => {
 
 const closeModal = () => {
   accessToken.value = '';
+  botSecret.value = '';
   toggleAccessToken(false);
 };
 
@@ -411,6 +439,20 @@ defineExpose({ dialogRef: { open, close } });
           </FormField>
         </div>
 
+        <div
+          v-if="botSecret && type === MODAL_TYPES.EDIT"
+          class="flex flex-col gap-1"
+        >
+          <label class="mb-0.5 text-sm font-medium text-n-slate-12">
+            {{ $t('AGENT_BOTS.SECRET.LABEL') }}
+          </label>
+          <AccessToken
+            :value="botSecret"
+            @on-copy="onCopySecret"
+            @on-reset="onResetSecret"
+          />
+        </div>
+
         <div v-if="showAccessTokenInput" class="flex flex-col gap-1">
           <label
             v-if="type === MODAL_TYPES.EDIT"
@@ -429,6 +471,23 @@ defineExpose({ dialogRef: { open, close } });
             :value="accessToken"
             :show-reset-button="false"
             @on-copy="onCopyToken"
+          />
+        </div>
+
+        <div
+          v-if="botSecret && showAccessToken && type === MODAL_TYPES.CREATE"
+          class="flex flex-col gap-1"
+        >
+          <p class="text-sm text-n-slate-11">
+            {{ $t('AGENT_BOTS.SECRET.CREATED_DESC') }}
+          </p>
+          <label class="mb-0.5 text-sm font-medium text-n-slate-12">
+            {{ $t('AGENT_BOTS.SECRET.LABEL') }}
+          </label>
+          <AccessToken
+            :value="botSecret"
+            :show-reset-button="false"
+            @on-copy="onCopySecret"
           />
         </div>
 

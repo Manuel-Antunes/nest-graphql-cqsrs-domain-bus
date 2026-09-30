@@ -1,7 +1,13 @@
 <script setup>
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { fromUnixTime, isToday, isYesterday, isSameYear, format } from 'date-fns';
+import {
+  fromUnixTime,
+  isToday,
+  isYesterday,
+  isSameYear,
+  format,
+} from 'date-fns';
 import { Badge } from 'next/ui/badge';
 
 const props = defineProps({
@@ -19,7 +25,10 @@ const label = computed(() => {
   if (isToday(value)) return t('CONVERSATION.DATE_SEPARATOR.TODAY');
   if (isYesterday(value)) return t('CONVERSATION.DATE_SEPARATOR.YESTERDAY');
 
-  return format(value, isSameYear(value, new Date()) ? 'MMMM d' : 'MMMM d, yyyy');
+  return format(
+    value,
+    isSameYear(value, new Date()) ? 'MMMM d' : 'MMMM d, yyyy'
+  );
 });
 </script>
 

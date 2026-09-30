@@ -34,8 +34,9 @@ const onClick = name => {
           variant="ghost"
           size="icon"
           @click="onClick(controlItem.routeName)"
-          ><Icon :icon="'i-lucide-chevron-right'"
-        /></Button>
+        >
+          <Icon icon="i-lucide-chevron-right" />
+        </Button>
       </div>
     </div>
     <span class="text-n-slate-11 text-sm leading-[21px] line-clamp-5">

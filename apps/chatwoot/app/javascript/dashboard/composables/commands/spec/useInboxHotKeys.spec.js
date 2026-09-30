@@ -1,17 +1,19 @@
 import { useInboxHotKeys } from '../useInboxHotKeys';
 import { useI18n } from 'vue-i18n';
-import { useRoute } from 'vue-router';
+import { useAppNavigation } from 'dashboard/composables/useAppNavigation';
 import { isAInboxViewRoute } from 'dashboard/helper/routeHelpers';
 
 vi.mock('vue-i18n');
-vi.mock('vue-router');
+vi.mock('dashboard/composables/useAppNavigation');
 vi.mock('dashboard/helper/routeHelpers');
 vi.mock('shared/helpers/mitt');
 
 describe('useInboxHotKeys', () => {
   beforeEach(() => {
     useI18n.mockReturnValue({ t: vi.fn(key => key) });
-    useRoute.mockReturnValue({ name: 'inbox_dashboard' });
+    useAppNavigation.mockReturnValue({
+      currentRouteName: { value: 'inbox_dashboard' },
+    });
     isAInboxViewRoute.mockReturnValue(true);
   });
 

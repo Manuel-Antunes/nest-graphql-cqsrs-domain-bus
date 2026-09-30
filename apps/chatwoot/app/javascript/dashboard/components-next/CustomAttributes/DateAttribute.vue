@@ -101,10 +101,10 @@ const handleInputUpdate = async () => {
       class="flex items-center gap-1"
     >
       <Button variant="outline" size="icon" @click="toggleEditValue(true)">
-        <Icon :icon="'i-lucide-pencil'" />
+        <Icon icon="i-lucide-pencil" />
       </Button>
       <Button variant="destructive" size="icon" @click="emit('delete')">
-        <Icon :icon="'i-lucide-trash'" />
+        <Icon icon="i-lucide-trash" />
       </Button>
     </div>
 
@@ -128,7 +128,7 @@ const handleInputUpdate = async () => {
       </div>
       <!-- TODO: dynamic color/variant – review manually -->
       <Button variant="default" size="icon" @click="handleInputUpdate">
-        <Icon :icon="'i-lucide-check'" />
+        <Icon icon="i-lucide-check" />
       </Button>
     </div>
   </div>

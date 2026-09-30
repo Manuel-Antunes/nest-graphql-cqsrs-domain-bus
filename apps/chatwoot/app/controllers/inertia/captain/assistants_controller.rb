@@ -1,6 +1,6 @@
 module Inertia
   module Captain
-    # Multi-route captain (AI assistants) group: the twelve named captain routes share
+    # Multi-route captain (AI assistants) group: the named captain routes share
     # one controller. Every page component navigates internally via useAppNavigation
     # (dual-mode) and reads :assistantId / :navigationPath from the URL via
     # useAppNavigation().currentParams — so NO data props here, just authorize + render
@@ -11,20 +11,26 @@ module Inertia
     # Gates mirror routes/registry.js EXACTLY. All routes carry
     # permissions: ['administrator', 'agent'] + installationTypes: ['cloud', 'enterprise'],
     # but the feature flag differs per route:
-    #   - captain_integration    → responses, faqs pending, documents, playground,
-    #                              inboxes, settings, and the :navigationPath landing.
-    #   - captain_integration_v2 → custom tools, scenarios, guardrails, guidelines.
+    #   - captain_integration    → overview, responses, faq suggestions, documents,
+    #                              playground, inboxes, settings (basic, system, audience,
+    #                              schedule), and the :navigationPath landing.
+    #   - captain_integration_v2 → scenarios, guardrails, guidelines.
+    #   - custom_tools           → custom tools.
     #   - (no flag)              → the assistants empty-state / create page.
     # So authorization is resolved per action.
     class AssistantsController < InertiaController
       CAPTAIN_PERMISSIONS = %w[administrator agent].freeze
+      FAQ_SUGGESTIONS_PERMISSIONS = %w[
+        agent administrator conversation_manage conversation_unassigned_manage conversation_participating_manage
+      ].freeze
       CAPTAIN_INSTALLATION_TYPES = %w[cloud enterprise].freeze
       # captain_integration_v2-gated pages.
-      V2_ACTIONS = %w[tools scenarios guardrails guidelines].freeze
+      V2_ACTIONS = %w[scenarios guardrails guidelines].freeze
+      CUSTOM_TOOLS_ACTIONS = %w[tools].freeze
       # captain_assistants_create_index carries NO feature flag.
       NO_FLAG_ACTIONS = %w[new_assistant].freeze
 
-      before_action :authorize_captain_page!
+      before_action :authorize_captain_page!, except: :responses_pending
 
       # captain_assistants_index — landing/redirect shell (reads :navigationPath)
       def index
@@ -36,14 +42,22 @@ module Inertia
         render inertia: 'Captain/AssistantsEmptyState/Index'
       end
 
+      def overview
+        render inertia: 'Captain/Overview/Index'
+      end
+
       # captain_assistants_responses_index
       def responses
         render inertia: 'Captain/Responses/Index'
       end
 
-      # captain_assistants_responses_pending
+      def faq_suggestions
+        render inertia: 'Captain/FaqSuggestions/Index'
+      end
+
       def responses_pending
-        render inertia: 'Captain/ResponsesPending/Index'
+        path = "/app/accounts/#{params[:account_id]}/captain/#{params[:assistant_id]}/faqs/suggestions"
+        redirect_to request.query_string.present? ? "#{path}?#{request.query_string}" : path
       end
 
       # captain_assistants_documents_index
@@ -76,6 +90,18 @@ module Inertia
         render inertia: 'Captain/Settings/Index'
       end
 
+      def settings_system
+        render inertia: 'Captain/SystemSettings/Index'
+      end
+
+      def settings_audience
+        render inertia: 'Captain/AudienceSettings/Index'
+      end
+
+      def settings_schedule
+        render inertia: 'Captain/ScheduleSettings/Index'
+      end
+
       # captain_assistants_guardrails_index
       def guardrails
         render inertia: 'Captain/Guardrails/Index'
@@ -90,7 +116,7 @@ module Inertia
 
       def authorize_captain_page!
         authorize_page!(
-          permissions: CAPTAIN_PERMISSIONS,
+          permissions: action_name == 'faq_suggestions' ? FAQ_SUGGESTIONS_PERMISSIONS : CAPTAIN_PERMISSIONS,
           feature_flag: feature_flag_for_action,
           installation_types: CAPTAIN_INSTALLATION_TYPES
         )
@@ -99,6 +125,7 @@ module Inertia
       def feature_flag_for_action
         return nil if NO_FLAG_ACTIONS.include?(action_name)
         return 'captain_integration_v2' if V2_ACTIONS.include?(action_name)
+        return 'custom_tools' if CUSTOM_TOOLS_ACTIONS.include?(action_name)
 
         'captain_integration'
       end

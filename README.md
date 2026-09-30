@@ -1662,7 +1662,7 @@ the events' detail.
 
 ## Chatwoot: a third subgraph that shares the database
 
-`apps/chatwoot` is a fork of Chatwoot 4.10 (Rails and Vue), vendored as an application of the
+`apps/chatwoot` is a fork of Chatwoot 4.18 (Rails and Vue), vendored as an application of the
 monorepo. It is not a service the platform calls: it is **part of the platform**, and three things
 make it so — it knows the same people, it answers to the same session, and its data joins ours in
 one supergraph.
@@ -1729,7 +1729,18 @@ Chatwoot's dashboard (`CHATWOOT_URL`). The embed keeps the web's URL in step wit
 Chatwoot's, tells it the colour scheme, and republishes its WebMCP tools in the web's own model
 context, checking every message's origin.
 
-**What is not done.** Chatwoot is not deployed by `infra/aws`, is not in `docker-compose.yml`'s
-`apps` profile and is not in `apps/web-e2e`; the gateway composes its SDL everywhere, so an operation
-that reaches it where it does not run fails. Its own suites — RSpec and Vitest — run from
-`apps/chatwoot`, not from `pnpm test`.
+**Where it runs.** `infra/aws/chatwoot` deploys it (Rails and Sidekiq on Fargate, behind the same
+CloudFront router as everything else), `apps/web-e2e` starts it for the browser suite, and `pnpm
+test` reaches its RSpec and Vitest suites, which CI runs as a job of their own. It is still not in
+`docker-compose.yml`'s `apps` profile.
+
+**Keeping up with upstream.** The fork follows Chatwoot's releases by merging them — 4.10.1 to
+4.18.0 was one merge — with the backend taken whole and the frontend translated: the fork's
+dashboard has no vue-router and no old `components-next` kit, so upstream's screens come in as
+Inertia pages built on shadcn-vue, and a component upstream changed is re-done in the fork's idioms
+rather than copied. 4.18 brought voice calls — Twilio and WhatsApp Cloud calling on one `Call`
+model, the `/calls` dashboard, recordings and their transcription, per inbox — and the screens that
+came with the rest of the release: WhatsApp templates, data imports, conversation workflow, the
+Captain overview and FAQ suggestions, company pages and campaign analytics. What an upgrade cannot
+merge is listed in `CLAUDE.md`: the default feature flags the organization trigger writes, and the
+`pt_BR` texts.

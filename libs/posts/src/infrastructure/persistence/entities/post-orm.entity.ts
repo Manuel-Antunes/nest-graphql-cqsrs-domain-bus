@@ -22,21 +22,21 @@ import { PostId } from '../../../domain/post/vo/post-id';
 import { PostTitle } from '../../../domain/post/vo/post-title';
 import { TagSchema } from './tag-orm.entity';
 
-const PostIdType = valueObjectType(PostId, { columnType: 'varchar(36)' });
-const PostTitleType = valueObjectType(PostTitle, {
-  columnType: `varchar(${POST_TITLE_MAX_LENGTH})`,
-});
-const PostContentType = valueObjectType(PostContent, { columnType: 'text' });
-
 export const PostEntitySchema = defineEntity({
   class: Post,
   tableName: 'posts',
   schema: TENANT_SCHEMA,
   forceConstructor: true,
   properties: {
-    id: p.type(PostIdType).primary(),
-    title: p.type(PostTitleType),
-    content: p.type(PostContentType),
+    id: p
+      .type(valueObjectType(PostId, { columnType: 'varchar(36)' }))
+      .primary(),
+    title: p.type(
+      valueObjectType(PostTitle, {
+        columnType: `varchar(${POST_TITLE_MAX_LENGTH})`,
+      }),
+    ),
+    content: p.type(valueObjectType(PostContent, { columnType: 'text' })),
     asset: attachment({
       disk: 'public',
       folder: 'assets',
