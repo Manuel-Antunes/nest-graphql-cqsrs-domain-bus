@@ -2,6 +2,7 @@ import {
   messageStamp,
   messageTimestamp,
   dynamicTime,
+  dynamicTimeInEnglish,
   dateFormat,
   shortTimestamp,
   getDayDifferenceFromNow,
@@ -38,9 +39,47 @@ describe('#messageTimestamp', () => {
 });
 
 describe('#dynamicTime', () => {
-  it('returns correct value', () => {
+  // The dashboard is pinned to pt_BR (dashboard/i18n/instance.js); date-fns
+  // defaults to en-US, which is what put "less than a minute ago" in the
+  // contact notes (issue #555).
+  it('returns the distance in the display locale', () => {
     Date.now = vi.fn(() => new Date(Date.UTC(2023, 1, 14)).valueOf());
-    expect(dynamicTime(1612971343)).toEqual('about 2 years ago');
+    expect(dynamicTime(1612971343)).toEqual('há cerca de 2 anos');
+  });
+
+  it('localizes the sub-minute case the laudo reported', () => {
+    const now = new Date(Date.UTC(2023, 1, 14));
+    Date.now = vi.fn(() => now.valueOf());
+    const tenSecondsAgo = Math.floor(now.valueOf() / 1000) - 10;
+    expect(dynamicTime(tenSecondsAgo)).toEqual('há menos de um minuto');
+    expect(dynamicTime(tenSecondsAgo)).not.toContain('less than a minute');
+  });
+});
+
+describe('#dynamicTimeInEnglish', () => {
+  // Exists ONLY to feed the two parsers (shortTimestamp here and
+  // shortenSnoozeTime in dashboard/helper/snoozeHelpers.js). If this ever
+  // follows the display locale, every short timestamp in the conversation and
+  // inbox lists silently stops shortening.
+  it('stays in English regardless of the display locale', () => {
+    Date.now = vi.fn(() => new Date(Date.UTC(2023, 1, 14)).valueOf());
+    expect(dynamicTimeInEnglish(1612971343)).toEqual('about 2 years ago');
+  });
+
+  it('is what the parser needs, where the display string is not', () => {
+    const now = new Date(Date.UTC(2023, 1, 14));
+    Date.now = vi.fn(() => now.valueOf());
+    const twelveMinutesAgo = Math.floor(now.valueOf() / 1000) - 12 * 60;
+
+    // The regression this pair guards: feeding shortTimestamp the DISPLAY
+    // string matches none of its branches and returns it whole — a long
+    // Portuguese sentence in a slot sized for "12m".
+    expect(shortTimestamp(dynamicTime(twelveMinutesAgo))).toEqual(
+      'há 12 minutos'
+    );
+    expect(shortTimestamp(dynamicTimeInEnglish(twelveMinutesAgo))).toEqual(
+      '12m'
+    );
   });
 });
 
@@ -52,6 +91,58 @@ describe('#dateFormat', () => {
 });
 
 describe('#shortTimestamp', () => {
+  // The path every caller uses now: hand it the timestamp and let it produce
+  // its own English input. Bucketing is date-fns', so these match what the old
+  // `shortTimestamp(dynamicTime(ts))` produced.
+  describe('given a Unix timestamp', () => {
+    const at = (now, seconds) => Math.floor(now.valueOf() / 1000) - seconds;
+
+    it('shortens without ever going through the display locale', () => {
+      const now = new Date(Date.UTC(2023, 1, 14));
+      Date.now = vi.fn(() => now.valueOf());
+
+      expect(shortTimestamp(at(now, 10))).toEqual('now');
+      expect(shortTimestamp(at(now, 60))).toEqual('1m');
+      expect(shortTimestamp(at(now, 12 * 60))).toEqual('12m');
+      expect(shortTimestamp(at(now, 26 * 3600))).toEqual('1d');
+      expect(shortTimestamp(at(now, 3 * 86400))).toEqual('3d');
+    });
+
+    it('keeps the leading space of the "about" buckets', () => {
+      // date-fns buckets 50 minutes as "about 1 hour", and the parser strips
+      // the word without its space — so these have ALWAYS rendered as " 1h".
+      // Asserted rather than fixed: this change is about the locale, and
+      // trimming here would alter every conversation row's spacing. Pinned so
+      // that if someone does trim it, it is a decision and not a side effect.
+      const now = new Date(Date.UTC(2023, 1, 14));
+      Date.now = vi.fn(() => now.valueOf());
+
+      expect(shortTimestamp(at(now, 50 * 60))).toEqual(' 1h');
+      expect(shortTimestamp(at(now, 2 * 3600))).toEqual(' 2h');
+      expect(shortTimestamp(at(now, 35 * 86400))).toEqual(' 1mo');
+      expect(shortTimestamp(at(now, 2 * 365 * 86400))).toEqual(' 2y');
+    });
+
+    it('never leaks a Portuguese word into the short form', () => {
+      const now = new Date(Date.UTC(2023, 1, 14));
+      Date.now = vi.fn(() => now.valueOf());
+
+      for (const seconds of [10, 60, 12 * 60, 2 * 3600, 3 * 86400]) {
+        expect(shortTimestamp(at(now, seconds))).not.toMatch(
+          /há|minuto|hora|dia|mês|ano/
+        );
+      }
+    });
+
+    it('appends ago when asked', () => {
+      const now = new Date(Date.UTC(2023, 1, 14));
+      Date.now = vi.fn(() => now.valueOf());
+      expect(shortTimestamp(at(now, 12 * 60), true)).toEqual('12m ago');
+    });
+  });
+
+  // The string form stays supported for upstream compatibility, and these are
+  // the parser's own tests.
   // Test cases when withAgo is false or not provided
   it('returns correct value without ago', () => {
     expect(shortTimestamp('less than a minute ago')).toEqual('now');

@@ -32,6 +32,12 @@ export default $config({
           baseUrl: SENTRY_BASE_URL,
           token: SENTRY_TOKEN,
         },
+        /**
+         * Only a stage with a domain of its own creates DNS records — the router's and Chatwoot's, in
+         * the Cloudflare zone `CLOUDFLARE_ZONE_ID` names, with `CLOUDFLARE_API_TOKEN`. See
+         * `infra/aws/edge/domain.ts`.
+         */
+        ...(process.env.BASE_DOMAIN ? { cloudflare: '6.15.0' } : {}),
       },
     };
   },

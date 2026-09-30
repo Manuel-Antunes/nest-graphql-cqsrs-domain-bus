@@ -126,6 +126,6 @@ class Campaign < ApplicationRecord
 
   # creating db triggers
   trigger.before(:insert).for_each(:row) do
-    "NEW.display_id := nextval('camp_dpid_seq_' || NEW.account_id);"
+    "NEW.display_id := nextval(format('%I.camp_dpid_seq_%s', TG_TABLE_SCHEMA, NEW.account_id));"
   end
 end

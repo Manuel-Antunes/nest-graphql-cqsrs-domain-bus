@@ -1,26 +1,28 @@
 import { isOnMentionsView, isOnFoldersView } from '../actionHelpers';
 
+const visit = path => window.history.pushState({}, '', path);
+
+afterEach(() => visit('/'));
+
 describe('#isOnMentionsView', () => {
-  it('return valid responses when passing the state', () => {
-    expect(isOnMentionsView({ route: { name: 'conversation_mentions' } })).toBe(
-      true
-    );
-    expect(isOnMentionsView({ route: { name: 'conversation_messages' } })).toBe(
-      false
-    );
+  it('reads the view from the URL', () => {
+    visit('/app/accounts/1/mentions/conversations');
+    expect(isOnMentionsView()).toBe(true);
+
+    visit('/app/accounts/1/conversations/9');
+    expect(isOnMentionsView()).toBe(false);
   });
 });
 
 describe('#isOnFoldersView', () => {
-  it('return valid responses when passing the state', () => {
-    expect(isOnFoldersView({ route: { name: 'folder_conversations' } })).toBe(
-      true
-    );
-    expect(
-      isOnFoldersView({ route: { name: 'conversations_through_folders' } })
-    ).toBe(true);
-    expect(isOnFoldersView({ route: { name: 'conversation_messages' } })).toBe(
-      false
-    );
+  it('reads the view from the URL', () => {
+    visit('/app/accounts/1/custom_view/3');
+    expect(isOnFoldersView()).toBe(true);
+
+    visit('/app/accounts/1/custom_view/3/conversations/9');
+    expect(isOnFoldersView()).toBe(true);
+
+    visit('/app/accounts/1/conversations/9');
+    expect(isOnFoldersView()).toBe(false);
   });
 });

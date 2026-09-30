@@ -2,6 +2,7 @@
 
 require 'openssl'
 require 'base64'
+require 'uri'
 
 module BetterAuth
   # Better Auth's session cookie is `<token>.<base64 HMAC-SHA256(AUTH_SECRET, token)>`, which is what
@@ -13,8 +14,10 @@ module BetterAuth
 
     module_function
 
-    def from(cookies)
-      NAMES.lazy.map { |name| cookies[name] }.find(&:present?)
+    def from_header(header)
+      pairs = header.to_s.split(/;\s*/).filter_map { |pair| pair.split('=', 2) if pair.include?('=') }.to_h
+      raw = NAMES.lazy.map { |name| pairs[name] }.find(&:present?)
+      raw && URI.decode_uri_component(raw)
     end
 
     def token_of(raw)

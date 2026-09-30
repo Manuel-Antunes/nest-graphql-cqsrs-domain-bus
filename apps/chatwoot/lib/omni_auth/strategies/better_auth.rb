@@ -45,7 +45,7 @@ module OmniAuth
       private
 
       def authenticate(env, req, original_path)
-        raw_cookie = ::BetterAuth::SessionCookie.from(req.cookies)
+        raw_cookie = ::BetterAuth::SessionCookie.from_header(env['HTTP_COOKIE'])
         bearer = env['HTTP_AUTHORIZATION']
 
         if raw_cookie.present?
@@ -77,7 +77,7 @@ module OmniAuth
       end
 
       def redirect_for(original_path)
-        return platform_sign_in_url if @identity.nil? && original_path.match?(DASHBOARD)
+        return ::BetterAuth::Platform.sign_in_url if @identity.nil? && original_path.match?(DASHBOARD)
         return @account_redirect_path if @account_redirect_path
 
         '/app' if @identity && (original_path == '/' || original_path.include?('/login'))
@@ -93,10 +93,6 @@ module OmniAuth
         return false if env['HTTP_ACCESS_TOKEN'].blank? || env['HTTP_UID'].blank?
 
         @user.nil? || !ActiveSupport::SecurityUtils.secure_compare(@user.uid.to_s, env['HTTP_UID'].to_s)
-      end
-
-      def platform_sign_in_url
-        ENV['PLATFORM_SIGN_IN_URL'].presence || "#{ENV.fetch('WEB_URL', 'http://localhost:4200')}/auth/sign-in"
       end
 
       def session_identity(raw_cookie, env)

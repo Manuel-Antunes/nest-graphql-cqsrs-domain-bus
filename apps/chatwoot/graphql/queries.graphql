@@ -87,6 +87,14 @@ type Query {
     inboxId: ID @eq(key: "inbox_id")
     "Filter to conversations assigned to the agent with this id."
     assigneeId: ID @eq(key: "assignee_id")
+    """
+    Sort clauses, applied in the order given. Omitted, the rows come back in
+    whatever order Postgres returns them — `account.conversations` carries no
+    default scope — so any caller that means "the most recent N" has to say so
+    with `[{column: LAST_ACTIVITY_AT, order: DESC}]`.
+    """
+    orderBy: [ConversationOrderByClause!]
+      @orderBy(columns: ["last_activity_at", "created_at", "waiting_since"])
   ): [Conversation!]!
     @paginate
     @builder(class: "Resolvers::AccountConversationsBuilder")

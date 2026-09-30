@@ -74,6 +74,18 @@ pt_BR:
       header:
         one: 'Não foi possível gravar %{model}: 1 erro'
         other: 'Não foi possível gravar %{model}: %{count} erros.'
+    account:
+      not_authorized: Você não tem permissão para acessar esta conta
+    upload:
+      missing_input: 'Nenhum arquivo ou URL informado'
+      invalid_url: 'URL inválida'
+      fetch_failed: 'Não foi possível obter o arquivo da URL'
+      fetch_failed_with_message: 'Não foi possível obter o arquivo da URL: %{message}'
+      file_too_large: 'O arquivo excede o tamanho máximo permitido'
+      unsupported_content_type: 'Tipo de arquivo não suportado (apenas imagens e vídeos são permitidos)'
+      unexpected: 'Ocorreu um erro inesperado'
+    database:
+      query_canceled: 'A requisição demorou demais para ser concluída. Por favor, tente novamente.'
     validations:
       presence: não pode ficar em branco
     webhook:

@@ -956,6 +956,45 @@ input ConversationMessagesWhereWhereConditionsRelation {
 }
 
 """
+One clause of a `conversations` sort. Clauses apply in the order given, so
+`[{column: LAST_ACTIVITY_AT, order: DESC}]` puts the most recently active
+conversation first.
+"""
+input ConversationOrderByClause {
+  """
+  Column to order by.
+  """
+  column: ConversationOrderByColumn!
+
+  """
+  Direction to order in.
+  """
+  order: SortOrder!
+}
+
+"""
+Column a `conversations` sort clause can order by. Each value maps to the
+column of the same name in snake_case.
+"""
+enum ConversationOrderByColumn {
+  """
+  When the conversation was created.
+  """
+  CREATED_AT
+
+  """
+  Timestamp of the most recent activity — a message or a status change. This is
+  the "what did I touch last" order the agent UI sorts by.
+  """
+  LAST_ACTIVITY_AT
+
+  """
+  Since when the conversation has been waiting for an agent reply.
+  """
+  WAITING_SINCE
+}
+
+"""
 A paginated list of Conversation items.
 """
 type ConversationPaginator {
@@ -1950,6 +1989,14 @@ type Query {
     last: Int
 
     """
+    Sort clauses, applied in the order given. Omitted, the rows come back in
+    whatever order Postgres returns them — `account.conversations` carries no
+    default scope — so any caller that means "the most recent N" has to say so
+    with `[{column: LAST_ACTIVITY_AT, order: DESC}]`.
+    """
+    orderBy: [ConversationOrderByClause!] @orderBy(columns: ["last_activity_at", "created_at", "waiting_since"])
+
+    """
     Filter by priority name: low, medium, high or urgent.
     """
     priority: String @eq
@@ -2145,6 +2192,14 @@ type SetTeamWorkingHoursPayload {
   """
   clientMutationId: String
   team: SupportTeam!
+}
+
+"""
+Direction of a sort clause.
+"""
+enum SortOrder {
+  ASC
+  DESC
 }
 
 """

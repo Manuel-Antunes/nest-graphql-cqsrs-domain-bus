@@ -1,7 +1,7 @@
 import { useConversationHotKeys } from '../useConversationHotKeys';
 import { useStore, useMapGetter } from 'dashboard/composables/store';
 import { useI18n } from 'vue-i18n';
-import { useRoute } from 'vue-router';
+import { useAppNavigation } from 'dashboard/composables/useAppNavigation';
 import { useConversationLabels } from 'dashboard/composables/useConversationLabels';
 import { useAI } from 'dashboard/composables/useAI';
 import { useAgentsList } from 'dashboard/composables/useAgentsList';
@@ -16,7 +16,7 @@ import {
 
 vi.mock('dashboard/composables/store');
 vi.mock('vue-i18n');
-vi.mock('vue-router');
+vi.mock('dashboard/composables/useAppNavigation');
 vi.mock('dashboard/composables/useConversationLabels');
 vi.mock('dashboard/composables/useAI');
 vi.mock('dashboard/composables/useAgentsList');
@@ -42,7 +42,7 @@ describe('useConversationHotKeys', () => {
     }));
 
     useI18n.mockReturnValue({ t: vi.fn(key => key) });
-    useRoute.mockReturnValue({ name: 'inbox_conversation' });
+    useAppNavigation.mockReturnValue({ currentRouteName: { value: 'inbox_conversation' } });
     useConversationLabels.mockReturnValue({
       activeLabels: { value: mockActiveLabels },
       inactiveLabels: { value: mockInactiveLabels },
@@ -110,7 +110,7 @@ describe('useConversationHotKeys', () => {
     useMapGetter.mockImplementation(key => ({
       value: store.getters[key],
     }));
-    useRoute.mockReturnValue({ name: 'inbox_conversation' });
+    useAppNavigation.mockReturnValue({ currentRouteName: { value: 'inbox_conversation' } });
 
     const { conversationHotKeys } = useConversationHotKeys();
     const snoozeAction = conversationHotKeys.value.find(action =>
@@ -196,7 +196,7 @@ describe('useConversationHotKeys', () => {
   });
 
   it('should not return conversation hot keys when not in conversation or inbox route', () => {
-    useRoute.mockReturnValue({ name: 'some_other_route' });
+    useAppNavigation.mockReturnValue({ currentRouteName: { value: 'some_other_route' } });
     const { conversationHotKeys } = useConversationHotKeys();
 
     expect(conversationHotKeys.value.length).toBe(0);

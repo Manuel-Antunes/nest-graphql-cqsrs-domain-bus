@@ -199,11 +199,11 @@ class Account < ApplicationRecord
   end
 
   trigger.after(:insert).for_each(:row) do
-    "execute format('create sequence IF NOT EXISTS conv_dpid_seq_%s', NEW.id);"
+    "execute format('create sequence IF NOT EXISTS %I.conv_dpid_seq_%s', TG_TABLE_SCHEMA, NEW.id);"
   end
 
   trigger.name('camp_dpid_before_insert').after(:insert).for_each(:row) do
-    "execute format('create sequence IF NOT EXISTS camp_dpid_seq_%s', NEW.id);"
+    "execute format('create sequence IF NOT EXISTS %I.camp_dpid_seq_%s', TG_TABLE_SCHEMA, NEW.id);"
   end
 
   def validate_limit_keys

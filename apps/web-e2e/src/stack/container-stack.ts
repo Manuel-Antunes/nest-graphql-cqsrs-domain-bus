@@ -253,10 +253,19 @@ export class ContainerStack {
     await migrator.stop({ timeout: 10 }).catch(() => undefined);
   }
 
+  private static async exposeHostPort(port: number): Promise<void> {
+    const eventLoopHold = setInterval(() => undefined, 1_000);
+    try {
+      await TestContainers.exposeHostPorts(port);
+    } finally {
+      clearInterval(eventLoopHold);
+    }
+  }
+
   private async startApplications(
     options: ContainerStackOptions,
   ): Promise<void> {
-    await TestContainers.exposeHostPorts(options.chatwootPort);
+    await ContainerStack.exposeHostPort(options.chatwootPort);
     const apiUrl = `http://localhost:${options.apiPort}`;
     const shared = {
       POSTGRES_URL: this.internalPostgresUrl,

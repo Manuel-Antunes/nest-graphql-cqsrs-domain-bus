@@ -10,10 +10,8 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_09_29_120000) do
-  create_schema "chatwoot"
-  create_schema "tenant_root"
-  create_schema "transport"
+ActiveRecord::Schema[7.2].define(version: 2026_09_29_230000) do
+  create_schema "chatwoot", if_not_exists: true
 
   # These extensions should be enabled to support this database
   enable_extension "pg_stat_statements"
@@ -1320,17 +1318,33 @@ ActiveRecord::Schema[7.1].define(version: 2026_09_29_120000) do
   add_foreign_key "contact_links", "contacts"
   add_foreign_key "inboxes", "portals"
   add_foreign_key "working_hours", "teams", on_delete: :cascade
-  # no candidate create_trigger statement could be found, creating an adapter-specific one
-  execute(<<-SQL)
-CREATE OR REPLACE FUNCTION public.organization_organization_tenant_schema_fn()
- RETURNS trigger
- LANGUAGE plpgsql
-AS $function$ begin IF TG_OP = 'INSERT' THEN
-          EXECUTE format('create schema if not exists %I', 'tenant_' || NEW.slug);         ELSIF TG_OP = 'DELETE' THEN
-          EXECUTE format('drop schema if exists %I cascade', 'tenant_' || OLD.slug);         END IF;         RETURN NULL; end; $function$
-  SQL
+  create_trigger("accounts_after_insert_row_tr", :generated => true, :compatibility => 1).
+      on("accounts").
+      after(:insert).
+      for_each(:row) do
+    "execute format('create sequence IF NOT EXISTS %I.conv_dpid_seq_%s', TG_TABLE_SCHEMA, NEW.id);"
+  end
 
-  # no candidate create_trigger statement could be found, creating an adapter-specific one
-  execute("CREATE TRIGGER organization_tenant_schema AFTER INSERT OR DELETE ON \"public\".organization FOR EACH ROW EXECUTE FUNCTION public.organization_organization_tenant_schema_fn()")
+  create_trigger("conversations_before_insert_row_tr", :generated => true, :compatibility => 1).
+      on("conversations").
+      before(:insert).
+      for_each(:row) do
+    "NEW.display_id := nextval(format('%I.conv_dpid_seq_%s', TG_TABLE_SCHEMA, NEW.account_id));"
+  end
+
+  create_trigger("camp_dpid_before_insert", :generated => true, :compatibility => 1).
+      on("accounts").
+      name("camp_dpid_before_insert").
+      after(:insert).
+      for_each(:row) do
+    "execute format('create sequence IF NOT EXISTS %I.camp_dpid_seq_%s', TG_TABLE_SCHEMA, NEW.id);"
+  end
+
+  create_trigger("campaigns_before_insert_row_tr", :generated => true, :compatibility => 1).
+      on("campaigns").
+      before(:insert).
+      for_each(:row) do
+    "NEW.display_id := nextval(format('%I.camp_dpid_seq_%s', TG_TABLE_SCHEMA, NEW.account_id));"
+  end
 
 end

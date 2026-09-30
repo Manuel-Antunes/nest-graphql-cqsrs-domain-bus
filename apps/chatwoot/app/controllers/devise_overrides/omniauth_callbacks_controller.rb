@@ -1,6 +1,8 @@
 class DeviseOverrides::OmniauthCallbacksController < DeviseTokenAuth::OmniauthCallbacksController
   include EmailHelper
 
+  before_action :redirect_unanswered_callback, only: :redirect_callbacks # rubocop:disable Rails/LexicallyScopedActionFilter
+
   def omniauth_success
     get_resource_from_auth_hash
 
@@ -8,6 +10,12 @@ class DeviseOverrides::OmniauthCallbacksController < DeviseTokenAuth::OmniauthCa
   end
 
   private
+
+  def redirect_unanswered_callback
+    return if request.env['omniauth.auth'].present?
+
+    redirect_to ::BetterAuth::Platform.sign_in_url, allow_other_host: true
+  end
 
   def sign_in_user
     @resource.skip_confirmation! if confirmable_enabled?

@@ -21,13 +21,15 @@ class Webhooks::Trigger
   private
 
   def perform_request
-    RestClient::Request.execute(
+    SafeFetch.fetch(
+      @url,
       method: :post,
-      url: @url,
-      payload: @payload.to_json,
-      headers: { content_type: :json, accept: :json },
-      timeout: webhook_timeout
-    )
+      body: @payload.to_json,
+      headers: { 'Content-Type' => 'application/json', 'Accept' => 'application/json' },
+      open_timeout: webhook_timeout,
+      read_timeout: webhook_timeout,
+      validate_content_type: false
+    ) { |_response| nil }
   end
 
   def handle_error(error)

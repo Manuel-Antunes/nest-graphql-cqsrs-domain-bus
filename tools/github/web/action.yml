@@ -14,3 +14,7 @@ runs:
     - name: Build the web client
       run: npx nx run @nestposts/web:build
       shell: bash
+
+    - name: Build what a deploy packages — every bundle, and every prune the functions and images read
+      run: npx nx run @nestposts/infra:build-functions
+      shell: bash

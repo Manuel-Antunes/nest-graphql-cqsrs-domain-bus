@@ -12,6 +12,10 @@ import type { SecondaryStorage } from 'better-auth';
  *
  * `getAndDelete` and `increment` are atomic, as Better Auth requires: `GETDEL`, and `INCR` with an
  * `EXPIRE … NX` in one transaction — which is Redis 7.
+ *
+ * Every member Better Auth calls is a function bound to the instance, not a prototype method: its rate
+ * limiter takes `secondaryStorage.increment` off the object and calls it bare, and a method called
+ * that way has no `this`.
  */
 export class RedisSecondaryStorage implements SecondaryStorage {
   static readonly KEY_PREFIX = 'better-auth:';
@@ -22,15 +26,13 @@ export class RedisSecondaryStorage implements SecondaryStorage {
     return `${RedisSecondaryStorage.KEY_PREFIX}${key}`;
   }
 
-  get(key: string): Promise<string | null> {
-    return this.redis.client.get(RedisSecondaryStorage.keyOf(key));
-  }
+  readonly get = (key: string): Promise<string | null> =>
+    this.redis.client.get(RedisSecondaryStorage.keyOf(key));
 
-  getAndDelete(key: string): Promise<string | null> {
-    return this.redis.client.getDel(RedisSecondaryStorage.keyOf(key));
-  }
+  readonly getAndDelete = (key: string): Promise<string | null> =>
+    this.redis.client.getDel(RedisSecondaryStorage.keyOf(key));
 
-  async increment(key: string, ttl: number): Promise<number> {
+  readonly increment = async (key: string, ttl: number): Promise<number> => {
     if (!Number.isInteger(ttl) || ttl <= 0) {
       throw new TypeError('Redis increment TTL must be a positive integer');
     }
@@ -41,20 +43,24 @@ export class RedisSecondaryStorage implements SecondaryStorage {
       .expire(stored, ttl, 'NX')
       .execTyped();
     return value;
-  }
+  };
 
-  async set(key: string, value: string, ttl?: number): Promise<void> {
+  readonly set = async (
+    key: string,
+    value: string,
+    ttl?: number,
+  ): Promise<void> => {
     const stored = RedisSecondaryStorage.keyOf(key);
     if (ttl && ttl > 0) {
       await this.redis.client.set(stored, value, { EX: ttl });
     } else {
       await this.redis.client.set(stored, value);
     }
-  }
+  };
 
-  async delete(key: string): Promise<void> {
+  readonly delete = async (key: string): Promise<void> => {
     await this.redis.client.del(RedisSecondaryStorage.keyOf(key));
-  }
+  };
 
   /**
    * Forgets everything Better Auth keeps here — what a database that was dropped and recreated needs,

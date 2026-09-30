@@ -14,6 +14,16 @@ runs:
       run: npx playwright install --with-deps chromium
       shell: bash
 
+    - name: Install the libraries Chatwoot links against
+      run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libvips42 libpq-dev
+      shell: bash
+
+    - name: Set up Ruby and Chatwoot's gems
+      uses: ruby/setup-ruby@v1
+      with:
+        working-directory: apps/chatwoot
+        bundler-cache: true
+
     - name: Run end-to-end tests
       run: pnpm test:e2e
       shell: bash
@@ -62,7 +72,7 @@ runs:
           echo "| --- | --- |"
           echo "| \`playwright-report\`   | the HTML report — open the \`index.html\` |"
           echo "| \`playwright-artifacts\`| video, screenshot and trace of every test that FAILED |"
-          echo "| \`e2e-reports\`         | junit, and the logs of posts-api, tagging and web |"
+          echo "| \`e2e-reports\`         | junit, and the logs of posts-api, tagging, web and Chatwoot |"
           echo
           echo "A trace opens at <https://trace.playwright.dev> without installing anything."
         } >> "$GITHUB_STEP_SUMMARY"

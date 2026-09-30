@@ -924,6 +924,28 @@ describe('posts (e2e)', () => {
       });
     });
 
+    it('a reference to the interface answers the concrete type the user is, as another subgraph’s @interfaceObject sends it', async () => {
+      const authorId = (await client.execute('{ me { id } }')).data!.me.id;
+
+      const entities = await resolve(
+        ref('IUser', authorId),
+        ref('IUser', readerId),
+        ref('IUser', 'nobody'),
+      );
+
+      expect(entities[0]).toMatchObject({
+        __typename: 'Author',
+        id: authorId,
+        email: 'manuel@example.com',
+      });
+      expect(entities[1]).toMatchObject({
+        __typename: 'User',
+        id: readerId,
+        email: 'reader@example.com',
+      });
+      expect(entities[2]).toBeNull();
+    });
+
     it('the router calls without a session, and the subgraph answers', async () => {
       const post = await completedPost('No session');
       const anonymous = await GraphqlClient.for(app);

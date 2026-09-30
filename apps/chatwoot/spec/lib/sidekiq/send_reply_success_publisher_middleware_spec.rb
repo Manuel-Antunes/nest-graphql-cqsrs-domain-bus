@@ -4,7 +4,7 @@ RSpec.describe Sidekiq::SendReplySuccessPublisherMiddleware do
   subject(:middleware) { described_class.new }
 
   let(:redis_client) { instance_double(Redis) }
-  let(:message) { create(:message) }
+  let!(:message) { create(:message) }
   let(:job_payload) do
     {
       'wrapped' => 'SendReplyJob',

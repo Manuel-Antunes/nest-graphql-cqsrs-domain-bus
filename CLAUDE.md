@@ -148,8 +148,15 @@ is already one of that project's inputs.
 - **`apps/chatwoot` is not Biome's at all**: its `biome.json` includes `!**`. It is a vendored Rails
   and Vue application with its own ESLint, Prettier and RuboCop (`apps/chatwoot/AGENTS.md`), and
   checked by Biome it is 5,000 files and 3,000 errors. Its `package.json` keeps its npm scripts out of
-  Nx (`includedScripts: []`) and its `test` a no-op, so `pnpm test` and `pnpm typecheck` stay this
-  repository's — Chatwoot's RSpec and Vitest suites run from `apps/chatwoot`.
+  Nx (`includedScripts: []`) and declares its targets itself: its `test` is `test:frontend` (the
+  dashboard's Vitest, in UTC, with its own `vitest` 3 through `pnpm exec` — the root's is another
+  major) and `test:backend` (RSpec in UTC — a report spec builds its window with `Date#to_time`, which
+  is the machine's zone — against the compose Postgres, database `nestposts_chatwoot_test`, and Redis
+  database `15`, so a local run never writes into the sessions on `0`). The suite runs in English
+  (`config.i18n.default_locale = :en` in `test.rb`): `SwitchLocale` renders every request in the
+  installation's default locale, which is `pt_BR` everywhere else. `pnpm test` reaches
+  it like any other project; CI runs it as a job of its own, `chatwoot`, beside `test`, which
+  excludes it.
 - **What ESLint had and Biome does not ship is `tools/biome`**, three GritQL plugins wired by path
   in the `biome.json` of the project each one checks — `playwright.grit` in `apps/web-e2e`,
   `graphql-operations.grit` and `tailwind.grit` in `apps/web`.
@@ -191,9 +198,15 @@ is already one of that project's inputs.
   `@shareable`) are declared in `apps/web/federation.graphql`, beside the `_Any`/`_Entity`/`_entities`
   that are already there for the same reason: they exist at runtime and codegen cannot see them.
 - **CI is `tools/github/*`**, composite actions called by `.github/workflows/ci.yml` — one job per
-  check (`test`, `test-e2e`, `web`) through a single `ci` action, so the environment is prepared in
-  one place. `web` is the static one: `pnpm lint`, then `typecheck` for every project, then the Next
-  build.
+  check (`test`, `test-e2e`, `web`, `chatwoot`) through a single `ci` action, so the environment is
+  prepared in one place. `web` is the static one: `pnpm lint`, then `typecheck` for every project, then the Next
+  build, then `@nestposts/infra:build-functions` — every `prune` and bundle a deploy reads, which
+  until then only a deploy ran: `@chatwoot/chatwoot:prune` asked for a root `Gemfile.lock` and
+  failed the first `sst deploy` that included Chatwoot.
+- **Every failure found on a deployed stage gets a spec that fails without its fix** — the rate
+  limiter's detached `increment` (`redis-secondary-storage.spec`, with rate limiting on as
+  `NODE_ENV=production` turns it on), an author behind an `IUser` reference (posts-api's federation
+  e2e), the prune above (this CI step). `infra/scripts/e2e.sh <stage>` is where they are found.
 
 ## Commands
 
@@ -1283,6 +1296,12 @@ last section is the design; the essentials:
   points at `IUser` from `Agent.user` (`@interfaceObject`). Chatwoot's own `User` and `Team` are
   `Agent` and `SupportTeam` in the SDL, with Chatwoot's ids. A `@hasMany` list is served as a Relay
   connection (`contacts { nodes { … } }`).
+- **On AWS it is two Fargate services** (`infra/aws/chatwoot`, ported from `gmpa-monorepo-migrate`):
+  Rails behind a load balancer and Sidekiq on the same image, **on the CloudFront router by path**
+  (`/app`, `/vite`, `/cable`, `/api/v1`, … and `/chatwoot/graphql` for the gateway), so the session
+  cookie reaches it on the one origin with no domain. `infra/aws/README.md` has the rest.
+  `db/seeds.rb`'s demo data (the `john@acme.inc` SuperAdmin, the Acme accounts) is development-only:
+  the container's `db:chatwoot_prepare` seeds a production database with the installation config alone.
 - **Clients** (`libs/clients`, posts-api's `client/` slices) are guarded by the organization's
   `client` resource (`CLIENT_RESOURCE`: owners and admins every action, members all but `delete`) and
   the `read:clients`/`write:clients` scopes. The web's `/clients` screen links and creates Chatwoot
@@ -1792,10 +1811,33 @@ DTOs count.
   Vite: `serve` runs it beside Rails, and `autoBuild` does not replace it.
 - **`rails db:*` in development prepares the TEST database too**, which does not exist here:
   Chatwoot's Nx targets set `SKIP_TEST_DATABASE=true`.
+- **Rack reads a cookie as form data, so a `+` in it becomes a space.** Better Auth's signature is
+  base64 and percent-encoded once, which Rack decodes correctly — but `WebAuth.sessionCookie` rebuilt
+  the forwarded header from Next's `cookies()`, whose values are already decoded, and Chatwoot then
+  refused every session whose signature held a `+`: about half of them, as `session cookie with an
+  invalid signature`, while the Node subgraphs, which do not treat `+` specially, accepted the same
+  header. The web re-encodes what it forwards, and Chatwoot reads its cookie off the raw header
+  (`SessionCookie.from_header`).
+- **Chatwoot's `db/schema.rb` is dumped from a database it shares.** hairtrigger dumps the triggers of
+  `HairTrigger.pg_schema` (`public` by default) and Rails' PostgreSQL dumper a `create_schema` for every
+  schema there is, so a Chatwoot `db:migrate` wrote the platform's `organization_tenant_schema`
+  trigger and `create_schema "tenant_root"`/`"transport"` into it and lost Chatwoot's own
+  display-id triggers — a fresh `db:chatwoot_prepare` beside the migrator then failed on schemas and
+  triggers that already existed, and a conversation got no `display_id`. `config/initializers/hair_trigger.rb`
+  and `monkey_patches/schema_dumper.rb` scope both to Chatwoot's search path. hairtrigger also reads
+  a migration's triggers statically, from literal `create_trigger` calls inside `up`: a helper method
+  there makes the dump fall back to raw SQL with a "mismatch" warning.
 - **`@interfaceObject` on an interface may come from more than one subgraph.** Chatwoot declares
   `IUser` as one to point at it and contributes no field; `InterfaceObjects.collect` used to take the
   first `isInterfaceObject` join only — Chatwoot's, alphabetically — skip it for having no field, and
   lose `me { notifications }` with nothing failing. It collects every join that contributes a field.
+- **The subgraph that owns an entity INTERFACE resolves a reference to the interface itself.** An
+  `@interfaceObject` elsewhere — Chatwoot's `Agent.user` — makes the gateway send posts
+  `{ __typename: "IUser", id }`. With no `__resolveReference` on `IUser`, `@apollo/subgraph` handed
+  the bare reference to `__resolveType`, which answered `User`, and `User`'s resolver answers `null`
+  for an author: every agent who writes failed with `Abstract type "IUser" was resolved to a
+  non-object type "IUser"`, on AWS, while the local spec's agent was a reader. `IUserEntityResolver`
+  loads the user and answers the concrete view.
 
 - **The Inngest SDK advertises the URL it was REACHED at, not the one it is reachable at.** A
   registration triggered from outside the network — a `PUT /api/inngest` from the host, say — tells

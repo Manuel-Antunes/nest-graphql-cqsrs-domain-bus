@@ -9,7 +9,7 @@ ConfigLoader.new.process
 # end
 
 # ## Seeds for Local Development
-# unless Rails.env.production?
+unless Rails.env.production?
 
   # Enables creating additional accounts from dashboard
   installation_config = InstallationConfig.find_by(name: 'CREATE_NEW_ACCOUNT_FROM_DASHBOARD')
@@ -231,4 +231,4 @@ ConfigLoader.new.process
   puts "__TEST_CHATWOOT_TOKEN=#{test_token}"
   puts "__TEST_CHATWOOT_BASE_URL=#{ENV.fetch('FRONTEND_URL', '')}"
   $stdout.flush
-# end
+end

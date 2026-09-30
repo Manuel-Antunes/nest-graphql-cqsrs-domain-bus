@@ -213,6 +213,8 @@ export const gatewayEnvironment = {
   GATEWAY_URL: gatewayUrl,
   WEB_URL: router.url,
   AUTH_URL: router.url,
+  /** Chatwoot's GraphQL, through the router — `chatwoot/index.ts` routes and rewrites it. */
+  CHATWOOT_SUBGRAPH_URL: $interpolate`${router.url}/chatwoot/graphql`,
 };
 
 /** What every function is allowed to reach. The queues and the topic carry the IAM with them. */

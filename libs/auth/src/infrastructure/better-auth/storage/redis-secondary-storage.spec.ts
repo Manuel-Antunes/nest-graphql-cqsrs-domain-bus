@@ -6,12 +6,13 @@ import { RecordingOnDemandNotifications } from '@nestposts/notifications/testing
 import { RedisConnection } from '@nestposts/redis';
 import { ThrowawayRedis } from '@nestposts/redis/testing/throwaway-redis';
 import type { SecondaryStorage } from 'better-auth';
+import { betterAuth } from 'better-auth';
 import { mikroOrmAdapter } from 'better-auth-mikro-orm';
 
 import { authConfig } from '../../../config/auth.config';
 import { authEntities } from '../../persistence/auth-entities';
 import { BetterAuthEmails } from '../emails/better-auth-emails';
-import { BetterAuthInstance } from '../init-auth';
+import { BetterAuthInstance, BetterAuthStorage } from '../init-auth';
 import { BetterAuthPlugins } from '../plugins/registry';
 import { RedisSecondaryStorage } from './redis-secondary-storage';
 
@@ -23,11 +24,11 @@ describe('sessions in Redis, in front of the database', () => {
   let withRedis: ReturnType<typeof build>;
   let withoutRedis: ReturnType<typeof build>;
 
-  const build = (secondaryStorage: SecondaryStorage | null) => {
+  const partsOf = (rateLimit: boolean) => {
     const config = {
       ...authConfig(),
       requireEmailVerification: false,
-      rateLimit: false,
+      rateLimit,
     };
     const notifications = new RecordingOnDemandNotifications();
     const emails = new BetterAuthEmails(notifications);
@@ -36,6 +37,11 @@ describe('sessions in Redis, in front of the database', () => {
       [BetterAuthEmails, emails],
       [OnDemandNotifications, notifications],
     ]);
+    return { config, emails, plugins };
+  };
+
+  const build = (secondaryStorage: SecondaryStorage | null) => {
+    const { config, emails, plugins } = partsOf(false);
     return BetterAuthInstance.create(
       config,
       mikroOrmAdapter(orm),
@@ -43,6 +49,16 @@ describe('sessions in Redis, in front of the database', () => {
       emails,
       { secondaryStorage },
     );
+  };
+
+  const rateLimitedAsInProduction = () => {
+    const { config, emails, plugins } = partsOf(true);
+    return betterAuth({
+      ...BetterAuthInstance.optionsFor(config, plugins, emails),
+      database: mikroOrmAdapter(orm),
+      ...BetterAuthStorage.optionsWith(storage),
+      rateLimit: { enabled: true },
+    });
   };
 
   const inContext = <T>(work: () => Promise<T>): Promise<T> =>
@@ -116,6 +132,57 @@ describe('sessions in Redis, in front of the database', () => {
       await expect(
         connection.client.ttl('better-auth:window'),
       ).resolves.toBeLessThanOrEqual(5);
+    });
+
+    it('answers a method taken off it, the way Better Auth rate limits with increment', async () => {
+      const { increment, get, set, getAndDelete } = storage;
+
+      await set('detached', 'value');
+      await expect(get('detached')).resolves.toBe('value');
+      await expect(getAndDelete('detached')).resolves.toBe('value');
+      await expect(increment('detached-window', 60)).resolves.toBe(1);
+    });
+  });
+
+  describe('rate limiting, which Better Auth turns on only under NODE_ENV=production', () => {
+    const CLIENT_IP = '203.0.113.7';
+
+    const wrongPassword = (
+      auth: ReturnType<typeof rateLimitedAsInProduction>,
+    ) =>
+      inContext(() =>
+        auth.handler(
+          new Request(
+            `${authConfig().baseUrl}${authConfig().basePath}/sign-in/email`,
+            {
+              method: 'POST',
+              headers: {
+                'content-type': 'application/json',
+                'x-forwarded-for': CLIENT_IP,
+              },
+              body: JSON.stringify({
+                email: `nobody-${Date.now()}@example.com`,
+                password: 'not-the-password',
+              }),
+            },
+          ),
+        ),
+      );
+
+    it('counts each attempt in Redis and refuses past the limit, instead of failing every sign-in as it did on AWS', async () => {
+      const auth = rateLimitedAsInProduction();
+
+      const statuses: number[] = [];
+      for (let attempt = 0; attempt < 4; attempt++) {
+        statuses.push((await wrongPassword(auth)).status);
+      }
+
+      expect(statuses).toEqual([401, 401, 401, 429]);
+      await expect(
+        connection.client.keys(
+          `${RedisSecondaryStorage.KEY_PREFIX}*${CLIENT_IP}*`,
+        ),
+      ).resolves.not.toEqual([]);
     });
   });
 

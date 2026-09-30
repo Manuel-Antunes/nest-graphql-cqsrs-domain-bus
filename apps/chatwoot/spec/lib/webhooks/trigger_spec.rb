@@ -32,28 +32,22 @@ describe Webhooks::Trigger do
     it 'triggers webhook' do
       payload = { hello: :hello }
 
-      expect(RestClient::Request).to receive(:execute)
-        .with(
-          method: :post,
-          url: url,
-          payload: payload.to_json,
-          headers: { content_type: :json, accept: :json },
-          timeout: webhook_timeout
-        ).once
+      expect(SafeFetch).to receive(:fetch).with(
+        url,
+        method: :post,
+        body: payload.to_json,
+        headers: { 'Content-Type' => 'application/json', 'Accept' => 'application/json' },
+        open_timeout: webhook_timeout,
+        read_timeout: webhook_timeout,
+        validate_content_type: false
+      ).once
       trigger.execute(url, payload, webhook_type)
     end
 
     it 'updates message status if webhook fails for message-created event' do
       payload = { event: 'message_created', conversation: { id: conversation.id }, id: message.id }
 
-      expect(RestClient::Request).to receive(:execute)
-        .with(
-          method: :post,
-          url: url,
-          payload: payload.to_json,
-          headers: { content_type: :json, accept: :json },
-          timeout: webhook_timeout
-        ).and_raise(RestClient::ExceptionWithResponse.new('error', 500)).once
+      expect(SafeFetch).to receive(:fetch).and_raise(SafeFetch::HttpError.new('500 Internal Server Error')).once
 
       expect { trigger.execute(url, payload, webhook_type) }.to change { message.reload.status }.from('sent').to('failed')
     end
@@ -61,14 +55,7 @@ describe Webhooks::Trigger do
     it 'updates message status if webhook fails for message-updated event' do
       payload = { event: 'message_updated', conversation: { id: conversation.id }, id: message.id }
 
-      expect(RestClient::Request).to receive(:execute)
-        .with(
-          method: :post,
-          url: url,
-          payload: payload.to_json,
-          headers: { content_type: :json, accept: :json },
-          timeout: webhook_timeout
-        ).and_raise(RestClient::ExceptionWithResponse.new('error', 500)).once
+      expect(SafeFetch).to receive(:fetch).and_raise(SafeFetch::HttpError.new('500 Internal Server Error')).once
       expect { trigger.execute(url, payload, webhook_type) }.to change { message.reload.status }.from('sent').to('failed')
     end
 
@@ -79,14 +66,7 @@ describe Webhooks::Trigger do
         conversation.update(status: :pending)
         payload = { event: 'message_created', conversation: { id: conversation.id }, id: message.id }
 
-        expect(RestClient::Request).to receive(:execute)
-          .with(
-            method: :post,
-            url: url,
-            payload: payload.to_json,
-            headers: { content_type: :json, accept: :json },
-            timeout: webhook_timeout
-          ).and_raise(RestClient::ExceptionWithResponse.new('error', 500)).once
+        expect(SafeFetch).to receive(:fetch).and_raise(SafeFetch::HttpError.new('500 Internal Server Error')).once
 
         expect do
           perform_enqueued_jobs do
@@ -104,14 +84,7 @@ describe Webhooks::Trigger do
       it 'does not change message status or enqueue activity when conversation is not pending' do
         payload = { event: 'message_created', conversation: { id: conversation.id }, id: message.id }
 
-        expect(RestClient::Request).to receive(:execute)
-          .with(
-            method: :post,
-            url: url,
-            payload: payload.to_json,
-            headers: { content_type: :json, accept: :json },
-            timeout: webhook_timeout
-          ).and_raise(RestClient::ExceptionWithResponse.new('error', 500)).once
+        expect(SafeFetch).to receive(:fetch).and_raise(SafeFetch::HttpError.new('500 Internal Server Error')).once
 
         expect do
           trigger.execute(url, payload, webhook_type)
@@ -127,14 +100,7 @@ describe Webhooks::Trigger do
   it 'does not update message status if webhook fails for other events' do
     payload = { event: 'conversation_created', conversation: { id: conversation.id }, id: message.id }
 
-    expect(RestClient::Request).to receive(:execute)
-      .with(
-        method: :post,
-        url: url,
-        payload: payload.to_json,
-        headers: { content_type: :json, accept: :json },
-        timeout: webhook_timeout
-      ).and_raise(RestClient::ExceptionWithResponse.new('error', 500)).once
+    expect(SafeFetch).to receive(:fetch).and_raise(SafeFetch::HttpError.new('500 Internal Server Error')).once
 
     expect { trigger.execute(url, payload, webhook_type) }.not_to(change { message.reload.status })
   end
@@ -145,14 +111,15 @@ describe Webhooks::Trigger do
     it 'falls back to default timeout' do
       payload = { hello: :hello }
 
-      expect(RestClient::Request).to receive(:execute)
-        .with(
-          method: :post,
-          url: url,
-          payload: payload.to_json,
-          headers: { content_type: :json, accept: :json },
-          timeout: default_timeout
-        ).once
+      expect(SafeFetch).to receive(:fetch).with(
+        url,
+        method: :post,
+        body: payload.to_json,
+        headers: { 'Content-Type' => 'application/json', 'Accept' => 'application/json' },
+        open_timeout: default_timeout,
+        read_timeout: default_timeout,
+        validate_content_type: false
+      ).once
 
       trigger.execute(url, payload, webhook_type)
     end
@@ -164,14 +131,15 @@ describe Webhooks::Trigger do
     it 'falls back to default timeout' do
       payload = { hello: :hello }
 
-      expect(RestClient::Request).to receive(:execute)
-        .with(
-          method: :post,
-          url: url,
-          payload: payload.to_json,
-          headers: { content_type: :json, accept: :json },
-          timeout: default_timeout
-        ).once
+      expect(SafeFetch).to receive(:fetch).with(
+        url,
+        method: :post,
+        body: payload.to_json,
+        headers: { 'Content-Type' => 'application/json', 'Accept' => 'application/json' },
+        open_timeout: default_timeout,
+        read_timeout: default_timeout,
+        validate_content_type: false
+      ).once
 
       trigger.execute(url, payload, webhook_type)
     end

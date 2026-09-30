@@ -29,6 +29,7 @@ import { CalendarEventQueryResolver } from './graphql/calendar-event-query.resol
 import { ClientEntityResolver } from './graphql/client-entity.resolver';
 import { ClientMutationResolver } from './graphql/client-mutation.resolver';
 import { ClientQueryResolver } from './graphql/client-query.resolver';
+import { IUserEntityResolver } from './graphql/iuser-entity.resolver';
 import { OrganizationQueryResolver } from './graphql/organization-query.resolver';
 import { PostAuthorResolver } from './graphql/post-author.resolver';
 import { PostEntityResolver } from './graphql/post-entity.resolver';
@@ -67,6 +68,7 @@ import { PostCompletionController } from './messaging/post-completion.controller
     TeamEntityResolver,
     UserEntityResolver,
     AuthorEntityResolver,
+    IUserEntityResolver,
     CalendarEventQueryResolver,
     CalendarEventMutationResolver,
     OrganizationQueryResolver,

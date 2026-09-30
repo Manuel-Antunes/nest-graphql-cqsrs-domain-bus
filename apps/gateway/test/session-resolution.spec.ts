@@ -160,6 +160,15 @@ describe('the gateway resolves who is calling, from Redis first', () => {
     ).resolves.toBe(1);
   });
 
+  it('forwards the tenant a caller names over the organization they are in — the root tenant included', async () => {
+    const { cookie } = await signedUp('elisa');
+    await organizationOf(cookie, `umbrella-${Date.now()}`);
+
+    await callGateway({ cookie, 'x-tenant': 'root' });
+
+    expect(received['x-tenant']).toBe('root');
+  });
+
   it('answers that session from Redis, with its row gone from the database', async () => {
     const { cookie, token } = await signedUp('bruno');
     const organization = await organizationOf(cookie, `initech-${Date.now()}`);

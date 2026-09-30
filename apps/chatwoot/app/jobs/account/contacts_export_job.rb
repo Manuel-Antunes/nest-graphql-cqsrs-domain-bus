@@ -14,7 +14,7 @@ class Account::ContactsExportJob < ApplicationJob
   private
 
   def generate_csv(headers)
-    csv_data = CSV.generate do |csv|
+    csv_data = CSVSafe.generate do |csv|
       csv << headers
       contacts.each do |contact|
         csv << headers.map { |header| contact.send(header) }

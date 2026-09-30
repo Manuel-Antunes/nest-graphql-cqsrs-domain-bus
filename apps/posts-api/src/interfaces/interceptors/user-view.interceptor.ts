@@ -16,24 +16,29 @@ import { UserProfile } from '../mapper/user.profile';
 @Injectable()
 export class UserViewInterceptor
   implements
-    NestInterceptor<User | readonly User[], IUserView | readonly IUserView[]>
+    NestInterceptor<
+      User | readonly User[] | null,
+      IUserView | readonly IUserView[] | null
+    >
 {
   constructor(@InjectMapper() private readonly mapper: Mapper) {}
 
   intercept(
     _context: ExecutionContext,
-    next: CallHandler<User | readonly User[]>,
-  ): Observable<IUserView | readonly IUserView[]> {
-    return next
-      .handle()
-      .pipe(
-        concatMap(
-          (users): Promise<IUserView | readonly IUserView[]> =>
-            users instanceof User
-              ? this.viewOf(users)
-              : Promise.all(users.map((user) => this.viewOf(user))),
-        ),
-      );
+    next: CallHandler<User | readonly User[] | null>,
+  ): Observable<IUserView | readonly IUserView[] | null> {
+    return next.handle().pipe(
+      concatMap(
+        async (users): Promise<IUserView | readonly IUserView[] | null> => {
+          if (users === null) {
+            return null;
+          }
+          return users instanceof User
+            ? this.viewOf(users)
+            : Promise.all(users.map((user) => this.viewOf(user)));
+        },
+      ),
+    );
   }
 
   private viewOf(user: User): Promise<IUserView> {

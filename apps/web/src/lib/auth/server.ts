@@ -122,7 +122,7 @@ export class WebAuth {
           cookie.name.includes('better-auth') ||
           cookie.name.startsWith('__Secure-'),
       )
-      .map((cookie) => `${cookie.name}=${cookie.value}`);
+      .map((cookie) => `${cookie.name}=${encodeURIComponent(cookie.value)}`);
     return carried.length > 0 ? carried.join('; ') : null;
   }
 

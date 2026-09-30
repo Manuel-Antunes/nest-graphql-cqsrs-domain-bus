@@ -1,14 +1,14 @@
 import { useGoToCommandHotKeys } from '../useGoToCommandHotKeys';
 import { useStore, useMapGetter } from 'dashboard/composables/store';
 import { useI18n } from 'vue-i18n';
-import { useRouter } from 'vue-router';
+import { useAppNavigation } from 'dashboard/composables/useAppNavigation';
 import { useAdmin } from 'dashboard/composables/useAdmin';
 import { frontendURL } from 'dashboard/helper/URLHelper';
 import { MOCK_FEATURE_FLAGS } from './fixtures';
 
 vi.mock('dashboard/composables/store');
 vi.mock('vue-i18n');
-vi.mock('vue-router');
+vi.mock('dashboard/composables/useAppNavigation');
 vi.mock('dashboard/composables/useAdmin');
 vi.mock('dashboard/helper/URLHelper');
 
@@ -75,7 +75,7 @@ describe('useGoToCommandHotKeys', () => {
     }));
 
     useI18n.mockReturnValue({ t: vi.fn(key => key) });
-    useRouter.mockReturnValue({ push: vi.fn() });
+    useAppNavigation.mockReturnValue({ visit: vi.fn() });
     useAdmin.mockReturnValue({ isAdmin: { value: true } });
     frontendURL.mockImplementation(url => url);
   });
@@ -143,11 +143,11 @@ describe('useGoToCommandHotKeys', () => {
     });
   });
 
-  it('should call router.push with correct URL when handler is called', () => {
+  it('should visit the command URL when handler is called', () => {
     const { goToCommandHotKeys } = useGoToCommandHotKeys();
     goToCommandHotKeys.value.forEach(command => {
       command.handler();
-      expect(useRouter().push).toHaveBeenCalledWith(expect.any(String));
+      expect(useAppNavigation().visit).toHaveBeenCalledWith(expect.any(String));
     });
   });
 
@@ -156,7 +156,7 @@ describe('useGoToCommandHotKeys', () => {
     const { goToCommandHotKeys } = useGoToCommandHotKeys();
     goToCommandHotKeys.value.forEach(command => {
       command.handler();
-      expect(useRouter().push).toHaveBeenCalledWith(
+      expect(useAppNavigation().visit).toHaveBeenCalledWith(
         expect.stringContaining('42')
       );
     });

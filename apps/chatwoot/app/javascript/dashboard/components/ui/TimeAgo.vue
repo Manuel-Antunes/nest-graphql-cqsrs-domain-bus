@@ -29,16 +29,16 @@ export default {
     return {
       lastActivityAtTimeAgo: dynamicTime(this.lastActivityTimestamp),
       createdAtTimeAgo: dynamicTime(this.createdAtTimestamp),
+      // Short forms are state, not computed from the long ones: they come from
+      // the TIMESTAMP now (`shortTimestamp` reads English words, so it must not
+      // be fed the localized string), and the refresh timer has to be able to
+      // tick them — a computed over an unchanging prop never would.
+      lastActivityTime: shortTimestamp(this.lastActivityTimestamp),
+      createdAtTime: shortTimestamp(this.createdAtTimestamp),
       timer: null,
     };
   },
   computed: {
-    lastActivityTime() {
-      return shortTimestamp(this.lastActivityAtTimeAgo);
-    },
-    createdAtTime() {
-      return shortTimestamp(this.createdAtTimeAgo);
-    },
     createdAt() {
       const createdTimeDiff = Date.now() - this.createdAtTimestamp * 1000;
       const isBeforeAMonth = createdTimeDiff > DAY_IN_MILLI_SECONDS * 30;
@@ -69,10 +69,10 @@ export default {
   },
   watch: {
     lastActivityTimestamp() {
-      this.lastActivityAtTimeAgo = dynamicTime(this.lastActivityTimestamp);
+      this.refreshLastActivity();
     },
     createdAtTimestamp() {
-      this.createdAtTimeAgo = dynamicTime(this.createdAtTimestamp);
+      this.refreshCreatedAt();
     },
   },
   mounted() {
@@ -84,10 +84,18 @@ export default {
     clearTimeout(this.timer);
   },
   methods: {
+    refreshLastActivity() {
+      this.lastActivityAtTimeAgo = dynamicTime(this.lastActivityTimestamp);
+      this.lastActivityTime = shortTimestamp(this.lastActivityTimestamp);
+    },
+    refreshCreatedAt() {
+      this.createdAtTimeAgo = dynamicTime(this.createdAtTimestamp);
+      this.createdAtTime = shortTimestamp(this.createdAtTimestamp);
+    },
     createTimer() {
       this.timer = setTimeout(() => {
-        this.lastActivityAtTimeAgo = dynamicTime(this.lastActivityTimestamp);
-        this.createdAtTimeAgo = dynamicTime(this.createdAtTimestamp);
+        this.refreshLastActivity();
+        this.refreshCreatedAt();
         this.createTimer();
       }, this.refreshTime());
     },

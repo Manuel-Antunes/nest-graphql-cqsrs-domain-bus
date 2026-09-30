@@ -10,8 +10,9 @@
 # What it walks: the composed schema, the anonymous and the refused paths, the saga across SNS and
 # SQS, the two subscriptions over SSE through the gateway, the screens the browser opens, a file from
 # a presigned upload to the CDN, the author's notification, one operation across two subgraphs, an
-# organization's tenant — and then, when it can read Better Stack, the same run as telemetry: every
-# service reporting, the post's whole life as one trace, and the logs inside it.
+# organization's tenant, Chatwoot under that organization — its agent, its account, a client's
+# contact, a team's hours, its dashboard — and then, when it can read Better Stack, the same run as
+# telemetry: every service reporting, the post's whole life as one trace, and the logs inside it.
 #
 #   ./infra/scripts/e2e.sh dev
 #
@@ -124,6 +125,21 @@ event_in() {
 trace_of() { echo "$1" | jq -r '.extensions.traceparent // empty' | cut -d- -f2; }
 
 fail() { echo "FAILED: $*" >&2; exit 1; }
+
+# A CPF the domain accepts: nine random digits and the two check digits the rule derives from them.
+cpf() {
+  local d=() i n sum r
+  d[0]=$((RANDOM % 9 + 1))
+  for i in 1 2 3 4 5 6 7 8; do d[$i]=$((RANDOM % 10)); done
+  for n in 9 10; do
+    sum=0
+    for ((i = 0; i < n; i++)); do sum=$((sum + d[i] * (n + 1 - i))); done
+    r=$(((sum * 10) % 11))
+    [ $r -eq 10 ] && r=0
+    d[$n]=$r
+  done
+  printf '%s' "${d[@]}"
+}
 
 PROBLEMS=()
 problem() {
@@ -412,7 +428,9 @@ done
 [ "$V" = "2" ] || fail "the saga did not close inside the tenant in 180s (last version seen: $V)"
 echo "    OK: the saga closed inside $SLUG — tagging and posts-api migrated the tenant on its first message"
 
-ELSEWHERE=$(TENANT='' gql 'query($id:ID!){ post(id:$id){ id } }' "$(jq -nc --arg id "$TENANT_POST" '{id:$id}')" signed)
+# The root tenant is NAMED: a signed-in caller who names none is sent to their active organization by
+# the gateway, and creating $SLUG made it the author's active one.
+ELSEWHERE=$(TENANT=root gql 'query($id:ID!){ post(id:$id){ id } }' "$(jq -nc --arg id "$TENANT_POST" '{id:$id}')" signed)
 echo "$ELSEWHERE" | jq -e '.data.post == null' >/dev/null \
   || fail "the root tenant sees a post written in $SLUG: $ELSEWHERE"
 ROOT_FROM_TENANT=$(gql 'query($id:ID!){ post(id:$id){ id } }' "$(jq -nc --arg id "$POST_ID" '{id:$id}')" signed)
@@ -436,6 +454,62 @@ while [ $SECONDS -lt $DEADLINE ]; do
 done
 [ -n "$TOLD" ] || fail "no notification of $TENANT_POST inside $SLUG in 180s"
 echo "    OK: notification=$TOLD stored in $SLUG by the notificator"
+
+echo
+echo "==> 14. Chatwoot, behind the same router and the same session: mirrored, federated, framed"
+# The seeded author was a user long before Chatwoot existed on this stage, so being its agent now is
+# what `migrate()`'s mirror backfilled; the organization made a moment ago is its account because the
+# platform's triggers mirrored it as it was inserted.
+SUPPORT=$(gql '{ currentAgent { email user { id email } } currentAccount { id name } }' '' signed)
+echo "$SUPPORT" | jq -e --arg e "$AUTHOR_EMAIL" --arg n "E2E $SLUG" \
+  '.data.currentAgent.email == ($e | ascii_downcase) and .data.currentAgent.user.email == $e
+   and .data.currentAccount.name == $n' >/dev/null \
+  || fail "Chatwoot did not answer as the author's agent in $SLUG's account: $SUPPORT"
+echo "    OK: $(echo "$SUPPORT" | jq -c '{agent: .data.currentAgent.email, account: .data.currentAccount.name, platformUser: .data.currentAgent.user.id}')"
+
+CLIENT=$(gql 'mutation($i:CreateClientInput!){ createClient(input:$i){ id } }' \
+  "$(jq -nc --arg n "E2E client $SLUG" --arg c "$(cpf)" '{i:{name:$n,cpf:$c}}')" signed)
+CLIENT_ID=$(echo "$CLIENT" | jq -r '.data.createClient.id // empty')
+[ -n "$CLIENT_ID" ] || fail "createClient in $SLUG failed: $CLIENT"
+CONTACT=$(gql 'mutation($i:CreateContactInput!){ createContact(input:$i){ contact { id } } }' \
+  "$(jq -nc --arg n "E2E contact $SLUG" --arg e "contact-$SLUG@example.com" '{i:{name:$n,email:$e}}')" signed)
+CONTACT_ID=$(echo "$CONTACT" | jq -r '.data.createContact.contact.id // empty')
+[ -n "$CONTACT_ID" ] || fail "createContact in Chatwoot failed: $CONTACT"
+LINKED=$(gql 'mutation($i:LinkContactToClientInput!){ linkContactToClient(input:$i){ contact { id } } }' \
+  "$(jq -nc --arg c "$CONTACT_ID" --arg k "$CLIENT_ID" '{i:{contactId:$c,clientId:$k}}')" signed)
+echo "$LINKED" | jq -e '.data.linkContactToClient.contact.id' >/dev/null \
+  || fail "linkContactToClient failed: $LINKED"
+FEDERATED=$(gql '{ clients(first: 200) { edges { node { id contacts { nodes { id dashboardPath } } } } } }' '' signed)
+DASHBOARD_PATH=$(echo "$FEDERATED" | jq -r --arg k "$CLIENT_ID" --arg c "$CONTACT_ID" \
+  '[.data.clients.edges[].node | select(.id == $k) | .contacts.nodes[] | select(.id == $c) | .dashboardPath][0] // empty')
+[ -n "$DASHBOARD_PATH" ] || fail "the client does not list its Chatwoot contact through the gateway: $FEDERATED"
+echo "    OK: client=$CLIENT_ID lists contact=$CONTACT_ID from Chatwoot, at $DASHBOARD_PATH"
+
+ANONYMOUS=$(curl -sS -o /dev/null -w '%{http_code} %{redirect_url}' "$TARGET/app/")
+[ "$ANONYMOUS" = "302 $TARGET/auth/sign-in" ] \
+  || fail "Chatwoot's dashboard did not send a stranger to the platform sign-in: $ANONYMOUS"
+PAGE="$(mktemp -t nestposts-chatwoot-dashboard)"; TEMPS+=("$PAGE")
+FRAMED=$(curl -sS -L --max-redirs 5 -b "$JAR" -o "$PAGE" -w '%{http_code} %{url_effective}' "$TARGET$DASHBOARD_PATH")
+case "$FRAMED" in
+  "200 $TARGET/app/accounts/"*) ;;
+  *) fail "the contact's dashboard page did not open under the session: $FRAMED" ;;
+esac
+grep -q 'data-page' "$PAGE" || fail "$DASHBOARD_PATH answered 200 without the dashboard's page"
+echo "    OK: a stranger is sent to the platform sign-in; the author's session opens $DASHBOARD_PATH"
+
+TEAM=$(auth organization/create-team "$(jq -nc --arg n "Front Desk $SLUG" '{name:$n}')")
+TEAM_ID=$(echo "$TEAM" | jq -r '.id // empty')
+[ -n "$TEAM_ID" ] || fail "organization/create-team failed: $TEAM"
+HOURS=$(gql 'mutation($i:SetTeamWorkingHoursInput!){ setTeamWorkingHours(input:$i){ team { name } } }' \
+  "$(jq -nc --arg t "$TEAM_ID" '{i:{teamId:$t,days:[{dayOfWeek:1,openHour:9,openMinutes:0,closeHour:18,closeMinutes:0}]}}')" signed)
+echo "$HOURS" | jq -e '.data.setTeamWorkingHours.team.name' >/dev/null \
+  || fail "setTeamWorkingHours failed: $HOURS"
+TEAMS=$(gql '{ teams { id supportTeam { name } workingHours { nodes { dayOfWeek openHour closeHour } } } }' '' signed)
+echo "$TEAMS" | jq -e --arg t "$TEAM_ID" --arg n "front desk $SLUG" \
+  '[.data.teams[] | select(.id == $t)][0] | .supportTeam.name == $n
+   and .workingHours.nodes == [{dayOfWeek: 1, openHour: 9, closeHour: 18}]' >/dev/null \
+  || fail "the platform's team does not show the hours kept in Chatwoot: $TEAMS"
+echo "    OK: team=$TEAM_ID is Chatwoot's 'front desk $SLUG', open Mondays 9-18"
 TENANT=''
 
 DELETED_ORGANIZATION=$(auth organization/delete "$(jq -nc --arg id "$ORGANIZATION_ID" '{organizationId:$id}')")
@@ -452,10 +526,12 @@ BETTER_STACK_QUERY_PASSWORD="${BETTER_STACK_QUERY_PASSWORD:-$(from_env_file BETT
 BETTER_STACK_COLLECTION="${BETTER_STACK_COLLECTION:-$(from_env_file BETTER_STACK_COLLECTION)}"
 
 echo
-echo "==> 14. the same run, as telemetry: Better Stack"
+echo "==> 15. the same run, as telemetry: Better Stack"
+TELEMETRY="AND THE WHOLE RUN IS ONE STORY IN BETTER STACK"
 if [ -z "$BETTER_STACK_QUERY_URL" ] || [ -z "$BETTER_STACK_QUERY_USERNAME" ] \
   || [ -z "$BETTER_STACK_QUERY_PASSWORD" ] || [ -z "$BETTER_STACK_COLLECTION" ]; then
   echo "    skipped: no BETTER_STACK_QUERY_* connection in the environment or in .env"
+  TELEMETRY="AND THE TELEMETRY WAS NOT CHECKED (no BETTER_STACK_QUERY_*)"
 else
   SPANS="remote(${BETTER_STACK_COLLECTION}_spans)"
   LOGS="remote(${BETTER_STACK_COLLECTION}_logs)"
@@ -559,6 +635,7 @@ if [ ${#PROBLEMS[@]} -gt 0 ]; then
 fi
 echo "================================================================"
 echo "  THE SAGA CLOSED ON AWS — IN THE ROOT TENANT AND IN AN ORGANIZATION'S —, THE SUBSCRIPTIONS"
-echo "  STREAMED, THE SCREENS RENDERED, A FILE WENT THE WHOLE WAY, THE AUTHOR WAS TOLD, AND THE"
-echo "  WHOLE RUN IS ONE STORY IN BETTER STACK. post=$POST_ID"
+echo "  STREAMED, THE SCREENS RENDERED, A FILE WENT THE WHOLE WAY, THE AUTHOR WAS TOLD, CHATWOOT"
+echo "  ANSWERED AS THE AUTHOR'S AGENT AND FEDERATED ITS CONTACTS AND TEAMS —"
+echo "  $TELEMETRY. post=$POST_ID"
 echo "================================================================"

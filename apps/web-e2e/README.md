@@ -181,11 +181,19 @@ server routes between them, and the client is Chromium on `apps/web`.
    only, where a post keeps its file — what a bucket behind a CDN amounts to.
 2. **Where it all ended up is published as environment** (`RunEnvironment.publish`), because a
    Playwright worker is a process forked after the setup, and what it inherits is exactly that.
-3. **`apps/web` starts as a process**, by `next start` the way `nx` serves it everywhere else, with
+3. **Chatwoot starts as processes on the host** (`src/stack/chatwoot-stack.ts`): `rails
+   db:chatwoot_prepare` as a one-shot, which loads its `chatwoot` schema into the suite's Postgres
+   beside the platform's tables and the triggers the migrator made to mirror users, organizations and
+   teams into it; then Vite and the Rails server, on a port picked up front. The gateway, in its
+   container, reaches that port as `host.testcontainers.internal` (`TestContainers.exposeHostPorts`)
+   to compose the `chatwoot` subgraph, and the web frames it on `/atendimento`. It needs the Ruby of
+   `apps/chatwoot/.ruby-version` with its gems installed — the `test-e2e` action sets both up — and
+   Postgres is `pgvector/pgvector`, because Chatwoot's schema enables `vector`.
+4. **`apps/web` starts as a process**, by `next start` the way `nx` serves it everywhere else, with
    its log in `target/logs`. It is the thing under the browser: keeping it out of an image keeps a
    failure one `tail` away. It publishes on the run's transport too — the emails its Better Auth asks
    for are notifications.
-4. **Three accounts are registered** through the web's own sign-up endpoint and verified by the link
+5. **Three accounts are registered** through the web's own sign-up endpoint and verified by the link
    in their email (`Registration.seed`): an author, a reader and an admin. They reach the workers
    through `target/accounts.json`.
 

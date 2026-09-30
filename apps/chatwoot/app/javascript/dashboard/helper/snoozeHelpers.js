@@ -70,6 +70,14 @@ export const snoozedReopenTime = snoozedUntil => {
 export const snoozedReopenTimeToTimestamp = snoozedUntil => {
   return snoozedUntil ? getUnixTime(new Date(snoozedUntil)) : null;
 };
+/**
+ * Shortens an ENGLISH relative-time string ("in about 2 hours" -> "about 2h").
+ *
+ * It reaches the number by stripping a leading "in " and matching English unit
+ * words, so its input must come from `dynamicTimeInEnglish`, never from
+ * `dynamicTime` (which follows the display locale). A localized string matches
+ * nothing here and is returned whole.
+ */
 export const shortenSnoozeTime = snoozedUntil => {
   if (!snoozedUntil) {
     return null;

@@ -2,7 +2,7 @@ import { defineComponent, h } from 'vue';
 import { createStore } from 'vuex';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { useAccount } from '../useAccount';
-import { useRoute } from 'vue-router';
+import { usePage } from '@inertiajs/vue3';
 import { mount } from '@vue/test-utils';
 
 const store = createStore({
@@ -34,14 +34,13 @@ const mountParams = {
   },
 };
 
-vi.mock('vue-router');
+vi.mock('@inertiajs/vue3', () => ({ usePage: vi.fn() }));
 
 describe('useAccount', () => {
   beforeEach(() => {
-    useRoute.mockReturnValue({
-      params: {
-        accountId: '123',
-      },
+    usePage.mockReturnValue({
+      props: {},
+      url: '/app/accounts/123/dashboard',
     });
   });
 
@@ -99,15 +98,27 @@ describe('useAccount', () => {
     });
   });
 
-  it('returns route with correct params', () => {
+  it('prefers the account the backend shares over the URL', () => {
+    usePage.mockReturnValueOnce({
+      props: { account: { id: '7' } },
+      url: '/app/accounts/123/dashboard',
+    });
+
+    const wrapper = mount(createComponent(), mountParams);
+    const { accountId } = wrapper.vm;
+    expect(accountId).toBe(7);
+  });
+
+  it('exposes no vue-router route', () => {
     const wrapper = mount(createComponent(), mountParams);
     const { route } = wrapper.vm;
-    expect(route.params).toEqual({ accountId: '123' });
+    expect(route).toBeUndefined();
   });
 
   it('handles non-numeric accountId gracefully', async () => {
-    useRoute.mockReturnValueOnce({
-      params: { accountId: 'abc' },
+    usePage.mockReturnValueOnce({
+      props: {},
+      url: '/app/accounts/abc/dashboard',
     });
 
     const wrapper = mount(createComponent(), mountParams);

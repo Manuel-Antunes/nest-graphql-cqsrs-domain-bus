@@ -1,5 +1,6 @@
 /// <reference path="../../../.sst/platform/config.d.ts" />
 
+import { chatwoot } from '../chatwoot';
 import { Migrator, Seeder } from '../support';
 import { seedEnvironment } from './environment';
 import { migrations } from './platform';
@@ -15,6 +16,7 @@ import { migrations } from './platform';
 export const migrator = new Migrator('Migrate', {
   platform: migrations,
   handler: 'apps/migrator/dist/lambda.handler',
+  after: [chatwoot.rails],
 });
 
 /**

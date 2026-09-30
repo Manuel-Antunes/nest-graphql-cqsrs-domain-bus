@@ -4,13 +4,11 @@ module SwitchLocale
   private
 
   def switch_locale(&)
-    # Force Portuguese (Brazil) for all requests
-    set_locale('pt_BR', &)
+    set_locale(I18n.default_locale, &)
   end
 
   def switch_locale_using_account_locale(&)
-    # Force Portuguese (Brazil) for all requests
-    set_locale('pt_BR', &)
+    set_locale(I18n.default_locale, &)
   end
 
   # If the request is coming from a custom domain, it should be for a helpcenter portal

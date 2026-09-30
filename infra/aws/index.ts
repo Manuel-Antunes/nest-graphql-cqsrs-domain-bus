@@ -8,6 +8,7 @@
  * route points at a function's URL, and `web/` last because it is the only thing that wants all
  * three.
  */
+import { chatwoot } from './chatwoot';
 import {
   gateway,
   migrator,
@@ -68,4 +69,6 @@ export const outputs = {
   mailSender,
 
   database: database.host,
+
+  chatwoot: chatwoot.url,
 };

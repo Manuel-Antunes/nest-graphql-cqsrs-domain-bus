@@ -3,7 +3,6 @@ import Cookies from 'js-cookie';
 import { actions } from '../../auth';
 import types from '../../../mutation-types';
 import * as APIHelpers from '../../../utils/api';
-import '../../../../routes';
 
 vi.spyOn(APIHelpers, 'setUser');
 vi.spyOn(APIHelpers, 'clearCookiesOnLogout');

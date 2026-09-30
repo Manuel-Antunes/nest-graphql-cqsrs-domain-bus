@@ -565,6 +565,7 @@ describe('#addMentions', () => {
   });
 
   it('send mutations if the view is mentions', () => {
+    window.history.pushState({}, '', '/app/accounts/1/mentions/conversations');
     actions.addMentions(
       {
         dispatch,
@@ -572,6 +573,7 @@ describe('#addMentions', () => {
       },
       { id: 1, meta: { sender: { id: 1 } } }
     );
+    window.history.pushState({}, '', '/');
     expect(dispatch.mock.calls).toEqual([
       ['updateConversation', { id: 1, meta: { sender: { id: 1 } } }],
     ]);

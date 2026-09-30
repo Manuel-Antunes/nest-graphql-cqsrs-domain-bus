@@ -334,7 +334,7 @@ class Conversation < ApplicationRecord
 
   # creating db triggers
   trigger.before(:insert).for_each(:row) do
-    "NEW.display_id := nextval('conv_dpid_seq_' || NEW.account_id);"
+    "NEW.display_id := nextval(format('%I.conv_dpid_seq_%s', TG_TABLE_SCHEMA, NEW.account_id));"
   end
 end
 

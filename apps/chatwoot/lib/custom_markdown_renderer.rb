@@ -1,4 +1,6 @@
 class CustomMarkdownRenderer < CommonMarker::HtmlRenderer
+  include MarkdownRendererUrlSanitizer
+
   CONFIG_PATH = Rails.root.join('config/markdown_embeds.yml')
 
   def self.config
@@ -25,6 +27,15 @@ class CustomMarkdownRenderer < CommonMarker::HtmlRenderer
 
     # If it's not a supported embed link, render normally
     super
+  end
+
+  def image(node)
+    out('<img src="', sanitized_href(node.url), '"')
+    plain do
+      out(' alt="', :children, '"')
+    end
+    out(' title="', escape_html(node.title), '"') if node.title.present?
+    out(' />')
   end
 
   private
@@ -71,9 +82,10 @@ class CustomMarkdownRenderer < CommonMarker::HtmlRenderer
     return nil unless embed_config
 
     template = embed_config['template']
-    # Use Ruby's built-in named captures with gsub to handle CSS % values
+    # Use gsub (not format) so CSS `%` values in templates don't need escaping.
+    # Captured values are HTML-escaped since they land inside HTML attribute contexts.
     match_data.named_captures.each do |var_name, value|
-      template = template.gsub("%{#{var_name}}", value)
+      template = template.gsub("%{#{var_name}}", CGI.escapeHTML(value))
     end
     template
   end

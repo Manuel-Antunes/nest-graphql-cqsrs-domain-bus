@@ -2,7 +2,10 @@
 import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { getInboxIconByType } from 'dashboard/helper/inbox';
-import { dynamicTime, shortTimestamp } from 'shared/helpers/timeHelper';
+import {
+  dynamicTimeInEnglish,
+  shortTimestamp,
+} from 'shared/helpers/timeHelper';
 import {
   snoozedReopenTimeToTimestamp,
   shortenSnoozeTime,
@@ -62,7 +65,8 @@ const hasSlaThreshold = computed(() => {
 
 const lastActivityAt = computed(() => {
   const timestamp = props.inboxItem?.lastActivityAt;
-  return timestamp ? shortTimestamp(dynamicTime(timestamp)) : '';
+  // See ConversationCard: pass the timestamp, not a localized string.
+  return timestamp ? shortTimestamp(timestamp) : '';
 });
 
 const menuItems = computed(() => [
@@ -115,8 +119,10 @@ const notificationDetails = computed(() => {
 const snoozedUntilTime = computed(() => {
   const { snoozedUntil } = props.inboxItem;
   if (!snoozedUntil) return null;
+  // `shortenSnoozeTime` strips a leading "in " and maps English unit words, so
+  // it needs the English distance — never the displayed one.
   return shortenSnoozeTime(
-    dynamicTime(snoozedReopenTimeToTimestamp(snoozedUntil))
+    dynamicTimeInEnglish(snoozedReopenTimeToTimestamp(snoozedUntil))
   );
 });
 

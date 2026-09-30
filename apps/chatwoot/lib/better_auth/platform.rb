@@ -32,6 +32,10 @@ module BetterAuth
       SQL
     end
 
+    def sign_in_url
+      ENV['PLATFORM_SIGN_IN_URL'].presence || "#{ENV.fetch('WEB_URL', 'http://localhost:4200')}/auth/sign-in"
+    end
+
     def organization_id_of_tenant(tenant)
       return nil if tenant.blank? || tenant == ROOT_TENANT
 

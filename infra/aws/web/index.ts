@@ -85,6 +85,7 @@ export const web = new sst.aws.Nextjs('Web', {
     POLAR_ACCESS_TOKEN: polarAccessToken.value,
     POLAR_ENVIRONMENT: polarEnvironment.value,
     POLAR_WEBHOOK_SECRET: polarWebhookSecret.value,
+    CHATWOOT_URL: router.url,
   },
 });
 

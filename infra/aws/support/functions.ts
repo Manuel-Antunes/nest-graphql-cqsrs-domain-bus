@@ -401,7 +401,14 @@ export class Migrator extends NodeFunction {
 
   constructor(
     name: string,
-    args: NodeFunctionArgs,
+    args: NodeFunctionArgs & {
+      /**
+       * What must be up before the migration runs — Chatwoot's service, which prepares the `chatwoot`
+       * schema on boot: `migrate()` ends by mirroring the platform into it, and on the first deploy of
+       * a stage there is nothing to mirror into until that service has started.
+       */
+      readonly after?: $util.Resource[];
+    },
     opts?: $util.ComponentResourceOptions,
   ) {
     super(name, { ...args, timeout: args.timeout ?? '15 minutes' }, opts);
@@ -413,7 +420,7 @@ export class Migrator extends NodeFunction {
           functionName: this.fn.name,
           input: JSON.stringify({ command: 'migrate', at: Date.now() }),
         },
-        { parent: this },
+        { parent: this, dependsOn: args.after ?? [] },
       );
     }
   }

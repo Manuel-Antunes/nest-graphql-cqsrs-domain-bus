@@ -1,26 +1,40 @@
 require 'rails_helper'
 
 describe '/app/login', type: :request do
-  context 'without DEFAULT_LOCALE' do
-    it 'renders the dashboard' do
-      get '/app/login'
-      expect(response).to have_http_status(:success)
-    end
+  let(:agent) { create(:user, account: create(:account), role: :agent).tap { |user| user.update!(platform_user_id: 'platform-agent') } }
+
+  def platform_cookie
+    token = 'session-token'
+    signature = Base64.strict_encode64(OpenSSL::HMAC.digest('SHA256', BetterAuth::SessionCookie.secret, token))
+    "better-auth.session_token=#{CGI.escape("#{token}.#{signature}")}"
   end
 
-  context 'with DEFAULT_LOCALE' do
-    it 'renders the dashboard' do
-      with_modified_env DEFAULT_LOCALE: 'pt_BR' do
+  context 'without a platform session' do
+    it 'sends the visitor to the platform sign-in' do
+      with_modified_env PLATFORM_SIGN_IN_URL: 'https://platform.example/auth/sign-in' do
         get '/app/login'
-        expect(response).to have_http_status(:success)
-        expect(response.body).to include "selectedLocale: 'pt_BR'"
+        expect(response).to redirect_to('https://platform.example/auth/sign-in')
       end
     end
   end
 
-  context 'with non-HTML format' do
+  context 'with a platform session' do
+    before do
+      allow(BetterAuth::Platform).to receive(:session).and_return('platform_user_id' => agent.platform_user_id, 'organization_id' => nil)
+    end
+
+    it 'sends the agent past the login page, to the dashboard' do
+      get '/app/login', headers: { 'Cookie' => platform_cookie }
+      expect(response).to redirect_to('/app')
+    end
+
+    it 'still renders the auth pages of the dashboard' do
+      get '/app/auth/password/edit', headers: { 'Cookie' => platform_cookie }
+      expect(response).to have_http_status(:success)
+    end
+
     it 'returns not acceptable for JSON with error message' do
-      get '/app/login', headers: { 'Accept' => 'application/json' }
+      get '/app/auth/password/edit', headers: { 'Cookie' => platform_cookie, 'Accept' => 'application/json' }
       expect(response).to have_http_status(:not_acceptable)
       expect(response.parsed_body).to eq({ 'error' => 'Please use API routes instead of dashboard routes for JSON requests' })
     end

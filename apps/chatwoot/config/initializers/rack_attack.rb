@@ -19,7 +19,7 @@ class Rack::Attack
   Rack::Attack.cache.store = ActiveSupport::Cache::RedisCacheStore.new(redis: $velma, pool: false)
 
   class Request < ::Rack::Request
-    # You many need to specify a method to fetch the correct remote IP address
+    # You may need to specify a method to fetch the correct remote IP address
     # if the web server is behind a load balancer.
     def remote_ip
       @remote_ip ||= (env['action_dispatch.remote_ip'] || ip).to_s
@@ -31,10 +31,11 @@ class Rack::Attack
       (default_allowed_ips + env_allowed_ips).include?(remote_ip)
     end
 
-    # Rails would allow requests to paths with extentions, so lets compare against the path with extention stripped
-    # example /auth & /auth.json would both work
-    def path_without_extentions
-      path[/^[^.]+/]
+    # Rails allows paths with extensions and trailing slashes, so compare against a normalized path.
+    # For example, /auth, /auth.json, and /auth/ should all use the same throttle.
+    def path_without_extensions
+      normalized_path = path[/^[^.]+/]
+      normalized_path == '/' ? normalized_path : normalized_path.sub(%r{/+\z}, '')
     end
   end
 
@@ -69,11 +70,11 @@ class Rack::Attack
 
   ### Prevent Brute-Force Super Admin Login Attacks ###
   throttle('super_admin_login/ip', limit: 5, period: 5.minutes) do |req|
-    req.ip if req.path_without_extentions == '/super_admin/sign_in' && req.post?
+    req.ip if req.path_without_extensions == '/super_admin/sign_in' && req.post?
   end
 
   throttle('super_admin_login/email', limit: 5, period: 15.minutes) do |req|
-    if req.path_without_extentions == '/super_admin/sign_in' && req.post?
+    if req.path_without_extensions == '/super_admin/sign_in' && req.post?
       # NOTE: This line used to throw ArgumentError /rails/action_mailbox/sendgrid/inbound_emails : invalid byte sequence in UTF-8
       # Hence placed in the if block
       # ref: https://github.com/rack/rack-attack/issues/399
@@ -85,7 +86,7 @@ class Rack::Attack
   # ### Prevent Brute-Force Login Attacks ###
   # Exclude MFA verification attempts from regular login throttling
   throttle('login/ip', limit: 5, period: 5.minutes) do |req|
-    if req.path_without_extentions == '/auth/sign_in' && req.post? && req.params['mfa_token'].blank?
+    if req.path_without_extensions == '/auth/sign_in' && req.post? && req.params['mfa_token'].blank?
       # Skip if this is an MFA verification request
       req.ip
     end
@@ -93,7 +94,7 @@ class Rack::Attack
 
   throttle('login/email', limit: 10, period: 15.minutes) do |req|
     # Skip if this is an MFA verification request
-    if req.path_without_extentions == '/auth/sign_in' && req.post? && req.params['mfa_token'].blank?
+    if req.path_without_extensions == '/auth/sign_in' && req.post? && req.params['mfa_token'].blank?
       # ref: https://github.com/rack/rack-attack/issues/399
       # NOTE: This line used to throw ArgumentError /rails/action_mailbox/sendgrid/inbound_emails : invalid byte sequence in UTF-8
       # Hence placed in the if block
@@ -104,11 +105,11 @@ class Rack::Attack
 
   ## Reset password throttling
   throttle('reset_password/ip', limit: 5, period: 30.minutes) do |req|
-    req.ip if req.path_without_extentions == '/auth/password' && req.post?
+    req.ip if req.path_without_extensions == '/auth/password' && req.post?
   end
 
   throttle('reset_password/email', limit: 5, period: 1.hour) do |req|
-    if req.path_without_extentions == '/auth/password' && req.post?
+    if req.path_without_extensions == '/auth/password' && req.post?
       email = req.params['email'].presence || ActionDispatch::Request.new(req.env).params['email'].presence
       email.to_s.downcase.gsub(/\s+/, '')
     end
@@ -116,25 +117,25 @@ class Rack::Attack
 
   ## Resend confirmation throttling
   throttle('resend_confirmation/ip', limit: 5, period: 30.minutes) do |req|
-    req.ip if req.path_without_extentions == '/api/v1/profile/resend_confirmation' && req.post?
+    req.ip if req.path_without_extensions == '/api/v1/profile/resend_confirmation' && req.post?
   end
 
   ## MFA throttling - prevent brute force attacks
   throttle('mfa_verification/ip', limit: 5, period: 1.minute) do |req|
-    if req.path_without_extentions == '/api/v1/profile/mfa'
+    if req.path_without_extensions == '/api/v1/profile/mfa'
       req.ip if req.delete? # Throttle disable attempts
-    elsif req.path_without_extentions.match?(%r{/api/v1/profile/mfa/(verify|backup_codes)})
+    elsif req.path_without_extensions.match?(%r{/api/v1/profile/mfa/(verify|backup_codes)})
       req.ip if req.post? # Throttle verify and backup_codes attempts
     end
   end
 
   # Separate rate limiting for MFA verification attempts
   throttle('mfa_login/ip', limit: 10, period: 1.minute) do |req|
-    req.ip if req.path_without_extentions == '/auth/sign_in' && req.post? && req.params['mfa_token'].present?
+    req.ip if req.path_without_extensions == '/auth/sign_in' && req.post? && req.params['mfa_token'].present?
   end
 
   throttle('mfa_login/token', limit: 10, period: 1.minute) do |req|
-    if req.path_without_extentions == '/auth/sign_in' && req.post?
+    if req.path_without_extensions == '/auth/sign_in' && req.post?
       # Track by MFA token to prevent brute force on a specific token
       mfa_token = req.params['mfa_token'].presence
       (mfa_token.presence)
@@ -143,7 +144,7 @@ class Rack::Attack
 
   ## Prevent Brute-Force Signup Attacks ###
   throttle('accounts/ip', limit: 5, period: 30.minutes) do |req|
-    req.ip if req.path_without_extentions == '/api/v1/accounts' && req.post?
+    req.ip if req.path_without_extensions == '/api/v1/accounts' && req.post?
   end
 
   ##-----------------------------------------------##
@@ -158,17 +159,22 @@ class Rack::Attack
   if ActiveModel::Type::Boolean.new.cast(ENV.fetch('ENABLE_RACK_ATTACK_WIDGET_API', true))
     ## Prevent Conversation Bombing on Widget APIs ###
     throttle('api/v1/widget/conversations', limit: 6, period: 12.hours) do |req|
-      req.ip if req.path_without_extentions == '/api/v1/widget/conversations' && req.post?
+      req.ip if req.path_without_extensions == '/api/v1/widget/conversations' && req.post?
     end
 
     ## Prevent Contact update Bombing in Widget API ###
     throttle('api/v1/widget/contacts', limit: 60, period: 1.hour) do |req|
-      req.ip if req.path_without_extentions == '/api/v1/widget/contacts' && (req.patch? || req.put?)
+      req.ip if req.path_without_extensions == '/api/v1/widget/contacts' && (req.patch? || req.put?)
     end
 
     ## Prevent Conversation Bombing through multiple sessions
     throttle('widget?website_token={website_token}&cw_conversation={x-auth-token}', limit: 5, period: 1.hour) do |req|
-      req.ip if req.path_without_extentions == '/widget' && ActionDispatch::Request.new(req.env).params['cw_conversation'].blank?
+      req.ip if req.path_without_extensions == '/widget' && ActionDispatch::Request.new(req.env).params['cw_conversation'].blank?
+    end
+
+    ## Prevent Transcript Bombing on Widget API ###
+    throttle('api/v1/widget/conversations/transcript', limit: 5, period: 1.hour) do |req|
+      req.ip if req.path_without_extensions == '/api/v1/widget/conversations/transcript' && req.post?
     end
   end
 
@@ -181,6 +187,24 @@ class Rack::Attack
   ## Prevent Abuse of Converstion Transcript APIs ###
   throttle('/api/v1/accounts/:account_id/conversations/:conversation_id/transcript', limit: 30, period: 1.hour) do |req|
     match_data = %r{/api/v1/accounts/(?<account_id>\d+)/conversations/(?<conversation_id>\d+)/transcript}.match(req.path)
+    match_data[:account_id] if match_data.present?
+  end
+
+  ## Prevent abuse of agent create APIs (per account, covers bulk_create)
+  throttle('/api/v1/accounts/:account_id/agents POST',
+           limit: ENV.fetch('RATE_LIMIT_AGENT_CREATE', '100').to_i, period: 1.day) do |req|
+    next unless req.post?
+
+    match_data = %r{\A/api/v1/accounts/(?<account_id>\d+)/agents(?:/bulk_create)?/?\z}.match(req.path_without_extensions)
+    match_data[:account_id] if match_data.present?
+  end
+
+  ## Prevent abuse of agent delete API (per account)
+  throttle('/api/v1/accounts/:account_id/agents/:id DELETE',
+           limit: ENV.fetch('RATE_LIMIT_AGENT_DELETE', '50').to_i, period: 1.day) do |req|
+    next unless req.delete?
+
+    match_data = %r{\A/api/v1/accounts/(?<account_id>\d+)/agents/(?<id>\d+)/?\z}.match(req.path_without_extensions)
     match_data[:account_id] if match_data.present?
   end
 

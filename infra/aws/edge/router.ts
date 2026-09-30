@@ -1,5 +1,7 @@
 /// <reference path="../../../.sst/platform/config.d.ts" />
 
+import { dns, stageDomain } from './domain';
+
 /**
  * **One origin for the browser, and that is what makes the session work.**
  *
@@ -12,4 +14,7 @@
  * to be configured — the same shape `messaging/` has, where the topic and the queues exist before
  * anything binds them together.
  */
-export const router = new sst.aws.Router('Edge');
+export const router = new sst.aws.Router(
+  'Edge',
+  stageDomain && dns ? { domain: { name: stageDomain, dns } } : {},
+);

@@ -609,6 +609,11 @@
         "ADD_NOTE": "Adicionar nota de contato",
         "EXPAND": "Expandir",
         "COLLAPSE": "Recolher",
+        "DELETE_DIALOG": {
+          "TITLE": "Excluir nota?",
+          "DESCRIPTION": "Esta nota será removida para todo o time. Não é possível desfazer.",
+          "CONFIRM": "Excluir nota"
+        },
         "NO_NOTES": "Sem notas, você pode adicionar notas a partir da página de detalhes do contato.",
         "EMPTY_STATE": "Não existem notas associadas a este contato. Você pode adicionar uma nota digitando na caixa acima.",
         "CONVERSATION_EMPTY_STATE": "Ainda não há notas. Use o botão Adicionar nota para criar uma."

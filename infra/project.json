@@ -9,7 +9,8 @@
     "@nestposts/tagging",
     "@nestposts/notificator",
     "@nestposts/migrator",
-    "@nestposts/web"
+    "@nestposts/web",
+    "@chatwoot/chatwoot"
   ],
   "targets": {
     "build-functions": {

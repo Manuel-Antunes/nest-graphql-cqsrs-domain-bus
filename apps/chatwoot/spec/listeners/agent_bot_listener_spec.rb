@@ -69,7 +69,7 @@ describe AgentBotListener do
         expect(AgentBots::WebhookJob).not_to receive(:perform_later)
         expect(AgentBots::InnerQueueJob).to receive(:perform_later).once.with(
           Events::Types::AGENT_BOT_INNER_QUEUE,
-          hash_including(messageId: message.id, conversationId: conversation.id),
+          hash_including(messageId: message.id, conversationId: conversation.display_id),
           a_string_including("agent-bot-#{agent_bot.id}")
         )
         listener.message_created(event)

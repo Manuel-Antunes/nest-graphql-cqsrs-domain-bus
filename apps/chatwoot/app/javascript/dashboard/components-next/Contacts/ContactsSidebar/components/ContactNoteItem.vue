@@ -7,6 +7,17 @@ import { useMessageFormatter } from 'shared/composables/useMessageFormatter';
 import Avatar from 'dashboard/components-next/avatar/Avatar.vue';
 import { Button } from 'dashboard/components-next/ui/button';
 import Icon from 'dashboard/components-next/icon/Icon.vue';
+import {
+  AlertDialog,
+  AlertDialogTrigger,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogCancel,
+  AlertDialogAction,
+} from 'next/ui/alert-dialog';
 
 const props = defineProps({
   note: {
@@ -34,8 +45,13 @@ const [isExpanded, toggleExpanded] = useToggle();
 const { t } = useI18n();
 const { formatMessage } = useMessageFormatter();
 
+const isDeleteDialogOpen = ref(false);
+
+// Deleting a note is destructive and has no undo, so the trash button opens a
+// confirmation instead of emitting straight away (issue #555).
 const handleDelete = () => {
   emit('delete', props.note.id);
+  isDeleteDialogOpen.value = false;
 };
 
 onMounted(() => {
@@ -72,14 +88,35 @@ onMounted(() => {
           </span>
         </div>
       </div>
-      <Button
+      <AlertDialog
         v-if="allowDelete"
-        variant="destructive"
-        size="icon"
-        @click="handleDelete"
+        :open="isDeleteDialogOpen"
+        @update:open="isDeleteDialogOpen = $event"
       >
-        <Icon icon="i-lucide-trash" />
-      </Button>
+        <AlertDialogTrigger as-child>
+          <Button variant="destructive" size="icon">
+            <Icon icon="i-lucide-trash" />
+          </Button>
+        </AlertDialogTrigger>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {{ t('CONTACTS_LAYOUT.SIDEBAR.NOTES.DELETE_DIALOG.TITLE') }}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {{ t('CONTACTS_LAYOUT.SIDEBAR.NOTES.DELETE_DIALOG.DESCRIPTION') }}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>
+              {{ t('DIALOG.BUTTONS.CANCEL') }}
+            </AlertDialogCancel>
+            <AlertDialogAction variant="destructive" @click="handleDelete">
+              {{ t('CONTACTS_LAYOUT.SIDEBAR.NOTES.DELETE_DIALOG.CONFIRM') }}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
     <p
       ref="noteContentRef"

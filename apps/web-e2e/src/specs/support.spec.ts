@@ -2,6 +2,7 @@ import { expect, test } from '../fixtures/test';
 import { ChatwootApi } from '../infrastructure/chatwoot/chatwoot-api';
 import { DashboardToken } from '../infrastructure/chatwoot/dashboard-token';
 import {
+  ChatwootIdentity,
   SetTeamHours,
   SupportIdentity,
   TeamHours,
@@ -122,13 +123,13 @@ test.describe('Chatwoot, under the platform session', () => {
 
     const identity = await chatwoot
       .graphql(session ?? '')
-      .data(SupportIdentity);
+      .data(ChatwootIdentity);
     expect(identity.currentAgent?.email).toBe(agent.email.toLowerCase());
 
     const [sessionToken] = decodeURIComponent(session ?? '').split('.');
     const forged = await chatwoot
       .graphql(`${sessionToken}.${'A'.repeat(43)}=`)
-      .execute(SupportIdentity);
+      .execute(ChatwootIdentity);
     expect(forged.data?.currentAgent ?? null).toBeNull();
     expect(forged.errors?.[0]?.message).toBe('Unauthenticated.');
 

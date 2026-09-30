@@ -46,7 +46,7 @@ type ProjectType = Record<
   string,
   {
     readonly app: string;
-    readonly platform: 'javascript-nextjs' | 'node';
+    readonly platform: 'javascript-nextjs' | 'node' | 'ruby-rails';
     readonly appName: string;
   }
 >;
@@ -86,6 +86,11 @@ const PROJECTS = {
     app: 'migrator',
     platform: 'node',
     appName: 'Migrator',
+  },
+  'nestposts-chatwoot': {
+    app: 'chatwoot',
+    platform: 'ruby-rails',
+    appName: 'Chatwoot',
   },
 } as const satisfies ProjectType;
 

@@ -116,16 +116,7 @@
         }
       },
       "prune": {
-        "executor": "nx-ruby-on-rails:prune-lockfile",
-        "cache": true,
-        "inputs": [
-          "{workspaceRoot}/Gemfile.lock",
-          "{projectRoot}/Gemfile"
-        ],
-        "outputs": [
-          "{projectRoot}/Gemfile.lock"
-        ],
-        "options": {}
+        "executor": "nx:noop"
       },
       "docker:build": {
         "dependsOn": [
@@ -164,7 +155,42 @@
         }
       },
       "test": {
-        "executor": "nx:noop"
+        "executor": "nx:noop",
+        "dependsOn": [
+          "test:frontend",
+          "test:backend"
+        ]
+      },
+      "test:frontend": {
+        "executor": "nx:run-commands",
+        "cache": true,
+        "inputs": [
+          "{projectRoot}/app/javascript/**/*",
+          "{projectRoot}/enterprise/app/javascript/**/*",
+          "{projectRoot}/vite.config.*",
+          "{projectRoot}/package.json"
+        ],
+        "options": {
+          "cwd": "apps/chatwoot",
+          "command": "TZ=UTC pnpm exec vitest --no-watch --no-cache --no-coverage"
+        }
+      },
+      "test:backend": {
+        "executor": "nx:run-commands",
+        "options": {
+          "cwd": "apps/chatwoot",
+          "parallel": false,
+          "env": {
+            "BUNDLE_GEMFILE": "Gemfile",
+            "RAILS_ENV": "test",
+            "REDIS_URL": "redis://localhost:6379/15",
+            "TZ": "UTC"
+          },
+          "commands": [
+            "bundle exec rails db:create",
+            "bundle exec rspec --format progress --format RspecJunitFormatter --out target/test-results/rspec.xml"
+          ]
+        }
       }
     }
   },

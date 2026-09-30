@@ -1,0 +1,38 @@
+name: 'chatwoot'
+description: "Chatwoot's own suites: RSpec against a real Postgres and Redis, and the dashboard's Vitest"
+inputs:
+  upload_reports:
+    description: "Keep RSpec's junit report as an artifact of the run."
+    default: 'true'
+    required: false
+runs:
+  using: composite
+  steps:
+    - name: Install the libraries Chatwoot links against
+      run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libvips42 libpq-dev
+      shell: bash
+
+    - name: Set up Ruby and Chatwoot's gems
+      uses: ruby/setup-ruby@v1
+      with:
+        working-directory: apps/chatwoot
+        bundler-cache: true
+
+    - name: Start Postgres and Redis
+      run: docker compose up -d --wait postgres redis
+      shell: bash
+
+    - name: Run Chatwoot's suites
+      run: npx nx run @chatwoot/chatwoot:test --outputStyle=static
+      shell: bash
+      env:
+        CI: 'true'
+
+    - name: Upload the RSpec report
+      if: ${{ always() && inputs.upload_reports == 'true' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: chatwoot-test-reports
+        path: apps/chatwoot/target/test-results/**
+        if-no-files-found: ignore
+        retention-days: 7

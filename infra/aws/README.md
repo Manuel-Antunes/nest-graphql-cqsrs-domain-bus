@@ -146,8 +146,10 @@ infra/aws/
   compute/           the functions
     platform.ts        where support/ finds the resources: network, links, environment, the build
     build.ts, environment.ts, api.ts, gateway.ts, workers.ts, migrations.ts
-  edge/              the CloudFront router: router.ts creates it, routes.ts points it
+  edge/              the CloudFront router: router.ts creates it, routes.ts points it, domain.ts
+                     is the stage's own domain when BASE_DOMAIN names one (optional)
   web/               the Next application, on the same origin
+  chatwoot/          Chatwoot's two Fargate services, and the router's paths to them
 infra/lambda/
   collector.yaml     the collector extension's configuration, travelling beside every bundle
   otel-preload.cjs   the Lambda instrumentation, loaded through NODE_OPTIONS=--require before the handler
@@ -189,6 +191,38 @@ endpoints, and with the one `/api/auth` route the plans page loaded and every ca
 `404` — the webhook included. Locally nothing routes: the web serves the whole of `/api/auth` itself,
 which is why only a deployed stage could show it. The subgraphs keep their own Function URLs, which the gateway calls — and which anything
 that can reach them can call too; the gateway is the place for a policy about who may.
+
+### Chatwoot: the one container, on the same router
+
+`chatwoot/index.ts` is the port of `gmpa-monorepo-migrate`'s `infra/aws/chatwoot.ts`: the Rails
+server as a Fargate service behind a load balancer, and Sidekiq as a second service on the **same
+image** — read back from the first one's task definition, so a deploy builds Chatwoot once. It is not
+a function because nothing in it is built to be one: Puma holds ActionCable's websockets and Sidekiq
+polls Redis. It shares the VPC, the Postgres (its tables in the `chatwoot` schema, which the container
+prepares on boot with `db:chatwoot_prepare`) and the Valkey, on database `1`; its files go to a bucket
+of its own, through Active Storage.
+
+**It is on the router, by path, like everything the browser talks to.** Chatwoot has no sign-in of
+its own — it reads the session cookie the web signs — and on the one origin that cookie simply
+arrives: `/app`, `/vite`, `/cable`, `/api/v1`, `/api/v2`, `/rails` and the rest of `ROUTED_PATHS` go
+to its load balancer, none of them a path the web serves, and the embed at `/atendimento` frames the
+same origin. Its GraphQL, which the gateway calls, is `/chatwoot/graphql`, rewritten to `/graphql` —
+that path is the gateway's. The load balancer answers plain HTTP (there is no certificate without a
+domain); the browser only ever sees CloudFront's HTTPS, and the router hands Rails the viewer's host
+as `x-forwarded-host`, which is what its absolute URLs are built from.
+
+What a first deploy of a stage needs, beyond the `.env`: `sst secret set ChatwootSecretKeyBase
+$(openssl rand -hex 64)`. The order is the stack's to keep — the `Migrate` invocation waits for
+Chatwoot's web service (`Migrator`'s `after`), because `migrate()` ends by mirroring the platform's
+users, organizations and teams into Chatwoot, which on a new stage has no tables until that service
+has booted once. And the GlitchTip project `nestposts-chatwoot` is created by the owner stage: deploy
+that stage first, or every other stage fails to find the key it looks up by name.
+
+What was left behind in gmpa's version: the subdomain (and the domain it needs), the EFS volume (the
+files are in S3), the Evolution API service and the Natasha inbox lock (this system has neither), the
+agent-bot queue (`APP_QUEUE_URL`), SigNoz (telemetry goes to Better Stack, directly, since a
+container has no collector extension beside it), and SMTP: without `SMTP_ADDRESS` Chatwoot sends no
+email of its own.
 
 ### Files: one bucket, served by the same router
 
@@ -571,7 +605,8 @@ like.
 
 **Two** NAT gateways — SST puts one per availability zone — a `t4g.micro` Postgres and a `t4g.micro`
 Valkey (about US$ 9 a month of it), on the order of **US$ 0.12/hour**, running whether anything is
-invoked or not. The functions themselves are billed per invocation and round to nothing at this
+invoked or not. Chatwoot adds a load balancer and two Fargate tasks of 0.5 vCPU / 1 GB each (Spot
+outside production), roughly another **US$ 0.05/hour**. The functions themselves are billed per invocation and round to nothing at this
 scale. `sst remove` is not optional.
 
 The NAT is there because the functions sit in the VPC to reach the database and still have to reach

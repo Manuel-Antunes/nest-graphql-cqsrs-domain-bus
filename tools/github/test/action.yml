@@ -9,7 +9,7 @@ runs:
   using: composite
   steps:
     - name: Run unit and wiring tests
-      run: pnpm test
+      run: pnpm test --exclude=@chatwoot/chatwoot
       shell: bash
       env:
         CI: 'true'

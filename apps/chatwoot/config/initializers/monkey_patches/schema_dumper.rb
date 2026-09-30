@@ -23,6 +23,16 @@ module ActiveRecord
           end
           stream.puts
         end
+
+        def schemas(stream)
+          schema_names = @connection.schema_search_path.split(',').map { |name| name.strip.delete('"') } - ['public', '$user']
+          return if schema_names.empty?
+
+          schema_names.sort.each do |name|
+            stream.puts "  create_schema #{name.inspect}, if_not_exists: true"
+          end
+          stream.puts
+        end
       end
     end
   end

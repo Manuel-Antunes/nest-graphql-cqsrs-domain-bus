@@ -17,6 +17,18 @@ export const SupportIdentity = graphql(`
   }
 `);
 
+export const ChatwootIdentity = graphql(`
+  query ChatwootIdentity {
+    currentAgent {
+      email
+    }
+    currentAccount {
+      id
+      name
+    }
+  }
+`);
+
 export const SupportContacts = graphql(`
   query SupportContacts($where: QueryContactsWhereWhereConditions) {
     contacts(first: 20, where: $where) {
