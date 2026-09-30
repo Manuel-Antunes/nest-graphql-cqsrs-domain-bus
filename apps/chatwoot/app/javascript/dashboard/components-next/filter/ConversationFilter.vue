@@ -31,7 +31,7 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['applyFilter', 'updateFolder', 'close']);
-const { filterTypes } = useConversationFilterContext();
+const { attributeFilterTypes } = useConversationFilterContext();
 
 const filters = defineModel({
   type: Array,
@@ -145,7 +145,7 @@ const handlePointerDownOutside = event => {
           />
         </div>
       </div>
-      <ul class="grid gap-4 list-none">
+      <ul class="grid gap-4 list-none min-w-0">
         <template v-for="(filter, index) in filters" :key="index">
           <ConditionRow
             v-if="index === 0"
@@ -153,7 +153,7 @@ const handlePointerDownOutside = event => {
             v-model:attribute-key="filter.attributeKey"
             v-model:filter-operator="filter.filterOperator"
             v-model:values="filter.values"
-            :filter-types="filterTypes"
+            :filter-types="attributeFilterTypes"
             :show-query-operator="false"
             @remove="removeFilter(index)"
           />
@@ -165,7 +165,7 @@ const handlePointerDownOutside = event => {
             v-model:query-operator="filters[index - 1].queryOperator"
             v-model:values="filter.values"
             show-query-operator
-            :filter-types="filterTypes"
+            :filter-types="attributeFilterTypes"
             @remove="removeFilter(index)"
           />
         </template>

@@ -48,7 +48,14 @@ defineProps({
           <span>#{{ conversationId }}</span>
         </a>
         <span>·</span>
-        <span :title="createdAt">{{ createdAgo }}</span>
+        <span
+          v-tooltip.top="{
+            content: createdAt,
+            delay: { show: 500, hide: 0 },
+          }"
+        >
+          {{ createdAgo }}
+        </span>
       </div>
     </div>
   </div>

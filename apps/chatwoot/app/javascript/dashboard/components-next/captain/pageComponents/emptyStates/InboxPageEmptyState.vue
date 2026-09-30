@@ -30,7 +30,9 @@ const onClick = () => {
     </template>
     <template #actions>
       <Button @click="onClick">
-        <Icon :icon="'i-lucide-plus'" class="size-4" />{{ $t('CAPTAIN.INBOXES.ADD_NEW') }}
+        <Icon icon="i-lucide-plus" class="size-4" />{{
+          $t('CAPTAIN.INBOXES.ADD_NEW')
+        }}
       </Button>
     </template>
   </EmptyStateLayout>

@@ -2,7 +2,7 @@
 import { Button } from 'dashboard/components-next/ui/button';
 import Icon from 'dashboard/components-next/icon/Icon.vue';
 import { useAlert, useTrack } from 'dashboard/composables';
-import ReportFilterSelector from './components/FilterSelector.vue';
+import ReportFilters from './components/ReportFilters.vue';
 import { GROUP_BY_FILTER } from './constants';
 import { REPORTS_EVENTS } from '../../../../helper/AnalyticsHelper/events';
 import { generateFileName } from 'dashboard/helper/downloadHelper';
@@ -23,7 +23,7 @@ export default {
   name: 'ConversationReports',
   components: {
     ReportHeader,
-    ReportFilterSelector,
+    ReportFilters,
     ReportContainer,
     Button,
     Icon,
@@ -115,12 +115,17 @@ export default {
       {{ $t('REPORT.DOWNLOAD_CONVERSATION_REPORTS') }}
     </Button>
   </ReportHeader>
-  <div class="flex flex-col gap-3">
-    <ReportFilterSelector
-      :show-agents-filter="false"
-      show-group-by-filter
+  <div class="flex flex-col">
+    <ReportFilters
+      :show-entity-filter="false"
+      show-group-by
       @filter-change="onFilterChange"
     />
-    <ReportContainer :group-by="groupBy" />
+    <ReportContainer
+      :group-by="groupBy"
+      :from="from"
+      :to="to"
+      :business-hours="businessHours"
+    />
   </div>
 </template>

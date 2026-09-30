@@ -8,6 +8,10 @@ module Inertia
       def index
         render inertia: 'Campaigns/WhatsApp/Index'
       end
+
+      def analytics
+        render inertia: 'Campaigns/WhatsApp/Analytics'
+      end
     end
   end
 end

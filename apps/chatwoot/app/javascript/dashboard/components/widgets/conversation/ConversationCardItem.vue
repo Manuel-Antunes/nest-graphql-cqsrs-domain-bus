@@ -10,7 +10,8 @@ import InboxName from '../InboxName.vue';
 import ConversationContextMenu from './contextMenu/Index.vue';
 import TimeAgo from 'dashboard/components/ui/TimeAgo.vue';
 import CardLabels from './conversationCardComponents/CardLabels.vue';
-import PriorityMark from './PriorityMark.vue';
+import CardPriorityIcon from 'dashboard/components-next/Conversation/ConversationCard/CardPriorityIcon.vue';
+import Icon from 'dashboard/components-next/icon/Icon.vue';
 import SLACardLabel from './components/SLACardLabel.vue';
 import {
   ContextMenu,
@@ -49,6 +50,7 @@ const deSelectConversation = inject('deSelectConversation');
 const assignAgent = inject('assignAgent');
 const assignTeam = inject('assignTeam');
 const assignLabels = inject('assignLabels');
+const removeLabels = inject('removeLabels');
 const updateConversationStatus = inject('updateConversationStatus');
 const toggleContextMenu = inject('toggleContextMenu');
 const markAsUnreadFn = inject('markAsUnread');
@@ -82,10 +84,16 @@ const unreadCount = computed(() => chat.value.unread_count);
 const hasUnread = computed(() => unreadCount.value > 0);
 const isInboxNameVisible = computed(() => !activeInbox.value);
 const lastMessageInChat = computed(() => getLastMessage(chat.value));
-const voiceCallData = computed(() => ({
-  status: chat.value.additional_attributes?.call_status,
-  direction: chat.value.additional_attributes?.call_direction,
-}));
+const voiceCallData = computed(() => {
+  const last = lastMessageInChat.value;
+  if (last?.content_type !== 'voice_call' || !last.call) {
+    return { status: null, direction: null };
+  }
+  return {
+    status: last.call.status,
+    direction: last.call.direction === 'outgoing' ? 'outbound' : 'inbound',
+  };
+});
 const inboxId = computed(() => chat.value.inbox_id);
 const inbox = computed(() =>
   inboxId.value ? store.getters['inboxes/getInbox'](inboxId.value) : {}
@@ -102,7 +110,12 @@ const showMetaSection = computed(
     (props.showAssignee && assignee.value.name) ||
     chat.value.priority
 );
-const hasSlaPolicyId = computed(() => chat.value?.sla_policy_id);
+const isAIAssignee = computed(() =>
+  ['AgentBot', 'Captain::Assistant'].includes(chat.value?.meta?.assignee_type)
+);
+const hasSlaPolicyId = computed(
+  () => chat.value?.applied_sla?.id && !currentContact.value?.blocked
+);
 const showLabelsSection = computed(
   () => chat.value.labels?.length > 0 || hasSlaPolicyId.value
 );
@@ -165,6 +178,9 @@ const onAssignAgent = agent => {
 };
 const onAssignLabel = label => {
   assignLabels([label.title], [chat.value.id]);
+};
+const onRemoveLabel = label => {
+  removeLabels([label.title], [chat.value.id]);
 };
 const onAssignTeam = team => {
   assignTeam(team, chat.value.id);
@@ -234,7 +250,10 @@ const onDeleteConversation = () => {
               :inbox="inbox"
               class="min-w-0 flex-1"
             />
-            <PriorityMark :priority="chat.priority" />
+            <CardPriorityIcon
+              :priority="chat.priority"
+              class="flex-shrink-0 !size-3.5"
+            />
           </ItemHeader>
 
           <ItemTitle :class="hasUnread && 'font-semibold'">
@@ -272,6 +291,7 @@ const onDeleteConversation = () => {
             class="text-xxs text-muted-foreground"
             :last-activity-timestamp="chat.timestamp"
             :created-at-timestamp="chat.created_at"
+            :conversation-id="chat.id"
           />
           <span
             v-if="hasUnread"
@@ -283,8 +303,11 @@ const onDeleteConversation = () => {
             v-if="showAssignee && assignee.name"
             class="inline-flex items-center gap-1 truncate text-xs"
           >
-            <fluent-icon icon="person" size="12" />
-            {{ assignee.name }}
+            <Icon
+              :icon="isAIAssignee ? 'i-lucide-bot' : 'i-lucide-user-round'"
+              class="size-3 flex-shrink-0"
+            />
+            <span class="truncate">{{ assignee.name }}</span>
           </span>
         </ItemActions>
       </Item>
@@ -296,11 +319,13 @@ const onDeleteConversation = () => {
         :priority="chat.priority"
         :chat-id="chat.id"
         :has-unread-messages="hasUnread"
+        :conversation-labels="chat.labels"
         :conversation-url="conversationPath"
         :allowed-options="allowedContextMenuOptions"
         @update-conversation="onUpdateConversation"
         @assign-agent="onAssignAgent"
         @assign-label="onAssignLabel"
+        @remove-label="onRemoveLabel"
         @assign-team="onAssignTeam"
         @mark-as-unread="onMarkAsUnread"
         @mark-as-read="onMarkAsRead"

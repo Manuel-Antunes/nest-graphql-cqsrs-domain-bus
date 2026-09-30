@@ -6,6 +6,7 @@ import { useStore, useMapGetter } from 'dashboard/composables/store';
 import { useI18n } from 'vue-i18n';
 import { useAlert } from 'dashboard/composables';
 import { convertToAttributeSlug } from 'dashboard/helper/commons.js';
+import { normalizeRegexPattern } from 'shared/helpers/Validators';
 import { ATTRIBUTE_MODELS, ATTRIBUTE_TYPES } from './constants';
 
 import { Button } from 'dashboard/components-next/ui/button';
@@ -145,7 +146,7 @@ const addAttributes = async values => {
       attribute_display_type: Number(values.attributeType),
       attribute_key: values.attributeKey,
       attribute_values: values.values || [],
-      regex_pattern: regexPattern ? new RegExp(regexPattern).toString() : null,
+      regex_pattern: normalizeRegexPattern(regexPattern),
       regex_cue: regexCue,
     });
     useAlert(t('ATTRIBUTES_MGMT.ADD.API.SUCCESS_MESSAGE'));

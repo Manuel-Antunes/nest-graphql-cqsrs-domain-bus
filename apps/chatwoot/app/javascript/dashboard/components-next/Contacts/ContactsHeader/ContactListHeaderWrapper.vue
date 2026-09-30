@@ -74,11 +74,7 @@ const hasActiveSegments = computed(
 const activeSegmentName = computed(() => props.activeSegment?.name);
 
 const openCreateNewContactDialog = () => {
-  // Open first: the form (contactsFormRef) lives inside DialogContent, which is
-  // only mounted once the dialog opens — so it's null until then. The `?.` chain
-  // must cover the nested ref too, otherwise this throws and the dialog never opens.
   createNewContactDialogRef.value?.dialogRef.open();
-  createNewContactDialogRef.value?.contactsFormRef?.resetValidation();
 };
 const openContactImportDialog = () =>
   contactImportDialogRef.value?.dialogRef.open();
@@ -187,31 +183,6 @@ const closeAdvanceFiltersModal = () => {
   appliedFilter.value = [];
 };
 
-const initializeFilters = () => {
-  appliedFilter.value = [];
-  if (hasActiveSegments.value) {
-    initializeSegmentToFilterModal(props.activeSegment);
-  } else {
-    appliedFilter.value = props.hasAppliedFilters
-      ? [...appliedFilters.value]
-      : [
-          {
-            attributeKey: 'name',
-            filterOperator: 'equal_to',
-            values: '',
-            queryOperator: 'and',
-            attributeModel: 'standard',
-          },
-        ];
-  }
-};
-
-const onFilterPopoverChange = val => {
-  showFiltersModal.value = val;
-  if (val) initializeFilters();
-  else appliedFilter.value = [];
-};
-
 const clearFilters = async () => {
   emit('clearFilters');
 };
@@ -268,6 +239,35 @@ const initializeSegmentToFilterModal = segment => {
 
   appliedFilter.value = [...appliedFilter.value, ...newFilters];
 };
+
+const initializeFilters = () => {
+  appliedFilter.value = [];
+  if (hasActiveSegments.value) {
+    initializeSegmentToFilterModal(props.activeSegment);
+  } else {
+    appliedFilter.value = props.hasAppliedFilters
+      ? [...appliedFilters.value]
+      : [
+          {
+            attributeKey: 'name',
+            filterOperator: 'equal_to',
+            values: '',
+            queryOperator: 'and',
+            attributeModel: 'standard',
+          },
+        ];
+  }
+};
+
+const onFilterPopoverChange = val => {
+  showFiltersModal.value = val;
+  if (val) initializeFilters();
+  else appliedFilter.value = [];
+};
+
+defineExpose({
+  onToggleFilters: () => onFilterPopoverChange(true),
+});
 </script>
 
 <template>

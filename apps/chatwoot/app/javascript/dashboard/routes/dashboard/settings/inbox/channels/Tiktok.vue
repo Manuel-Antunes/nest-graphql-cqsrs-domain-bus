@@ -4,9 +4,12 @@ import { useI18n } from 'vue-i18n';
 import tiktokClient from 'dashboard/api/channel/tiktokClient';
 import { Button } from 'dashboard/components-next/ui/button';
 import { Spinner } from 'dashboard/components-next/ui/spinner';
+import Banner from 'dashboard/components-next/banner/Banner.vue';
 import Icon from 'dashboard/components-next/icon/Icon.vue';
+import { useAccount } from 'dashboard/composables/useAccount';
 
 const { t } = useI18n();
+const { isOnChatwootCloud } = useAccount();
 
 const hasError = ref(false);
 const errorStateMessage = ref('');
@@ -58,28 +61,42 @@ const requestAuthorization = async () => {
       </div>
       <div
         v-else
-        class="flex flex-col items-center justify-center px-8 py-10 text-center rounded-2xl outline outline-1 outline-n-weak"
+        class="flex flex-col items-center justify-center w-full px-8 py-10 text-center rounded-2xl outline outline-1 outline-n-weak"
       >
-        <h6 class="text-2xl font-medium">
-          {{ $t('INBOX_MGMT.ADD.TIKTOK.CONNECT_YOUR_TIKTOK_PROFILE') }}
-        </h6>
-        <p class="py-6 text-sm text-n-slate-11">
-          {{ $t('INBOX_MGMT.ADD.TIKTOK.HELP') }}
-        </p>
-        <Button
-          class="text-white !rounded-full !px-6 bg-gradient-to-r from-[#00f2ea] via-[#ff0050] to-[#000000]"
-          :disabled="isRequestingAuthorization"
-          @click="requestAuthorization()"
-        >
-          <Spinner
-            v-if="isRequestingAuthorization"
-            class="size-4 flex-shrink-0"
-          />
-          <template v-if="!isRequestingAuthorization">
-            <Icon :icon="'i-ri-tiktok-line'" class="size-4" />
-            {{ $t('INBOX_MGMT.ADD.TIKTOK.CONTINUE_WITH_TIKTOK') }}
-          </template>
-        </Button>
+        <div class="flex flex-col items-center w-full max-w-2xl">
+          <h6 class="text-2xl font-medium">
+            {{ $t('INBOX_MGMT.ADD.TIKTOK.CONNECT_YOUR_TIKTOK_PROFILE') }}
+          </h6>
+          <p class="max-w-xl py-6 text-sm text-n-slate-11">
+            {{ $t('INBOX_MGMT.ADD.TIKTOK.HELP') }}
+          </p>
+
+          <Button
+            class="text-white !rounded-full !px-6 bg-gradient-to-r from-[#00f2ea] via-[#ff0050] to-[#000000]"
+            :disabled="isRequestingAuthorization"
+            @click="requestAuthorization()"
+          >
+            <Spinner
+              v-if="isRequestingAuthorization"
+              class="size-4 flex-shrink-0"
+            />
+            <template v-if="!isRequestingAuthorization">
+              <Icon icon="i-ri-tiktok-line" class="size-4" />
+              {{ $t('INBOX_MGMT.ADD.TIKTOK.CONTINUE_WITH_TIKTOK') }}
+            </template>
+          </Button>
+          <Banner v-if="isOnChatwootCloud" color="amber" class="w-full mt-6">
+            <div class="flex items-start gap-3 text-left">
+              <Icon
+                icon="i-lucide-triangle-alert"
+                class="flex-shrink-0 size-4 mt-0.5"
+              />
+              <span>
+                {{ $t('INBOX_MGMT.ADD.TIKTOK.NORTH_AMERICA_WARNING') }}
+              </span>
+            </div>
+          </Banner>
+        </div>
       </div>
     </div>
   </div>

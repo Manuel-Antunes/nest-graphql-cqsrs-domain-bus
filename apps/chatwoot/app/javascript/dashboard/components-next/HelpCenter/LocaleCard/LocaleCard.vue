@@ -1,7 +1,7 @@
 <script setup>
 import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { LOCALE_MENU_ITEMS } from 'dashboard/helper/portalHelper';
+import { buildLocaleMenuItems } from 'dashboard/helper/portalHelper';
 
 import CardLayout from 'dashboard/components-next/CardLayout.vue';
 import { Button } from 'dashboard/components-next/ui/button';
@@ -18,6 +18,10 @@ const props = defineProps({
     required: true,
   },
   isDefault: {
+    type: Boolean,
+    required: true,
+  },
+  isDraft: {
     type: Boolean,
     required: true,
   },
@@ -41,11 +45,34 @@ const { t } = useI18n();
 
 const isOpen = ref(false);
 
+const localeLabel = computed(() => `${props.locale} (${props.localeCode})`);
+
+const localeMenuLabels = computed(() => ({
+  'change-default': t(
+    'HELP_CENTER.LOCALES_PAGE.LOCALE_CARD.DROPDOWN_MENU.MAKE_DEFAULT'
+  ),
+  'move-to-draft': t(
+    'HELP_CENTER.LOCALES_PAGE.LOCALE_CARD.DROPDOWN_MENU.MOVE_TO_DRAFT'
+  ),
+  'publish-locale': t(
+    'HELP_CENTER.LOCALES_PAGE.LOCALE_CARD.DROPDOWN_MENU.PUBLISH_LOCALE'
+  ),
+  'customize-content': t(
+    'HELP_CENTER.LOCALES_PAGE.LOCALE_CARD.DROPDOWN_MENU.CUSTOMIZE_CONTENT'
+  ),
+  'select-popular-content': t(
+    'HELP_CENTER.LOCALES_PAGE.LOCALE_CARD.DROPDOWN_MENU.SELECT_POPULAR_CONTENT'
+  ),
+  delete: t('HELP_CENTER.LOCALES_PAGE.LOCALE_CARD.DROPDOWN_MENU.DELETE'),
+}));
+
 const localeMenuItems = computed(() =>
-  LOCALE_MENU_ITEMS.map(item => ({
+  buildLocaleMenuItems({
+    isDefault: props.isDefault,
+    isDraft: props.isDraft,
+  }).map(item => ({
     ...item,
-    label: t(item.label),
-    disabled: props.isDefault,
+    label: localeMenuLabels.value[item.action],
   }))
 );
 
@@ -60,13 +87,19 @@ const handleAction = ({ action, value }) => {
     <div class="flex justify-between gap-2">
       <div class="flex items-center justify-start gap-2">
         <span class="text-sm font-medium text-n-slate-12 line-clamp-1">
-          {{ locale }} ({{ localeCode }})
+          {{ localeLabel }}
         </span>
         <span
           v-if="isDefault"
-          class="bg-n-alpha-2 h-6 inline-flex items-center justify-center rounded-md text-xs border-px border-transparent text-n-blue-text px-2 py-0.5"
+          class="bg-n-alpha-2 h-6 inline-flex items-center justify-center rounded-md text-xs border-px border-transparent text-n-blue-11 px-2 py-0.5"
         >
           {{ $t('HELP_CENTER.LOCALES_PAGE.LOCALE_CARD.DEFAULT') }}
+        </span>
+        <span
+          v-else-if="isDraft"
+          class="bg-n-alpha-2 h-6 inline-flex items-center justify-center rounded-md text-xs border-px border-transparent text-n-slate-11 px-2 py-0.5"
+        >
+          {{ $t('HELP_CENTER.LOCALES_PAGE.LOCALE_CARD.DRAFT') }}
         </span>
       </div>
       <div class="flex items-center justify-end gap-4">
@@ -89,7 +122,7 @@ const handleAction = ({ action, value }) => {
             }}
           </span>
         </div>
-        <Popover v-model:open="isOpen">
+        <Popover v-if="localeMenuItems.length" v-model:open="isOpen">
           <PopoverTrigger as-child>
             <Button variant="outline" size="icon">
               <Icon icon="i-lucide-ellipsis-vertical" />

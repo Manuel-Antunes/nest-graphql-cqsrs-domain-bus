@@ -1,12 +1,31 @@
 <script>
+/* eslint-disable vue/no-reserved-component-names -- shadcn Button component name */
+import { ref } from 'vue';
 import { useKeyboardEvents } from 'dashboard/composables/useKeyboardEvents';
+import { useCaptain } from 'dashboard/composables/useCaptain';
+import { useTrack } from 'dashboard/composables';
 import { REPLY_EDITOR_MODES, CHAR_LENGTH_WARNING } from './constants';
+import { CAPTAIN_EVENTS } from 'dashboard/helper/AnalyticsHelper/events';
 import { Button } from 'dashboard/components-next/ui/button';
+import Icon from 'dashboard/components-next/icon/Icon.vue';
+import { Tabs, TabsList, TabsTrigger } from 'dashboard/components-next/ui/tabs';
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+} from 'dashboard/components-next/ui/dropdown-menu';
+import CopilotMenuBar from './CopilotMenuBar.vue';
 
 export default {
   name: 'ReplyTopPanel',
   components: {
     Button,
+    Icon,
+    Tabs,
+    TabsList,
+    TabsTrigger,
+    DropdownMenu,
+    DropdownMenuTrigger,
+    CopilotMenuBar,
   },
   props: {
     mode: {
@@ -17,6 +36,18 @@ export default {
       type: Boolean,
       default: false,
     },
+    disabled: {
+      type: Boolean,
+      default: false,
+    },
+    isEditorDisabled: {
+      type: Boolean,
+      default: false,
+    },
+    conversationId: {
+      type: Number,
+      default: null,
+    },
     isMessageLengthReachingThreshold: {
       type: Boolean,
       default: () => false,
@@ -25,8 +56,16 @@ export default {
       type: Number,
       default: () => 0,
     },
+    editorContent: {
+      type: String,
+      default: undefined,
+    },
+    hasContent: {
+      type: Boolean,
+      default: false,
+    },
   },
-  emits: ['setReplyMode', 'togglePopout'],
+  emits: ['setReplyMode', 'executeCopilotAction'],
   setup(props, { emit }) {
     const setReplyMode = mode => {
       emit('setReplyMode', mode);
@@ -38,42 +77,52 @@ export default {
     const handleNoteClick = () => {
       setReplyMode(REPLY_EDITOR_MODES.NOTE);
     };
-    const handleModeToggle = () => {
-      const newMode =
-        props.mode === REPLY_EDITOR_MODES.REPLY
-          ? REPLY_EDITOR_MODES.NOTE
-          : REPLY_EDITOR_MODES.REPLY;
-      setReplyMode(newMode);
+
+    const { captainTasksEnabled } = useCaptain();
+    const showCopilotMenu = ref(false);
+
+    const handleCopilotAction = (actionKey, data) => {
+      emit('executeCopilotAction', actionKey, data || props.editorContent);
+      showCopilotMenu.value = false;
     };
+
+    const onCopilotMenuOpenChange = isOpening => {
+      if (isOpening) {
+        useTrack(CAPTAIN_EVENTS.EDITOR_AI_MENU_OPENED, {
+          conversationId: props.conversationId,
+          entryPoint: 'top_panel',
+        });
+      }
+      showCopilotMenu.value = isOpening;
+    };
+
     const keyboardEvents = {
       'Alt+KeyP': {
         action: () => handleNoteClick(),
-        allowOnFocusedInput: true,
+        allowOnFocusedInput: false,
       },
       'Alt+KeyL': {
         action: () => handleReplyClick(),
-        allowOnFocusedInput: true,
+        allowOnFocusedInput: false,
       },
     };
     useKeyboardEvents(keyboardEvents);
 
     return {
-      handleModeToggle,
-      handleReplyClick,
-      handleNoteClick,
+      setReplyMode,
       REPLY_EDITOR_MODES,
+      captainTasksEnabled,
+      handleCopilotAction,
+      showCopilotMenu,
+      onCopilotMenuOpenChange,
     };
   },
   computed: {
-    replyButtonClass() {
-      return {
-        'is-active': this.mode === REPLY_EDITOR_MODES.REPLY,
-      };
+    activeMode() {
+      return this.isReplyRestricted ? REPLY_EDITOR_MODES.NOTE : this.mode;
     },
-    noteButtonClass() {
-      return {
-        'is-active': this.mode === REPLY_EDITOR_MODES.NOTE,
-      };
+    isNoteActive() {
+      return this.activeMode === REPLY_EDITOR_MODES.NOTE;
     },
     charLengthClass() {
       return this.charactersRemaining < 0 ? 'text-n-ruby-9' : 'text-n-slate-11';
@@ -88,26 +137,52 @@ export default {
 </script>
 
 <template>
-  <div class="flex justify-between h-[3.25rem] gap-2 ltr:pl-3 rtl:pr-3">
-    <EditorModeToggle
-      :mode="mode"
-      :disabled="isReplyRestricted"
-      class="mt-3"
-      @toggle-mode="handleModeToggle"
-    />
-    <div class="flex items-center mx-4 my-0">
-      <div v-if="isMessageLengthReachingThreshold" class="text-xs">
-        <span :class="charLengthClass">
-          {{ characterLengthWarning }}
-        </span>
-      </div>
+  <div class="flex items-center justify-between gap-2 px-2 pt-2">
+    <Tabs :model-value="activeMode" @update:model-value="setReplyMode">
+      <TabsList :class="isNoteActive ? 'bg-n-black/5' : ''">
+        <TabsTrigger
+          :value="REPLY_EDITOR_MODES.REPLY"
+          :disabled="disabled || isReplyRestricted"
+        >
+          {{ $t('CONVERSATION.REPLYBOX.REPLY') }}
+        </TabsTrigger>
+        <TabsTrigger :value="REPLY_EDITOR_MODES.NOTE" :disabled="disabled">
+          {{ $t('CONVERSATION.REPLYBOX.PRIVATE_NOTE') }}
+        </TabsTrigger>
+      </TabsList>
+    </Tabs>
+    <div class="flex items-center gap-2">
+      <span
+        v-if="isMessageLengthReachingThreshold"
+        class="text-xs"
+        :class="charLengthClass"
+      >
+        {{ characterLengthWarning }}
+      </span>
+      <DropdownMenu
+        v-if="captainTasksEnabled"
+        :open="showCopilotMenu"
+        @update:open="onCopilotMenuOpenChange"
+      >
+        <DropdownMenuTrigger as-child>
+          <Button
+            variant="ghost"
+            size="icon"
+            :disabled="disabled || isEditorDisabled"
+            :class="{
+              'text-n-violet-9 hover:enabled:!bg-n-violet-3': !showCopilotMenu,
+              'text-n-violet-9 bg-n-violet-3': showCopilotMenu,
+            }"
+          >
+            <Icon icon="i-ph-sparkle-fill" />
+          </Button>
+        </DropdownMenuTrigger>
+        <CopilotMenuBar
+          :has-content="hasContent"
+          :conversation-id="conversationId"
+          @execute-copilot-action="handleCopilotAction"
+        />
+      </DropdownMenu>
     </div>
-    <!-- <Button
-      variant="ghost"
-      class="ltr:rounded-bl-md rtl:rounded-br-md ltr:rounded-br-none rtl:rounded-bl-none ltr:rounded-tl-none rtl:rounded-tr-none text-n-slate-11 ltr:rounded-tr-[11px] rtl:rounded-tl-[11px]"
-      @click="$emit('togglePopout')"
-    >
-      <Icon icon="i-lucide-maximize-2" />
-    </Button> -->
   </div>
 </template>

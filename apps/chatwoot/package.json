@@ -40,7 +40,7 @@
         "options": {
           "parallel": false,
           "commands": [
-            "cd apps/chatwoot && BUNDLE_GEMFILE=Gemfile SKIP_TEST_DATABASE=true bundle exec rails db:migrate",
+            "cd apps/chatwoot && BUNDLE_GEMFILE=Gemfile SKIP_TEST_DATABASE=true ANNOTATERB_SKIP_ON_DB_TASKS=true bundle exec rails db:migrate",
             "node apps/migrator/dist/main.js chatwoot:mirror"
           ]
         }
@@ -52,7 +52,8 @@
           "command": "bundle exec rails db:migrate:reset",
           "env": {
             "BUNDLE_GEMFILE": "Gemfile",
-            "SKIP_TEST_DATABASE": "true"
+            "SKIP_TEST_DATABASE": "true",
+            "ANNOTATERB_SKIP_ON_DB_TASKS": "true"
           }
         }
       },
@@ -131,7 +132,7 @@
         "options": {
           "parallel": false,
           "commands": [
-            "cd apps/chatwoot && BUNDLE_GEMFILE=Gemfile SKIP_TEST_DATABASE=true bundle exec rails db:chatwoot_prepare",
+            "cd apps/chatwoot && BUNDLE_GEMFILE=Gemfile SKIP_TEST_DATABASE=true ANNOTATERB_SKIP_ON_DB_TASKS=true bundle exec rails db:chatwoot_prepare",
             "node apps/migrator/dist/main.js chatwoot:mirror"
           ]
         }
@@ -190,6 +191,30 @@
             "bundle exec rails db:create",
             "bundle exec rspec --format progress --format RspecJunitFormatter --out target/test-results/rspec.xml"
           ]
+        }
+      },
+      "build:frontend": {
+        "executor": "nx:run-commands",
+        "cache": true,
+        "inputs": [
+          "{projectRoot}/app/javascript/**/*",
+          "{projectRoot}/enterprise/app/javascript/**/*",
+          "{projectRoot}/config/vite.json",
+          "{projectRoot}/config/markdown_embeds.yml",
+          "{projectRoot}/vite.config.mts",
+          "{projectRoot}/postcss.config.js",
+          "{projectRoot}/theme/**/*",
+          "{projectRoot}/package.json"
+        ],
+        "outputs": [
+          "{projectRoot}/public/vite"
+        ],
+        "options": {
+          "cwd": "apps/chatwoot",
+          "command": "pnpm exec vite build",
+          "env": {
+            "NODE_OPTIONS": "--max-old-space-size=6144"
+          }
         }
       }
     }

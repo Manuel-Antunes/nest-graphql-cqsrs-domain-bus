@@ -26,6 +26,8 @@ module SetGlobalConfig
     HCAPTCHA_SITE_KEY
     LOGOUT_REDIRECT_LINK
     DISABLE_USER_PROFILE_UPDATE
+    DISABLE_META_INBOX_CREATION
+    DISABLE_META_MESSAGE_SENDING
     DEPLOYMENT_ENV
     INSTALLATION_PRICING_PLAN
   ].freeze
@@ -52,8 +54,15 @@ module SetGlobalConfig
       GIT_SHA: GIT_HASH,
       LOCK_TO_NATASHA_INBOX: ENV.fetch('LOCK_TO_NATASHA_INBOX', 'false').to_s.downcase,
       NATASHA_INBOX_ID: ENV.fetch('NATASHA_INBOX_ID', '2').to_s,
-      ALLOWED_LOGIN_METHODS: allowed_login_methods
+      ALLOWED_LOGIN_METHODS: allowed_login_methods,
+      ACTIVE_PLATFORM_BANNERS: active_platform_banners
     }
+  end
+
+  def active_platform_banners
+    return [] unless ChatwootApp.chatwoot_cloud?
+
+    PlatformBanner.active.order(created_at: :desc).as_json(only: %i[id banner_message banner_type updated_at])
   end
 
   def allowed_login_methods

@@ -54,6 +54,9 @@ export default {
       );
     },
   },
+  mounted() {
+    this.$store.dispatch('agents/get');
+  },
   methods: {
     getAllData() {
       try {

@@ -34,7 +34,9 @@ const guidelinesExample = [
             <Button
               variant="ghost"
               class="h-6 px-2 text-xs !text-sm !text-n-slate-11 flex-shrink-0"
-            >Add this</Button>
+            >
+              Add this
+            </Button>
           </template>
         </SuggestedRules>
       </div>

@@ -14,6 +14,7 @@ const props = defineProps({
   size: { type: String, default: 'default' },
   icon: { type: [String, Object, Function], default: '' },
   isLoading: { type: Boolean, default: false },
+  disabled: { type: Boolean, default: false },
 });
 
 const emit = defineEmits(['click']);
@@ -56,6 +57,7 @@ const handleClick = () => {
       type="button"
       :variant="currentVariant"
       :size="size"
+      :disabled="disabled || isLoading"
       @click="handleClick"
       @blur="resetConfirmMode"
     >

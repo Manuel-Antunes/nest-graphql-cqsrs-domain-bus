@@ -69,8 +69,8 @@ const activeLocaleCode = computed(() => activeLocale.value?.code ?? '');
 const onUpdateCategory = async () => {
   if (!categoryFormRef.value) return;
   const { state } = categoryFormRef.value;
-  const { id, name, slug, icon, description } = state;
-  const categoryData = { name, icon, slug, description };
+  const { id, name, slug, icon, iconColor, description } = state;
+  const categoryData = { name, icon, icon_color: iconColor, slug, description };
   categoryData.id = id;
 
   try {
@@ -145,11 +145,7 @@ defineExpose({ dialogRef: { open, close } });
         >
           <Spinner v-if="isUpdatingCategory" class="size-4 flex-shrink-0" />
           <template v-if="!isUpdatingCategory">
-            {{
-              t(
-                'HELP_CENTER.CATEGORY_PAGE.CATEGORY_DIALOG.CONFIRM_BUTTON_LABEL'
-              )
-            }}
+            {{ t('DIALOG.BUTTONS.CONFIRM') }}
           </template>
         </Button>
       </DialogFooter>

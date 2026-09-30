@@ -21,6 +21,7 @@ const props = defineProps({
   id: { type: Number, required: true },
   name: { type: String, default: '' },
   email: { type: String, default: '' },
+  companyId: { type: [Number, String], default: '' },
   additionalAttributes: { type: Object, default: () => ({}) },
   phoneNumber: { type: String, default: '' },
   thumbnail: { type: String, default: '' },
@@ -45,6 +46,7 @@ const getInitialContactData = () => ({
   id: props.id,
   name: props.name,
   email: props.email,
+  companyId: props.companyId,
   phoneNumber: props.phoneNumber,
   additionalAttributes: props.additionalAttributes,
 });
@@ -55,7 +57,6 @@ const isFormInvalid = computed(() => contactsFormRef.value?.isFormInvalid);
 
 const countriesMap = computed(() => {
   return countries.reduce((acc, country) => {
-    acc[country.code] = country;
     acc[country.id] = country;
     return acc;
   }, {});
@@ -131,10 +132,9 @@ const handleAvatarHover = isHovered => {
           <Avatar
             :name="name"
             :src="thumbnail"
-            :size="48"
+            :size="42"
             :status="availabilityStatus"
             hide-offline-status
-            rounded-full
           >
             <template v-if="selectable" #overlay="{ size }">
               <label

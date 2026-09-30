@@ -57,7 +57,10 @@ const emit = defineEmits(['retry', 'loadOlder']);
 const allMessages = computed(() => {
   return useCamelCase(props.messages, {
     deep: true,
-    stopPaths: ['content_attributes.translations'],
+    stopPaths: [
+      'content_attributes.translations',
+      'content_attributes.whatsapp_flow_response.response_json',
+    ],
   });
 });
 
@@ -226,7 +229,7 @@ onBeforeUnmount(() =>
   <MessageScroller class="size-full">
     <MessageScrollerViewport
       class="conversation-panel bg-n-background"
-      aria-label="Messages"
+      :aria-label="$t('CONVERSATION.DASHBOARD_APP_TAB_MESSAGES')"
     >
       <MessageScrollerContent class="gap-0 px-4 pb-4">
         <slot name="beforeAll" />

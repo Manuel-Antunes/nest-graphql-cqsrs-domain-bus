@@ -94,6 +94,8 @@ yarn-debug.log*
 .vscode
 .claude/settings.local.json
 .cursor
+.codex/
+.claude/
 CLAUDE.local.md
 
 # Histoire deployment
@@ -101,6 +103,8 @@ CLAUDE.local.md
 .histoire
 .pnpm-store/*
 local/
+Procfile.worktree
+.nodeterm/project.json
 
 # Path gems vendored by `nx prune chatwoot` for the folder-context Docker build
 .workspace-gems/

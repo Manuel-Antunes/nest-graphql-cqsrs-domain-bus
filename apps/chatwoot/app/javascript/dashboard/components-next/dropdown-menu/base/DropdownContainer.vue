@@ -1,6 +1,7 @@
 <script setup>
 import { ref } from 'vue';
 import { DropdownMenuRoot, DropdownMenuTrigger } from 'reka-ui';
+import { provideDropdownContext } from './provider.js';
 
 const emit = defineEmits(['close']);
 
@@ -13,6 +14,12 @@ const handleOpenChange = val => {
 
 const toggle = () => handleOpenChange(!isOpen.value);
 const closeMenu = () => handleOpenChange(false);
+
+provideDropdownContext({
+  isOpen,
+  toggle,
+  closeMenu,
+});
 </script>
 
 <template>

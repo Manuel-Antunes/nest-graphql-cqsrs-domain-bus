@@ -1,12 +1,20 @@
 <script>
+/* eslint-disable vue/no-reserved-component-names -- shadcn Button component name */
 import { CSAT_RATINGS } from 'shared/constants/messages';
 import { Button } from 'dashboard/components-next/ui/button';
 
 export default {
+  components: {
+    Button,
+  },
   props: {
     selectedRating: {
       type: Number,
       default: null,
+    },
+    isDisabled: {
+      type: Boolean,
+      default: false,
     },
   },
   emits: ['selectRating'],
@@ -20,12 +28,13 @@ export default {
     buttonClass(rating) {
       return [
         { selected: rating.value === this.selectedRating },
-        { disabled: !!this.selectedRating },
-        { hover: !!this.selectedRating },
+        { disabled: this.isDisabled },
+        { hover: this.isDisabled },
         'emoji-button shadow-none text-3xl lg:text-4xl outline-none mr-8',
       ];
     },
     onClick(rating) {
+      if (this.isDisabled) return;
       this.$emit('selectRating', rating.value);
     },
   },
@@ -38,6 +47,8 @@ export default {
       <Button
         v-for="rating in ratings"
         :key="rating.key"
+        :class="buttonClass(rating)"
+        :disabled="isDisabled"
         @click="onClick(rating)"
       >
         {{ rating.emoji }}

@@ -40,7 +40,7 @@ const toggleSidebar = () => {
   <div
     v-if="!isConversationRoute"
     id="mobile-sidebar-launcher"
-    class="fixed bottom-20 ltr:left-4 rtl:right-4 z-50 transition-transform duration-200 ease-in-out block md:hidden"
+    class="fixed bottom-20 ltr:left-4 rtl:right-4 z-50 transition-transform duration-200 ease-out block md:hidden"
     :class="[
       {
         // When the sidebar is open, sit just past the 64px icon rail (not 160px away).

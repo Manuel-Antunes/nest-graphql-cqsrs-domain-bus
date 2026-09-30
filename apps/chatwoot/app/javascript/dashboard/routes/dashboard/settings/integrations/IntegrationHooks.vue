@@ -16,12 +16,16 @@ import {
 import NewHook from './NewHook.vue';
 import SingleIntegrationHooks from './SingleIntegrationHooks.vue';
 import MultipleIntegrationHooks from './MultipleIntegrationHooks.vue';
+import SettingsLayout from '../SettingsLayout.vue';
+import BaseSettingsHeader from '../components/BaseSettingsHeader.vue';
 
 export default {
   components: {
     NewHook,
     SingleIntegrationHooks,
     MultipleIntegrationHooks,
+    SettingsLayout,
+    BaseSettingsHeader,
     AlertDialog,
     AlertDialogContent,
     AlertDialogHeader,
@@ -46,6 +50,7 @@ export default {
       isIntegrationSingle,
       isHookTypeInbox,
     } = useIntegrationHook(integrationId);
+
     return {
       integration,
       isIntegrationMultiple,
@@ -61,12 +66,6 @@ export default {
       selectedHook: {},
       alertMessage: '',
     };
-  },
-  mounted() {
-    // Header + hooks are gated on this integration's metadata; on a direct load
-    // (no prior visit to the integrations index that preloads it) the store is
-    // empty and the page renders blank, so fetch it here.
-    this.$store.dispatch('integrations/get');
   },
   computed: {
     ...mapGetters({ uiFlags: 'integrations/getUIFlags' }),
@@ -94,6 +93,12 @@ export default {
     cancelText() {
       return this.$t('INTEGRATION_APPS.DELETE.CANCEL_BUTTON_TEXT');
     },
+  },
+  mounted() {
+    // Header + hooks are gated on this integration's metadata; on a direct load
+    // (no prior visit to the integrations index that preloads it) the store is
+    // empty and the page renders blank, so fetch it here.
+    this.$store.dispatch('integrations/get');
   },
   methods: {
     openAddHookModal() {
@@ -132,25 +137,35 @@ export default {
 </script>
 
 <template>
-  <div class="overflow-auto p-4 w-full my-auto flex flex-wrap h-full">
-    <div v-if="showIntegrationHooks" class="w-full">
-      <div v-if="isIntegrationMultiple">
-        <MultipleIntegrationHooks
-          :integration-id="integrationId"
-          :show-add-button="showAddButton"
-          @add="openAddHookModal"
-          @delete="openDeletePopup"
-        />
-      </div>
+  <SettingsLayout :is-loading="uiFlags.isFetching">
+    <template v-if="isIntegrationSingle" #header>
+      <BaseSettingsHeader
+        :title="integration.name || ''"
+        description=""
+        :feature-name="integrationId"
+        :back-button-label="$t('INTEGRATION_SETTINGS.HEADER')"
+      />
+    </template>
+    <template #body>
+      <div v-if="showIntegrationHooks" class="w-full">
+        <div v-if="isIntegrationMultiple">
+          <MultipleIntegrationHooks
+            :integration-id="integrationId"
+            :show-add-button="showAddButton"
+            @add="openAddHookModal"
+            @delete="openDeletePopup"
+          />
+        </div>
 
-      <div v-if="isIntegrationSingle">
-        <SingleIntegrationHooks
-          :integration-id="integrationId"
-          @add="openAddHookModal"
-          @delete="openDeletePopup"
-        />
+        <div v-if="isIntegrationSingle">
+          <SingleIntegrationHooks
+            :integration-id="integrationId"
+            @add="openAddHookModal"
+            @delete="openDeletePopup"
+          />
+        </div>
       </div>
-    </div>
+    </template>
 
     <NewHook
       :open="showAddHookModal"
@@ -177,5 +192,5 @@ export default {
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
-  </div>
+  </SettingsLayout>
 </template>

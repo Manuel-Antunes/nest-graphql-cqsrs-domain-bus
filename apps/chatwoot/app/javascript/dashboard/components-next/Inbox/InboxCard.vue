@@ -6,6 +6,7 @@ import {
   dynamicTimeInEnglish,
   shortTimestamp,
 } from 'shared/helpers/timeHelper';
+import { useExactTimestamp } from 'shared/composables/useExactTimestamp';
 import {
   snoozedReopenTimeToTimestamp,
   shortenSnoozeTime,
@@ -37,6 +38,8 @@ const emit = defineEmits([
   'deleteNotification',
 ]);
 
+const exactTimestamp = useExactTimestamp();
+
 const { t } = useI18n();
 
 const slaCardLabel = ref(null);
@@ -55,8 +58,8 @@ const isUnread = computed(() => !props.inboxItem?.readAt);
 const inbox = computed(() => props.stateInbox);
 
 const inboxIcon = computed(() => {
-  const { channelType, medium } = inbox.value;
-  return getInboxIconByType(channelType, medium);
+  const { channelType, medium, voiceEnabled } = inbox.value;
+  return getInboxIconByType(channelType, medium, 'fill', voiceEnabled);
 });
 
 const hasSlaThreshold = computed(() => {
@@ -111,7 +114,7 @@ const formattedMessage = computed(() => {
 
 const notificationDetails = computed(() => {
   const type = props.inboxItem?.notificationType?.toUpperCase() || '';
-  const [icon = '', color = 'text-n-blue-text'] =
+  const [icon = '', color = 'text-n-blue-11'] =
     NOTIFICATION_TYPES_MAPPING[type] || [];
   return { text: type ? t(`INBOX.TYPES_NEXT.${type}`) : '', icon, color };
 });
@@ -182,11 +185,11 @@ const onSelectAction = key => {
                     : 'i-lucide-alarm-clock-off'
                 "
                 class="flex-shrink-0 size-4"
-                :class="!isUnread ? 'text-n-slate-11' : 'text-n-blue-text'"
+                :class="!isUnread ? 'text-n-slate-11' : 'text-n-blue-11'"
               />
               <span
                 class="text-xs font-medium truncate"
-                :class="!isUnread ? 'text-n-slate-11' : 'text-n-blue-text'"
+                :class="!isUnread ? 'text-n-slate-11' : 'text-n-blue-11'"
               >
                 {{ snoozedText }}
               </span>
@@ -242,7 +245,13 @@ const onSelectAction = key => {
                 class="flex-shrink-0 text-n-slate-11 size-2.5"
               />
             </div>
-            <span class="text-xs text-n-slate-10">
+            <span
+              v-tooltip.top="{
+                content: exactTimestamp(inboxItem?.lastActivityAt),
+                delay: { show: 500, hide: 0 },
+              }"
+              class="text-xs text-n-slate-10"
+            >
               {{ lastActivityAt }}
             </span>
           </div>

@@ -1,15 +1,18 @@
 <script>
+/* eslint-disable vue/no-reserved-component-names -- shadcn Button component name */
 import { useAlert } from 'dashboard/composables';
 import EmojiOrIcon from 'shared/components/EmojiOrIcon.vue';
 import { copyTextToClipboard } from 'shared/helpers/clipboard';
 import { Button } from 'dashboard/components-next/ui/button';
 import Icon from 'dashboard/components-next/icon/Icon.vue';
+import InlineInput from 'dashboard/components-next/inline-input/InlineInput.vue';
 
 export default {
   components: {
     EmojiOrIcon,
     Button,
     Icon,
+    InlineInput,
   },
   props: {
     href: {
@@ -32,6 +35,21 @@ export default {
       type: Boolean,
       default: false,
     },
+    editable: {
+      type: Boolean,
+      default: false,
+    },
+    title: {
+      type: String,
+      default: '',
+    },
+  },
+  emits: ['update'],
+  data() {
+    return {
+      isEditing: false,
+      editValue: '',
+    };
   },
   methods: {
     async onCopy(e) {
@@ -39,14 +57,52 @@ export default {
       await copyTextToClipboard(this.value);
       useAlert(this.$t('CONTACT_PANEL.COPY_SUCCESSFUL'));
     },
+    startEditing() {
+      if (!this.editable) return;
+      this.editValue = this.value || '';
+      this.isEditing = true;
+      this.$nextTick(() => {
+        this.$refs.editInput?.focus();
+      });
+    },
+    saveEdit() {
+      if (!this.isEditing) return;
+      this.isEditing = false;
+      const trimmed = this.editValue.trim();
+      if (trimmed !== (this.value || '')) {
+        this.$emit('update', trimmed);
+      }
+    },
+    cancelEdit() {
+      this.isEditing = false;
+    },
   },
 };
 </script>
 
 <template>
-  <div class="w-full h-5 ltr:-ml-1 rtl:-mr-1">
+  <div class="group/row w-full h-5 ltr:-ml-1 rtl:-mr-1">
+    <!-- Inline edit mode -->
+    <div v-if="isEditing" class="flex items-center w-full min-w-0 gap-2">
+      <EmojiOrIcon
+        :icon="icon"
+        :emoji="emoji"
+        icon-size="14"
+        class="flex-shrink-0 ltr:ml-1 rtl:mr-1"
+      />
+      <InlineInput
+        ref="editInput"
+        v-model="editValue"
+        :placeholder="title"
+        @enter-press="saveEdit"
+        @escape-press="cancelEdit"
+        @blur="saveEdit"
+      />
+    </div>
+
+    <!-- Read mode with link -->
     <a
-      v-if="href"
+      v-else-if="href"
       :href="href"
       class="flex items-center gap-2 text-n-slate-11 hover:underline"
     >
@@ -66,11 +122,27 @@ export default {
       <span v-else class="text-sm text-n-slate-11">
         {{ $t('CONTACT_PANEL.NOT_AVAILABLE') }}
       </span>
-      <Button v-if="showCopy" variant="ghost" size="icon" @click="onCopy"
-        ><Icon :icon="'i-lucide-clipboard'"
-      /></Button>
+      <Button
+        v-if="showCopy"
+        variant="ghost"
+        size="icon"
+        class="ltr:-ml-1 rtl:-mr-1"
+        @click="onCopy"
+      >
+        <Icon icon="i-lucide-clipboard" />
+      </Button>
+      <Button
+        v-if="editable"
+        variant="ghost"
+        size="icon"
+        class="ltr:-ml-1 rtl:-mr-1 opacity-0 group-hover/row:opacity-100 transition-opacity"
+        @click.prevent="startEditing"
+      >
+        <Icon icon="i-lucide-pencil" />
+      </Button>
     </a>
 
+    <!-- Read mode without link -->
     <div v-else class="flex items-center gap-2 text-n-slate-11">
       <EmojiOrIcon
         :icon="icon"
@@ -86,6 +158,24 @@ export default {
       <span v-else class="text-sm text-n-slate-11">
         {{ $t('CONTACT_PANEL.NOT_AVAILABLE') }}
       </span>
+      <Button
+        v-if="showCopy"
+        variant="ghost"
+        size="icon"
+        class="ltr:-ml-1 rtl:-mr-1"
+        @click="onCopy"
+      >
+        <Icon icon="i-lucide-clipboard" />
+      </Button>
+      <Button
+        v-if="editable"
+        variant="ghost"
+        size="icon"
+        class="ltr:-ml-1 rtl:-mr-1 opacity-0 group-hover/row:opacity-100 transition-opacity"
+        @click="startEditing"
+      >
+        <Icon icon="i-lucide-pencil" />
+      </Button>
     </div>
   </div>
 </template>

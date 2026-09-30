@@ -13,6 +13,7 @@ import {
 const props = defineProps({
   value: { type: String, default: '' },
   showResetButton: { type: Boolean, default: true },
+  disabled: { type: Boolean, default: false },
 });
 
 const emit = defineEmits(['onCopy', 'onReset']);
@@ -39,6 +40,7 @@ const onReset = () => {
         name="access_token"
         :type="inputType"
         :model-value="value"
+        :disabled="disabled"
         readonly
         class="cursor-not-allowed"
       />
@@ -47,29 +49,45 @@ const onReset = () => {
           type="button"
           size="icon-xs"
           variant="ghost"
+          :disabled="disabled"
           :aria-label="
-            inputType === 'password'
-              ? 'Show access token'
-              : 'Hide access token'
+            inputType === 'password' ? 'Show access token' : 'Hide access token'
           "
           @click="toggleMasked"
         >
           <Icon
-            :icon="inputType === 'password' ? 'i-lucide-eye' : 'i-lucide-eye-off'"
+            :icon="
+              inputType === 'password' ? 'i-lucide-eye' : 'i-lucide-eye-off'
+            "
             class="size-4"
           />
         </InputGroupButton>
       </InputGroupAddon>
     </InputGroup>
     <div class="flex flex-row gap-2">
-      <Button variant="ghost" type="button" class="rounded-xl" @click="onClick">
+      <Button
+        variant="ghost"
+        type="button"
+        class="rounded-xl"
+        :disabled="disabled"
+        @click="onClick"
+      >
         <Icon icon="i-lucide-copy" class="size-4" />
         {{ $t('PROFILE_SETTINGS.FORM.ACCESS_TOKEN.COPY') }}
       </Button>
-      <ConfirmButton v-if="showResetButton" :label="$t('PROFILE_SETTINGS.FORM.ACCESS_TOKEN.RESET')"
+      <ConfirmButton
+        v-if="showResetButton"
+        :label="$t('PROFILE_SETTINGS.FORM.ACCESS_TOKEN.RESET')"
         :confirm-label="$t('PROFILE_SETTINGS.FORM.ACCESS_TOKEN.CONFIRM_RESET')"
-        :confirm-hint="$t('PROFILE_SETTINGS.FORM.ACCESS_TOKEN.CONFIRM_HINT')" variant="ghost"
-        confirm-variant="destructive" icon="i-lucide-key-round" class="rounded-xl" @click="onReset" />
+        :confirm-hint="$t('PROFILE_SETTINGS.FORM.ACCESS_TOKEN.CONFIRM_HINT')"
+        variant="ghost"
+        confirm-variant="destructive"
+        icon="i-lucide-key-round"
+        class="rounded-xl"
+        :disabled="disabled"
+        @click="onReset"
+      />
+      <slot name="actions" />
     </div>
   </div>
 </template>

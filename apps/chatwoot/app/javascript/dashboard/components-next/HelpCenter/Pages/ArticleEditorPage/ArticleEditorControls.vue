@@ -1,12 +1,14 @@
 <script setup>
 import { computed, ref, watch, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
+import { OnClickOutside } from '@vueuse/components';
 import { useAppNavigation } from 'dashboard/composables/useAppNavigation';
 import { useMapGetter } from 'dashboard/composables/store';
 
 import { Button } from 'dashboard/components-next/ui/button';
 import Icon from 'dashboard/components-next/icon/Icon.vue';
 import Avatar from 'dashboard/components-next/avatar/Avatar.vue';
+import EmojiIcon from 'dashboard/components-next/emoji-icon-picker/EmojiIcon.vue';
 import {
   Popover,
   PopoverTrigger,
@@ -34,8 +36,12 @@ const isCategoryOpen = ref(false);
 const authorSearch = ref('');
 const categorySearch = ref('');
 
-watch(isAuthorOpen, val => { if (!val) authorSearch.value = ''; });
-watch(isCategoryOpen, val => { if (!val) categorySearch.value = ''; });
+watch(isAuthorOpen, val => {
+  if (!val) authorSearch.value = '';
+});
+watch(isCategoryOpen, val => {
+  if (!val) categorySearch.value = '';
+});
 
 const agents = useMapGetter('agents/getAgents');
 const categories = useMapGetter('categories/allCategories');
@@ -92,28 +98,20 @@ const findCategoryFromSlug = slug => {
   return categories.value?.find(category => category.slug === slug);
 };
 
-const assignCategoryFromSlug = slug => {
-  const categoryFromSlug = findCategoryFromSlug(slug);
-  if (categoryFromSlug) {
-    selectedCategoryId.value = categoryFromSlug.id;
-    return categoryFromSlug;
-  }
-  return null;
-};
-
 const selectedCategory = computed(() => {
   if (isNewArticle.value) {
+    if (selectedCategoryId.value) {
+      return (
+        categories.value?.find(c => c.id === selectedCategoryId.value) || null
+      );
+    }
     if (categorySlugFromRoute.value) {
-      const categoryFromSlug = assignCategoryFromSlug(
+      const categoryFromSlug = findCategoryFromSlug(
         categorySlugFromRoute.value
       );
       if (categoryFromSlug) return categoryFromSlug;
     }
-    return selectedCategoryId.value
-      ? categories.value.find(
-          category => category.id === selectedCategoryId.value
-        )
-      : categories.value[0] || null;
+    return categories.value?.[0] || null;
   }
   return categories.value.find(
     category => category.id === props.article?.category?.id
@@ -121,19 +119,18 @@ const selectedCategory = computed(() => {
 });
 
 const categoryList = computed(() => {
-  return (
-    categories.value
-      .map(({ name, id, icon }) => ({
-        label: name,
-        value: id,
-        emoji: icon,
-        isSelected: isNewArticle.value
-          ? id === (selectedCategoryId.value || selectedCategory.value?.id)
-          : id === props.article?.category?.id,
-        action: 'assignCategory',
-      }))
-      .toSorted((a, b) => Number(b.isSelected) - Number(a.isSelected))
-  );
+  return categories.value
+    .map(({ name, id, icon, icon_color: iconColor }) => ({
+      label: name,
+      value: id,
+      emoji: icon,
+      iconColor,
+      isSelected: isNewArticle.value
+        ? id === (selectedCategoryId.value || selectedCategory.value?.id)
+        : id === props.article?.category?.id,
+      action: 'assignCategory',
+    }))
+    .toSorted((a, b) => Number(b.isSelected) - Number(a.isSelected));
 });
 
 const hasCategoryMenuItems = computed(() => {
@@ -149,7 +146,9 @@ const filteredAgentList = computed(() => {
 const filteredCategoryList = computed(() => {
   if (!categorySearch.value) return categoryList.value;
   const q = categorySearch.value.toLowerCase();
-  return categoryList.value.filter(item => item.label.toLowerCase().includes(q));
+  return categoryList.value.filter(item =>
+    item.label.toLowerCase().includes(q)
+  );
 });
 
 const handleArticleAction = ({ action, value }) => {
@@ -175,6 +174,16 @@ const handleArticleAction = ({ action, value }) => {
   actions[action]?.();
 };
 
+const selectAuthor = item => {
+  isAuthorOpen.value = false;
+  handleArticleAction(item);
+};
+
+const selectCategory = item => {
+  isCategoryOpen.value = false;
+  handleArticleAction(item);
+};
+
 const updateMeta = meta => {
   emit('saveArticle', { meta });
 };
@@ -197,7 +206,12 @@ onMounted(() => {
     <Popover v-if="hasAgentList" v-model:open="isAuthorOpen">
       <PopoverTrigger as-child>
         <Button variant="none" size="none" class="hover:opacity-80">
-          <Avatar :name="authorName" :src="authorThumbnailSrc" :size="20" rounded-full />
+          <Avatar
+            :name="authorName"
+            :src="authorThumbnailSrc"
+            :size="20"
+            rounded-full
+          />
           <span class="text-sm text-n-slate-12 hover:text-n-slate-11">
             {{ authorName || '-' }}
           </span>
@@ -218,10 +232,17 @@ onMounted(() => {
             :key="item.value"
             variant="ghost"
             class="justify-start"
-            :class="item.isSelected ? 'bg-n-alpha-1 dark:bg-n-solid-active' : ''"
-            @click="() => { isAuthorOpen = false; handleArticleAction(item); }"
+            :class="
+              item.isSelected ? 'bg-n-alpha-1 dark:bg-n-solid-active' : ''
+            "
+            @click="selectAuthor(item)"
           >
-            <Avatar :name="item.thumbnail.name" :src="item.thumbnail.src" :size="16" rounded-full />
+            <Avatar
+              :name="item.thumbnail.name"
+              :src="item.thumbnail.src"
+              :size="16"
+              rounded-full
+            />
             {{ item.label }}
           </Button>
         </div>
@@ -231,17 +252,27 @@ onMounted(() => {
     <Popover v-if="hasCategoryMenuItems" v-model:open="isCategoryOpen">
       <PopoverTrigger as-child>
         <Button variant="none" size="none" class="px-2 hover:opacity-80">
-          <template v-if="selectedCategory">
-            <span class="text-sm text-n-slate-12 hover:text-n-slate-11">
+          <Icon
+            v-if="!selectedCategory?.icon"
+            icon="i-lucide-shapes"
+            class="size-4"
+          />
+          <span
+            class="flex items-center gap-1.5 min-w-0 text-sm text-n-slate-12 hover:text-n-slate-11"
+          >
+            <EmojiIcon
+              v-if="selectedCategory?.icon"
+              :value="selectedCategory.icon"
+              :color="selectedCategory.icon_color"
+              class="flex-shrink-0 size-4"
+            />
+            <span class="truncate">
               {{
-                `${selectedCategory.icon || ''} ${selectedCategory.name || t('HELP_CENTER.EDIT_ARTICLE_PAGE.EDIT_ARTICLE.UNCATEGORIZED')}`
+                selectedCategory?.name ||
+                t('HELP_CENTER.EDIT_ARTICLE_PAGE.EDIT_ARTICLE.UNCATEGORIZED')
               }}
             </span>
-          </template>
-          <template v-else>
-            <Icon icon="i-lucide-shapes" class="size-4" />
-            {{ t('HELP_CENTER.EDIT_ARTICLE_PAGE.EDIT_ARTICLE.UNCATEGORIZED') }}
-          </template>
+          </span>
         </Button>
       </PopoverTrigger>
       <PopoverContent class="p-0 w-56" align="start">
@@ -259,11 +290,18 @@ onMounted(() => {
             :key="item.value"
             variant="ghost"
             class="justify-start"
-            :class="item.isSelected ? 'bg-n-alpha-1 dark:bg-n-solid-active' : ''"
-            @click="() => { isCategoryOpen = false; handleArticleAction(item); }"
+            :class="
+              item.isSelected ? 'bg-n-alpha-1 dark:bg-n-solid-active' : ''
+            "
+            @click="selectCategory(item)"
           >
-            <span v-if="item.emoji" class="flex-shrink-0">{{ item.emoji }}</span>
-            {{ item.label }}
+            <EmojiIcon
+              v-if="item.emoji"
+              :value="item.emoji"
+              :color="item.iconColor"
+              class="flex-shrink-0 size-4"
+            />
+            <span class="truncate">{{ item.label }}</span>
           </Button>
         </div>
       </PopoverContent>

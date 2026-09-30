@@ -7,7 +7,7 @@ import { useStore, useMapGetter } from 'dashboard/composables/store';
 import { useI18n } from 'vue-i18n';
 import { useAlert } from 'dashboard/composables';
 
-import Spinner from 'shared/components/Spinner.vue';
+import { Spinner } from 'dashboard/components-next/ui/spinner';
 import PageHeader from '../../SettingsSubPageHeader.vue';
 import AgentSelector from '../AgentSelector.vue';
 import { Form, FormField } from 'dashboard/components-next/ui/form';
@@ -83,26 +83,24 @@ const addAgents = async values => {
 </script>
 
 <template>
-  <div class="h-full w-full p-8 col-span-6">
+  <div class="h-full w-full px-8 pt-8 col-span-6 overflow-auto">
     <Form
       ref="editAgentsForm"
       :validation-schema="validationSchema"
       :initial-values="initialValues"
-      class="flex flex-wrap mx-0 overflow-x-auto"
+      class="flex flex-col gap-4 mx-0"
       @submit="addAgents"
     >
-      <div class="w-full">
-        <PageHeader
-          :header-title="headerTitle"
-          :header-content="$t('TEAMS_SETTINGS.EDIT_FLOW.AGENTS.DESC')"
-        />
-      </div>
+      <PageHeader
+        :header-title="headerTitle"
+        :header-content="$t('TEAMS_SETTINGS.EDIT_FLOW.AGENTS.DESC')"
+      />
 
       <FormField
         v-slot="{ value, handleChange, errorMessage }"
         name="selectedAgents"
       >
-        <div class="w-full">
+        <div class="w-full h-full">
           <p v-if="errorMessage" class="error-message pb-2">
             {{ errorMessage }}
           </p>
@@ -116,7 +114,9 @@ const addAgents = async values => {
               $t('TEAMS_SETTINGS.EDIT_FLOW.AGENTS.BUTTON_TEXT')
             "
           />
-          <Spinner v-else />
+          <div v-else class="flex items-center justify-center py-6">
+            <Spinner class="size-6 text-n-blue-11" />
+          </div>
         </div>
       </FormField>
     </Form>

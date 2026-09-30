@@ -88,9 +88,9 @@ defineExpose({ dialogRef: { open, close } });
     <DialogContent class="max-w-2xl">
       <DialogHeader>
         <DialogTitle>{{ $t(`${i18nKey}.TITLE`) }}</DialogTitle>
-        <DialogDescription>{{
-          $t('CAPTAIN.CUSTOM_TOOLS.FORM_DESCRIPTION')
-        }}</DialogDescription>
+        <DialogDescription>
+          {{ $t('CAPTAIN.CUSTOM_TOOLS.FORM_DESCRIPTION') }}
+        </DialogDescription>
       </DialogHeader>
       <CustomToolForm
         :mode="type"

@@ -12,6 +12,7 @@ import {
 import TabBar from 'dashboard/components-next/tabbar/TabBar.vue';
 import { Button } from 'dashboard/components-next/ui/button';
 import Icon from 'dashboard/components-next/icon/Icon.vue';
+import EmojiIcon from 'dashboard/components-next/emoji-icon-picker/EmojiIcon.vue';
 import {
   Popover,
   PopoverTrigger,
@@ -76,18 +77,17 @@ const activeTabIndex = computed(() => {
   return tabs.value.findIndex(tab => tab.value === tabParam);
 });
 
-const activeCategoryName = computed(() => {
-  const activeCategory = props.categories.find(
+const activeCategory = computed(() =>
+  props.categories.find(
     category => category.slug === currentParams.value.categorySlug
-  );
+  )
+);
 
-  if (activeCategory) {
-    const { icon, name } = activeCategory;
-    return `${icon} ${name}`;
-  }
-
-  return t('HELP_CENTER.ARTICLES_PAGE.ARTICLES_HEADER.CATEGORY.ALL');
-});
+const activeCategoryName = computed(
+  () =>
+    activeCategory.value?.name ||
+    t('HELP_CENTER.ARTICLES_PAGE.ARTICLES_HEADER.CATEGORY.ALL')
+);
 
 const activeLocaleName = computed(() => {
   return props.allowedLocales.find(
@@ -107,6 +107,7 @@ const categoryMenuItems = computed(() => {
     value: category.slug,
     action: 'filter',
     emoji: category.icon,
+    iconColor: category.icon_color,
   }));
 
   const hasCategorySlug = !!currentParams.value.categorySlug;
@@ -203,7 +204,15 @@ const handleTabChange = value => {
         <Popover v-if="hasCategoryMenuItems" v-model:open="isCategoryOpen">
           <PopoverTrigger as-child>
             <Button variant="outline" class="max-w-48">
-              {{ activeCategoryName }}
+              <span class="flex items-center gap-1.5 min-w-0">
+                <EmojiIcon
+                  v-if="activeCategory?.icon"
+                  :value="activeCategory.icon"
+                  :color="activeCategory.icon_color"
+                  class="flex-shrink-0 size-4"
+                />
+                <span class="truncate">{{ activeCategoryName }}</span>
+              </span>
               <Icon icon="i-lucide-chevron-down" class="size-4" />
             </Button>
           </PopoverTrigger>
@@ -224,10 +233,13 @@ const handleTabChange = value => {
                 class="justify-start"
                 @click="handleCategoryAction(item)"
               >
-                <span v-if="item.emoji" class="flex-shrink-0">{{
-                  item.emoji
-                }}</span>
-                {{ item.label }}
+                <EmojiIcon
+                  v-if="item.emoji"
+                  :value="item.emoji"
+                  :color="item.iconColor"
+                  class="flex-shrink-0 size-4"
+                />
+                <span class="truncate">{{ item.label }}</span>
               </Button>
             </div>
           </PopoverContent>

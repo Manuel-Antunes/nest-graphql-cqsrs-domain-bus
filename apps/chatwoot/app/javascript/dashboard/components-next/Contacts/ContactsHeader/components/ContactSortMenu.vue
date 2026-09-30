@@ -119,7 +119,7 @@ const isOpen = ref(false);
   <Popover v-model:open="isOpen">
     <PopoverTrigger as-child>
       <Button variant="ghost" size="icon">
-        <Icon :icon="'i-lucide-arrow-down-up'" />
+        <Icon icon="i-lucide-arrow-down-up" />
       </Button>
     </PopoverTrigger>
     <PopoverContent align="end" class="flex flex-col gap-2 w-72 p-4">

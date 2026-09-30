@@ -5,7 +5,7 @@ import * as z from 'zod';
 import { useStore } from 'dashboard/composables/store';
 import { useI18n } from 'vue-i18n';
 import { useAlert } from 'dashboard/composables';
-import { getRegexp } from 'shared/helpers/Validators';
+import { getRegexp, normalizeRegexPattern } from 'shared/helpers/Validators';
 import { ATTRIBUTE_TYPES } from './constants';
 
 import { Button } from 'dashboard/components-next/ui/button';
@@ -122,7 +122,9 @@ const validationSchema = toTypedSchema(
 // attribute (the dialog component stays mounted). Type + regex are derived here.
 const initialValues = computed(() => {
   const a = attribute.value;
-  const regexPattern = a.regex_pattern ? getRegexp(a.regex_pattern).source : null;
+  const regexPattern = a.regex_pattern
+    ? getRegexp(a.regex_pattern).toString()
+    : null;
   const typeId =
     ATTRIBUTE_TYPES.find(
       item => item.key.toLowerCase() === a.attribute_display_type
@@ -152,7 +154,7 @@ const editAttributes = async values => {
       attribute_description: values.description,
       attribute_display_name: values.displayName,
       attribute_values: values.values || [],
-      regex_pattern: regexPattern ? new RegExp(regexPattern).toString() : null,
+      regex_pattern: normalizeRegexPattern(regexPattern),
       regex_cue: regexCue,
     });
     useAlert(t('ATTRIBUTES_MGMT.EDIT.API.SUCCESS_MESSAGE'));
@@ -186,9 +188,9 @@ const editAttributes = async values => {
       >
         <FormField v-slot="{ componentField }" name="displayName">
           <FormItem class="w-full">
-            <FormLabel>{{
-              $t('ATTRIBUTES_MGMT.ADD.FORM.NAME.LABEL')
-            }}</FormLabel>
+            <FormLabel>
+              {{ $t('ATTRIBUTES_MGMT.ADD.FORM.NAME.LABEL') }}
+            </FormLabel>
             <FormControl>
               <Input
                 v-bind="componentField"
@@ -202,9 +204,9 @@ const editAttributes = async values => {
 
         <FormField v-slot="{ componentField }" name="attributeKey">
           <FormItem class="w-full">
-            <FormLabel>{{
-              $t('ATTRIBUTES_MGMT.ADD.FORM.KEY.LABEL')
-            }}</FormLabel>
+            <FormLabel>
+              {{ $t('ATTRIBUTES_MGMT.ADD.FORM.KEY.LABEL') }}
+            </FormLabel>
             <FormControl>
               <Input
                 v-bind="componentField"
@@ -219,9 +221,9 @@ const editAttributes = async values => {
 
         <FormField v-slot="{ componentField }" name="description">
           <FormItem class="w-full">
-            <FormLabel>{{
-              $t('ATTRIBUTES_MGMT.ADD.FORM.DESC.LABEL')
-            }}</FormLabel>
+            <FormLabel>
+              {{ $t('ATTRIBUTES_MGMT.ADD.FORM.DESC.LABEL') }}
+            </FormLabel>
             <FormControl>
               <Textarea
                 v-bind="componentField"
@@ -235,9 +237,9 @@ const editAttributes = async values => {
 
         <FormField v-slot="{ componentField }" name="attributeType">
           <FormItem class="w-full">
-            <FormLabel>{{
-              $t('ATTRIBUTES_MGMT.ADD.FORM.TYPE.LABEL')
-            }}</FormLabel>
+            <FormLabel>
+              {{ $t('ATTRIBUTES_MGMT.ADD.FORM.TYPE.LABEL') }}
+            </FormLabel>
             <Select v-bind="componentField" disabled>
               <FormControl>
                 <SelectTrigger class="w-full">

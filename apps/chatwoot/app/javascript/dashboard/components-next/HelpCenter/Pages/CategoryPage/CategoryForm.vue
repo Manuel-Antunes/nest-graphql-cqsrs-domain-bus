@@ -26,6 +26,7 @@ import {
 } from 'dashboard/components-next/ui/input-group';
 import { Spinner } from 'dashboard/components-next/ui/spinner';
 import Icon from 'dashboard/components-next/icon/Icon.vue';
+import EmojiIcon from 'dashboard/components-next/emoji-icon-picker/EmojiIcon.vue';
 
 const props = defineProps({
   mode: {
@@ -57,8 +58,9 @@ const props = defineProps({
 
 const emit = defineEmits(['submit', 'cancel']);
 
-const EmojiInput = defineAsyncComponent(
-  () => import('shared/components/emoji/EmojiInput.vue')
+const EmojiIconPicker = defineAsyncComponent(
+  () =>
+    import('dashboard/components-next/emoji-icon-picker/EmojiIconPicker.vue')
 );
 
 const { t } = useI18n();
@@ -80,6 +82,7 @@ const state = reactive({
   id: '',
   name: '',
   icon: '',
+  iconColor: '',
   slug: '',
   description: '',
   locale: '',
@@ -117,8 +120,19 @@ const slugHelpText = computed(() => {
   });
 });
 
-const onClickInsertEmoji = emoji => {
-  state.icon = emoji;
+const onSelectIcon = ({ type, value, color }) => {
+  state.icon = value;
+  state.iconColor = type === 'icon' ? color : '';
+  isEmojiPickerOpen.value = false;
+};
+
+const onColorChange = color => {
+  state.iconColor = color;
+};
+
+const onRemoveIcon = () => {
+  state.icon = '';
+  state.iconColor = '';
   isEmojiPickerOpen.value = false;
 };
 
@@ -147,7 +161,14 @@ watch(
   newCategory => {
     if (props.mode === 'edit' && newCategory) {
       const { id, name, icon, slug, description } = newCategory;
-      Object.assign(state, { id, name, icon, slug, description });
+      Object.assign(state, {
+        id,
+        name,
+        icon,
+        iconColor: newCategory.icon_color || '',
+        slug,
+        description,
+      });
     }
   },
   { immediate: true }
@@ -201,14 +222,23 @@ defineExpose({ state, isSubmitDisabled });
                 type="button"
                 @click="isEmojiPickerOpen = !isEmojiPickerOpen"
               >
-                <Icon v-if="!state.icon" icon="i-lucide-smile-plus" />
-                <span v-else>{{ state.icon }}</span>
+                <EmojiIcon
+                  v-if="state.icon"
+                  :value="state.icon"
+                  :color="state.iconColor"
+                  class="size-5 text-xl !leading-5"
+                />
+                <Icon v-else icon="i-lucide-smile-plus" />
               </Button>
-              <EmojiInput
+              <EmojiIconPicker
                 v-if="isEmojiPickerOpen"
                 class="left-0 top-16"
+                :value="state.icon"
+                :color="state.iconColor"
                 show-remove-button
-                :on-click="onClickInsertEmoji"
+                @select="onSelectIcon"
+                @color-change="onColorChange"
+                @remove="onRemoveIcon"
               />
             </OnClickOutside>
           </InputGroupAddon>
@@ -254,7 +284,7 @@ defineExpose({ state, isSubmitDisabled });
       >
         <Button
           variant="outline"
-          class="w-full bg-n-alpha-2 text-n-blue-text hover:bg-n-alpha-3"
+          class="w-full bg-n-alpha-2 text-n-blue-11 hover:bg-n-alpha-3"
           @click="handleCancel"
         >
           {{ t('HELP_CENTER.CATEGORY_PAGE.CATEGORY_DIALOG.BUTTONS.CANCEL') }}

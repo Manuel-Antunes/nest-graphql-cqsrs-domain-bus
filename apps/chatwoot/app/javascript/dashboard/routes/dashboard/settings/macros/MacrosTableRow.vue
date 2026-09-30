@@ -6,11 +6,16 @@ import { useI18n } from 'vue-i18n';
 import { Button } from 'dashboard/components-next/ui/button';
 import Icon from 'dashboard/components-next/icon/Icon.vue';
 import AppLink from 'dashboard/components-next/AppLink.vue';
+import { BaseTableRow, BaseTableCell } from 'dashboard/components-next/table';
 
 const props = defineProps({
   macro: {
     type: Object,
     required: true,
+  },
+  canManagePublicMacros: {
+    type: Boolean,
+    default: true,
   },
 });
 defineEmits(['delete']);
@@ -33,42 +38,79 @@ const visibilityLabel = computed(() => {
       : 'MACROS.EDITOR.VISIBILITY.PERSONAL.LABEL';
   return t(i18nKey);
 });
+
+const canManageMacro = computed(
+  () => props.canManagePublicMacros || props.macro.visibility !== 'global'
+);
+
+const editTooltip = computed(() =>
+  canManageMacro.value ? t('MACROS.EDIT.TOOLTIP') : t('MACROS.VIEW.TOOLTIP')
+);
 </script>
 
 <template>
-  <tr>
-    <td class="py-4 ltr:pr-4 rtl:pl-4 truncate">{{ macro.name }}</td>
-    <td class="py-4 ltr:pr-4 rtl:pl-4">
-      <div v-if="macro.created_by" class="flex items-center">
-        <Avatar :name="createdByName" :size="24" rounded-full />
-        <span class="mx-2">{{ createdByName }}</span>
-      </div>
-      <div v-else>--</div>
-    </td>
-    <td class="py-4 ltr:pr-4 rtl:pl-4">
-      <div v-if="macro.updated_by" class="flex items-center">
-        <Avatar :name="updatedByName" :size="24" rounded-full />
-        <span class="mx-2">{{ updatedByName }}</span>
-      </div>
-      <div v-else>--</div>
-    </td>
-    <td class="py-4 ltr:pr-4 rtl:pl-4">{{ visibilityLabel }}</td>
-    <td class="py-4 flex justify-end gap-1">
-      <AppLink :to="{ name: 'macros_edit', params: { macroId: macro.id } }">
-        <Button
-          v-tooltip.top="$t('MACROS.EDIT.TOOLTIP')"
-          variant="outline"
-          size="icon"
-          ><Icon icon="i-lucide-pen"
-        /></Button>
-      </AppLink>
-      <Button
-        v-tooltip.top="$t('MACROS.DELETE.TOOLTIP')"
-        variant="destructive"
-        size="icon"
-        @click="$emit('delete')"
-        ><Icon icon="i-lucide-trash-2"
-      /></Button>
-    </td>
-  </tr>
+  <BaseTableRow :item="macro">
+    <template #default>
+      <BaseTableCell class="max-w-0 min-w-0">
+        <span class="text-body-main text-n-slate-12 truncate block">
+          {{ macro.name }}
+        </span>
+      </BaseTableCell>
+
+      <BaseTableCell class="max-w-0">
+        <div v-if="macro.created_by" class="flex items-center gap-2 min-w-0">
+          <Avatar
+            :name="createdByName"
+            :size="24"
+            rounded-full
+            class="flex-shrink-0"
+          />
+          <span class="text-body-main text-n-slate-12 truncate">
+            {{ createdByName }}
+          </span>
+        </div>
+        <span v-else class="text-body-main text-n-slate-11">--</span>
+      </BaseTableCell>
+
+      <BaseTableCell class="max-w-0">
+        <div v-if="macro.updated_by" class="flex items-center gap-2 min-w-0">
+          <Avatar
+            :name="updatedByName"
+            :size="24"
+            rounded-full
+            class="flex-shrink-0"
+          />
+          <span class="text-body-main text-n-slate-12 truncate">
+            {{ updatedByName }}
+          </span>
+        </div>
+        <span v-else class="text-body-main text-n-slate-11">--</span>
+      </BaseTableCell>
+
+      <BaseTableCell class="max-w-0">
+        <span class="text-body-main text-n-slate-12 whitespace-nowrap">
+          {{ visibilityLabel }}
+        </span>
+      </BaseTableCell>
+
+      <BaseTableCell align="end" class="w-24">
+        <div class="flex gap-1 justify-end flex-shrink-0">
+          <AppLink :to="{ name: 'macros_edit', params: { macroId: macro.id } }">
+            <Button v-tooltip.top="editTooltip" variant="outline" size="icon">
+              <Icon icon="i-lucide-pen" />
+            </Button>
+          </AppLink>
+          <Button
+            v-if="canManageMacro"
+            v-tooltip.top="$t('MACROS.DELETE.TOOLTIP')"
+            variant="destructive"
+            size="icon"
+            @click="$emit('delete')"
+          >
+            <Icon icon="i-lucide-trash-2" />
+          </Button>
+        </div>
+      </BaseTableCell>
+    </template>
+  </BaseTableRow>
 </template>

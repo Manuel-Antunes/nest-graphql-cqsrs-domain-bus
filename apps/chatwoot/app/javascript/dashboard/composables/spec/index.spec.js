@@ -13,10 +13,12 @@ vi.mock('vue-sonner', () => ({
 
 vi.mock('dashboard/helper/AnalyticsHelper/index', async importOriginal => {
   const actual = await importOriginal();
-  actual.default = {
-    track: vi.fn(),
+  return {
+    ...actual,
+    default: {
+      track: vi.fn(),
+    },
   };
-  return actual;
 });
 
 describe('useTrack', () => {

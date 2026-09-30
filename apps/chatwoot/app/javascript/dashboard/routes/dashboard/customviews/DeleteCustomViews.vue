@@ -2,6 +2,7 @@
 import { useAlert } from 'dashboard/composables';
 import { CONTACTS_EVENTS } from '../../../helper/AnalyticsHelper/events';
 import { useTrack } from 'dashboard/composables';
+import { useAppNavigation } from 'dashboard/composables/useAppNavigation';
 import {
   AlertDialog,
   AlertDialogContent,
@@ -47,6 +48,10 @@ export default {
     },
   },
   emits: ['close', 'update:show'],
+  setup() {
+    const { currentRouteName } = useAppNavigation();
+    return { currentRouteName };
+  },
   computed: {
     localShow: {
       get() {
@@ -75,11 +80,12 @@ export default {
       return `${this.$t('FILTER.CUSTOM_VIEWS.DELETE.MODAL.CONFIRM.NO')}`;
     },
     isFolderSection() {
-      return this.activeFilterType === 0 && this.$route.name !== 'home';
+      return this.activeFilterType === 0 && this.currentRouteName !== 'home';
     },
     isSegmentSection() {
       return (
-        this.activeFilterType === 1 && this.$route.name !== 'contacts_dashboard'
+        this.activeFilterType === 1 &&
+        this.currentRouteName !== 'contacts_dashboard_index'
       );
     },
   },

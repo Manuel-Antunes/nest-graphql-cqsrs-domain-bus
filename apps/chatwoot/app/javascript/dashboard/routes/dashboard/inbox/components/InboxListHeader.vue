@@ -1,4 +1,5 @@
 <script>
+/* eslint-disable vue/no-reserved-component-names -- shadcn Button component name */
 import { useAlert, useTrack } from 'dashboard/composables';
 import { INBOX_EVENTS } from 'dashboard/helper/AnalyticsHelper/events';
 
@@ -97,7 +98,7 @@ export default {
           <PopoverTrigger as-child>
             <Button variant="outline">
               {{ $t('INBOX.LIST.DISPLAY_DROPDOWN') }}
-              <Icon :icon="'i-lucide-chevron-down'" />
+              <Icon icon="i-lucide-chevron-down" />
             </Button>
           </PopoverTrigger>
           <PopoverContent align="start">
@@ -109,7 +110,7 @@ export default {
         <DropdownMenu>
           <DropdownMenuTrigger as-child>
             <Button variant="ghost" size="icon">
-              <Icon :icon="'i-lucide-sliders-vertical'" />
+              <Icon icon="i-lucide-sliders-vertical" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">

@@ -1,6 +1,5 @@
 import { getAllowedFileTypesByChannel } from '@chatwoot/utils';
 import { INBOX_TYPES } from 'dashboard/helper/inbox';
-import { ALLOWED_FILE_TYPES } from 'shared/constants/messages';
 
 // `getAllowedFileTypesByChannel` types channelType as the internal `ChannelKey`
 // union (not exported). Extract it from the signature so the runtime string we
@@ -79,9 +78,8 @@ export const isFileTypeAllowedForChannel = (
     isOnPrivateNote,
   } = options;
 
-  // Use broader file types for private notes (matches file picker behavior)
   const allowedFileTypes = isOnPrivateNote
-    ? ALLOWED_FILE_TYPES
+    ? getAllowedFileTypesByChannel()
     : getAllowedFileTypesByChannel({
         channelType: (isInstagramChannel ||
         conversationType === 'instagram_direct_message'

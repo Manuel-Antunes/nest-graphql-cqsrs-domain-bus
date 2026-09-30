@@ -1,6 +1,6 @@
 <script>
 import { Head } from '@inertiajs/vue3';
-import BillingIndex from 'dashboard/routes/dashboard/settings/billing/Index.vue';
+import BillingIndex from 'dashboard/routes/dashboard/settings/billing/ProviderIndex.vue';
 import AppShell from 'dashboard/inertia/layouts/AppShell.vue';
 import SettingsLayout from 'dashboard/inertia/layouts/SettingsLayout.vue';
 import SettingsWrapper from 'dashboard/inertia/layouts/SettingsWrapper.vue';

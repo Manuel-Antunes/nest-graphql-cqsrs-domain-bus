@@ -76,7 +76,7 @@ const pageInfo = computed(() => {
     class="flex-row items-center justify-between gap-0 h-12 w-full max-w-[calc(60rem-3px)] mx-auto py-2 ltr:pl-4 rtl:pr-4 ltr:pr-3 rtl:pl-3 before:absolute before:inset-x-0 before:-top-4 before:bg-gradient-to-t before:from-n-background before:from-10% before:dark:from-0% before:to-transparent before:h-4 before:pointer-events-none"
   >
     <div class="flex items-center gap-3">
-      <span class="min-w-0 text-sm font-normal line-clamp-1 text-n-slate-11">
+      <span class="min-w-0 text-body-main line-clamp-1 text-n-slate-11">
         {{ currentPageInformation }}
       </span>
     </div>
@@ -97,11 +97,13 @@ const pageInfo = computed(() => {
       >
         <Icon icon="i-lucide-chevron-left" />
       </Button>
-      <div class="inline-flex items-center gap-2 text-sm text-n-slate-11">
-        <span class="px-3 tabular-nums py-0.5 bg-n-alpha-black2 rounded-md">
+      <div class="inline-flex items-center gap-2 text-sm">
+        <span
+          class="px-3 tabular-nums py-0.5 font-420 bg-n-input-background text-body-main text-n-slate-12 rounded-md"
+        >
           {{ formatFullNumber(currentPage) }}
         </span>
-        <span class="truncate">
+        <span class="truncate text-body-main text-n-slate-11">
           {{ pageInfo }}
         </span>
       </div>

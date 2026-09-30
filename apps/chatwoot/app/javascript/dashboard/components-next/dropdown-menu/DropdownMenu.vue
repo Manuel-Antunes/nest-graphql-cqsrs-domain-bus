@@ -10,6 +10,7 @@ import {
   DropdownMenuSeparator,
 } from 'dashboard/components-next/ui/dropdown-menu';
 import Icon from 'dashboard/components-next/icon/Icon.vue';
+import EmojiIcon from 'dashboard/components-next/emoji-icon-picker/EmojiIcon.vue';
 import Avatar from 'dashboard/components-next/avatar/Avatar.vue';
 import { Spinner } from 'dashboard/components-next/ui/spinner';
 import {
@@ -22,25 +23,26 @@ const props = defineProps({
   menuItems: {
     type: Array,
     default: () => [],
-    validator: value =>
-      value.every(item => item.action && item.value && item.label),
   },
   menuSections: {
     type: Array,
     default: () => [],
   },
   thumbnailSize: { type: Number, default: 20 },
+  roundedThumbnail: { type: Boolean, default: true },
   showSearch: { type: Boolean, default: false },
   searchPlaceholder: { type: String, default: '' },
   isSearching: { type: Boolean, default: false },
   labelClass: { type: String, default: '' },
   disableLocalFiltering: { type: Boolean, default: false },
+  isLoading: { type: Boolean, default: false },
+  emptyStateMessage: { type: String, default: 'DROPDOWN_MENU.EMPTY_STATE' },
   open: { type: Boolean, default: undefined },
   align: { type: String, default: 'end' },
   side: { type: String, default: 'bottom' },
 });
 
-const emit = defineEmits(['action', 'search', 'update:open']);
+const emit = defineEmits(['action', 'search', 'empty', 'update:open']);
 
 const { t } = useI18n();
 const slots = useSlots();
@@ -98,9 +100,13 @@ const shouldShowEmptyState = computed(() => {
 });
 
 const handleSearchInput = event => {
-  if (props.disableLocalFiltering) {
-    emit('search', event.target.value);
-  }
+  emit('search', event.target.value);
+
+  const isEmpty = hasSections.value
+    ? filteredMenuSections.value.length === 0
+    : filteredMenuItems.value.length === 0;
+
+  if (isEmpty) emit('empty');
 };
 
 const handleAction = item => {
@@ -146,7 +152,7 @@ watch(isOpen, val => {
           :key="section.title || sectionIndex"
           class="flex flex-col gap-1"
         >
-          <DropdownMenuLabel v-if="section.title">
+          <DropdownMenuLabel v-if="section.title" class="truncate min-w-0">
             {{ section.title }}
           </DropdownMenuLabel>
           <div
@@ -165,7 +171,7 @@ watch(isOpen, val => {
             v-for="(item, itemIndex) in section.items"
             :key="item.value || itemIndex"
             :disabled="item.disabled"
-            :destructive="item.action === 'delete'"
+            :variant="item.action === 'delete' ? 'destructive' : 'default'"
             :class="
               item.isSelected ? 'bg-n-alpha-1 dark:bg-n-solid-active' : ''
             "
@@ -177,24 +183,32 @@ watch(isOpen, val => {
                 :name="item.thumbnail.name"
                 :src="item.thumbnail.src"
                 :size="thumbnailSize"
-                rounded-full
+                :rounded-full="roundedThumbnail"
               />
             </slot>
-            <Icon
-              v-if="item.icon"
-              :icon="item.icon"
-              class="flex-shrink-0 size-3.5"
+            <slot name="icon" :item="item">
+              <Icon
+                v-if="item.icon"
+                :icon="item.icon"
+                class="flex-shrink-0 size-3.5"
+              />
+            </slot>
+            <EmojiIcon
+              v-if="item.emoji"
+              :value="item.emoji"
+              :color="item.iconColor"
+              class="flex-shrink-0 size-4"
             />
-            <span v-if="item.emoji" class="flex-shrink-0">{{
-              item.emoji
-            }}</span>
-            <span
-              v-if="item.label"
-              class="min-w-0 text-sm truncate"
-              :class="labelClass"
-            >
-              {{ item.label }}
-            </span>
+            <slot name="label" :item="item">
+              <span
+                v-if="item.label"
+                class="min-w-0 text-sm font-420 truncate"
+                :class="labelClass"
+              >
+                {{ item.label }}
+              </span>
+            </slot>
+            <slot name="trailing-icon" :item="item" />
           </DropdownMenuItem>
           <DropdownMenuSeparator
             v-if="sectionIndex < filteredMenuSections.length - 1"
@@ -202,11 +216,14 @@ watch(isOpen, val => {
         </div>
       </template>
       <template v-else>
+        <div v-if="isLoading" class="flex items-center justify-center py-2">
+          <Spinner class="size-6" />
+        </div>
         <DropdownMenuItem
           v-for="(item, index) in filteredMenuItems"
           :key="index"
           :disabled="item.disabled"
-          :destructive="item.action === 'delete'"
+          :variant="item.action === 'delete' ? 'destructive' : 'default'"
           :class="item.isSelected ? 'bg-n-alpha-1 dark:bg-n-solid-active' : ''"
           @select="handleAction(item)"
         >
@@ -216,22 +233,32 @@ watch(isOpen, val => {
               :name="item.thumbnail.name"
               :src="item.thumbnail.src"
               :size="thumbnailSize"
-              rounded-full
+              :rounded-full="roundedThumbnail"
             />
           </slot>
-          <Icon
-            v-if="item.icon"
-            :icon="item.icon"
-            class="flex-shrink-0 size-3.5"
+          <slot name="icon" :item="item">
+            <Icon
+              v-if="item.icon"
+              :icon="item.icon"
+              class="flex-shrink-0 size-3.5"
+            />
+          </slot>
+          <EmojiIcon
+            v-if="item.emoji"
+            :value="item.emoji"
+            :color="item.iconColor"
+            class="flex-shrink-0 size-4"
           />
-          <span v-if="item.emoji" class="flex-shrink-0">{{ item.emoji }}</span>
-          <span
-            v-if="item.label"
-            class="min-w-0 text-sm truncate"
-            :class="labelClass"
-          >
-            {{ item.label }}
-          </span>
+          <slot name="label" :item="item">
+            <span
+              v-if="item.label"
+              class="min-w-0 text-sm font-420 truncate"
+              :class="labelClass"
+            >
+              {{ item.label }}
+            </span>
+          </slot>
+          <slot name="trailing-icon" :item="item" />
         </DropdownMenuItem>
       </template>
       <div
@@ -241,7 +268,9 @@ watch(isOpen, val => {
         {{
           isSearching
             ? t('DROPDOWN_MENU.SEARCHING')
-            : t('DROPDOWN_MENU.EMPTY_STATE')
+            : searchQuery
+              ? t('DROPDOWN_MENU.EMPTY_STATE')
+              : t(emptyStateMessage)
         }}
       </div>
       <slot name="footer" />

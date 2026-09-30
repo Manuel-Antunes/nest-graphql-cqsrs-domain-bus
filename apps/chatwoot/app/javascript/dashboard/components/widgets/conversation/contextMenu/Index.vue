@@ -7,6 +7,7 @@ import {
   getSortedAgentsByAvailability,
   getAgentsByUpdatedPresence,
 } from 'dashboard/helper/agentHelper.js';
+import { picoSearch } from '@chatwoot/pico-search';
 import wootConstants from 'dashboard/constants/globals';
 import AgentLoadingPlaceholder from './agentLoadingPlaceholder.vue';
 import Icon from 'dashboard/components-next/icon/Icon.vue';
@@ -18,6 +19,11 @@ import {
   ContextMenuSubTrigger,
   ContextMenuSubContent,
 } from 'dashboard/components-next/ui/context-menu';
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from 'dashboard/components-next/ui/input-group';
 
 const MENU = {
   MARK_AS_READ: 'mark-as-read',
@@ -43,6 +49,9 @@ export default {
     ContextMenuSub,
     ContextMenuSubTrigger,
     ContextMenuSubContent,
+    InputGroup,
+    InputGroupAddon,
+    InputGroupInput,
   },
   props: {
     chatId: {
@@ -65,6 +74,10 @@ export default {
       type: String,
       default: null,
     },
+    conversationLabels: {
+      type: Array,
+      default: () => [],
+    },
     conversationUrl: {
       type: String,
       default: '',
@@ -82,6 +95,7 @@ export default {
     'assignAgent',
     'assignTeam',
     'assignLabel',
+    'removeLabel',
     'deleteConversation',
     'close',
   ],
@@ -94,6 +108,7 @@ export default {
   data() {
     return {
       MENU,
+      labelSearchQuery: '',
       STATUS_TYPE: wootConstants.STATUS_TYPE,
       statusIcons: {
         [wootConstants.STATUS_TYPE.RESOLVED]: 'i-lucide-check',
@@ -228,6 +243,14 @@ export default {
       // Don't show snooze if the conversation is already snoozed/resolved/pending
       return this.status === wootConstants.STATUS_TYPE.OPEN;
     },
+    filteredLabels() {
+      const labels = this.labelSearchQuery
+        ? picoSearch(this.labels, this.labelSearchQuery, ['title'])
+        : this.labels;
+      // Assigned labels first, keeping each group's existing order.
+      const isAssigned = label => this.conversationLabels.includes(label.title);
+      return [...labels].sort((a, b) => isAssigned(b) - isAssigned(a));
+    },
   },
   mounted() {
     this.$store.dispatch('inboxAssignableAgents/fetch', [this.inboxId]);
@@ -346,19 +369,48 @@ export default {
         <Icon icon="i-lucide-tag" />
         {{ labelMenuConfig.label }}
       </ContextMenuSubTrigger>
-      <ContextMenuSubContent class="max-h-80 overflow-y-auto">
-        <ContextMenuItem
-          v-for="label in labels"
-          :key="label.id"
-          class="gap-2"
-          @select="$emit('assignLabel', label)"
-        >
-          <span
-            class="flex-shrink-0 rounded-full size-2.5"
-            :style="{ backgroundColor: label.color }"
+      <ContextMenuSubContent class="w-[12.5rem]">
+        <InputGroup class="h-8 mb-1">
+          <InputGroupAddon>
+            <Icon icon="i-lucide-search" class="size-3.5" />
+          </InputGroupAddon>
+          <InputGroupInput
+            v-model="labelSearchQuery"
+            type="search"
+            class="text-xs"
+            :placeholder="$t('CONVERSATION.CARD_CONTEXT_MENU.SEARCH_LABELS')"
+            @keydown.stop
           />
-          {{ label.title }}
-        </ContextMenuItem>
+        </InputGroup>
+        <div class="max-h-[12.5rem] overflow-x-hidden overflow-y-auto">
+          <ContextMenuItem
+            v-for="label in filteredLabels"
+            :key="label.id"
+            class="gap-2"
+            @select.prevent="
+              conversationLabels.includes(label.title)
+                ? $emit('removeLabel', label)
+                : $emit('assignLabel', label)
+            "
+          >
+            <span
+              class="flex-shrink-0 rounded-full size-2.5"
+              :style="{ backgroundColor: label.color }"
+            />
+            <span class="flex-1 min-w-0 truncate">{{ label.title }}</span>
+            <Icon
+              v-if="conversationLabels.includes(label.title)"
+              icon="i-lucide-check"
+              class="flex-shrink-0 size-3.5"
+            />
+          </ContextMenuItem>
+          <p
+            v-if="!filteredLabels.length"
+            class="px-2 py-2 m-0 text-xs text-center text-n-slate-11"
+          >
+            {{ $t('CONVERSATION.CARD_CONTEXT_MENU.NO_LABELS_FOUND') }}
+          </p>
+        </div>
       </ContextMenuSubContent>
     </ContextMenuSub>
     <ContextMenuSub v-if="isAllowed([MENU.AGENT])">

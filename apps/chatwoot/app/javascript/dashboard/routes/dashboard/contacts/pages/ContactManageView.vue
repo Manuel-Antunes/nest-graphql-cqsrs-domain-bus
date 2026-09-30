@@ -16,6 +16,7 @@ import {
 } from 'dashboard/components-next/ui/tabs';
 import ContactNotes from 'dashboard/components-next/Contacts/ContactsSidebar/ContactNotes.vue';
 import ContactHistory from 'dashboard/components-next/Contacts/ContactsSidebar/ContactHistory.vue';
+import ContactMedia from 'dashboard/components-next/Contacts/ContactsSidebar/ContactMedia.vue';
 import ContactMerge from 'dashboard/components-next/Contacts/ContactsSidebar/ContactMerge.vue';
 import ContactCustomAttributes from 'dashboard/components-next/Contacts/ContactsSidebar/ContactCustomAttributes.vue';
 import ClientInformationItem from 'dashboard/routes/dashboard/conversation/ClientInformationItem.vue';
@@ -44,24 +45,6 @@ const showSpinner = computed(
 
 const { t } = useI18n();
 
-const CONTACT_TABS_OPTIONS = [
-  { key: 'ATTRIBUTES', value: 'attributes' },
-  { key: 'HISTORY', value: 'history' },
-  { key: 'NOTES', value: 'notes' },
-  { key: 'MERGE', value: 'merge' },
-];
-
-const tabs = computed(() => {
-  return CONTACT_TABS_OPTIONS.map(tab => ({
-    label: t(`CONTACTS_LAYOUT.SIDEBAR.TABS.${tab.key}`),
-    value: tab.value,
-  }));
-});
-
-const activeTabIndex = computed(() => {
-  return CONTACT_TABS_OPTIONS.findIndex(v => v.value === activeTab.value);
-});
-
 const goToContactsList = () => {
   if (window.history.state?.back || window.history.length > 1) {
     window.history.back();
@@ -79,10 +62,6 @@ const fetchActiveContact = async () => {
     await store.dispatch('contacts/show', { id: contactId });
     await store.dispatch('contacts/fetchContactableInbox', contactId);
   }
-};
-
-const handleTabChange = tab => {
-  activeTab.value = tab.value;
 };
 
 const fetchContactNotes = () => {
@@ -133,9 +112,10 @@ onMounted(() => {
   fetchAttributes();
 });
 </script>
+
 <template>
   <div
-    class="flex flex-col justify-between flex-1 h-full m-0 overflow-auto bg-n-background"
+    class="flex flex-col justify-between flex-1 h-full m-0 overflow-auto bg-n-surface-1"
   >
     <ContactsDetailsLayout
       :button-label="$t('CONTACTS_LAYOUT.HEADER.SEND_MESSAGE')"
@@ -177,6 +157,10 @@ onMounted(() => {
               {{ $t('CONTACTS_LAYOUT.SIDEBAR.TABS.NOTES') }}
             </TabsTrigger>
 
+            <TabsTrigger value="media" class="flex-1 min-w-fit">
+              {{ $t('CONTACTS_LAYOUT.SIDEBAR.TABS.MEDIA') }}
+            </TabsTrigger>
+
             <TabsTrigger value="merge" class="flex-1 min-w-fit">
               {{ $t('CONTACTS_LAYOUT.SIDEBAR.TABS.MERGE') }}
             </TabsTrigger>
@@ -206,6 +190,10 @@ onMounted(() => {
 
             <TabsContent value="notes" class="mt-0">
               <ContactNotes />
+            </TabsContent>
+
+            <TabsContent value="media" class="mt-0">
+              <ContactMedia />
             </TabsContent>
 
             <TabsContent value="merge" class="mt-0">

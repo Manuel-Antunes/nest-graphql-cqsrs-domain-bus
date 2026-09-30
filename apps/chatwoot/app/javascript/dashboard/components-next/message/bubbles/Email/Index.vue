@@ -44,7 +44,6 @@ onMounted(() => {
 });
 
 const isOutgoing = computed(() => messageType.value === MESSAGE_TYPES.OUTGOING);
-const isIncoming = computed(() => !isOutgoing.value);
 
 const { hasTranslations, translationContent } =
   useTranslations(contentAttributes);
@@ -223,5 +222,11 @@ const handleSeeOriginal = () => {
       display: inline-block;
     }
   }
+}
+
+// Email clients (Gmail, Outlook) hardcode dir="ltr" on wrapper elements.
+// In RTL apps this forces email content LTR regardless of actual text.
+[dir='rtl'] .letter-render [dir='ltr'] {
+  direction: inherit;
 }
 </style>

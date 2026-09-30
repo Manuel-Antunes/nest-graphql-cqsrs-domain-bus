@@ -5,7 +5,8 @@ import * as z from 'zod';
 import { useStore, useMapGetter } from 'dashboard/composables/store';
 import { useI18n } from 'vue-i18n';
 import { useAlert } from 'dashboard/composables';
-import SettingsSection from 'dashboard/components/SettingsSection.vue';
+import SettingsFieldSection from 'dashboard/components-next/Settings/SettingsFieldSection.vue';
+import SingleSelectDropdown from './components/SingleSelectDropdown.vue';
 import { Button } from 'dashboard/components-next/ui/button';
 import { Input } from 'dashboard/components-next/ui/input';
 import { Label } from 'dashboard/components-next/ui/label';
@@ -33,6 +34,12 @@ const { t } = useI18n();
 const uiFlags = useMapGetter('inboxes/getUIFlags');
 
 const imapForm = ref(null);
+const authMechanism = ref('plain');
+const authMechanisms = [
+  { key: 1, value: 'plain' },
+  { key: 2, value: 'login' },
+  { key: 3, value: 'cram-md5' },
+];
 
 const validationSchema = toTypedSchema(
   z
@@ -94,6 +101,7 @@ const setDefaults = () => {
     imap_login: imapLogin,
     imap_password: imapPassword,
     imap_enable_ssl: imapEnableSsl,
+    imap_authentication: imapAuthentication,
   } = props.inbox;
   imapForm.value?.setValues({
     isIMAPEnabled: imapEnabled || false,
@@ -103,10 +111,15 @@ const setDefaults = () => {
     password: imapPassword || '',
     isSSLEnabled: imapEnableSsl ?? true,
   });
+  authMechanism.value = imapAuthentication || 'plain';
 };
 
 onMounted(setDefaults);
 watch(() => props.inbox, setDefaults);
+
+const handleAuthMechanismChange = mode => {
+  authMechanism.value = mode;
+};
 
 const updateInbox = async values => {
   try {
@@ -120,12 +133,9 @@ const updateInbox = async values => {
         imap_login: values.login,
         imap_password: values.password,
         imap_enable_ssl: values.isSSLEnabled,
+        imap_authentication: authMechanism.value,
       },
     };
-
-    if (!values.isIMAPEnabled) {
-      payload.channel.smtp_enabled = false;
-    }
 
     await store.dispatch('inboxes/updateInboxIMAP', payload);
     useAlert(t('INBOX_MGMT.IMAP.EDIT.SUCCESS_MESSAGE'));
@@ -136,101 +146,115 @@ const updateInbox = async values => {
 </script>
 
 <template>
-  <div class="mx-8">
-    <SettingsSection
-      :title="$t('INBOX_MGMT.IMAP.TITLE')"
-      :sub-title="$t('INBOX_MGMT.IMAP.SUBTITLE')"
-      :note="$t('INBOX_MGMT.IMAP.NOTE_TEXT')"
+  <SettingsFieldSection
+    :label="$t('INBOX_MGMT.IMAP.TITLE')"
+    :help-text="$t('INBOX_MGMT.IMAP.NOTE_TEXT')"
+    class="[&>div]:!items-start [&>div>label]:mt-1 mb-4"
+  >
+    <Form
+      ref="imapForm"
+      v-slot="{ values, meta }"
+      :validation-schema="validationSchema"
+      :initial-values="initialValues"
+      @submit="updateInbox"
     >
-      <Form
-        ref="imapForm"
-        v-slot="{ values, meta }"
-        :validation-schema="validationSchema"
-        :initial-values="initialValues"
-        @submit="updateInbox"
-      >
-        <FormField v-slot="{ value, handleChange }" name="isIMAPEnabled">
+      <FormField v-slot="{ value, handleChange }" name="isIMAPEnabled">
+        <div class="flex items-center gap-2">
+          <Checkbox
+            id="toggle-imap-enable"
+            :checked="value"
+            @update:checked="handleChange"
+          />
+          <Label for="toggle-imap-enable" class="mb-0 font-normal">
+            {{ $t('INBOX_MGMT.IMAP.TOGGLE_AVAILABILITY') }}
+          </Label>
+        </div>
+      </FormField>
+      <p>{{ $t('INBOX_MGMT.IMAP.TOGGLE_HELP') }}</p>
+
+      <div v-if="values.isIMAPEnabled" class="mb-6 flex flex-col gap-4 mt-4">
+        <FormField v-slot="{ componentField }" name="address">
+          <FormItem class="flex flex-col gap-1 w-full">
+            <FormLabel>{{ $t('INBOX_MGMT.IMAP.ADDRESS.LABEL') }}</FormLabel>
+            <FormControl>
+              <Input
+                v-bind="componentField"
+                :placeholder="$t('INBOX_MGMT.IMAP.ADDRESS.PLACE_HOLDER')"
+              />
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        </FormField>
+
+        <FormField v-slot="{ componentField }" name="port">
+          <FormItem class="flex flex-col gap-1 w-full">
+            <FormLabel>{{ $t('INBOX_MGMT.IMAP.PORT.LABEL') }}</FormLabel>
+            <FormControl>
+              <Input
+                v-bind="componentField"
+                type="number"
+                :placeholder="$t('INBOX_MGMT.IMAP.PORT.PLACE_HOLDER')"
+              />
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        </FormField>
+
+        <FormField v-slot="{ componentField }" name="login">
+          <FormItem class="flex flex-col gap-1 w-full">
+            <FormLabel>{{ $t('INBOX_MGMT.IMAP.LOGIN.LABEL') }}</FormLabel>
+            <FormControl>
+              <Input
+                v-bind="componentField"
+                :placeholder="$t('INBOX_MGMT.IMAP.LOGIN.PLACE_HOLDER')"
+              />
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        </FormField>
+
+        <FormField v-slot="{ componentField }" name="password">
+          <FormItem class="flex flex-col gap-1 w-full">
+            <FormLabel>{{ $t('INBOX_MGMT.IMAP.PASSWORD.LABEL') }}</FormLabel>
+            <FormControl>
+              <Input
+                v-bind="componentField"
+                type="password"
+                :placeholder="$t('INBOX_MGMT.IMAP.PASSWORD.PLACE_HOLDER')"
+              />
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        </FormField>
+
+        <FormField v-slot="{ value, handleChange }" name="isSSLEnabled">
           <div class="flex items-center gap-2">
-            <Checkbox :checked="value" @update:checked="handleChange" />
-            <Label class="mb-0 font-normal">
-              {{ $t('INBOX_MGMT.IMAP.TOGGLE_AVAILABILITY') }}
+            <Checkbox
+              id="toggle-enable-ssl"
+              :checked="value"
+              @update:checked="handleChange"
+            />
+            <Label for="toggle-enable-ssl" class="mb-0 font-normal">
+              {{ $t('INBOX_MGMT.IMAP.ENABLE_SSL') }}
             </Label>
           </div>
         </FormField>
-        <p>{{ $t('INBOX_MGMT.IMAP.TOGGLE_HELP') }}</p>
 
-        <div v-if="values.isIMAPEnabled" class="mb-6 flex flex-col gap-4 mt-4">
-          <FormField v-slot="{ componentField }" name="address">
-            <FormItem class="flex flex-col gap-1 max-w-[75%] w-full">
-              <FormLabel>{{ $t('INBOX_MGMT.IMAP.ADDRESS.LABEL') }}</FormLabel>
-              <FormControl>
-                <Input
-                  v-bind="componentField"
-                  :placeholder="$t('INBOX_MGMT.IMAP.ADDRESS.PLACE_HOLDER')"
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          </FormField>
+        <SingleSelectDropdown
+          class="w-full"
+          :label="$t('INBOX_MGMT.IMAP.AUTH_MECHANISM')"
+          :selected="authMechanism"
+          :options="authMechanisms"
+          :action="handleAuthMechanismChange"
+        />
+      </div>
 
-          <FormField v-slot="{ componentField }" name="port">
-            <FormItem class="flex flex-col gap-1 max-w-[75%] w-full">
-              <FormLabel>{{ $t('INBOX_MGMT.IMAP.PORT.LABEL') }}</FormLabel>
-              <FormControl>
-                <Input
-                  v-bind="componentField"
-                  type="number"
-                  :placeholder="$t('INBOX_MGMT.IMAP.PORT.PLACE_HOLDER')"
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          </FormField>
-
-          <FormField v-slot="{ componentField }" name="login">
-            <FormItem class="flex flex-col gap-1 max-w-[75%] w-full">
-              <FormLabel>{{ $t('INBOX_MGMT.IMAP.LOGIN.LABEL') }}</FormLabel>
-              <FormControl>
-                <Input
-                  v-bind="componentField"
-                  :placeholder="$t('INBOX_MGMT.IMAP.LOGIN.PLACE_HOLDER')"
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          </FormField>
-
-          <FormField v-slot="{ componentField }" name="password">
-            <FormItem class="flex flex-col gap-1 max-w-[75%] w-full">
-              <FormLabel>{{ $t('INBOX_MGMT.IMAP.PASSWORD.LABEL') }}</FormLabel>
-              <FormControl>
-                <Input
-                  v-bind="componentField"
-                  type="password"
-                  :placeholder="$t('INBOX_MGMT.IMAP.PASSWORD.PLACE_HOLDER')"
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          </FormField>
-
-          <FormField v-slot="{ value, handleChange }" name="isSSLEnabled">
-            <div class="flex items-center gap-2">
-              <Checkbox :checked="value" @update:checked="handleChange" />
-              <Label class="mb-0 font-normal">
-                {{ $t('INBOX_MGMT.IMAP.ENABLE_SSL') }}
-              </Label>
-            </div>
-          </FormField>
-        </div>
-
-        <Button type="submit" :disabled="!meta.valid || uiFlags.isUpdatingIMAP">
-          <Spinner v-if="uiFlags.isUpdatingIMAP" class="size-4 flex-shrink-0" />
-          <template v-if="!uiFlags.isUpdatingIMAP">{{
-            $t('INBOX_MGMT.IMAP.UPDATE')
-          }}</template>
-        </Button>
-      </Form>
-    </SettingsSection>
-  </div>
+      <Button type="submit" :disabled="!meta.valid || uiFlags.isUpdatingIMAP">
+        <Spinner v-if="uiFlags.isUpdatingIMAP" class="size-4 flex-shrink-0" />
+        <template v-if="!uiFlags.isUpdatingIMAP">
+          {{ $t('INBOX_MGMT.IMAP.UPDATE') }}
+        </template>
+      </Button>
+    </Form>
+  </SettingsFieldSection>
 </template>

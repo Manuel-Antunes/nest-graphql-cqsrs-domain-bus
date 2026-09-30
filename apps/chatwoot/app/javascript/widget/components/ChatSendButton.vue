@@ -1,4 +1,5 @@
 <script>
+/* eslint-disable vue/no-reserved-component-names -- shadcn Button component name */
 import Spinner from 'shared/components/Spinner.vue';
 import FluentIcon from 'shared/components/FluentIcon/Index.vue';
 import { Button } from 'dashboard/components-next/ui/button';
@@ -34,7 +35,12 @@ export default {
     class="size-8"
     :disabled="disabled"
   >
-    <FluentIcon v-if="!loading" icon="send" :style="`color: ${color}`" />
+    <FluentIcon
+      v-if="!loading"
+      icon="send"
+      class="rtl:-scale-x-100"
+      :style="`color: ${color}`"
+    />
     <Spinner v-else size="small" />
   </Button>
 </template>

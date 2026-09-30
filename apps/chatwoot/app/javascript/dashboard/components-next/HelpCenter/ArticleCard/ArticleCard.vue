@@ -1,17 +1,25 @@
 <script setup>
-import { computed, ref } from 'vue';
+import { computed, ref, useTemplateRef } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { dynamicTime } from 'shared/helpers/timeHelper';
+import { useExactTimestamp } from 'shared/composables/useExactTimestamp';
 import {
   ARTICLE_MENU_ITEMS,
   ARTICLE_MENU_OPTIONS,
   ARTICLE_STATUSES,
+  getArticleStatus,
 } from 'dashboard/helper/portalHelper';
+import ArticlePendingChangesPopover from 'dashboard/components-next/HelpCenter/Pages/ArticleEditorPage/ArticlePendingChangesPopover.vue';
 
+import { useMapGetter } from 'dashboard/composables/store.js';
+import { useConfig } from 'dashboard/composables/useConfig';
+import { FEATURE_FLAGS } from 'dashboard/featureFlags';
 import Icon from 'dashboard/components-next/icon/Icon.vue';
+import EmojiIcon from 'dashboard/components-next/emoji-icon-picker/EmojiIcon.vue';
 import CardLayout from 'dashboard/components-next/CardLayout.vue';
 import { Button } from 'dashboard/components-next/ui/button';
 import Avatar from 'dashboard/components-next/avatar/Avatar.vue';
+import { Checkbox } from 'dashboard/components-next/ui/checkbox';
 import {
   Popover,
   PopoverTrigger,
@@ -47,13 +55,55 @@ const props = defineProps({
     type: Number,
     required: true,
   },
+  isSelected: {
+    type: Boolean,
+    default: false,
+  },
+  hasPendingChanges: {
+    type: Boolean,
+    default: false,
+  },
+  selectable: {
+    type: Boolean,
+    default: false,
+  },
+  showSelectionControl: {
+    type: Boolean,
+    default: false,
+  },
 });
 
-const emit = defineEmits(['openArticle', 'articleAction']);
+const emit = defineEmits([
+  'openArticle',
+  'articleAction',
+  'toggleSelect',
+  'hover',
+  'draftResolved',
+  'draftFailed',
+]);
+
+const exactTimestamp = useExactTimestamp();
 
 const { t } = useI18n();
 
 const isOpen = ref(false);
+
+const pendingChangesPopoverRef = useTemplateRef('pendingChangesPopoverRef');
+
+const currentAccountId = useMapGetter('getCurrentAccountId');
+const isFeatureEnabledonAccount = useMapGetter(
+  'accounts/isFeatureEnabledonAccount'
+);
+const { isEnterprise } = useConfig();
+
+const isTranslationAvailable = computed(
+  () =>
+    isEnterprise &&
+    isFeatureEnabledonAccount.value(
+      currentAccountId.value,
+      FEATURE_FLAGS.CAPTAIN_TASKS
+    )
+);
 
 const articleMenuItems = computed(() => {
   const commonItems = Object.entries(ARTICLE_MENU_ITEMS).reduce(
@@ -67,9 +117,22 @@ const articleMenuItems = computed(() => {
   const statusItems = (
     ARTICLE_MENU_OPTIONS[props.status] ||
     ARTICLE_MENU_OPTIONS[ARTICLE_STATUSES.PUBLISHED]
-  ).map(key => commonItems[key]);
+  )
+    .filter(key => key !== 'translate' || isTranslationAvailable.value)
+    .map(key => commonItems[key]);
 
-  return [...statusItems, commonItems.delete];
+  const draftItems = props.hasPendingChanges
+    ? [
+        {
+          label: t('HELP_CENTER.EDIT_ARTICLE_PAGE.HEADER.DISCARD_CHANGES'),
+          value: 'discard-draft',
+          action: 'discard-draft',
+          icon: 'i-lucide-undo-2',
+        },
+      ]
+    : [];
+
+  return [...statusItems, ...draftItems, commonItems.delete];
 });
 
 const statusTextColor = computed(() => {
@@ -96,7 +159,7 @@ const statusText = computed(() => {
 
 const categoryName = computed(() => {
   if (props.category?.slug) {
-    return `${props.category.icon} ${props.category.name}`;
+    return props.category.name;
   }
   return t(
     'HELP_CENTER.ARTICLES_PAGE.ARTICLE_CARD.CARD.CATEGORY.UNCATEGORISED'
@@ -117,6 +180,12 @@ const lastUpdatedAt = computed(() => {
 
 const handleArticleAction = ({ action, value }) => {
   isOpen.value = false;
+  // Un-publishing an article with staged edits — confirm apply/discard first;
+  // the popover applies the chosen status itself.
+  if (props.hasPendingChanges && (action === 'draft' || action === 'archive')) {
+    pendingChangesPopoverRef.value?.open(getArticleStatus(value));
+    return;
+  }
   emit('articleAction', { action, value, id: props.id });
 };
 
@@ -126,48 +195,98 @@ const handleClick = id => {
 </script>
 
 <template>
-  <CardLayout>
+  <CardLayout
+    :selectable="selectable"
+    class="relative"
+    @mouseenter="emit('hover', true)"
+    @mouseleave="emit('hover', false)"
+  >
+    <div
+      v-show="showSelectionControl"
+      class="absolute top-7 ltr:left-3 rtl:right-3"
+    >
+      <Checkbox
+        :checked="isSelected"
+        @update:checked="emit('toggleSelect', id)"
+      />
+    </div>
     <div class="flex justify-between w-full gap-1">
-      <span
-        class="text-base cursor-pointer hover:underline underline-offset-2 hover:text-n-blue-text text-n-slate-12 line-clamp-1"
-        @click="handleClick(id)"
-      >
-        {{ title }}
-      </span>
+      <div class="flex items-center gap-2 min-w-0">
+        <span
+          class="text-base cursor-pointer hover:underline underline-offset-2 hover:text-n-blue-11 text-n-slate-12 line-clamp-1"
+          @click="handleClick(id)"
+        >
+          {{ title }}
+        </span>
+      </div>
       <div class="flex items-center gap-2">
+        <span
+          v-if="hasPendingChanges"
+          :title="
+            t(
+              'HELP_CENTER.ARTICLES_PAGE.ARTICLE_CARD.CARD.PENDING_EDITS_TOOLTIP'
+            )
+          "
+          class="text-xs font-medium inline-flex items-center gap-1 h-6 px-2 py-0.5 rounded-md text-n-slate-11 bg-n-alpha-2 whitespace-nowrap shrink-0"
+        >
+          <span class="rounded-full size-1.5 bg-n-amber-9 shrink-0" />
+          {{ t('HELP_CENTER.ARTICLES_PAGE.ARTICLE_CARD.CARD.PENDING_EDITS') }}
+        </span>
         <span
           class="text-xs font-medium inline-flex items-center h-6 px-2 py-0.5 rounded-md bg-n-alpha-2"
           :class="statusTextColor"
         >
           {{ statusText }}
         </span>
-        <Popover v-model:open="isOpen">
-          <PopoverTrigger as-child>
-            <Button variant="ghost" size="icon">
-              <Icon icon="i-lucide-ellipsis-vertical" />
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent side="bottom" align="end" class="flex flex-col p-1 w-auto min-w-36">
-            <Button
-              v-for="item in articleMenuItems"
-              :key="item.value"
-              variant="ghost"
-              class="justify-start"
-              :class="item.action === 'delete' ? 'text-destructive hover:text-destructive' : ''"
-              :disabled="item.disabled"
-              @click="handleArticleAction(item)"
+        <div class="relative flex items-center">
+          <Popover v-model:open="isOpen">
+            <PopoverTrigger as-child>
+              <Button variant="ghost" size="icon-sm">
+                <Icon icon="i-lucide-ellipsis-vertical" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent
+              side="bottom"
+              align="end"
+              class="flex flex-col p-1 w-auto min-w-36"
             >
-              <Icon v-if="item.icon" :icon="item.icon" class="size-3.5 flex-shrink-0" />
-              <span v-if="item.emoji" class="flex-shrink-0">{{ item.emoji }}</span>
-              {{ item.label }}
-            </Button>
-          </PopoverContent>
-        </Popover>
+              <Button
+                v-for="item in articleMenuItems"
+                :key="item.value"
+                variant="ghost"
+                class="justify-start"
+                :class="
+                  item.action === 'delete'
+                    ? 'text-destructive hover:text-destructive'
+                    : ''
+                "
+                :disabled="item.disabled"
+                @click="handleArticleAction(item)"
+              >
+                <Icon
+                  v-if="item.icon"
+                  :icon="item.icon"
+                  class="size-3.5 flex-shrink-0"
+                />
+                <span v-if="item.emoji" class="flex-shrink-0">{{
+                  item.emoji
+                }}</span>
+                {{ item.label }}
+              </Button>
+            </PopoverContent>
+          </Popover>
+          <ArticlePendingChangesPopover
+            ref="pendingChangesPopoverRef"
+            :article-id="id"
+            @resolved="emit('draftResolved', $event)"
+            @failed="emit('draftFailed', $event)"
+          />
+        </div>
       </div>
     </div>
-    <div class="flex items-center justify-between w-full gap-4">
-      <div class="flex items-center gap-4">
-        <div class="flex items-center gap-1">
+    <div class="flex items-center justify-between w-full gap-2 sm:gap-4">
+      <div class="flex items-center min-w-0 gap-2 sm:gap-4">
+        <div class="flex items-center min-w-0 gap-1">
           <Avatar
             :name="authorName"
             :src="authorThumbnailSrc"
@@ -178,11 +297,17 @@ const handleClick = id => {
             {{ authorName || '-' }}
           </span>
         </div>
-        <span class="block text-sm whitespace-nowrap text-n-slate-11">
-          {{ categoryName }}
+        <span class="flex items-center min-w-0 gap-1 text-sm text-n-slate-11">
+          <EmojiIcon
+            v-if="category?.icon"
+            :value="category.icon"
+            :color="category.icon_color"
+            class="flex-shrink-0 size-4"
+          />
+          <span class="truncate">{{ categoryName }}</span>
         </span>
         <div
-          class="inline-flex items-center gap-1 text-n-slate-11 whitespace-nowrap"
+          class="inline-flex items-center gap-1 text-n-slate-11 whitespace-nowrap shrink-0"
         >
           <Icon icon="i-lucide-eye" />
           <span class="text-sm">
@@ -194,7 +319,13 @@ const handleClick = id => {
           </span>
         </div>
       </div>
-      <span class="text-sm text-n-slate-11 line-clamp-1">
+      <span
+        v-tooltip.top="{
+          content: exactTimestamp(updatedAt),
+          delay: { show: 500, hide: 0 },
+        }"
+        class="text-sm text-n-slate-11 line-clamp-1 shrink-0"
+      >
         {{ lastUpdatedAt }}
       </span>
     </div>

@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useStore } from 'dashboard/composables/store';
 import { useAlert, useTrack } from 'dashboard/composables';
@@ -18,6 +18,13 @@ import {
 } from 'next/ui/dialog';
 import { Button } from 'next/ui/button';
 import { Spinner } from 'next/ui/spinner';
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from 'next/ui/select';
 import { AsyncSelect } from 'dashboard/components-next/ui/async-select';
 
 const props = defineProps({
@@ -34,15 +41,23 @@ const { currentRouteName } = useAppNavigation();
 const isOpen = ref(false);
 const isUpdating = ref(false);
 
+const selectedLocale = ref('');
+const localeStatus = ref('published');
+
 const close = () => {
   isOpen.value = false;
 };
 
-const selectedLocale = ref('');
-
 const addedLocales = computed(() => {
   const { allowed_locales: allowedLocales = [] } = props.portal?.config || {};
   return allowedLocales.map(locale => locale.code);
+});
+
+const draftedLocales = computed(() => {
+  const { allowed_locales: allowedLocales = [] } = props.portal?.config || {};
+  return allowedLocales
+    .filter(locale => locale.draft)
+    .map(locale => locale.code);
 });
 
 const locales = computed(() => {
@@ -56,17 +71,48 @@ const locales = computed(() => {
     .filter(locale => !addedLocales.value.includes(locale.value));
 });
 
+const statusOptions = computed(() => [
+  {
+    value: 'published',
+    label: t('HELP_CENTER.LOCALES_PAGE.ADD_LOCALE_DIALOG.STATUS.OPTIONS.LIVE'),
+  },
+  {
+    value: 'draft',
+    label: t('HELP_CENTER.LOCALES_PAGE.ADD_LOCALE_DIALOG.STATUS.OPTIONS.DRAFT'),
+  },
+]);
+
+const resetForm = () => {
+  selectedLocale.value = '';
+  localeStatus.value = 'published';
+};
+
+watch(localeStatus, value => {
+  if (!value) {
+    localeStatus.value = 'published';
+  }
+});
+
+watch(isOpen, value => {
+  if (!value) resetForm();
+});
+
 const onCreate = async () => {
   if (!selectedLocale.value) return;
 
   isUpdating.value = true;
   const updatedLocales = [...addedLocales.value, selectedLocale.value];
+  const updatedDraftLocales =
+    localeStatus.value === 'draft'
+      ? [...new Set([...draftedLocales.value, selectedLocale.value])]
+      : draftedLocales.value;
 
   try {
     await store.dispatch('portals/update', {
       portalSlug: props.portal?.slug,
       config: {
         allowed_locales: updatedLocales,
+        draft_locales: updatedDraftLocales,
         default_locale: props.portal?.meta?.default_locale,
       },
     });
@@ -93,14 +139,7 @@ const onCreate = async () => {
 </script>
 
 <template>
-  <Dialog
-    :open="isOpen"
-    @update:open="
-      val => {
-        if (!val) close();
-      }
-    "
-  >
+  <Dialog v-model:open="isOpen">
     <DialogTrigger as-child>
       <slot name="trigger" />
     </DialogTrigger>
@@ -122,6 +161,25 @@ const onCreate = async () => {
           "
           class="[&>div>button:not(.focused)]:!outline-n-slate-5 [&>div>button:not(.focused)]:dark:!outline-n-slate-5"
         />
+        <div class="flex flex-col gap-2">
+          <span class="text-sm font-medium text-n-slate-12">
+            {{ t('HELP_CENTER.LOCALES_PAGE.ADD_LOCALE_DIALOG.STATUS.LABEL') }}
+          </span>
+          <Select v-model="localeStatus">
+            <SelectTrigger class="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem
+                v-for="option in statusOptions"
+                :key="option.value"
+                :value="option.value"
+              >
+                {{ option.label }}
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
       <DialogFooter class="flex items-center justify-between gap-3">
         <DialogClose as-child>
@@ -130,11 +188,7 @@ const onCreate = async () => {
         <Button :disabled="isUpdating" @click="onCreate">
           <Spinner v-if="isUpdating" class="size-4 flex-shrink-0" />
           <template v-if="!isUpdating">
-            {{
-              t(
-                'HELP_CENTER.LOCALES_PAGE.ADD_LOCALE_DIALOG.CONFIRM_BUTTON_LABEL'
-              )
-            }}
+            {{ t('DIALOG.BUTTONS.CONFIRM') }}
           </template>
         </Button>
       </DialogFooter>

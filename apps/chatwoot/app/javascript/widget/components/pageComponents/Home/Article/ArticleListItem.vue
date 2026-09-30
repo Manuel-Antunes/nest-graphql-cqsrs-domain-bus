@@ -1,6 +1,5 @@
 <script setup>
 import { Button } from 'dashboard/components-next/ui/button';
-import { defineProps, defineEmits } from 'vue';
 const props = defineProps({
   link: {
     type: String,
@@ -29,6 +28,6 @@ const onClick = () => {
     >
       {{ title }}
     </Button>
-    <span class="i-lucide-chevron-right text-base shrink-0" />
+    <span class="i-lucide-chevron-right text-base shrink-0 rtl:rotate-180" />
   </div>
 </template>

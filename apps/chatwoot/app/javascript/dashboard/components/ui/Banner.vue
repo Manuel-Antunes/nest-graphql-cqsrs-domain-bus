@@ -1,4 +1,7 @@
+<!-- DEPRECIATED -->
+<!-- TODO: Replace this banner component with NextBanner "app/javascript/dashboard/components-next/banner/Banner.vue" -->
 <script>
+/* eslint-disable vue/no-reserved-component-names -- shadcn Button component name */
 import { Button } from 'dashboard/components-next/ui/button';
 import Icon from 'dashboard/components-next/icon/Icon.vue';
 
@@ -65,6 +68,19 @@ export default {
       };
       return variantMap[this.colorScheme] || 'default';
     },
+    actionButtonShadcnVariant() {
+      const shadcnVariants = [
+        'default',
+        'destructive',
+        'outline',
+        'secondary',
+        'ghost',
+        'link',
+      ];
+      return shadcnVariants.includes(this.actionButtonVariant)
+        ? this.actionButtonVariant
+        : this.getButtonVariant;
+    },
   },
   methods: {
     onClick(e) {
@@ -96,7 +112,7 @@ export default {
     <div class="actions">
       <Button
         v-if="hasActionButton"
-        :variant="getButtonVariant"
+        :variant="actionButtonShadcnVariant"
         size="icon"
         @click="onClick"
       >
@@ -107,7 +123,7 @@ export default {
       </Button>
       <Button
         v-if="hasCloseButton"
-        :variant="getButtonVariant"
+        variant="ghost"
         size="icon"
         @click="onClickClose"
       >

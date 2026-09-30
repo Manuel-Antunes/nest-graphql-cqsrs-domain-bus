@@ -2,10 +2,13 @@
 import { computed, ref, watch } from 'vue';
 import { useAppNavigation } from 'dashboard/composables/useAppNavigation';
 import { useI18n } from 'vue-i18n';
+import { OnClickOutside } from '@vueuse/components';
 import { useStoreGetters } from 'dashboard/composables/store.js';
 
 import { Button } from 'dashboard/components-next/ui/button';
 import Icon from 'dashboard/components-next/icon/Icon.vue';
+import Input from 'dashboard/components-next/input/Input.vue';
+import EmojiIcon from 'dashboard/components-next/emoji-icon-picker/EmojiIcon.vue';
 import {
   Breadcrumb as BreadcrumbRoot,
   BreadcrumbList,
@@ -36,7 +39,12 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(['localeChange']);
+const emit = defineEmits(['localeChange', 'newArticle']);
+
+const searchQuery = defineModel('searchQuery', {
+  type: String,
+  default: '',
+});
 
 const { currentParams, visit } = useAppNavigation();
 const getters = useStoreGetters();
@@ -131,6 +139,7 @@ const breadcrumbItems = computed(() => {
         }
       ),
       emoji: selectedCategoryEmoji.value,
+      iconColor: selectedCategory.value?.icon_color,
     });
   }
   return items;
@@ -205,33 +214,50 @@ const handleBreadcrumbClick = () => {
             >
               {{ item.label }}
             </BreadcrumbLink>
-            <BreadcrumbPage v-else>
-              {{ item.emoji ? `${item.emoji} ${item.label}` : item.label }}
+            <BreadcrumbPage v-else class="flex items-center gap-1.5">
+              <EmojiIcon
+                v-if="item.emoji"
+                :value="item.emoji"
+                :color="item.iconColor"
+                class="flex-shrink-0 size-4"
+              />
+              {{ item.label }}
             </BreadcrumbPage>
           </BreadcrumbItem>
         </template>
       </BreadcrumbList>
     </BreadcrumbRoot>
-    <div v-if="!hasSelectedCategory" class="relative">
-      <OnClickOutside @trigger="isCreateCategoryDialogOpen = false">
-        <Button
-          variant="default"
-          @click="isCreateCategoryDialogOpen = !isCreateCategoryDialogOpen"
-        >
-          <Icon icon="i-lucide-plus" class="mr-1" />
-          {{ t('HELP_CENTER.CATEGORY_PAGE.CATEGORY_HEADER.NEW_CATEGORY') }}
-        </Button>
-        <CategoryDialog
-          v-if="isCreateCategoryDialogOpen"
-          mode="create"
-          :portal-name="currentPortalName"
-          :active-locale-name="activeLocaleName"
-          :active-locale-code="activeLocaleCode"
-          @close="isCreateCategoryDialogOpen = false"
-        />
-      </OnClickOutside>
+    <div v-if="!hasSelectedCategory" class="flex items-center gap-2">
+      <Input
+        v-model="searchQuery"
+        :placeholder="
+          t('HELP_CENTER.CATEGORY_PAGE.CATEGORY_HEADER.SEARCH_PLACEHOLDER')
+        "
+        type="search"
+        size="sm"
+        class="w-48"
+      />
+      <div class="relative">
+        <OnClickOutside @trigger="isCreateCategoryDialogOpen = false">
+          <Button
+            variant="default"
+            @click="isCreateCategoryDialogOpen = !isCreateCategoryDialogOpen"
+          >
+            <Icon icon="i-lucide-plus" class="mr-1" />
+            {{ t('HELP_CENTER.CATEGORY_PAGE.CATEGORY_HEADER.NEW_CATEGORY') }}
+          </Button>
+          <CategoryDialog
+            v-if="isCreateCategoryDialogOpen"
+            mode="create"
+            :portal-name="currentPortalName"
+            :active-locale-name="activeLocaleName"
+            :active-locale-code="activeLocaleCode"
+            @close="isCreateCategoryDialogOpen = false"
+          />
+        </OnClickOutside>
+      </div>
     </div>
-    <div v-else class="relative">
+    <div v-else class="relative flex items-center gap-2">
       <OnClickOutside @trigger="isEditCategoryDialogOpen = false">
         <Button
           variant="outline"
@@ -248,6 +274,10 @@ const handleBreadcrumbClick = () => {
           @close="isEditCategoryDialogOpen = false"
         />
       </OnClickOutside>
+      <Button variant="default" @click="emit('newArticle')">
+        <Icon icon="i-lucide-plus" class="mr-1" />
+        {{ t('HELP_CENTER.ARTICLES_PAGE.ARTICLES_HEADER.NEW_ARTICLE') }}
+      </Button>
     </div>
   </div>
 </template>

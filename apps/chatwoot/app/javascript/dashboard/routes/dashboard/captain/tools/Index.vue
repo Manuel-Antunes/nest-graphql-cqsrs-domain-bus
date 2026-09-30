@@ -1,7 +1,10 @@
 <script setup>
 import { computed, onMounted, ref, nextTick } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useMapGetter, useStore } from 'dashboard/composables/store';
+import { useAlert } from 'dashboard/composables';
 import { FEATURE_FLAGS } from 'dashboard/featureFlags';
+import { usePolicy } from 'dashboard/composables/usePolicy';
 
 import PageLayout from 'dashboard/components-next/captain/PageLayout.vue';
 import CaptainPaywall from 'dashboard/components-next/captain/pageComponents/Paywall.vue';
@@ -9,18 +12,69 @@ import CustomToolsPageEmptyState from 'dashboard/components-next/captain/pageCom
 import CreateCustomToolDialog from 'dashboard/components-next/captain/pageComponents/customTool/CreateCustomToolDialog.vue';
 import CustomToolCard from 'dashboard/components-next/captain/pageComponents/customTool/CustomToolCard.vue';
 import DeleteDialog from 'dashboard/components-next/captain/pageComponents/DeleteDialog.vue';
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogCancel,
+} from 'dashboard/components-next/ui/alert-dialog';
+import { Button } from 'dashboard/components-next/ui/button';
+import { Spinner } from 'dashboard/components-next/ui/spinner';
 
 const store = useStore();
+const { t } = useI18n();
+const { isFeatureFlagEnabled, shouldShowPaywall } = usePolicy();
+
+const SOFT_LIMIT = 10;
+const isV2 = computed(() => isFeatureFlagEnabled(FEATURE_FLAGS.CAPTAIN_V2));
 
 const uiFlags = useMapGetter('captainCustomTools/getUIFlags');
 const customTools = useMapGetter('captainCustomTools/getRecords');
 const isFetching = computed(() => uiFlags.value.fetchingList);
 const customToolsMeta = useMapGetter('captainCustomTools/getMeta');
 
+const showSoftLimitWarning = computed(
+  () => !isV2.value && customToolsMeta.value.totalCount > SOFT_LIMIT
+);
+
 const createDialogRef = ref(null);
 const deleteDialogRef = ref(null);
+const isDisableDialogOpen = ref(false);
 const selectedTool = ref(null);
 const dialogType = ref('');
+const pendingToggleIds = ref(new Set());
+const pendingDisable = ref(null);
+const isDisableSaving = ref(false);
+
+const disableConfirmationTitle = computed(() =>
+  t('CAPTAIN.CUSTOM_TOOLS.DISABLE_CONFIRMATION.TITLE', {
+    title: pendingDisable.value?.title,
+  })
+);
+
+const disableConfirmationDescription = computed(() => {
+  const count = pendingDisable.value?.enabledScenariosCount || 0;
+  return count === 1
+    ? t('CAPTAIN.CUSTOM_TOOLS.DISABLE_CONFIRMATION.DESCRIPTION_ONE', {
+        count,
+      })
+    : t('CAPTAIN.CUSTOM_TOOLS.DISABLE_CONFIRMATION.DESCRIPTION_OTHER', {
+        count,
+      });
+});
+
+const setTogglePending = (id, isPending) => {
+  const pendingIds = new Set(pendingToggleIds.value);
+  if (isPending) {
+    pendingIds.add(id);
+  } else {
+    pendingIds.delete(id);
+  }
+  pendingToggleIds.value = pendingIds;
+};
 
 const fetchCustomTools = (page = 1) => {
   store.dispatch('captainCustomTools/get', { page });
@@ -46,12 +100,82 @@ const handleDelete = tool => {
 };
 
 const handleAction = ({ action, id }) => {
-  const tool = customTools.value.find(t => t.id === id);
+  const tool = customTools.value.find(item => item.id === id);
   if (action === 'edit') {
     handleEdit(tool);
   } else if (action === 'delete') {
     handleDelete(tool);
   }
+};
+
+const updateCustomToolStatus = async ({ id, enabled }) => {
+  try {
+    await store.dispatch('captainCustomTools/update', { id, enabled });
+    const successMessage = enabled
+      ? t('CAPTAIN.CUSTOM_TOOLS.TOGGLE.ENABLED')
+      : t('CAPTAIN.CUSTOM_TOOLS.TOGGLE.DISABLED');
+    useAlert(successMessage);
+    return true;
+  } catch {
+    useAlert(t('CAPTAIN.CUSTOM_TOOLS.TOGGLE.ERROR'));
+    return false;
+  }
+};
+
+const toggleCustomTool = async ({ id, enabled }) => {
+  if (pendingToggleIds.value.has(id)) return;
+
+  setTogglePending(id, true);
+
+  if (!enabled) {
+    try {
+      const tool = await store.dispatch('captainCustomTools/show', id);
+      if (tool.enabled_scenarios_count > 0) {
+        pendingDisable.value = {
+          id,
+          enabled,
+          title: tool.title,
+          enabledScenariosCount: tool.enabled_scenarios_count,
+        };
+        isDisableDialogOpen.value = true;
+        return;
+      }
+    } catch {
+      useAlert(t('CAPTAIN.CUSTOM_TOOLS.TOGGLE.ERROR'));
+      setTogglePending(id, false);
+      return;
+    }
+  }
+
+  await updateCustomToolStatus({ id, enabled });
+  setTogglePending(id, false);
+};
+
+const handleDisableDialogClose = () => {
+  if (pendingDisable.value) {
+    setTogglePending(pendingDisable.value.id, false);
+  }
+  pendingDisable.value = null;
+  isDisableSaving.value = false;
+};
+
+const closeDisableDialog = () => {
+  isDisableDialogOpen.value = false;
+  handleDisableDialogClose();
+};
+
+const onDisableDialogOpenChange = open => {
+  if (!open) closeDisableDialog();
+};
+
+const handleDisableConfirm = async () => {
+  if (!pendingDisable.value) return;
+
+  isDisableSaving.value = true;
+  const updated = await updateCustomToolStatus(pendingDisable.value);
+  isDisableSaving.value = false;
+
+  if (updated) closeDisableDialog();
 };
 
 const handleDialogClose = () => {
@@ -72,7 +196,9 @@ const onDeleteSuccess = () => {
 };
 
 onMounted(() => {
-  fetchCustomTools();
+  if (!shouldShowPaywall(FEATURE_FLAGS.CAPTAIN_CUSTOM_TOOLS)) {
+    fetchCustomTools();
+  }
 });
 </script>
 
@@ -81,18 +207,18 @@ onMounted(() => {
     :header-title="$t('CAPTAIN.CUSTOM_TOOLS.HEADER')"
     :button-label="$t('CAPTAIN.CUSTOM_TOOLS.ADD_NEW')"
     :button-policy="['administrator']"
+    :feature-flag="FEATURE_FLAGS.CAPTAIN_CUSTOM_TOOLS"
     :total-count="customToolsMeta.totalCount"
     :current-page="customToolsMeta.page"
     :show-pagination-footer="!isFetching && !!customTools.length"
     :is-fetching="isFetching"
     :is-empty="!customTools.length"
-    :feature-flag="FEATURE_FLAGS.CAPTAIN_V2"
     :show-know-more="false"
     @update:current-page="onPageChange"
     @click="openCreateDialog"
   >
     <template #paywall>
-      <CaptainPaywall />
+      <CaptainPaywall feature-prefix="CAPTAIN.CUSTOM_TOOLS" />
     </template>
 
     <template #emptyState>
@@ -101,6 +227,13 @@ onMounted(() => {
 
     <template #body>
       <div class="flex flex-col gap-4">
+        <div
+          v-if="showSoftLimitWarning"
+          class="flex items-center gap-2 px-4 py-3 text-sm rounded-lg bg-n-amber-2 text-n-amber-11"
+        >
+          <span class="i-lucide-triangle-alert size-4 shrink-0" />
+          {{ $t('CAPTAIN.CUSTOM_TOOLS.SOFT_LIMIT_WARNING') }}
+        </div>
         <CustomToolCard
           v-for="tool in customTools"
           :id="tool.id"
@@ -112,9 +245,11 @@ onMounted(() => {
           :auth-type="tool.auth_type"
           :param-schema="tool.param_schema"
           :enabled="tool.enabled"
+          :is-updating="pendingToggleIds.has(tool.id)"
           :created-at="tool.created_at"
           :updated-at="tool.updated_at"
           @action="handleAction"
+          @toggle="toggleCustomTool"
         />
       </div>
     </template>
@@ -136,4 +271,31 @@ onMounted(() => {
     translation-key="CUSTOM_TOOLS"
     @delete-success="onDeleteSuccess"
   />
+
+  <AlertDialog
+    :open="isDisableDialogOpen"
+    @update:open="onDisableDialogOpenChange"
+  >
+    <AlertDialogContent>
+      <AlertDialogHeader>
+        <AlertDialogTitle>{{ disableConfirmationTitle }}</AlertDialogTitle>
+        <AlertDialogDescription>
+          {{ disableConfirmationDescription }}
+        </AlertDialogDescription>
+      </AlertDialogHeader>
+      <AlertDialogFooter>
+        <AlertDialogCancel :disabled="isDisableSaving">
+          {{ t('DIALOG.BUTTONS.CANCEL') }}
+        </AlertDialogCancel>
+        <Button
+          variant="destructive"
+          :disabled="isDisableSaving"
+          @click="handleDisableConfirm"
+        >
+          <Spinner v-if="isDisableSaving" class="size-4" />
+          {{ t('CAPTAIN.CUSTOM_TOOLS.DISABLE_CONFIRMATION.CONFIRM') }}
+        </Button>
+      </AlertDialogFooter>
+    </AlertDialogContent>
+  </AlertDialog>
 </template>

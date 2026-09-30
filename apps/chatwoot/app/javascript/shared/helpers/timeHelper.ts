@@ -1,6 +1,9 @@
 import {
   format,
   isSameYear,
+  isThisYear,
+  isToday,
+  isYesterday,
   fromUnixTime,
   formatDistanceToNow,
   differenceInDays,
@@ -58,6 +61,25 @@ export const messageTimestamp = (
     return format(messageTime, 'LLL d y, h:mm a');
   }
   return messageDate;
+};
+
+/**
+ * Formats a Unix timestamp relative to today: the time for today, a caller-
+ * supplied label for yesterday, and a date otherwise. The yesterday label is
+ * passed in so the caller keeps ownership of translation.
+ * @param time - Unix timestamp.
+ * @param yesterdayLabel - Localized label shown for yesterday.
+ * @returns Formatted timestamp string.
+ */
+export const relativeDayTimestamp = (
+  time: number,
+  yesterdayLabel: string
+): string => {
+  const date = fromUnixTime(time);
+  if (isToday(date)) return format(date, 'h:mm a');
+  if (isYesterday(date)) return yesterdayLabel;
+  if (isThisYear(date)) return format(date, 'MMM d');
+  return format(date, 'MMM d, yyyy');
 };
 
 /**
@@ -134,6 +156,7 @@ export const shortTimestamp = (
   const suffix = withAgo ? ' ago' : '';
   const timeMappings: Record<string, string> = {
     'less than a minute ago': 'now',
+    'in less than a minute': 'now',
     'a minute ago': `1m${suffix}`,
     'an hour ago': `1h${suffix}`,
     'a day ago': `1d${suffix}`,
@@ -157,6 +180,31 @@ export const shortTimestamp = (
     .replace(' year ago', `y${suffix}`)
     .replace(' years ago', `y${suffix}`);
   return convertToShortTime;
+};
+
+/**
+ * Formats a duration in seconds into mm:ss or hh:mm:ss.
+ * @param durationInSeconds - Duration in seconds.
+ * @returns Formatted duration string. Empty string for invalid input.
+ */
+export const formatDuration = (
+  durationInSeconds: number | string | null | undefined
+): string => {
+  if (durationInSeconds === null || durationInSeconds === undefined) return '';
+
+  const totalSeconds = Number(durationInSeconds);
+  if (Number.isNaN(totalSeconds) || totalSeconds < 0) return '';
+
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  const mm = minutes.toString().padStart(2, '0');
+  const ss = seconds.toString().padStart(2, '0');
+  if (hours > 0) {
+    return `${hours.toString().padStart(2, '0')}:${mm}:${ss}`;
+  }
+  return `${mm}:${ss}`;
 };
 
 /**

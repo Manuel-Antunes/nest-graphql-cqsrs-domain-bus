@@ -97,7 +97,11 @@ export default {
         class="ltr:ml-2 rtl:mr-2"
         :disabled="v$.email.$invalid"
       >
-        <FluentIcon v-if="!isUpdating" icon="chevron-right" />
+        <FluentIcon
+          v-if="!isUpdating"
+          icon="chevron-right"
+          class="rtl:rotate-180"
+        />
         <Spinner v-else class="mx-2" />
       </Button>
     </form>

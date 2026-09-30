@@ -1,4 +1,5 @@
 <script>
+/* eslint-disable vue/no-reserved-component-names -- shadcn Button component name */
 import { mapGetters } from 'vuex';
 import DyteAPI from 'dashboard/api/integrations/dyte';
 import { useAlert } from 'dashboard/composables';
@@ -33,12 +34,22 @@ export default {
     }
   },
   methods: {
+    createErrorMessage(error) {
+      const responseError = error?.response?.data?.error;
+      if (typeof responseError === 'string') return responseError;
+
+      return (
+        responseError?.error?.message ||
+        responseError?.message ||
+        this.$t('INTEGRATION_SETTINGS.DYTE.CREATE_ERROR')
+      );
+    },
     async onClick() {
       this.isLoading = true;
       try {
         await DyteAPI.createAMeeting(this.conversationId);
       } catch (error) {
-        useAlert(this.$t('INTEGRATION_SETTINGS.DYTE.CREATE_ERROR'));
+        useAlert(this.createErrorMessage(error));
       } finally {
         this.isLoading = false;
       }

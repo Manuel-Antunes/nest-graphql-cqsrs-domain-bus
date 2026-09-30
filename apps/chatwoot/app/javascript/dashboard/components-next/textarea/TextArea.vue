@@ -33,7 +33,7 @@ const props = defineProps({
   allowSignature: { type: Boolean, default: false }, // allowSignature is a kill switch, ensuring no signature methods are triggered except when this flag is true
 });
 
-const emit = defineEmits(['update:modelValue']);
+const emit = defineEmits(['update:modelValue', 'blur', 'focus']);
 
 const textareaRef = ref(null);
 
@@ -105,6 +105,18 @@ const handleInput = event => {
   }
 };
 
+const handleFocus = event => {
+  if (!props.disabled) {
+    emit('focus', event);
+  }
+};
+
+const handleBlur = event => {
+  if (!props.disabled) {
+    emit('blur', event);
+  }
+};
+
 // Watch for changes in modelValue to adjust height
 watch(
   () => props.modelValue,
@@ -164,6 +176,8 @@ onMounted(() => {
         rows="1"
         class="flex w-full reset-base text-sm p-0 !rounded-none !bg-transparent dark:!bg-transparent !border-0 !outline-0 !mb-0 placeholder:text-n-slate-10 dark:placeholder:text-n-slate-10 text-n-slate-12 dark:text-n-slate-12 disabled:cursor-not-allowed disabled:opacity-50"
         @input="handleInput"
+        @focus="handleFocus"
+        @blur="handleBlur"
       />
       <InputGroupAddon
         v-if="showCharacterCount"

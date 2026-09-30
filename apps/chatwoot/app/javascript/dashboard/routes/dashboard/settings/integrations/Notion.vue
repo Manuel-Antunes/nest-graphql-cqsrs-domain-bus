@@ -9,7 +9,8 @@ import { useI18n } from 'vue-i18n';
 import notionClient from 'dashboard/api/notion_auth.js';
 
 import Integration from './Integration.vue';
-import Spinner from 'shared/components/Spinner.vue';
+import SettingsLayout from '../SettingsLayout.vue';
+import BaseSettingsHeader from '../components/BaseSettingsHeader.vue';
 import Button from 'next/ui/button/Button.vue';
 
 const { t } = useI18n();
@@ -48,8 +49,16 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="flex-grow flex-shrink p-4 overflow-auto mx-auto">
-    <div v-if="integrationLoaded && !uiFlags.isCreatingNotion">
+  <SettingsLayout :is-loading="!integrationLoaded || uiFlags.isCreatingNotion">
+    <template #header>
+      <BaseSettingsHeader
+        :title="$t('INTEGRATION_SETTINGS.NOTION.HEADER')"
+        description=""
+        feature-name="notion_integration"
+        :back-button-label="$t('INTEGRATION_SETTINGS.HEADER')"
+      />
+    </template>
+    <template #body>
       <Integration
         :integration-id="integration.id"
         :integration-logo="integration.logo"
@@ -68,9 +77,6 @@ onMounted(() => {
           </Button>
         </template>
       </Integration>
-    </div>
-    <div v-else class="flex items-center justify-center flex-1">
-      <Spinner size="" color-scheme="primary" />
-    </div>
-  </div>
+    </template>
+  </SettingsLayout>
 </template>

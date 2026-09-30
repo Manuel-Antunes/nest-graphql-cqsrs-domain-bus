@@ -14,6 +14,7 @@ class ContactMergeAction
       merge_contact_inboxes
       merge_contact_notes
       merge_contact_links
+      merge_calls
       merge_and_remove_mergee_contact
     end
     @base_contact
@@ -68,6 +69,10 @@ class ContactMergeAction
     end
   end
 
+  def merge_calls
+    # overridden in enterprise/app/actions/enterprise/contact_merge_action.rb
+  end
+
   def merge_and_remove_mergee_contact
     mergable_attribute_keys = %w[identifier name email phone_number additional_attributes custom_attributes]
     base_contact_attributes = base_contact.attributes.slice(*mergable_attribute_keys).compact_blank
@@ -82,3 +87,5 @@ class ContactMergeAction
     @base_contact.update!(merged_attributes)
   end
 end
+
+ContactMergeAction.prepend_mod_with('ContactMergeAction')

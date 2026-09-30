@@ -124,6 +124,7 @@ watch(
 
     <Editor
       v-model="state.description"
+      :max-length="500"
       :label="t('CAPTAIN.ASSISTANTS.FORM.DESCRIPTION.LABEL')"
       :placeholder="t('CAPTAIN.ASSISTANTS.FORM.DESCRIPTION.PLACEHOLDER')"
       :message="formErrors.description"
@@ -169,7 +170,7 @@ watch(
       <Button
         type="button"
         variant="outline"
-        class="w-full bg-n-alpha-2 text-n-blue-text hover:bg-n-alpha-3"
+        class="w-full bg-n-alpha-2 text-n-blue-11 hover:bg-n-alpha-3"
         @click="handleCancel"
       >
         {{ t('CAPTAIN.FORM.CANCEL') }}

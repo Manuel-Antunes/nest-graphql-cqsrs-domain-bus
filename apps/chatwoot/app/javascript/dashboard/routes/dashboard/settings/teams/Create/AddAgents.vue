@@ -62,25 +62,23 @@ const addAgents = async values => {
 </script>
 
 <template>
-  <div class="h-full w-full p-6 col-span-6">
+  <div class="h-full w-full px-8 pt-8 col-span-6 overflow-auto">
     <Form
       :validation-schema="validationSchema"
       :initial-values="initialValues"
-      class="flex flex-wrap mx-0 overflow-x-auto"
+      class="flex flex-col gap-4 mx-0"
       @submit="addAgents"
     >
-      <div class="w-full">
-        <PageHeader
-          :header-title="headerTitle"
-          :header-content="$t('TEAMS_SETTINGS.ADD.DESC')"
-        />
-      </div>
+      <PageHeader
+        :header-title="headerTitle"
+        :header-content="$t('TEAMS_SETTINGS.ADD.DESC')"
+      />
 
       <FormField
         v-slot="{ value, handleChange, errorMessage }"
         name="selectedAgents"
       >
-        <div class="w-full">
+        <div class="w-full h-full">
           <p v-if="errorMessage" class="error-message pb-2">
             {{ errorMessage }}
           </p>

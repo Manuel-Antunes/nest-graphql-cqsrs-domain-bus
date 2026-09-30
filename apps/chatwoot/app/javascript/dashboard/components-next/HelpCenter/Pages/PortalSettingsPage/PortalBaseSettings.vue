@@ -14,7 +14,6 @@ import { Button } from 'dashboard/components-next/ui/button';
 import { Spinner } from 'dashboard/components-next/ui/spinner';
 import Input from 'dashboard/components-next/input/Input.vue';
 import Avatar from 'dashboard/components-next/avatar/Avatar.vue';
-import { AsyncSelect } from 'dashboard/components-next/ui/async-select';
 import ColorPicker from 'dashboard/components-next/colorpicker/ColorPicker.vue';
 
 const props = defineProps({
@@ -43,30 +42,11 @@ const state = reactive({
   slug: '',
   widgetColor: '',
   homePageLink: '',
-  liveChatWidgetInboxId: '',
   logoUrl: '',
   avatarBlobId: '',
 });
 
 const originalState = reactive({ ...state });
-
-const liveChatWidgets = computed(() => {
-  const inboxes = store.getters['inboxes/getInboxes'];
-  const widgetOptions = inboxes
-    .filter(inbox => inbox.channel_type === 'Channel::WebWidget')
-    .map(inbox => ({
-      value: inbox.id,
-      label: inbox.name,
-    }));
-
-  return [
-    {
-      value: '',
-      label: t('HELP_CENTER.PORTAL_SETTINGS.FORM.LIVE_CHAT_WIDGET.NONE_OPTION'),
-    },
-    ...widgetOptions,
-  ];
-});
 
 const rules = {
   name: { required, minLength: minLength(2) },
@@ -117,7 +97,6 @@ watch(
         widgetColor: newVal.color,
         homePageLink: newVal.homepage_link,
         slug: newVal.slug,
-        liveChatWidgetInboxId: newVal.inbox?.id || '',
       });
       if (newVal.logo) {
         const {
@@ -149,7 +128,6 @@ const handleUpdatePortal = () => {
     header_text: state.headerText,
     homepage_link: state.homePageLink,
     blob_id: state.avatarBlobId,
-    inbox_id: state.liveChatWidgetInboxId,
   };
   emit('updatePortal', portal);
 };
@@ -302,26 +280,6 @@ const handleAvatarDelete = () => {
           custom-input-class="!bg-transparent dark:!bg-transparent"
           @input="v$.slug.$touch()"
           @blur="v$.slug.$touch()"
-        />
-      </div>
-      <div
-        class="grid items-start justify-between w-full gap-2 grid-cols-[200px,1fr]"
-      >
-        <label
-          class="text-sm font-medium whitespace-nowrap py-2.5 text-n-slate-12"
-        >
-          {{ t('HELP_CENTER.PORTAL_SETTINGS.FORM.LIVE_CHAT_WIDGET.LABEL') }}
-        </label>
-        <AsyncSelect
-          v-model="state.liveChatWidgetInboxId"
-          :options="liveChatWidgets"
-          :placeholder="
-            t('HELP_CENTER.PORTAL_SETTINGS.FORM.LIVE_CHAT_WIDGET.PLACEHOLDER')
-          "
-          :message="
-            t('HELP_CENTER.PORTAL_SETTINGS.FORM.LIVE_CHAT_WIDGET.HELP_TEXT')
-          "
-          class="[&>div>button:not(.focused)]:!outline-n-weak"
         />
       </div>
       <div

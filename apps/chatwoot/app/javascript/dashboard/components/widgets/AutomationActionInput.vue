@@ -1,4 +1,5 @@
 <script>
+/* eslint-disable vue/no-reserved-component-names -- shadcn Button/Select/Input component names */
 import AutomationActionTeamMessageInput from './AutomationActionTeamMessageInput.vue';
 import AutomationActionFileInput from './AutomationFileInput.vue';
 import WootMessageEditor from 'dashboard/components/widgets/WootWriter/Editor.vue';
@@ -13,6 +14,8 @@ import {
 } from 'dashboard/components-next/ui/select';
 import { AsyncSelect } from 'dashboard/components-next/ui/async-select';
 import { Input } from 'dashboard/components-next/ui/input';
+
+const CONTACT_EMAIL_TOKEN = '{{contact.email}}';
 
 export default {
   components: {
@@ -58,6 +61,10 @@ export default {
       type: Boolean,
       default: false,
     },
+    dropdownMaxHeight: {
+      type: String,
+      default: 'max-h-80',
+    },
   },
   emits: ['update:modelValue', 'input', 'removeAction', 'resetAction'],
   computed: {
@@ -87,11 +94,8 @@ export default {
       return this.actionTypes.find(action => action.key === this.action_name)
         .inputType;
     },
-    actionInputStyles() {
-      return {
-        'has-error': this.errorMessage,
-        'is-a-macro': this.isMacro,
-      };
+    isVerticalLayout() {
+      return ['team_message', 'textarea', 'email'].includes(this.inputType);
     },
     castMessageVmodel: {
       get() {
@@ -104,15 +108,11 @@ export default {
         this.action_params = value;
       },
     },
-    // `multi_select` stores params as an array of `{ id, name }`; AsyncSelect
-    // speaks in arrays of id strings, so we map between the two shapes.
     multiParamValues() {
       return Array.isArray(this.action_params)
         ? this.action_params.map(v => String(v.id))
         : [];
     },
-    // `search_select` is single-choice but is stored as an array of one
-    // `{ id, name }` (matching how macros load it), so read the first item.
     singleParamValue() {
       const first = Array.isArray(this.action_params)
         ? this.action_params[0]
@@ -136,32 +136,56 @@ export default {
       const option = this.dropdownValues?.find(o => String(o.id) === value);
       this.action_params = option ? [{ id: option.id, name: option.name }] : [];
     },
+    insertContactEmailToken() {
+      const existingEmails = (this.castMessageVmodel || '')
+        .split(',')
+        .map(email => email.trim())
+        .filter(Boolean);
+
+      const hasContactEmail = existingEmails.some(
+        email => email.replace(/\s+/g, '') === CONTACT_EMAIL_TOKEN
+      );
+      if (hasContactEmail) return;
+
+      this.action_params = [[...existingEmails, CONTACT_EMAIL_TOKEN].join(',')];
+    },
   },
 };
 </script>
 
 <template>
-  <div class="filter" :class="actionInputStyles">
-    <div class="filter-inputs">
-      <Select v-model="action_name" @update:model-value="resetAction()">
-        <SelectTrigger
-          class="mb-0 mr-1"
-          :class="showActionInput ? 'w-full max-w-[50%]' : 'w-full'"
-        >
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem
-            v-for="attribute in actionTypes"
-            :key="attribute.key"
-            :value="attribute.key"
+  <li class="list-none py-2 first:pt-0 last:pb-0">
+    <div
+      class="flex flex-col gap-2"
+      :class="{ 'animate-wiggle': errorMessage }"
+    >
+      <div class="flex items-center gap-2">
+        <Select v-model="action_name" @update:model-value="resetAction()">
+          <SelectTrigger
+            class="mb-0"
+            :class="
+              showActionInput && !isVerticalLayout
+                ? 'w-full max-w-[50%]'
+                : 'w-full'
+            "
           >
-            {{ attribute.label }}
-          </SelectItem>
-        </SelectContent>
-      </Select>
-      <div v-if="showActionInput" class="filter__answer--wrap">
-        <div v-if="inputType" class="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem
+              v-for="attribute in actionTypes"
+              :key="attribute.key"
+              :value="attribute.key"
+            >
+              <Icon v-if="attribute.icon" :icon="attribute.icon" />
+              {{ attribute.label }}
+            </SelectItem>
+          </SelectContent>
+        </Select>
+        <div
+          v-if="showActionInput && !isVerticalLayout"
+          class="flex-grow min-w-0"
+        >
           <AsyncSelect
             v-if="inputType === 'search_select'"
             disable-portal
@@ -186,124 +210,59 @@ export default {
             @update:model-value="onMultiParamUpdate"
           />
           <Input
-            v-else-if="inputType === 'email'"
-            v-model="action_params"
-            type="email"
-            :placeholder="$t('AUTOMATION.ACTION.EMAIL_INPUT_PLACEHOLDER')"
-          />
-          <Input
             v-else-if="inputType === 'url'"
             v-model="action_params"
             type="url"
             :placeholder="$t('AUTOMATION.ACTION.URL_INPUT_PLACEHOLDER')"
           />
           <AutomationActionFileInput
-            v-if="inputType === 'attachment'"
+            v-else-if="inputType === 'attachment'"
             v-model="action_params"
             :initial-file-name="initialFileName"
           />
         </div>
+        <Button
+          v-if="!isMacro"
+          variant="outline"
+          size="icon"
+          class="flex-shrink-0"
+          @click="removeAction"
+        >
+          <Icon icon="i-lucide-trash" />
+        </Button>
       </div>
-      <Button v-if="!isMacro" variant="ghost" size="icon" @click="removeAction">
-        <Icon icon="i-lucide-x" />
-      </Button>
+      <div v-if="inputType === 'email'" class="flex items-center w-full gap-2">
+        <Input
+          v-model="castMessageVmodel"
+          type="text"
+          class="flex-1"
+          :placeholder="$t('AUTOMATION.ACTION.EMAIL_INPUT_PLACEHOLDER')"
+        />
+        <Button
+          variant="outline"
+          class="flex-shrink-0 whitespace-nowrap"
+          @click="insertContactEmailToken"
+        >
+          {{ $t('AUTOMATION.ACTION.INSERT_CONTACT_EMAIL') }}
+        </Button>
+      </div>
+      <AutomationActionTeamMessageInput
+        v-else-if="inputType === 'team_message'"
+        v-model="action_params"
+        :teams="dropdownValues"
+        :dropdown-max-height="dropdownMaxHeight"
+      />
+      <WootMessageEditor
+        v-else-if="inputType === 'textarea'"
+        v-model="castMessageVmodel"
+        rows="4"
+        enable-variables
+        :placeholder="$t('AUTOMATION.ACTION.TEAM_MESSAGE_INPUT_PLACEHOLDER')"
+        class="[&_.ProseMirror-menubar]:hidden px-3 py-1 bg-n-alpha-1 rounded-lg outline outline-1 outline-n-weak dark:outline-n-strong"
+      />
     </div>
-    <AutomationActionTeamMessageInput
-      v-if="inputType === 'team_message'"
-      v-model="action_params"
-      :teams="dropdownValues"
-    />
-    <WootMessageEditor
-      v-if="inputType === 'textarea'"
-      v-model="castMessageVmodel"
-      rows="4"
-      enable-variables
-      :placeholder="$t('AUTOMATION.ACTION.TEAM_MESSAGE_INPUT_PLACEHOLDER')"
-      class="action-message"
-    />
-    <p v-if="errorMessage" class="filter-error">
+    <span v-if="errorMessage" class="text-sm text-n-ruby-11">
       {{ errorMessage }}
-    </p>
-  </div>
+    </span>
+  </li>
 </template>
-
-<style lang="scss" scoped>
-.filter {
-  @apply bg-n-background p-2 border border-solid border-n-strong dark:border-n-strong rounded-lg mb-2;
-
-  &.is-a-macro {
-    @apply mb-0 bg-n-background dark:bg-n-solid-1 p-0 border-0 rounded-none;
-  }
-}
-
-.no-margin-bottom {
-  @apply mb-0;
-}
-
-.filter.has-error {
-  @apply bg-n-ruby-8/20 border-n-ruby-5 dark:border-n-ruby-5;
-
-  &.is-a-macro {
-    @apply bg-transparent;
-  }
-}
-
-.filter-inputs {
-  @apply flex gap-1;
-}
-
-.filter-error {
-  @apply text-n-ruby-9 dark:text-n-ruby-9 block my-1 mx-0;
-}
-
-.action__question,
-.filter__operator {
-  @apply mb-0 mr-1;
-}
-
-.action__question {
-  @apply max-w-[50%];
-}
-
-.action__question.full-width {
-  @apply max-w-full;
-}
-
-.filter__answer--wrap {
-  @apply max-w-[50%] flex-grow mr-1 flex w-full items-center justify-start;
-
-  input {
-    @apply mb-0;
-  }
-}
-.filter__answer {
-  &.answer--text-input {
-    @apply mb-0;
-  }
-}
-
-.filter__join-operator-wrap {
-  @apply relative z-20 m-0;
-}
-
-.filter__join-operator {
-  @apply flex items-center justify-center relative my-2.5 mx-0;
-
-  .operator__line {
-    @apply absolute w-full border-b border-solid border-n-weak;
-  }
-
-  .operator__select {
-    margin-bottom: 0 !important;
-    @apply relative w-auto;
-  }
-}
-
-.action-message {
-  @apply mt-2 mx-0 mb-0;
-}
-// Prosemirror does not have a native way of hiding the menu bar, hence
-::v-deep .ProseMirror-menubar {
-  @apply hidden;
-}
-</style>

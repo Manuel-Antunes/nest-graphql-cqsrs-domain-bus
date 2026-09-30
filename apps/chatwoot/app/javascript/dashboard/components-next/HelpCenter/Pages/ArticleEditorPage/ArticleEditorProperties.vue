@@ -63,11 +63,7 @@ onMounted(() => {
           )
         }}
       </h3>
-      <Button
-        variant="ghost"
-        size="icon"
-        @click="emit('close')"
-      >
+      <Button variant="ghost" size="icon" @click="emit('close')">
         <Icon icon="i-lucide-x" class="size-4" />
       </Button>
     </div>

@@ -1,10 +1,11 @@
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue';
+import { reactive, ref, computed, onMounted, watch } from 'vue';
 import { useStore, useMapGetter } from 'dashboard/composables/store';
 import { useI18n } from 'vue-i18n';
 import { useWindowSize } from '@vueuse/core';
 import { useUISettings } from 'dashboard/composables/useUISettings';
 import { useAlert } from 'dashboard/composables';
+import { parseAPIErrorResponse } from 'dashboard/store/utils/api';
 import { ExceptionWithMessage } from 'shared/helpers/CustomErrors';
 import { debounce } from '@chatwoot/utils';
 import { useKeyboardEvents } from 'dashboard/composables/useKeyboardEvents';
@@ -18,7 +19,7 @@ import {
 import { Button } from 'dashboard/components-next/ui/button';
 import Icon from 'dashboard/components-next/icon/Icon.vue';
 import {
-  searchContacts,
+  createContactSearcher,
   createNewContact,
   fetchContactableInboxes,
   processContactableInboxes,
@@ -33,6 +34,10 @@ const props = defineProps({
     type: String,
     default: 'left',
   },
+  align: {
+    type: String,
+    default: '',
+  },
   contactId: {
     type: String,
     default: null,
@@ -45,6 +50,7 @@ const props = defineProps({
 
 const emit = defineEmits(['close']);
 
+const searchContacts = createContactSearcher();
 const store = useStore();
 const { t } = useI18n();
 const { width: windowWidth } = useWindowSize();
@@ -65,6 +71,23 @@ const isFetchingInboxes = ref(false);
 const isSearching = ref(false);
 const showComposeNewConversation = ref(false);
 
+const formState = reactive({
+  message: '',
+  subject: '',
+  ccEmails: '',
+  bccEmails: '',
+  attachedFiles: [],
+});
+
+const clearFormState = () => {
+  Object.assign(formState, {
+    subject: '',
+    ccEmails: '',
+    bccEmails: '',
+    attachedFiles: [],
+  });
+};
+
 const contactById = useMapGetter('contacts/getContactById');
 const contactsUiFlags = useMapGetter('contacts/getUIFlags');
 const currentUser = useMapGetter('getCurrentUser');
@@ -83,24 +106,27 @@ const directUploadsEnabled = computed(
 
 const activeContact = computed(() => contactById.value(props.contactId));
 
-const popoverAlign = computed(() =>
-  props.alignPosition === 'right' ? 'start' : 'end'
-);
+const popoverAlign = computed(() => {
+  if (props.align) return props.align;
+  return props.alignPosition === 'right' ? 'start' : 'end';
+});
 
 const onContactSearch = debounce(
   async query => {
     isSearching.value = true;
     contacts.value = [];
     try {
-      contacts.value = await searchContacts(query);
+      const results = await searchContacts(query);
+      // null means the request was aborted (a newer search is in-flight),
+      if (results === null) return;
+      contacts.value = results;
       isSearching.value = false;
     } catch (error) {
-      useAlert(t('COMPOSE_NEW_CONVERSATION.CONTACT_SEARCH.ERROR_MESSAGE'));
-    } finally {
       isSearching.value = false;
+      useAlert(t('COMPOSE_NEW_CONVERSATION.CONTACT_SEARCH.ERROR_MESSAGE'));
     }
   },
-  300,
+  400,
   false
 );
 
@@ -117,12 +143,19 @@ const handleSelectedContact = async ({ value, action, ...rest }) => {
       isCreatingContact.value = false;
     } catch (error) {
       isCreatingContact.value = false;
+      const message = parseAPIErrorResponse(error);
+      useAlert(
+        typeof message === 'string'
+          ? message
+          : t('COMPOSE_NEW_CONVERSATION.CONTACT_CREATE.ERROR_MESSAGE')
+      );
       return;
     }
   } else {
     contact = rest;
   }
   selectedContact.value = contact;
+  contacts.value = [];
   if (contact?.id) {
     isFetchingInboxes.value = true;
     try {
@@ -142,12 +175,14 @@ const handleSelectedContact = async ({ value, action, ...rest }) => {
 
 const handleTargetInbox = inbox => {
   targetInbox.value = inbox;
+  if (!inbox) clearFormState();
   resetContacts();
 };
 
 const clearSelectedContact = () => {
   selectedContact.value = null;
   targetInbox.value = null;
+  clearFormState();
 };
 
 const closeCompose = () => {
@@ -162,6 +197,12 @@ const closeCompose = () => {
   emit('close');
 };
 
+const discardCompose = () => {
+  clearFormState();
+  formState.message = '';
+  closeCompose();
+};
+
 const createConversation = async ({ payload, isFromWhatsApp }) => {
   try {
     const data = await store.dispatch('contactConversations/create', {
@@ -173,7 +214,7 @@ const createConversation = async ({ payload, isFromWhatsApp }) => {
       to: `/app/accounts/${data.account_id}/conversations/${data.id}`,
       message: t('COMPOSE_NEW_CONVERSATION.FORM.GO_TO_CONVERSATION'),
     };
-    closeCompose();
+    discardCompose();
     useAlert(t('COMPOSE_NEW_CONVERSATION.FORM.SUCCESS_MESSAGE'), action);
     return true; // Return success
   } catch (error) {
@@ -195,7 +236,11 @@ watch(
   (currentContact, previousContact) => {
     if (currentContact && props.contactId) {
       // Reset on contact change
-      if (currentContact?.id !== previousContact?.id) clearSelectedContact();
+      if (currentContact?.id !== previousContact?.id) {
+        clearSelectedContact();
+        clearFormState();
+        formState.message = '';
+      }
 
       // First process the contactable inboxes to get the right structure
       const processedInboxes = processContactableInboxes(
@@ -250,6 +295,9 @@ onMounted(() => resetContacts());
 
 watch(showComposeNewConversation, val => {
   emitter.emit(BUS_EVENTS.NEW_CONVERSATION_MODAL, val);
+  // Cache-aware refetch, so newly synced WhatsApp templates show up here
+  // even if the account-cache-invalidated websocket event was missed.
+  if (val) store.dispatch('inboxes/get');
 });
 
 const keyboardEvents = {
@@ -266,15 +314,20 @@ useKeyboardEvents(keyboardEvents);
 <template>
   <!-- Modal mode: full-screen overlay for small screens -->
   <template v-if="viewInModal">
-    <Button variant="outline" size="icon" @click="toggle">
-      <Icon icon="i-lucide-pen-line" />
-    </Button>
+    <div class="contents" @click="toggle">
+      <slot name="trigger" :is-open="showComposeNewConversation">
+        <Button variant="outline" size="icon">
+          <Icon icon="i-lucide-pen-line" />
+        </Button>
+      </slot>
+    </div>
     <div
       v-if="showComposeNewConversation"
       class="fixed z-50 bg-n-alpha-black1 backdrop-blur-[4px] flex items-start pt-[clamp(3rem,15vh,12rem)] justify-center inset-0"
       @click.self="onModalBackdropClick"
     >
       <ComposeNewConversationForm
+        :form-state="formState"
         :contacts="contacts"
         :contact-id="contactId"
         :is-loading="isSearching"
@@ -294,7 +347,7 @@ useKeyboardEvents(keyboardEvents);
         @update-target-inbox="handleTargetInbox"
         @clear-selected-contact="clearSelectedContact"
         @create-conversation="createConversation"
-        @discard="closeCompose"
+        @discard="discardCompose"
       />
     </div>
   </template>
@@ -306,9 +359,11 @@ useKeyboardEvents(keyboardEvents);
     @update:open="handlePopoverUpdate"
   >
     <PopoverTrigger as-child>
-      <Button variant="outline" size="icon">
-        <Icon icon="i-lucide-pen-line" />
-      </Button>
+      <slot name="trigger" :is-open="showComposeNewConversation">
+        <Button variant="outline" size="icon">
+          <Icon icon="i-lucide-pen-line" />
+        </Button>
+      </slot>
     </PopoverTrigger>
     <PopoverContent
       side="bottom"
@@ -320,6 +375,7 @@ useKeyboardEvents(keyboardEvents);
       @interact-outside="keepComposeOpenOnNestedInteraction"
     >
       <ComposeNewConversationForm
+        :form-state="formState"
         :contacts="contacts"
         :contact-id="contactId"
         :is-loading="isSearching"
@@ -339,7 +395,7 @@ useKeyboardEvents(keyboardEvents);
         @update-target-inbox="handleTargetInbox"
         @clear-selected-contact="clearSelectedContact"
         @create-conversation="createConversation"
-        @discard="closeCompose"
+        @discard="discardCompose"
       />
     </PopoverContent>
   </Popover>

@@ -40,6 +40,7 @@ export default {
       required: true,
     },
   },
+  emits: ['close'],
   data() {
     return {
       isOpen: false,
@@ -52,10 +53,20 @@ export default {
       uiFlags: 'contacts/getUIFlags',
     }),
   },
+  watch: {
+    'primaryContact.id'() {
+      this.isSearching = false;
+      this.searchResults = [];
+    },
+  },
 
   methods: {
+    onOpenChange(isOpen) {
+      this.isOpen = isOpen;
+      if (!isOpen) this.$emit('close');
+    },
     onClose() {
-      this.isOpen = false;
+      this.onOpenChange(false);
     },
     async onContactSearch(query) {
       this.isSearching = true;
@@ -92,7 +103,7 @@ export default {
 </script>
 
 <template>
-  <Dialog :open="isOpen" @update:open="isOpen = $event">
+  <Dialog :open="isOpen" @update:open="onOpenChange">
     <DialogTrigger as-child>
       <slot name="trigger" />
     </DialogTrigger>
@@ -105,6 +116,7 @@ export default {
       </DialogHeader>
 
       <MergeContact
+        :key="primaryContact.id"
         :primary-contact="primaryContact"
         :is-searching="isSearching"
         :search-results="searchResults"

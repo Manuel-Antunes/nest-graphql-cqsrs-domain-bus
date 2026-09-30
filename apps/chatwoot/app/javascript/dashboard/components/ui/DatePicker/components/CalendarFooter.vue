@@ -14,16 +14,10 @@ const onClickApply = () => {
 
 <template>
   <div class="h-[56px] flex justify-between gap-2 px-2 py-3 items-center">
-    <Button
-      variant="ghost"
-      @click="onClickClear"
-    >
+    <Button variant="ghost" @click="onClickClear">
       {{ $t('DATE_PICKER.CLEAR_BUTTON') }}
     </Button>
-    <Button
-      variant="ghost"
-      @click="onClickApply"
-    >
+    <Button @click="onClickApply">
       {{ $t('DATE_PICKER.APPLY_BUTTON') }}
     </Button>
   </div>

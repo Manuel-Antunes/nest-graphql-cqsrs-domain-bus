@@ -30,9 +30,5 @@ const formattedContent = computed(() => {
     — needed because v4's custom `prose-bubble` typography modifier no longer
     emits its colour overrides. See that rule for the full explanation.
   -->
-  <span
-    v-dompurify-html="formattedContent"
-    class="prose prose-bubble"
-  />
-
+  <span v-dompurify-html="formattedContent" class="prose prose-bubble" />
 </template>

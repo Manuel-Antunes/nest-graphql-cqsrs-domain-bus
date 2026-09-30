@@ -1,4 +1,5 @@
 <script>
+/* eslint-disable vue/no-reserved-component-names -- shadcn Dialog component name */
 import TemplatesPicker from './TemplatesPicker.vue';
 import WhatsAppTemplateReply from './WhatsAppTemplateReply.vue';
 import {
@@ -27,6 +28,14 @@ export default {
       type: Number,
       default: undefined,
     },
+    sendRenderedContent: {
+      type: Boolean,
+      default: false,
+    },
+    requestContactInfoOnly: {
+      type: Boolean,
+      default: false,
+    },
   },
   emits: ['onSend', 'cancel', 'update:show'],
   data() {
@@ -49,6 +58,14 @@ export default {
             templateName: this.selectedWaTemplate.name,
           })
         : this.$t('WHATSAPP_TEMPLATES.MODAL.SUBTITLE');
+    },
+  },
+  watch: {
+    show(value) {
+      if (!value) this.selectedWaTemplate = null;
+    },
+    requestContactInfoOnly() {
+      this.selectedWaTemplate = null;
     },
   },
   methods: {
@@ -89,11 +106,13 @@ export default {
         <TemplatesPicker
           v-if="!selectedWaTemplate"
           :inbox-id="inboxId"
+          :request-contact-info-only="requestContactInfoOnly"
           @on-select="pickTemplate"
         />
         <WhatsAppTemplateReply
           v-else
           :template="selectedWaTemplate"
+          :send-rendered-content="sendRenderedContent"
           @reset-template="onResetTemplate"
           @send-message="onSendMessage"
         />

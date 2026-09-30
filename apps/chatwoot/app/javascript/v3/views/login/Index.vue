@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, nextTick } from 'vue';
 import { useStore } from 'vuex';
 import { useRoute, useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
@@ -11,6 +11,8 @@ import { useAlert } from 'dashboard/composables';
 import { SESSION_STORAGE_KEYS } from 'dashboard/constants/sessionStorage';
 import SessionStorage from 'shared/helpers/sessionStorage';
 import { useBranding } from 'shared/composables/useBranding';
+import AnalyticsHelper from 'dashboard/helper/AnalyticsHelper';
+import { SESSION_EVENTS } from 'dashboard/helper/AnalyticsHelper/events';
 
 // components
 import SimpleDivider from '../../components/Divider/SimpleDivider.vue';
@@ -34,6 +36,7 @@ import {
   InputGroupButton,
 } from 'next/ui/input-group';
 import MfaVerification from 'dashboard/components/auth/MfaVerification.vue';
+import SessionLimitOverlay from 'dashboard/components/auth/SessionLimitOverlay.vue';
 
 const props = defineProps({
   ssoAuthToken: { type: String, default: '' },
@@ -51,6 +54,8 @@ const ERROR_MESSAGES = {
 };
 
 const IMPERSONATION_URL_SEARCH_KEY = 'impersonation';
+const USER_NOT_CONFIRMED_ERROR_CODE = 'user_not_confirmed';
+const AUTH_ERROR_TOAST_DURATION = 6000;
 
 const store = useStore();
 const route = useRoute();
@@ -65,6 +70,9 @@ const loginApi = ref({
 });
 const mfaRequired = ref(false);
 const mfaToken = ref(null);
+const sessionsLimitReached = ref(false);
+const limitedSessions = ref([]);
+const lastFormValues = ref({});
 const showPassword = ref(false);
 const loginForm = ref(null);
 
@@ -138,17 +146,28 @@ const handleImpersonation = () => {
   }
 };
 
+const buildCredentials = (formValues = {}, extraParams = {}) => ({
+  email: props.email ? decodeURIComponent(props.email) : formValues.email,
+  password: formValues.password,
+  sso_auth_token: props.ssoAuthToken,
+  ssoAccountId: props.ssoAccountId,
+  ssoConversationId: props.ssoConversationId,
+  ...extraParams,
+});
+
+const showSessionsLimit = result => {
+  loginApi.value.showLoading = false;
+  sessionsLimitReached.value = true;
+  limitedSessions.value = result.sessions;
+  AnalyticsHelper.track(SESSION_EVENTS.LIMIT_HIT);
+};
+
 const submitLogin = (formValues = {}) => {
   loginApi.value.hasErrored = false;
   loginApi.value.showLoading = true;
+  lastFormValues.value = formValues;
 
-  const credentials = {
-    email: props.email ? decodeURIComponent(props.email) : formValues.email,
-    password: formValues.password,
-    sso_auth_token: props.ssoAuthToken,
-    ssoAccountId: props.ssoAccountId,
-    ssoConversationId: props.ssoConversationId,
-  };
+  const credentials = buildCredentials(formValues);
 
   login(credentials)
     .then(result => {
@@ -160,10 +179,25 @@ const submitLogin = (formValues = {}) => {
         return;
       }
 
+      // Check if sessions limit reached
+      if (result?.sessionsLimitReached) {
+        showSessionsLimit(result);
+        return;
+      }
+
       handleImpersonation();
       showAlertMessage(t('LOGIN.API.SUCCESS_MESSAGE'));
     })
     .catch(response => {
+      if (response?.errorCode === USER_NOT_CONFIRMED_ERROR_CODE) {
+        loginApi.value.showLoading = false;
+        router.push({
+          name: 'auth_verify_email',
+          state: { email: credentials.email },
+        });
+        return;
+      }
+
       // Reset URL Params if the authentication is invalid
       if (props.email) {
         window.location = '/app/login';
@@ -190,17 +224,58 @@ const handleMfaCancel = () => {
   loginForm.value?.setFieldValue('password', '');
 };
 
+const retryLoginWithParams = extraParams => {
+  const credentials = buildCredentials(lastFormValues.value, extraParams);
+
+  sessionsLimitReached.value = false;
+  limitedSessions.value = [];
+  loginApi.value.showLoading = true;
+  login(credentials)
+    .then(result => {
+      if (result?.sessionsLimitReached) {
+        showSessionsLimit(result);
+        return;
+      }
+      handleImpersonation();
+      showAlertMessage(t('LOGIN.API.SUCCESS_MESSAGE'));
+    })
+    .catch(response => {
+      loginApi.value.hasErrored = true;
+      showAlertMessage(response?.message || t('LOGIN.API.UNAUTH'));
+    });
+};
+
+const handleSessionRevoke = sessionId => {
+  retryLoginWithParams({ revoke_session_id: sessionId });
+};
+
+const handleSessionRevokeAll = () => {
+  retryLoginWithParams({ revoke_all_sessions: true });
+};
+
+const handleSessionLimitCancel = () => {
+  sessionsLimitReached.value = false;
+  limitedSessions.value = [];
+  lastFormValues.value = {};
+  loginForm.value?.setFieldValue('password', '');
+};
+
 onMounted(() => {
   if (props.ssoAuthToken) {
     submitLogin();
   }
   if (props.authError) {
-    const messageKey = ERROR_MESSAGES[props.authError] ?? 'LOGIN.API.UNAUTH';
-    useAlert(getTranslatedMessage(messageKey));
-    // wait for idle state, then remove the error query param from the url
-    requestIdleCallbackPolyfill(() => {
-      const { query } = route;
-      router.replace({ query: { ...query, error: undefined } });
+    // Wait for the sibling snackbar to mount and subscribe to toast events.
+    nextTick(() => {
+      const messageKey = ERROR_MESSAGES[props.authError] ?? 'LOGIN.API.UNAUTH';
+      useAlert(getTranslatedMessage(messageKey), {
+        duration: AUTH_ERROR_TOAST_DURATION,
+      });
+      // wait for idle state, then remove the error query param from the url
+      requestIdleCallbackPolyfill(() => {
+        const { query } = route;
+        router.replace({ query: { ...query, error: undefined } });
+      });
     });
   }
 });
@@ -233,8 +308,18 @@ onMounted(() => {
       </p>
     </section>
 
+    <!-- Session Limit Section -->
+    <section v-if="sessionsLimitReached" class="mt-11">
+      <SessionLimitOverlay
+        :sessions="limitedSessions"
+        @revoke="handleSessionRevoke"
+        @revoke-all="handleSessionRevokeAll"
+        @cancel="handleSessionLimitCancel"
+      />
+    </section>
+
     <!-- MFA Verification Section -->
-    <section v-if="mfaRequired" class="mt-11">
+    <section v-else-if="mfaRequired" class="mt-11">
       <MfaVerification
         :mfa-token="mfaToken"
         @verified="handleMfaVerified"

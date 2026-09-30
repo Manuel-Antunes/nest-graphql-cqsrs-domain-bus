@@ -64,16 +64,14 @@ useKeyboardEvents(keyboardEvents);
         <span class="truncate">{{ item.name }}</span>
         <div
           v-if="item.count"
-          :class="[
-            'shrink-0 min-w-5 h-5 px-1 rounded-full flex items-center justify-center',
-            item.key === activeTab ? 'bg-primary/20' : 'bg-input',
-          ]"
+          class="shrink-0 min-w-5 h-5 px-1 rounded-full flex items-center justify-center"
+          :class="item.key === activeTab ? 'bg-primary/20' : 'bg-input'"
         >
           <span
-            :class="[
-              'text-xxs font-bold leading-none',
-              item.key === activeTab ? 'text-primary' : 'text-muted-foreground',
-            ]"
+            class="text-xxs font-bold leading-none"
+            :class="
+              item.key === activeTab ? 'text-primary' : 'text-muted-foreground'
+            "
           >
             {{ item.count }}
           </span>

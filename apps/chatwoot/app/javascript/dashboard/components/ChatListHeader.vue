@@ -14,6 +14,7 @@ import ComposeConversation from 'dashboard/components-next/NewConversation/Compo
 
 const props = defineProps({
   pageTitle: { type: String, required: true },
+  contactFilter: { type: Object, default: null },
   hasAppliedFilters: { type: Boolean, required: true },
   hasActiveFolders: { type: Boolean, required: true },
   activeStatus: { type: String, required: true },
@@ -43,6 +44,20 @@ const hasAppliedFiltersOrActiveFolders = computed(() => {
 const allCount = computed(() => props.conversationStats?.allCount || 0);
 const formattedAllCount = computed(() => formatNumber(allCount.value));
 
+// While filters narrow the list, the header names it and the back button exits.
+const showFilterScope = computed(
+  () => props.hasAppliedFilters && !props.hasActiveFolders
+);
+
+// The contact scope is set from the contact panel; it is exited, not edited.
+const isContactScoped = computed(
+  () => showFilterScope.value && !!props.contactFilter
+);
+
+const title = computed(
+  () => (isContactScoped.value && props.contactFilter.name) || props.pageTitle
+);
+
 const toggleConversationLayout = () => {
   const { LAYOUT_TYPES } = wootConstants;
   const {
@@ -69,11 +84,22 @@ const toggleConversationLayout = () => {
     <!-- Title row -->
     <div class="flex items-center justify-between gap-2 px-3 h-12">
       <div class="flex items-center justify-center min-w-0 gap-2">
+        <Button
+          v-if="showFilterScope"
+          v-tooltip.right="$t('FILTER.CLEAR_BUTTON_LABEL')"
+          :aria-label="$t('FILTER.CLEAR_BUTTON_LABEL')"
+          variant="ghost"
+          size="icon"
+          class="shrink-0 -ms-2 size-6"
+          @click="emit('resetFilters')"
+        >
+          <Icon icon="i-lucide-chevron-left" class="rtl:rotate-180" />
+        </Button>
         <h1
           class="text-base font-medium truncate text-n-slate-12"
-          :title="pageTitle"
+          :title="title"
         >
-          {{ pageTitle }}
+          {{ title }}
         </h1>
         <span
           v-if="
@@ -104,14 +130,6 @@ const toggleConversationLayout = () => {
               :class="{ 'ltr:right-0 rtl:left-0': isOnExpandedLayout }"
             />
           </div>
-          <Button
-            v-tooltip.top-end="$t('FILTER.CLEAR_BUTTON_LABEL')"
-            variant="destructive"
-            size="icon"
-            @click="emit('resetFilters')"
-          >
-            <Icon icon="i-lucide-circle-x" />
-          </Button>
         </template>
         <template v-if="hasActiveFolders">
           <div class="relative">
@@ -140,7 +158,7 @@ const toggleConversationLayout = () => {
             <Icon icon="i-lucide-trash-2" />
           </Button>
         </template>
-        <div v-else class="relative">
+        <div v-else-if="!isContactScoped" class="relative">
           <Button
             id="toggleConversationFilterButton"
             v-tooltip.right="$t('FILTER.TOOLTIP_LABEL')"
@@ -157,8 +175,9 @@ const toggleConversationLayout = () => {
           />
         </div>
         <ConversationBasicFilter
-          v-if="!hasAppliedFiltersOrActiveFolders"
+          v-if="!isContactScoped"
           :is-on-expanded-layout="isOnExpandedLayout"
+          :show-status-filter="!hasAppliedFiltersOrActiveFolders"
           @change-filter="onBasicFilterChange"
         />
         <SwitchLayout

@@ -8,6 +8,7 @@ import { useI18n } from 'vue-i18n';
 import { LocalStorage } from 'shared/helpers/localStorage';
 import { ACCOUNT_EVENTS } from 'dashboard/helper/AnalyticsHelper/events';
 import { LOCAL_STORAGE_KEYS } from 'dashboard/constants/localStorage';
+import { getInboxIconByType } from 'dashboard/helper/inbox';
 import { BUS_EVENTS } from 'shared/constants/busEvents';
 import {
   MESSAGE_TYPES,
@@ -36,6 +37,7 @@ import FileBubble from './bubbles/File.vue';
 import AudioBubble from './bubbles/Audio.vue';
 import VideoBubble from './bubbles/Video.vue';
 import EmbedBubble from './bubbles/Embed.vue';
+import FallbackBubble from './bubbles/Fallback.vue';
 import InstagramStoryBubble from './bubbles/InstagramStory.vue';
 import EmailBubble from './bubbles/Email/Index.vue';
 import UnsupportedBubble from './bubbles/Unsupported.vue';
@@ -45,8 +47,11 @@ import LocationBubble from './bubbles/Location.vue';
 import CSATBubble from './bubbles/CSAT.vue';
 import FormBubble from './bubbles/Form.vue';
 import VoiceCallBubble from './bubbles/VoiceCall.vue';
+import WhatsappFlowResponseBubble from './bubbles/WhatsappFlowResponse.vue';
+import WhatsappReferral from './bubbles/Text/WhatsappReferral.vue';
 
 import MessageError from './MessageError.vue';
+import CaptainGenerationDetails from './CaptainGenerationDetails.vue';
 import Icon from 'dashboard/components-next/icon/Icon.vue';
 import {
   ContextMenu,
@@ -66,12 +71,15 @@ import {
   AlertDialogAction,
 } from 'next/ui/alert-dialog';
 import AddCannedModal from 'dashboard/routes/dashboard/settings/canned/AddCanned.vue';
+import ReportCaptainMessageDialog from 'dashboard/modules/conversations/components/ReportCaptainMessageDialog.vue';
 import { useStore, useMapGetter } from 'dashboard/composables/store';
 import { useAlert } from 'dashboard/composables';
 import { useMessageFormatter } from 'shared/composables/useMessageFormatter';
 import { copyTextToClipboard } from 'shared/helpers/clipboard';
 import { conversationUrl, frontendURL } from 'dashboard/helper/URLHelper';
 import { CONVERSATION_EVENTS } from 'dashboard/helper/AnalyticsHelper/events';
+import { parseAPIErrorResponse } from 'dashboard/store/utils/api';
+import { useBranding } from 'shared/composables/useBranding';
 
 /**
  * @typedef {Object} Attachment
@@ -141,6 +149,7 @@ const props = defineProps({
     validator: value => Object.values(MESSAGE_STATUS).includes(value),
   },
   attachments: { type: Array, default: () => [] },
+  call: { type: Object, default: null }, // eslint-disable-line vue/no-unused-properties
   content: { type: String, default: null },
   contentAttributes: { type: Object, default: () => ({}) },
   contentType: {
@@ -157,6 +166,7 @@ const props = defineProps({
   inReplyTo: { type: Object, default: null }, // eslint-disable-line vue/no-unused-properties
   isEmailInbox: { type: Boolean, default: false },
   private: { type: Boolean, default: false },
+  additionalAttributes: { type: Object, default: () => ({}) }, // eslint-disable-line vue/no-unused-properties
   sender: { type: Object, default: null },
   senderId: { type: Number, default: null },
   senderType: { type: String, default: null },
@@ -171,11 +181,21 @@ const showBackgroundHighlight = ref(false);
 const isContextMenuDisabled = ref(false);
 const isCannedResponseModalOpen = ref(false);
 const showDeleteModal = ref(false);
+const reportDialog = ref(null);
 const { t } = useI18n();
 const store = useStore();
 const { getPlainText } = useMessageFormatter();
 const currentAccountId = useMapGetter('getCurrentAccountId');
 const uiSettings = useMapGetter('getUISettings');
+const inboxGetter = useMapGetter('inboxes/getInbox');
+const inbox = computed(() => inboxGetter.value(props.inboxId) || {});
+const isOnChatwootCloud = useMapGetter('globalConfig/isOnChatwootCloud');
+const { replaceInstallationName } = useBranding();
+
+const isCaptainMessage = computed(() => {
+  const senderType = props.sender?.type ?? props.senderType;
+  return senderType === SENDER_TYPES.CAPTAIN_ASSISTANT;
+});
 
 /**
  * Computes the message variant based on props
@@ -193,7 +213,14 @@ const variant = computed(() => {
   if (props.contentAttributes?.isUnsupported)
     return MESSAGE_VARIANTS.UNSUPPORTED;
 
-  const isBot = !props.sender || props.sender.type === SENDER_TYPES.AGENT_BOT;
+  if (props.contentAttributes?.externalEcho) {
+    return MESSAGE_VARIANTS.AGENT;
+  }
+
+  const isBot =
+    props.sender?.type === SENDER_TYPES.AGENT_BOT ||
+    props.senderType === SENDER_TYPES.AGENT_BOT ||
+    (!props.sender && !props.additionalAttributes?.senderName);
   if (isBot && props.messageType === MESSAGE_TYPES.OUTGOING) {
     return MESSAGE_VARIANTS.BOT;
   }
@@ -262,30 +289,6 @@ const flexOrientationClass = computed(() => {
   return map[orientation.value];
 });
 
-const gridClass = computed(() => {
-  const map = {
-    [ORIENTATION.LEFT]: 'grid grid-cols-1fr',
-    [ORIENTATION.RIGHT]: 'grid grid-cols-[1fr_24px]',
-  };
-
-  return map[orientation.value];
-});
-
-const gridTemplate = computed(() => {
-  const map = {
-    [ORIENTATION.LEFT]: `
-      "bubble"
-      "meta"
-    `,
-    [ORIENTATION.RIGHT]: `
-      "bubble avatar"
-      "meta spacer"
-    `,
-  };
-
-  return map[orientation.value];
-});
-
 const shouldGroupWithNext = computed(() => {
   if (props.status === MESSAGE_STATUS.FAILED) return false;
 
@@ -303,6 +306,10 @@ const componentToRender = computed(() => {
   if (props.isEmailInbox && !props.private) {
     const emailInboxTypes = [MESSAGE_TYPES.INCOMING, MESSAGE_TYPES.OUTGOING];
     if (emailInboxTypes.includes(props.messageType)) return EmailBubble;
+  }
+
+  if (props.contentAttributes?.whatsappFlowResponse) {
+    return WhatsappFlowResponseBubble;
   }
 
   if (props.contentType === CONTENT_TYPES.INPUT_CSAT) {
@@ -334,6 +341,7 @@ const componentToRender = computed(() => {
   const instagramSharedTypes = [
     ATTACHMENT_TYPES.STORY_MENTION,
     ATTACHMENT_TYPES.IG_STORY,
+    ATTACHMENT_TYPES.IG_STORY_REPLY,
     ATTACHMENT_TYPES.IG_POST,
   ];
   if (instagramSharedTypes.includes(props.contentAttributes.imageType)) {
@@ -342,6 +350,8 @@ const componentToRender = computed(() => {
 
   if (Array.isArray(props.attachments) && props.attachments.length === 1) {
     const fileType = props.attachments[0].fileType;
+
+    if (fileType === ATTACHMENT_TYPES.FALLBACK) return FallbackBubble;
 
     if (!props.content) {
       if (fileType === ATTACHMENT_TYPES.IMAGE) return ImageBubble;
@@ -381,20 +391,6 @@ const messageAlign = computed(() =>
   orientation.value === ORIENTATION.RIGHT ? 'end' : 'start'
 );
 
-// Two-letter fallback for the shadcn Avatar when there's no image.
-const avatarInitials = computed(() => {
-  const name = avatarInfo.value.name || '';
-  return (
-    name
-      .split(' ')
-      .filter(Boolean)
-      .slice(0, 2)
-      .map(word => word[0])
-      .join('')
-      .toUpperCase() || '?'
-  );
-});
-
 // Timestamp + read-receipt live in a MessageFooter BELOW the bubble (shadcn
 // pattern) so they stay readable on every variant — inside a primary/dark
 // bubble the muted meta color was unreadable. VoiceCall manages its own layout
@@ -413,6 +409,12 @@ const showMeta = computed(
 const isMessageDeleted = computed(() => {
   return props.contentAttributes?.deleted;
 });
+
+const shouldShowWhatsappReferral = computed(
+  () =>
+    variant.value === MESSAGE_VARIANTS.USER &&
+    !!props.contentAttributes?.referral
+);
 
 const contextMenuEnabledOptions = computed(() => {
   const hasText = !!props.content;
@@ -436,6 +438,10 @@ const contextMenuEnabledOptions = computed(() => {
       !props.private &&
       props.inboxSupportsReplyTo.outgoing &&
       !isFailedOrProcessing,
+    report:
+      isOnChatwootCloud.value &&
+      isCaptainMessage.value &&
+      !isMessageDeleted.value,
   };
 });
 
@@ -445,13 +451,21 @@ const shouldRenderMessage = computed(() => {
   const isUnsupported = props.contentAttributes?.isUnsupported;
   const isAnIntegrationMessage =
     props.contentType === CONTENT_TYPES.INTEGRATIONS;
+  const hasWhatsappFlowResponse =
+    !!props.contentAttributes?.whatsappFlowResponse;
+  const isFailedMessage = props.status === MESSAGE_STATUS.FAILED;
+  const hasExternalError = !!props.contentAttributes?.externalError;
 
   return (
     hasAttachments ||
     props.content ||
     isEmailContentType ||
     isUnsupported ||
-    isAnIntegrationMessage
+    isAnIntegrationMessage ||
+    hasWhatsappFlowResponse ||
+    shouldShowWhatsappReferral.value ||
+    isFailedMessage ||
+    hasExternalError
   );
 });
 
@@ -494,15 +508,23 @@ async function copyLinkToMessage() {
   useAlert(t('CONVERSATION.CONTEXT_MENU.LINK_COPIED'));
 }
 
-function handleTranslate() {
+async function handleTranslate() {
   const account = store.getters['accounts/getAccount'](currentAccountId.value);
   const targetLanguage = uiSettings.value?.locale || account?.locale || 'en';
-  store.dispatch('translateMessage', {
-    conversationId: props.conversationId,
-    messageId: props.id,
-    targetLanguage,
-  });
-  useTrack(CONVERSATION_EVENTS.TRANSLATE_A_MESSAGE);
+  try {
+    await store.dispatch('translateMessage', {
+      conversationId: props.conversationId,
+      messageId: props.id,
+      targetLanguage,
+    });
+    useTrack(CONVERSATION_EVENTS.TRANSLATE_A_MESSAGE);
+  } catch (error) {
+    useAlert(parseAPIErrorResponse(error));
+  }
+}
+
+function openReportDialog() {
+  reportDialog.value?.open();
 }
 
 async function confirmDeletion() {
@@ -527,12 +549,26 @@ function handleReplyTo() {
 }
 
 const avatarInfo = computed(() => {
-  // If no sender, return bot info
-  if (!props.sender) {
+  if (props.contentAttributes?.externalEcho) {
+    const { name, avatar_url, channel_type, medium, voice_enabled } =
+      inbox.value;
+    const iconName = avatar_url
+      ? null
+      : getInboxIconByType(channel_type, medium, 'fill', voice_enabled);
     return {
-      name: t('CONVERSATION.BOT'),
-      src: '',
+      name: iconName ? '' : name || t('CONVERSATION.NATIVE_APP'),
+      src: avatar_url || '',
+      iconName,
     };
+  }
+
+  // If no sender, check for Slack (or other integration) sender info
+  if (!props.sender) {
+    const { senderName, senderAvatarUrl } = props.additionalAttributes || {};
+    if (senderName) {
+      return { name: senderName, src: senderAvatarUrl ?? '' };
+    }
+    return { name: t('CONVERSATION.BOT'), src: '' };
   }
 
   const { sender } = props;
@@ -554,12 +590,31 @@ const avatarInfo = computed(() => {
 });
 
 const avatarTooltip = computed(() => {
+  if (props.contentAttributes?.externalEcho) {
+    return replaceInstallationName(t('CONVERSATION.NATIVE_APP_ADVISORY'));
+  }
   if (avatarInfo.value.name === '') return '';
   return `${t('CONVERSATION.SENT_BY')} ${avatarInfo.value.name}`;
 });
 
+// Two-letter fallback for the shadcn Avatar when there's no image.
+const avatarInitials = computed(() => {
+  const name = avatarInfo.value.name || '';
+  return (
+    name
+      .split(' ')
+      .filter(Boolean)
+      .slice(0, 2)
+      .map(word => word[0])
+      .join('')
+      .toUpperCase() || '?'
+  );
+});
+
 const setupHighlightTimer = () => {
-  const messageId = new URLSearchParams(window.location.search).get('messageId');
+  const messageId = new URLSearchParams(window.location.search).get(
+    'messageId'
+  );
   if (Number(messageId) !== Number(props.id)) {
     return;
   }
@@ -600,12 +655,12 @@ provideMessageContext({
   >
     <Marker
       v-if="variant === MESSAGE_VARIANTS.ACTIVITY"
-      variant="separator"
       v-tooltip.top="activityTime"
+      variant="separator"
       class="px-3 py-1"
     >
       <MarkerContent>
-        <span v-dompurify-html="content" :title="content" />
+        <span :title="content">{{ content }}</span>
       </MarkerContent>
     </Marker>
     <MessageRoot v-else :align="messageAlign">
@@ -627,7 +682,12 @@ provideMessageContext({
             :alt="avatarInfo.name"
           />
           <AvatarFallback class="bg-muted text-foreground">
-            {{ avatarInitials }}
+            <Icon
+              v-if="avatarInfo.iconName"
+              :icon="avatarInfo.iconName"
+              class="size-3.5"
+            />
+            <template v-else>{{ avatarInitials }}</template>
           </AvatarFallback>
         </Avatar>
       </MessageAvatar>
@@ -637,94 +697,132 @@ provideMessageContext({
           { 'w-full': isEmailBubble },
         ]"
       >
-      <ContextMenu
-        v-if="shouldShowContextMenu && isBubble"
-        @update:open="onContextMenuOpenChange"
-      >
-        <ContextMenuTrigger as-child :disabled="isContextMenuDisabled">
-          <div
-            class="flex min-w-0"
-            :class="{ 'w-full': isEmailBubble }"
-            @mousedown="onContextMenuMouseDown"
-          >
-            <Component :is="componentToRender" />
-          </div>
-        </ContextMenuTrigger>
-        <ContextMenuContent class="w-56">
-          <ContextMenuItem
-            v-if="contextMenuEnabledOptions.replyTo"
-            class="gap-2"
-            @select="handleReplyTo"
-          >
-            <Icon icon="i-lucide-reply" class="size-4" />
-            {{ t('CONVERSATION.CONTEXT_MENU.REPLY_TO') }}
-          </ContextMenuItem>
-          <ContextMenuItem
-            v-if="contextMenuEnabledOptions.copy"
-            class="gap-2"
-            @select="handleCopy"
-          >
-            <Icon icon="i-lucide-clipboard" class="size-4" />
-            {{ t('CONVERSATION.CONTEXT_MENU.COPY') }}
-          </ContextMenuItem>
-          <ContextMenuItem
-            v-if="contextMenuEnabledOptions.translate"
-            class="gap-2"
-            @select="handleTranslate"
-          >
-            <Icon icon="i-lucide-languages" class="size-4" />
-            {{ t('CONVERSATION.CONTEXT_MENU.TRANSLATE') }}
-          </ContextMenuItem>
-          <ContextMenuSeparator
-            v-if="
-              contextMenuEnabledOptions.copyLink ||
-              contextMenuEnabledOptions.cannedResponse
-            "
+        <ContextMenu
+          v-if="shouldShowContextMenu && isBubble"
+          @update:open="onContextMenuOpenChange"
+        >
+          <ContextMenuTrigger as-child :disabled="isContextMenuDisabled">
+            <div
+              class="flex min-w-0"
+              :class="{
+                'w-full': isEmailBubble,
+                'flex-col items-start gap-2': shouldShowWhatsappReferral,
+              }"
+              @mousedown="onContextMenuMouseDown"
+            >
+              <WhatsappReferral
+                v-if="shouldShowWhatsappReferral"
+                :referral="contentAttributes.referral"
+              />
+              <Component :is="componentToRender" />
+            </div>
+          </ContextMenuTrigger>
+          <ContextMenuContent class="w-56">
+            <ContextMenuItem
+              v-if="contextMenuEnabledOptions.replyTo"
+              class="gap-2"
+              @select="handleReplyTo"
+            >
+              <Icon icon="i-lucide-reply" class="size-4" />
+              {{ t('CONVERSATION.CONTEXT_MENU.REPLY_TO') }}
+            </ContextMenuItem>
+            <ContextMenuItem
+              v-if="contextMenuEnabledOptions.copy"
+              class="gap-2"
+              @select="handleCopy"
+            >
+              <Icon icon="i-lucide-clipboard" class="size-4" />
+              {{ t('CONVERSATION.CONTEXT_MENU.COPY') }}
+            </ContextMenuItem>
+            <ContextMenuItem
+              v-if="contextMenuEnabledOptions.translate"
+              class="gap-2"
+              @select="handleTranslate"
+            >
+              <Icon icon="i-lucide-languages" class="size-4" />
+              {{ t('CONVERSATION.CONTEXT_MENU.TRANSLATE') }}
+            </ContextMenuItem>
+            <ContextMenuSeparator
+              v-if="
+                contextMenuEnabledOptions.copyLink ||
+                contextMenuEnabledOptions.cannedResponse
+              "
+            />
+            <ContextMenuItem
+              v-if="contextMenuEnabledOptions.copyLink"
+              class="gap-2"
+              @select="copyLinkToMessage"
+            >
+              <Icon icon="i-lucide-link" class="size-4" />
+              {{ t('CONVERSATION.CONTEXT_MENU.COPY_PERMALINK') }}
+            </ContextMenuItem>
+            <ContextMenuItem
+              v-if="contextMenuEnabledOptions.cannedResponse"
+              class="gap-2"
+              @select="isCannedResponseModalOpen = true"
+            >
+              <Icon icon="i-lucide-message-square-plus" class="size-4" />
+              {{ t('CONVERSATION.CONTEXT_MENU.CREATE_A_CANNED_RESPONSE') }}
+            </ContextMenuItem>
+            <ContextMenuSeparator v-if="contextMenuEnabledOptions.report" />
+            <ContextMenuItem
+              v-if="contextMenuEnabledOptions.report"
+              class="gap-2"
+              @select="openReportDialog"
+            >
+              <Icon icon="i-lucide-triangle-alert" class="size-4" />
+              {{ t('CONVERSATION.CONTEXT_MENU.REPORT_MESSAGE.LABEL') }}
+            </ContextMenuItem>
+            <ContextMenuSeparator v-if="contextMenuEnabledOptions.delete" />
+            <ContextMenuItem
+              v-if="contextMenuEnabledOptions.delete"
+              class="gap-2 text-n-ruby-11"
+              @select="showDeleteModal = true"
+            >
+              <Icon icon="i-lucide-trash-2" class="size-4" />
+              {{ t('CONVERSATION.CONTEXT_MENU.DELETE') }}
+            </ContextMenuItem>
+          </ContextMenuContent>
+        </ContextMenu>
+        <div
+          v-else
+          class="flex min-w-0"
+          :class="{
+            'w-full': isEmailBubble,
+            'flex-col items-start gap-2': shouldShowWhatsappReferral,
+          }"
+        >
+          <WhatsappReferral
+            v-if="shouldShowWhatsappReferral"
+            :referral="contentAttributes.referral"
           />
-          <ContextMenuItem
-            v-if="contextMenuEnabledOptions.copyLink"
-            class="gap-2"
-            @select="copyLinkToMessage"
-          >
-            <Icon icon="i-lucide-link" class="size-4" />
-            {{ t('CONVERSATION.CONTEXT_MENU.COPY_PERMALINK') }}
-          </ContextMenuItem>
-          <ContextMenuItem
-            v-if="contextMenuEnabledOptions.cannedResponse"
-            class="gap-2"
-            @select="isCannedResponseModalOpen = true"
-          >
-            <Icon icon="i-lucide-message-square-plus" class="size-4" />
-            {{ t('CONVERSATION.CONTEXT_MENU.CREATE_A_CANNED_RESPONSE') }}
-          </ContextMenuItem>
-          <ContextMenuSeparator v-if="contextMenuEnabledOptions.delete" />
-          <ContextMenuItem
-            v-if="contextMenuEnabledOptions.delete"
-            class="gap-2 text-n-ruby-11"
-            @select="showDeleteModal = true"
-          >
-            <Icon icon="i-lucide-trash-2" class="size-4" />
-            {{ t('CONVERSATION.CONTEXT_MENU.DELETE') }}
-          </ContextMenuItem>
-        </ContextMenuContent>
-      </ContextMenu>
-      <div v-else class="flex min-w-0" :class="{ 'w-full': isEmailBubble }">
-        <Component :is="componentToRender" />
-      </div>
-      <MessageError
-        v-if="contentAttributes.externalError"
-        :error="contentAttributes.externalError"
-        @retry="emit('retry')"
-      />
-      <MessageFooter v-if="showMeta">
-        <MessageMeta />
-      </MessageFooter>
+          <Component :is="componentToRender" />
+        </div>
+        <MessageError
+          v-if="contentAttributes.externalError"
+          :error="contentAttributes.externalError"
+          @retry="emit('retry')"
+        />
+        <MessageFooter v-if="showMeta">
+          <CaptainGenerationDetails v-if="isCaptainMessage" :message-id="id">
+            <template #meta>
+              <MessageMeta />
+            </template>
+          </CaptainGenerationDetails>
+          <MessageMeta v-else />
+        </MessageFooter>
       </MessageContent>
     </MessageRoot>
     <AddCannedModal
       v-if="contextMenuEnabledOptions.cannedResponse"
       v-model:open="isCannedResponseModalOpen"
       :response-content="plainTextContent"
+    />
+
+    <ReportCaptainMessageDialog
+      v-if="contextMenuEnabledOptions.report"
+      ref="reportDialog"
+      :message-id="id"
     />
 
     <AlertDialog

@@ -100,6 +100,7 @@ const handleAvatarHover = (id, isHovered) => {
       :key="contact.id"
       :name="contact.name"
       :email="contact.email"
+      :company-id="contact.companyId"
       :thumbnail="contact.thumbnail"
       :phone-number="contact.phoneNumber"
       :additional-attributes="contact.additionalAttributes"

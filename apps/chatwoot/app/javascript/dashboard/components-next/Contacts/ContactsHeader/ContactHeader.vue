@@ -27,9 +27,9 @@ const emit = defineEmits(['search', 'update:sort', 'add', 'import', 'export']);
 </script>
 
 <template>
-  <header class="sticky top-0 z-10">
+  <header class="sticky top-0 z-20 px-6">
     <div
-      class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between w-full p-6 mx-auto max-w-[60rem]"
+      class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between w-full py-6 mx-auto max-w-5xl"
     >
       <span class="text-xl font-medium truncate min-w-0">
         {{ headerTitle }}
@@ -76,10 +76,8 @@ const emit = defineEmits(['search', 'update:sort', 'add', 'import', 'export']);
           </div>
           <div class="w-px h-4 bg-n-strong" />
           <ComposeConversation>
-            <template #trigger="{ toggle }">
-              <Button variant="default" @click="toggle">{{
-                buttonLabel
-              }}</Button>
+            <template #trigger>
+              <Button variant="default">{{ buttonLabel }}</Button>
             </template>
           </ComposeConversation>
         </div>

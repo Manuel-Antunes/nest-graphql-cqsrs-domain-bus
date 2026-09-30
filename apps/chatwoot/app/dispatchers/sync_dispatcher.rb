@@ -12,3 +12,5 @@ class SyncDispatcher < BaseDispatcher
     ]
   end
 end
+
+SyncDispatcher.prepend_mod_with('SyncDispatcher')
