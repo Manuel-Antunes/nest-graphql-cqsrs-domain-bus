@@ -5,14 +5,17 @@ import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { FastifyAdapter } from '@nestjs/platform-fastify';
 import { Test } from '@nestjs/testing';
 import { IdentityResolver } from '@nestposts/auth/domain/auth/identity.resolver';
-import { Identity } from '@nestposts/auth/domain/auth/vo/identity';
+import { ClientIdentity } from '@nestposts/auth/domain/auth/vo/client-identity';
+import type { Identity } from '@nestposts/auth/domain/auth/vo/identity';
+import { UserIdentity } from '@nestposts/auth/domain/auth/vo/user-identity';
 import type { YogaInitialContext } from 'graphql-yoga';
 import { createSchema, createYoga } from 'graphql-yoga';
 
 import { Listening } from '../../test/support/listening';
 import { AppModule } from '../app.module';
 import { appConfig } from '../config/app.config';
-import { OrganizationSlugs } from './organization-slugs';
+import { ChatwootAgentBotTokens } from '../supergraph/header-resolvers/chatwoot-agent-bot-tokens';
+import { OrganizationSlugs } from '../supergraph/header-resolvers/organization-slugs';
 
 const LINK =
   'extend schema @link(url: "https://specs.apollo.dev/federation/v2.3", import: ["@key"])';
@@ -69,23 +72,33 @@ describe('what the gateway forwards to each subgraph', () => {
     return { name, url: served.url, sdlDir };
   };
 
+  const exchanged: (Identity | null)[] = [];
+
+  const agentBot = ClientIdentity.parse({
+    clientId: 'chatwoot-agent-bot-7',
+    scopes: ['write:conversations'],
+    activeOrganizationId: 'org-acme',
+  });
+
   const callGateway = async (
     headers: Record<string, string>,
     identity: Identity | null = null,
     query = '{ whoami }',
+    extensions?: Record<string, unknown>,
   ) => {
     received.clear();
+    exchanged.length = 0;
     identities.caller = identity;
     const response = await fetch(`${url}/graphql`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', ...headers },
-      body: JSON.stringify({ query }),
+      body: JSON.stringify({ query, extensions }),
     });
     return response.json();
   };
 
   const boundTo = (organizationId?: string) =>
-    Identity.parse({
+    UserIdentity.parse({
       userId: 'ana',
       email: 'ana@example.com',
       name: 'Ana',
@@ -99,6 +112,7 @@ describe('what the gateway forwards to each subgraph', () => {
     const sources = [
       await subgraph('main-graph', 'whoami'),
       await subgraph('other', 'echo'),
+      await subgraph('chatwoot', 'inbox'),
     ];
 
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
@@ -110,6 +124,13 @@ describe('what the gateway forwards to each subgraph', () => {
       .useValue({
         of: async (organizationId?: string) =>
           organizationId === 'org-mota' ? 'mota' : undefined,
+      })
+      .overrideProvider(ChatwootAgentBotTokens)
+      .useValue({
+        accessTokenFor: async (identity: Identity | null) => {
+          exchanged.push(identity);
+          return identity === agentBot ? 'bot-chatwoot-token' : undefined;
+        },
       })
       .compile();
     app = moduleRef.createNestApplication<NestFastifyApplication>(
@@ -178,6 +199,55 @@ describe('what the gateway forwards to each subgraph', () => {
         authorization: 'Bearer once',
         cookie: 'session=abc',
       });
+    }
+  });
+
+  it('hands Chatwoot the agent bot’s own token for its platform token, and every other subgraph the bearer as it came', async () => {
+    const body = await callGateway(
+      { authorization: 'Bearer bot-platform-token', 'x-tenant': 'acme' },
+      agentBot,
+      '{ whoami echo inbox }',
+    );
+
+    expect(body).toEqual({
+      data: { whoami: 'main-graph', echo: 'other', inbox: 'chatwoot' },
+    });
+    expect(received.get('chatwoot')).toMatchObject({
+      api_access_token: 'bot-chatwoot-token',
+      'x-tenant': 'acme',
+    });
+    expect(received.get('chatwoot')?.authorization).toBeUndefined();
+    for (const name of ['main-graph', 'other']) {
+      expect(received.get(name)?.authorization).toBe(
+        'Bearer bot-platform-token',
+      );
+      expect(received.get(name)?.api_access_token).toBeUndefined();
+    }
+    expect(exchanged).toEqual([agentBot]);
+  });
+
+  it('forwards to Chatwoot whatever is not an agent bot’s token untouched', async () => {
+    await callGateway(
+      { authorization: 'Bearer a-user', cookie: 'session=abc' },
+      null,
+      '{ inbox }',
+    );
+
+    expect(received.get('chatwoot')).toMatchObject({
+      authorization: 'Bearer a-user',
+      cookie: 'session=abc',
+    });
+    expect(received.get('chatwoot')?.api_access_token).toBeUndefined();
+  });
+
+  it('never lets a caller choose the headers a subgraph is sent', async () => {
+    await callGateway({ cookie: 'session=abc' }, null, '{ whoami inbox }', {
+      headers: { api_access_token: 'forged', 'x-tenant': 'forged' },
+    });
+
+    for (const name of ['main-graph', 'chatwoot']) {
+      expect(received.get(name)?.api_access_token).toBeUndefined();
+      expect(received.get(name)?.['x-tenant']).toBeUndefined();
     }
   });
 
