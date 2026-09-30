@@ -19,7 +19,7 @@ export class AssetMutationResolver {
   ): Promise<GeneratePresignedUrlQuery.PresignedUpload> {
     return this.queryBus.execute(
       new GeneratePresignedUrlQuery.GeneratePresignedUrl(
-        identity?.userId ?? null,
+        identity?.kind === 'user' ? identity.userId : null,
         input.mimeType,
       ),
     );

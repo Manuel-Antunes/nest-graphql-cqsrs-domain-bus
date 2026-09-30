@@ -1,6 +1,8 @@
 import type { ExecutionContext } from '@nestjs/common';
 import { ForbiddenException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import { ClientIdentity } from '@nestposts/auth/domain/auth/vo/client-identity';
+import type { AccessTokens } from '@nestposts/auth/infrastructure/better-auth/identity/access-tokens';
 import { BetterAuthIdentityResolver } from '@nestposts/auth/infrastructure/better-auth/identity/better-auth-identity.resolver';
 import type { BetterAuth } from '@nestposts/auth/infrastructure/better-auth/init-auth';
 import type { UserId } from '@nestposts/users/domain/user/vo/user-id';
@@ -87,7 +89,7 @@ describe('a tenant is an organization, and only its members work in it', () => {
         organizationCalled(organizationId.value.replace(/^org_/, '')),
     } as unknown as OrganizationRepository;
     return new TenantMembershipGuard(
-      new BetterAuthIdentityResolver(auth, req),
+      new BetterAuthIdentityResolver(auth, req, {} as AccessTokens),
       organizations,
       new Reflector(),
     );
@@ -229,6 +231,38 @@ describe('a tenant is an organization, and only its members work in it', () => {
       );
 
       expect(sessionsAsked).toBe(1);
+    });
+  });
+
+  describe('an OAuth client acting for itself', () => {
+    const bound = (activeOrganizationId: string | null) => {
+      const req = request('acme');
+      BetterAuthIdentityResolver.guard(
+        req,
+        ClientIdentity.parse({
+          clientId: 'machine',
+          scopes: ['read:clients'],
+          activeOrganizationId,
+        }),
+      );
+      return req;
+    };
+
+    it('works in the tenant of the organization it is bound to', async () => {
+      const req = bound('org_acme');
+
+      await expect(guard(req).canActivate(graphqlContext(req))).resolves.toBe(
+        true,
+      );
+      expect(membershipsAsked).toEqual([]);
+    });
+
+    it('works in no other, and nowhere when it is bound to none', async () => {
+      for (const req of [bound('org_initech'), bound(null)]) {
+        await expect(
+          guard(req).canActivate(graphqlContext(req)),
+        ).rejects.toBeInstanceOf(ForbiddenException);
+      }
     });
   });
 

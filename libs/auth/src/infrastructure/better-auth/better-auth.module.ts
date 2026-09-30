@@ -21,6 +21,7 @@ import {
   BetterAuthSecondaryStorageFactory,
 } from './factories';
 import { UserDatabaseHooks } from './hooks/user-database.hooks';
+import { AccessTokens } from './identity/access-tokens';
 import { BetterAuthIdentityProvider } from './identity/better-auth-identity.provider';
 import { BetterAuthIdentityResolver } from './identity/better-auth-identity.resolver';
 import type { BetterAuthPluginProvider } from './plugins/registry';
@@ -93,6 +94,7 @@ export class BetterAuthModule {
         ...providers,
         BetterAuthPluginsFactory(providers),
         BetterAuthFactory,
+        AccessTokens,
         { provide: IdentityResolver, useClass: BetterAuthIdentityResolver },
         {
           provide: AuthService,

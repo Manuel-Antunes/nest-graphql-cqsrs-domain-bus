@@ -12,6 +12,7 @@ export const OAUTH_SCOPES = [
   'write:posts',
   'read:clients',
   'write:clients',
+  'write:conversations',
 ] as const;
 
 export type OAuthScope = (typeof OAUTH_SCOPES)[number];

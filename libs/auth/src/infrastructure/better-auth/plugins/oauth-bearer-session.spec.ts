@@ -124,6 +124,26 @@ describe('an OAuth access token is a session', () => {
     ).resolves.toBeNull();
   });
 
+  it('carries the claims its issuer added, which the identity keeps as attributes', async () => {
+    const user = await givenAUser('duda-bearer@example.com');
+
+    const session = await sessionFor(
+      `Bearer ${await tokenFor({ sub: user.id, aud: GATEWAY, scope: 'openid', plan: 'pro' })}`,
+    );
+    const identity = BetterAuthIdentityResolver.fromSession(session);
+
+    expect(identity?.attributes).toEqual({ plan: 'pro' });
+    expect(identity?.credential).toMatchObject({ type: 'access-token' });
+  });
+
+  it('is no session for a client’s own token, which is read as the client instead', async () => {
+    await expect(
+      sessionFor(
+        `Bearer ${await tokenFor({ sub: 'machine', client_id: 'machine', aud: GATEWAY })}`,
+      ),
+    ).resolves.toBeNull();
+  });
+
   it('leaves anything that is not a signed token to Better Auth', async () => {
     await expect(sessionFor('Bearer opaque-session-token')).resolves.toBeNull();
     await expect(sessionFor('Basic dXNlcjpwYXNz')).resolves.toBeNull();

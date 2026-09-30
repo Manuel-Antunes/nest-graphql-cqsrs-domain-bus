@@ -17,9 +17,10 @@ import { OrganizationId } from '../../domain/organization/vo/organization-id';
  *
  * The tenant a request names is where its rows are read from and written to, so naming one is a claim
  * to that organization's data, and this is where the claim is checked: a request to any tenant but
- * the root one needs a session whose user is a member of the organization with that slug. The root
- * tenant is everybody's — the feed a visitor who never signed in reads — and a message off the broker
- * carries a tenant its publisher already checked.
+ * the root one needs a session whose user is a member of the organization with that slug — or an OAuth
+ * client acting for itself, bound to that organization, which works in its tenant and no other. The
+ * root tenant is everybody's — the feed a visitor who never signed in reads — and a message off the
+ * broker carries a tenant its publisher already checked.
  *
  * **A handler that checks the ACTIVE organization works only in its tenant.** `@OrgRoles`,
  * `@MemberHasPermission` and `@RequireActiveOrg` (`@thallesp/nestjs-better-auth`) ask Better Auth about
@@ -96,14 +97,8 @@ export class TenantMembershipGuard implements CanActivate {
   }
 
   private async lookUpActivation(tenant: string): Promise<boolean> {
-    const active = (await this.caller.identity())?.activeOrganizationId;
-    if (!active || Tenant.isRoot(tenant)) {
-      return false;
-    }
-    const organization = await this.organizations.findById(
-      OrganizationId.parse(active),
-    );
-    return organization?.isAddressedBy(tenant) ?? false;
+    const identity = await this.caller.identity();
+    return this.addresses(identity?.activeOrganizationId ?? null, tenant);
   }
 
   private async lookUpMembership(tenant: string): Promise<boolean> {
@@ -111,9 +106,25 @@ export class TenantMembershipGuard implements CanActivate {
     if (!identity) {
       return false;
     }
+    if (identity.kind === 'client') {
+      return this.addresses(identity.activeOrganizationId, tenant);
+    }
     const organizations = await this.organizations.findAllOf(identity.userId);
     return organizations.some((organization) =>
       organization.isAddressedBy(tenant),
     );
+  }
+
+  private async addresses(
+    organizationId: string | null,
+    tenant: string,
+  ): Promise<boolean> {
+    if (!organizationId || Tenant.isRoot(tenant)) {
+      return false;
+    }
+    const organization = await this.organizations.findById(
+      OrganizationId.parse(organizationId),
+    );
+    return organization?.isAddressedBy(tenant) ?? false;
   }
 }

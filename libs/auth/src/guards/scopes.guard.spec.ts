@@ -5,7 +5,8 @@ import { ExecutionContextHost } from '@nestjs/core/helpers/execution-context-hos
 import { RequireScopes } from '../decorators/require-scopes.decorator';
 import type { IdentityResolver } from '../domain/auth/identity.resolver';
 import { OAUTH_SCOPES } from '../domain/auth/scopes';
-import { Identity } from '../domain/auth/vo/identity';
+import type { Identity } from '../domain/auth/vo/identity';
+import { UserIdentity } from '../domain/auth/vo/user-identity';
 import { ScopesGuard } from './scopes.guard';
 
 @RequireScopes('read:posts')
@@ -24,7 +25,7 @@ describe('ScopesGuard', () => {
   let asked: number;
 
   const holding = (scopes: readonly string[]) =>
-    Identity.parse({
+    UserIdentity.parse({
       userId: 'ana',
       email: 'ana@example.com',
       name: 'Ana',

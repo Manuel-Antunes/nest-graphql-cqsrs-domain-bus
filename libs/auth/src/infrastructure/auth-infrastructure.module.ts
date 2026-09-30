@@ -1,8 +1,10 @@
 import { MikroORM, RequestContext } from '@mikro-orm/core';
 import type { DynamicModule } from '@nestjs/common';
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { AuthModule as NestBetterAuthModule } from '@thallesp/nestjs-better-auth';
 
+import { PlatformAuthGuard } from '../guards/platform-auth.guard';
 import type { BetterAuthModuleOptions } from './better-auth/better-auth.module';
 import { BetterAuthModule } from './better-auth/better-auth.module';
 import type { BetterAuth } from './better-auth/init-auth';
@@ -25,9 +27,10 @@ export interface AuthInfrastructureModuleOptions
    */
   readonly routes?: boolean;
   /**
-   * Whether the global guard is installed. On by default; a runtime that is no Nest server — the
-   * web's container, the migrator — turns it off, along with `routes`, and keeps what the module
-   * does besides: attaching every `@Hook` and `@DatabaseHook` provider to the instance.
+   * Whether the global guard ({@link PlatformAuthGuard}) is installed. On by default; a runtime that
+   * is no Nest server — the web's container, the migrator — turns it off, along with `routes`, and
+   * keeps what the module does besides: attaching every `@Hook` and `@DatabaseHook` provider to the
+   * instance.
    */
   readonly guard?: boolean;
 }
@@ -47,7 +50,7 @@ export class AuthInfrastructureModule {
         betterAuth,
         NestBetterAuthModule.forRootAsync({
           disableControllers: !routes,
-          disableGlobalAuthGuard: !guard,
+          disableGlobalAuthGuard: true,
           imports: [betterAuth],
           inject: [BETTER_AUTH, MikroORM],
           useFactory: (auth: BetterAuth, orm: MikroORM) => ({
@@ -60,6 +63,9 @@ export class AuthInfrastructureModule {
           }),
         }),
       ],
+      providers: guard
+        ? [{ provide: APP_GUARD, useClass: PlatformAuthGuard }]
+        : [],
       exports: [betterAuth],
     };
   }

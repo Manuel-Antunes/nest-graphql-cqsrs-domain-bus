@@ -7,6 +7,7 @@ import type { AuthConfig } from '../../../config/auth.config';
 import { authConfig } from '../../../config/auth.config';
 import { SYSTEM_ADMIN_ROLE } from '../../../domain/auth/roles';
 import { OAUTH_SCOPES } from '../../../domain/auth/scopes';
+import { AccessTokens } from '../identity/access-tokens';
 import { OAUTH_PROVIDER_BETTER_AUTH_PLUGIN } from './tokens';
 
 const READ_ONLY = new Set(['read', 'list']);
@@ -44,6 +45,46 @@ export const oauthClientPrivileges = ({
   });
 };
 
+/**
+ * **The claims a client's access tokens carry.** A client-credentials token has no user to derive
+ * anything from, so what binds it is stated where the client is registered:
+ *
+ * - the organization it was registered for — its `referenceId` — is `organization_id` in every token it
+ *   is issued for itself, which is the `activeOrganizationId` of the `ClientIdentity` it is read as;
+ * - a client whose `metadata` holds a `claims` object gets those claims copied, top level, into every
+ *   access token it is issued — the Chatwoot agent bot's `agent_bot_id` — which are the identity's
+ *   attributes.
+ *
+ * Reserved claims (`iss`, `sub`, `aud`, `scope`, …) are stripped by the provider itself.
+ */
+export class OAuthClientClaims {
+  static of(metadata: Readonly<Record<string, unknown>> | undefined) {
+    const claims = metadata?.claims;
+    return claims && typeof claims === 'object' && !Array.isArray(claims)
+      ? { ...(claims as Record<string, unknown>) }
+      : {};
+  }
+
+  /** Every claim an access token is issued with, the organization last so that nothing overrides it. */
+  static forAccessToken({
+    metadata,
+    client,
+    grantType,
+  }: {
+    readonly metadata?: Readonly<Record<string, unknown>>;
+    readonly client: { readonly referenceId?: string | null };
+    readonly grantType?: string;
+  }): Record<string, unknown> {
+    return {
+      ...OAuthClientClaims.of(metadata),
+      ...(grantType === 'client_credentials' &&
+        client.referenceId && {
+          [AccessTokens.ORGANIZATION_CLAIM]: client.referenceId,
+        }),
+    };
+  }
+}
+
 export const OAuthProviderBetterAuthPluginProvider = {
   provide: OAUTH_PROVIDER_BETTER_AUTH_PLUGIN,
   useFactory: (config: AuthConfig) => {
@@ -58,6 +99,13 @@ export const OAuthProviderBetterAuthPluginProvider = {
       scopes: [...OAUTH_SCOPES],
       enforcePerClientResources: false,
       clientPrivileges: oauthClientPrivileges,
+      extensions: [
+        {
+          claims: {
+            accessToken: (input) => OAuthClientClaims.forAccessToken(input),
+          },
+        },
+      ],
       silenceWarnings: { oauthAuthServerConfig: true, openidConfig: true },
     });
     return plugin as typeof plugin & BetterAuthPlugin;

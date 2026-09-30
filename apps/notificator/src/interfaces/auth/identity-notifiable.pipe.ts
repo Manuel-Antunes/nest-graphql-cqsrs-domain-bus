@@ -18,7 +18,7 @@ export class IdentityNotifiablePipe
   constructor(private readonly queryBus: QueryBus) {}
 
   async transform(identity: Identity | null): Promise<IdentityNotifiable> {
-    return identity
+    return identity?.kind === 'user'
       ? this.queryBus.execute(new FindReaderQuery.FindReader(identity.email))
       : null;
   }
