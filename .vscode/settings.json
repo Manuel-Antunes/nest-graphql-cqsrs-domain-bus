@@ -98,11 +98,7 @@
   "files.associations": {
     "*.css": "tailwindcss"
   },
-  "tailwindCSS.classFunctions": [
-    "cva",
-    "cx",
-    "cn"
-  ],
+  "tailwindCSS.classFunctions": ["cva", "cx", "cn"],
   "vitest.disableWorkspaceWarning": true,
   "[python]": {
     "editor.defaultFormatter": "ms-python.black-formatter"

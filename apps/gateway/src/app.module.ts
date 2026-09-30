@@ -11,7 +11,6 @@ import { organizationAuthPluginProviders } from '@nestposts/organizations/infras
 import { OrganizationsInfrastructureModule } from '@nestposts/organizations/infrastructure/organizations-infrastructure.module';
 import { OrganizationEntities } from '@nestposts/organizations/infrastructure/persistence/organization-entities';
 import { RedisCacheOptions, RedisModule } from '@nestposts/redis';
-import z from 'zod';
 
 import type { AppConfig } from './config/app.config';
 import { appConfig } from './config/app.config';
