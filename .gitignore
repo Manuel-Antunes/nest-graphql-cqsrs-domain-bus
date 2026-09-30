@@ -2,6 +2,7 @@ node_modules/
 dist/
 data/
 !infra/**/data/
+!apps/chatwoot/**/data/
 *.tsbuildinfo
 .DS_Store
 
