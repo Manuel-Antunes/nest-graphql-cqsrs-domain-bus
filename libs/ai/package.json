@@ -44,7 +44,9 @@
     "zod": "catalog:",
     "mime-types": "catalog:",
     "@nestposts/auth": "workspace:*",
-    "mikro-orm-neo4j": "catalog:"
+    "mikro-orm-neo4j": "catalog:",
+    "@google/genai": "catalog:",
+    "openai": "catalog:"
   },
   "devDependencies": {
     "@types/mime-types": "catalog:"
