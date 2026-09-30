@@ -44,6 +44,21 @@ describe Webhooks::Trigger do
       trigger.execute(url, payload, webhook_type)
     end
 
+    it 'sends the headers it is given beside its own' do
+      payload = { hello: :hello }
+
+      expect(SafeFetch).to receive(:fetch).with(
+        url,
+        method: :post,
+        body: payload.to_json,
+        headers: { 'Content-Type' => 'application/json', 'Accept' => 'application/json', 'Authorization' => 'Bearer jwt-1' },
+        open_timeout: webhook_timeout,
+        read_timeout: webhook_timeout,
+        validate_content_type: false
+      ).once
+      trigger.execute(url, payload, :agent_bot_webhook, headers: { 'Authorization' => 'Bearer jwt-1' })
+    end
+
     it 'updates message status if webhook fails for message-created event' do
       payload = { event: 'message_created', conversation: { id: conversation.id }, id: message.id }
 

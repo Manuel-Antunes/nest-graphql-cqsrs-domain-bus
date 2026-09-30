@@ -71,7 +71,7 @@ class AgentBotListener < BaseListener
     return if agent_bot.inner_queue?
     return if agent_bot.outgoing_url.blank?
 
-    AgentBots::WebhookJob.perform_later(agent_bot.outgoing_url, payload)
+    AgentBots::WebhookJob.perform_later(agent_bot.outgoing_url, payload, agent_bot_id: agent_bot.id)
   end
 
   # Publish an incoming customer message onto the internal agent-bot queue so
@@ -106,8 +106,8 @@ class AgentBotListener < BaseListener
     # humanizer invents placeholders.
     contact = message.conversation.contact
     {
+      # The bot's platform access token is added by `AgentBots::InnerQueueJob` when it publishes.
       bot: { id: agent_bot.id, name: agent_bot.name },
-      botToken: agent_bot.access_token&.token,
       messageId: message.id,
       # PUBLIC (display) id, not the internal FK: every downstream consumer keys
       # off it as Chatwoot's public conversation id — Natasha's REST delivery

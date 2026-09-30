@@ -68,6 +68,29 @@ RSpec.describe OmniAuth::Strategies::BetterAuth, :platform_session, type: :reque
     expect(response).to have_http_status(:unauthorized)
   end
 
+  describe 'a platform access token as a bearer', :platform_access_token do
+    def call_graphql(bearer)
+      post '/graphql', params: { query: '{ __typename }' }, headers: { 'Authorization' => "Bearer #{bearer}" }, as: :json
+    end
+
+    it 'resolves a user token to the user' do
+      allow(BetterAuth::Platform).to receive(:user).with('platform-agent').and_return('platform_user_id' => agent.platform_user_id)
+
+      call_graphql(platform_access_token(sub: 'platform-agent', scope: 'openid'))
+
+      expect(request.env['warden'].user(scope: :user)).to eq(agent)
+    end
+
+    it "resolves nobody from an agent bot's token, which the gateway exchanges for the bot's own" do
+      agent_bot = create(:agent_bot, account: create(:account, platform_organization_id: 'org-acme'))
+      allow(BetterAuth::Platform).to receive(:user).and_return(nil)
+
+      call_graphql(agent_bot_access_token(agent_bot))
+
+      expect(request.env['warden'].user(scope: :user)).to be_nil
+    end
+  end
+
   it 'reads nothing from a session cookie whose signature does not match' do
     allow(BetterAuth::Platform).to receive(:session)
 
