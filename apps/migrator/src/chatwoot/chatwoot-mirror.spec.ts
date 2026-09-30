@@ -1,4 +1,8 @@
 import type { MikroORM } from '@mikro-orm/postgresql';
+import {
+  CHATWOOT_DEFAULT_FEATURE_FLAGS,
+  CHATWOOT_DEFAULT_FEATURE_FLAGS_EXT_1,
+} from '@nestposts/organizations/infrastructure/persistence/triggers/chatwoot-sync.triggers';
 
 import type { MigratorContext } from '../app/bootstrap';
 import { bootstrap, migrate, mirrorChatwoot } from '../main';
@@ -15,7 +19,8 @@ const CHATWOOT_TABLES = `
   create unique index on chatwoot.users (platform_user_id);
   create table chatwoot.accounts (
     id serial primary key, name varchar not null, status integer default 0,
-    feature_flags bigint not null default 0, platform_organization_id varchar,
+    feature_flags bigint not null default 0, feature_flags_ext_1 bigint not null default 0,
+    platform_organization_id varchar,
     created_at timestamp not null, updated_at timestamp not null
   );
   create unique index on chatwoot.accounts (platform_organization_id);
@@ -113,6 +118,17 @@ describe('mirroring the platform into Chatwoot', () => {
       type: null,
     });
     expect(await seatOf('early-org', 'early-user')).toEqual({ role: 1 });
+    expect(
+      await rows(
+        context.orm,
+        `select feature_flags::text, feature_flags_ext_1::text from chatwoot.accounts where platform_organization_id = 'early-org'`,
+      ),
+    ).toEqual([
+      {
+        feature_flags: CHATWOOT_DEFAULT_FEATURE_FLAGS,
+        feature_flags_ext_1: CHATWOOT_DEFAULT_FEATURE_FLAGS_EXT_1,
+      },
+    ]);
     expect(
       await rows(
         context.orm,

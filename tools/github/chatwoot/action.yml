@@ -1,5 +1,5 @@
 name: 'chatwoot'
-description: "Chatwoot's own suites: RSpec against a real Postgres and Redis, and the dashboard's Vitest"
+description: "Chatwoot's own checks: the dashboard's production bundle, RSpec against a real Postgres and Redis, and the dashboard's Vitest"
 inputs:
   upload_reports:
     description: "Keep RSpec's junit report as an artifact of the run."
@@ -17,6 +17,10 @@ runs:
       with:
         working-directory: apps/chatwoot
         bundler-cache: true
+
+    - name: Build the dashboard bundle
+      run: npx nx run @chatwoot/chatwoot:build:frontend --outputStyle=static
+      shell: bash
 
     - name: Start Postgres and Redis
       run: docker compose up -d --wait postgres redis

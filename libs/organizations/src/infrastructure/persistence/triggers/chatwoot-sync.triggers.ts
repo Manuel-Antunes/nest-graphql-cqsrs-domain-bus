@@ -8,7 +8,14 @@ export const CHATWOOT_SYNC_TRIGGER = 'chatwoot_sync';
  * enables by default. Rails computes it in a `before_create` a trigger never runs, so it is written
  * here — and recomputed whenever Chatwoot is upgraded.
  */
-export const CHATWOOT_DEFAULT_FEATURE_FLAGS = '288235736297634575';
+export const CHATWOOT_DEFAULT_FEATURE_FLAGS = '1442282865933417223';
+
+/**
+ * The same for `feature_flags_ext_1`, the column Chatwoot 4.18 keeps the features past the 63rd in
+ * (`column: feature_flags_ext_1` in `features.yml`). An account created before Chatwoot has that
+ * column is written without it.
+ */
+export const CHATWOOT_DEFAULT_FEATURE_FLAGS_EXT_1 = '4';
 
 const CHATWOOT_ADMINISTRATOR = 1;
 const CHATWOOT_AGENT = 0;
@@ -31,12 +38,24 @@ export const OrganizationChatwootSyncTrigger: TriggerDef = {
       RETURN NULL;
     END IF;
 
-    INSERT INTO chatwoot.accounts (name, platform_organization_id, feature_flags, created_at, updated_at)
-    VALUES (NEW.name, NEW.id, ${CHATWOOT_DEFAULT_FEATURE_FLAGS}, NEW.created_at, now())
-    ON CONFLICT (platform_organization_id) DO UPDATE
-       SET name = excluded.name,
-           status = 0,
-           updated_at = now();
+    IF EXISTS (
+      SELECT 1 FROM information_schema.columns
+       WHERE table_schema = 'chatwoot' AND table_name = 'accounts' AND column_name = 'feature_flags_ext_1'
+    ) THEN
+      INSERT INTO chatwoot.accounts (name, platform_organization_id, feature_flags, feature_flags_ext_1, created_at, updated_at)
+      VALUES (NEW.name, NEW.id, ${CHATWOOT_DEFAULT_FEATURE_FLAGS}, ${CHATWOOT_DEFAULT_FEATURE_FLAGS_EXT_1}, NEW.created_at, now())
+      ON CONFLICT (platform_organization_id) DO UPDATE
+         SET name = excluded.name,
+             status = 0,
+             updated_at = now();
+    ELSE
+      INSERT INTO chatwoot.accounts (name, platform_organization_id, feature_flags, created_at, updated_at)
+      VALUES (NEW.name, NEW.id, ${CHATWOOT_DEFAULT_FEATURE_FLAGS}, NEW.created_at, now())
+      ON CONFLICT (platform_organization_id) DO UPDATE
+         SET name = excluded.name,
+             status = 0,
+             updated_at = now();
+    END IF;
     RETURN NULL
   `,
 };
