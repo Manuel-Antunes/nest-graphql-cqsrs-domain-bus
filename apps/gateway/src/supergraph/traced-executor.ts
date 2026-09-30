@@ -13,6 +13,8 @@ import { getOperationAST } from 'graphql';
 export interface SubgraphRequest {
   readonly document: DocumentNode;
   readonly operationName?: string;
+  readonly context?: unknown;
+  readonly extensions?: Readonly<Record<string, unknown>>;
 }
 
 export type SubgraphExecutor = (

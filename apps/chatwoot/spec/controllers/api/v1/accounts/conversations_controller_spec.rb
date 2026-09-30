@@ -679,6 +679,33 @@ RSpec.describe 'Conversations API', type: :request do
         expect(Rails.configuration.dispatcher).to have_received(:dispatch)
           .with(Conversation::CONVERSATION_TYPING_ON, kind_of(Time), { conversation: conversation, user: agent, is_private: true })
       end
+
+      it 'goes through the typing status manager the GraphQL mutation uses' do
+        allow(Conversations::TypingStatusManager).to receive(:new).and_call_original
+        post "/api/v1/accounts/#{account.id}/conversations/#{conversation.display_id}/toggle_typing_status",
+             headers: agent.create_new_auth_token,
+             params: { typing_status: 'off' },
+             as: :json
+
+        expect(response).to have_http_status(:success)
+        expect(Conversations::TypingStatusManager).to have_received(:new).with(conversation, agent, anything)
+      end
+    end
+
+    context 'when it is an authenticated bot' do
+      let(:agent_bot) { create(:agent_bot, account: account) }
+
+      it 'announces that the bot is typing, to everyone' do
+        allow(Rails.configuration.dispatcher).to receive(:dispatch).and_call_original
+        post "/api/v1/accounts/#{account.id}/conversations/#{conversation.display_id}/toggle_typing_status",
+             headers: { api_access_token: agent_bot.access_token.token },
+             params: { typing_status: 'on', is_private: false },
+             as: :json
+
+        expect(response).to have_http_status(:success)
+        expect(Rails.configuration.dispatcher).to have_received(:dispatch)
+          .with(Conversation::CONVERSATION_TYPING_ON, kind_of(Time), { conversation: conversation, user: agent_bot, is_private: false })
+      end
     end
   end
 
@@ -720,6 +747,34 @@ RSpec.describe 'Conversations API', type: :request do
 
         expect(response).to have_http_status(:success)
         expect(conversation.reload.assignee_last_seen_at).not_to be_nil
+      end
+
+      it 'goes through the last seen updater the GraphQL mutation uses' do
+        allow(Conversations::LastSeenUpdater).to receive(:new).and_call_original
+
+        post "/api/v1/accounts/#{account.id}/conversations/#{conversation.display_id}/update_last_seen",
+             headers: agent.create_new_auth_token,
+             as: :json
+
+        expect(response).to have_http_status(:success)
+        expect(response.parsed_body['id']).to eq(conversation.display_id)
+        expect(Conversations::LastSeenUpdater).to have_received(:new).with(conversation: conversation, user: agent)
+      end
+    end
+
+    context 'when it is an authenticated bot' do
+      let(:agent_bot) { create(:agent_bot, account: account) }
+
+      it "updates the agents' last seen, and not the assignee's" do
+        conversation.update!(assignee_id: create(:user, account: account, role: :agent).id)
+
+        post "/api/v1/accounts/#{account.id}/conversations/#{conversation.display_id}/update_last_seen",
+             headers: { api_access_token: agent_bot.access_token.token },
+             as: :json
+
+        expect(response).to have_http_status(:success)
+        expect(conversation.reload.agent_last_seen_at).not_to be_nil
+        expect(conversation.assignee_last_seen_at).to be_nil
       end
     end
   end

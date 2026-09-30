@@ -139,7 +139,8 @@ infra/aws/
   support/           the DEFINITIONS — classes and types. Nothing here creates a resource on import.
     functions.ts       NodeFunction, QueueWorker, Migrator, StreamingFunction
   network/           the VPC
-  data/              the database — one instance, two schemas
+  data/              the database — one instance, two schemas — the cache (Valkey), and Neo4j
+    neo4j/components/  Neo4j, the component the lexical graph runs on
   messaging/         topic.ts, queues.ts, routing.ts — the "exchange", translated
   storage/           the bucket posts keep their files in, served by the router under /files
   mail/              the SES identity the notificator sends email as (MAIL_SENDER, from .env)
@@ -223,6 +224,23 @@ files are in S3), the Evolution API service and the Natasha inbox lock (this sys
 agent-bot queue (`APP_QUEUE_URL`), SigNoz (telemetry goes to Better Stack, directly, since a
 container has no collector extension beside it), and SMTP: without `SMTP_ADDRESS` Chatwoot sends no
 email of its own.
+
+### Neo4j: the lexical graph, a Fargate service of its own
+
+`libs/ai` indexes documents into a lexical graph, and that graph is Neo4j: `data/index.ts` creates
+`graph`, a `Neo4j` (`data/neo4j/components/neo4j.ts`) — the server on Fargate with its data on EFS,
+Bolt behind a network load balancer, and a bucket for backups. It is a component rather than loose
+resources for the same reason the functions are: what a stage needs to reach it is one thing, the
+load balancer's ARN. The password is the `Neo4jKey` secret (`sst secret set Neo4jKey …` before a
+first deploy, or the stage runs on the placeholder), mirrored into an SSM parameter the load
+balancer is tagged with, so `Neo4j.get(name, loadBalancerArn)` references another stage's graph and
+reads its password from AWS instead of from a secret of its own. A stage with a domain reaches it at
+`neo4j.<its domain>`; one without, at the load balancer's name — the `neo4j` output either way.
+
+Nothing is linked to it yet: no function runs `libs/ai`. The first one that does gets
+`graph.connectionInfo()` as `NEO4J_URI`, `NEO4J_USER`, `NEO4J_PASSWORD` and `NEO4J_DATABASE`, which is
+what `libs/ai`'s configuration reads. The specs never reach it: the ones that need a graph start a
+Neo4j of their own (`ThrowawayNeo4j`), as the Redis ones do.
 
 ### Files: one bucket, served by the same router
 

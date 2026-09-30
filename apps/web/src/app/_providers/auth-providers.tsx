@@ -41,6 +41,9 @@ const plugins = [
       'write:posts': { label: 'Write posts on your behalf' },
       'read:clients': { label: "Read your organization's clients" },
       'write:clients': { label: "Manage your organization's clients" },
+      'write:conversations': {
+        label: "Reply in your organization's support conversations",
+      },
     },
   }),
 ];

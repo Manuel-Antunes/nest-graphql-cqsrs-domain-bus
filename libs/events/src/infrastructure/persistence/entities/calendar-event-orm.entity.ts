@@ -20,26 +20,23 @@ import { CalendarEventId } from '../../../domain/calendar-event/vo/calendar-even
 import { CalendarEventTitle } from '../../../domain/calendar-event/vo/calendar-event-title';
 import { CalendarEventWindow } from '../../../domain/calendar-event/vo/calendar-event-window';
 
-const CalendarEventIdType = valueObjectType(CalendarEventId, {
-  columnType: 'varchar(36)',
-});
-const CalendarEventTitleType = valueObjectType(CalendarEventTitle, {
-  columnType: `varchar(${CALENDAR_EVENT_TITLE_MAX_LENGTH})`,
-});
-const CalendarEventDescriptionType = valueObjectType(CalendarEventDescription, {
-  columnType: 'text',
-});
-const CalendarEventColorType = valueObjectType(CalendarEventColor, {
-  columnType: `varchar(${CALENDAR_EVENT_COLOR_MAX_LENGTH})`,
-});
-
 export const CalendarEventDetailsEntitySchema = defineEntity({
   class: CalendarEventDetails,
   embeddable: true,
   properties: {
-    title: p.type(CalendarEventTitleType),
-    description: p.type(CalendarEventDescriptionType).nullable(),
-    color: p.type(CalendarEventColorType),
+    title: p.type(
+      valueObjectType(CalendarEventTitle, {
+        columnType: `varchar(${CALENDAR_EVENT_TITLE_MAX_LENGTH})`,
+      }),
+    ),
+    description: p
+      .type(valueObjectType(CalendarEventDescription, { columnType: 'text' }))
+      .nullable(),
+    color: p.type(
+      valueObjectType(CalendarEventColor, {
+        columnType: `varchar(${CALENDAR_EVENT_COLOR_MAX_LENGTH})`,
+      }),
+    ),
   },
 });
 
@@ -58,7 +55,9 @@ export const CalendarEventEntitySchema = defineEntity({
   schema: TENANT_SCHEMA,
   forceConstructor: true,
   properties: {
-    id: p.type(CalendarEventIdType).primary(),
+    id: p
+      .type(valueObjectType(CalendarEventId, { columnType: 'varchar(36)' }))
+      .primary(),
     details: () =>
       p.embedded(CalendarEventDetailsEntitySchema).prefix(false).object(false),
     window: () =>

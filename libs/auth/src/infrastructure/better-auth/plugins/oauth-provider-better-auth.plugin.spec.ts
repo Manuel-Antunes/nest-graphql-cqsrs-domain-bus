@@ -2,6 +2,7 @@ import { APIError } from 'better-auth/api';
 
 import {
   OAUTH_CLIENT_ADMIN_REQUIRED,
+  OAuthClientClaims,
   oauthClientPrivileges,
 } from './oauth-provider-better-auth.plugin';
 
@@ -41,5 +42,52 @@ describe('oauthClientPrivileges', () => {
       code: OAUTH_CLIENT_ADMIN_REQUIRED,
       message: 'Only an admin can create an OAuth client',
     });
+  });
+});
+
+describe('OAuthClientClaims', () => {
+  it('copies the claims a client declares in its metadata into its tokens', () => {
+    expect(
+      OAuthClientClaims.of({
+        claims: { agent_bot_id: 7, organization_id: 'org-1' },
+        other: 'ignored',
+      }),
+    ).toEqual({ agent_bot_id: 7, organization_id: 'org-1' });
+  });
+
+  it('adds nothing for a client that declares none, or declares them malformed', () => {
+    expect(OAuthClientClaims.of(undefined)).toEqual({});
+    expect(OAuthClientClaims.of({})).toEqual({});
+    expect(OAuthClientClaims.of({ claims: ['agent_bot_id'] })).toEqual({});
+    expect(OAuthClientClaims.of({ claims: 'agent_bot_id' })).toEqual({});
+  });
+});
+
+describe('OAuthClientClaims.forAccessToken', () => {
+  const metadata = { claims: { agent_bot_id: 7, organization_id: 'declared' } };
+
+  it('binds a client’s own token to the organization it was registered for, over whatever it declares', () => {
+    expect(
+      OAuthClientClaims.forAccessToken({
+        metadata,
+        client: { referenceId: 'org-acme' },
+        grantType: 'client_credentials',
+      }),
+    ).toEqual({ agent_bot_id: 7, organization_id: 'org-acme' });
+  });
+
+  it('binds no organization to a token issued on a user’s behalf, nor for a client registered for none', () => {
+    expect(
+      OAuthClientClaims.forAccessToken({
+        client: { referenceId: 'org-acme' },
+        grantType: 'authorization_code',
+      }),
+    ).toEqual({});
+    expect(
+      OAuthClientClaims.forAccessToken({
+        client: { referenceId: null },
+        grantType: 'client_credentials',
+      }),
+    ).toEqual({});
   });
 });

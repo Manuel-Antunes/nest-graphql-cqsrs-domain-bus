@@ -11,9 +11,13 @@ export class ThrowawayRedis {
 
   private constructor(private readonly container: StartedTestContainer) {}
 
-  static async start(): Promise<ThrowawayRedis> {
+  /**
+   * Starts the container. `image` is for a spec that needs more than plain Redis — the Query
+   * Engine behind LangGraph's `RedisStore` ships in `redis:8` and not in the default image.
+   */
+  static async start(image = ThrowawayRedis.IMAGE): Promise<ThrowawayRedis> {
     return new ThrowawayRedis(
-      await new GenericContainer(ThrowawayRedis.IMAGE)
+      await new GenericContainer(image)
         .withExposedPorts(6379)
         .withWaitStrategy(
           Wait.forAll([

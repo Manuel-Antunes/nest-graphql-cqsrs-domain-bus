@@ -31,5 +31,11 @@ module Types
     field :update_contact, mutation: Mutations::UpdateContact
     field :update_contact_labels, mutation: Mutations::UpdateContactLabels
     field :update_contact_attributes, mutation: Mutations::UpdateContactAttributes
+
+    # The REST conversation actions an agent bot drives, over the same services
+    # (Messages::MessageBuilder, Conversations::TypingStatusManager, Conversations::LastSeenUpdater).
+    field :create_a_new_message_in_a_conversation, mutation: Mutations::CreateANewMessageInAConversation
+    field :toggle_typing_status_in_conversation, mutation: Mutations::ToggleTypingStatusInConversation
+    field :update_conversation_last_seen, mutation: Mutations::UpdateConversationLastSeen
   end
 end

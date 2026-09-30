@@ -5,6 +5,7 @@ import { verifyJWT } from 'better-auth/plugins';
 
 import type { AuthConfig } from '../../../config/auth.config';
 import { authConfig } from '../../../config/auth.config';
+import { AccessTokens } from '../identity/access-tokens';
 import { OAUTH_BEARER_SESSION_BETTER_AUTH_PLUGIN } from './tokens';
 
 export interface OAuthBearerSessionOptions {
@@ -14,20 +15,16 @@ export interface OAuthBearerSessionOptions {
   readonly audiences: readonly string[];
 }
 
-const signedBearerOf = (authorization: string | null | undefined) => {
-  const token = authorization?.match(/^Bearer\s+(\S+)$/i)?.[1];
-  return token && token.split('.').length === 3 ? token : undefined;
-};
-
-const grantedScopesOf = (scope: unknown): string[] =>
-  typeof scope === 'string' ? scope.split(/\s+/).filter(Boolean) : [];
-
 /**
- * **An OAuth 2.0 access token is a session.** A request carrying `Authorization: Bearer <JWT>` — an
- * access token this deployment's `oauthProvider` issued for one of its resources — answers
+ * **A user's OAuth 2.0 access token is a session.** A request carrying `Authorization: Bearer <JWT>` —
+ * an access token this deployment's `oauthProvider` issued for one of its resources — answers
  * `getSession` as the user the token was issued for, and the session carries `scopes`: what the
- * token was granted, from its `scope` claim — none when it names none. A session of this system's
- * own has no `scopes` at all, which is how the two are told apart.
+ * token was granted, from its `scope` claim — none when it names none — and `claims`, the custom
+ * claims the issuer added, which the identity keeps as its attributes. A session of this system's own
+ * has no `scopes` at all, which is how the two are told apart.
+ *
+ * A token of the client credentials grant (`sub` = `client_id`) is no user's, so it is no session:
+ * it is left alone, unverified, and `AccessTokens` reads it as a `ClientIdentity` instead.
  *
  * It is a `before` hook on `/get-session`, so everything that asks Better Auth for a session sees it
  * the same way: the global guard, `@Session()`, `AuthService`. The token is verified LOCALLY, with the
@@ -44,8 +41,10 @@ export const oauthBearerSession = (options: OAuthBearerSessionOptions) =>
         {
           matcher: (context) => context.path === '/get-session',
           handler: createAuthMiddleware(async (ctx) => {
-            const token = signedBearerOf(ctx.headers?.get('authorization'));
-            if (!token) return;
+            const token = AccessTokens.bearerOf(
+              ctx.headers?.get('authorization'),
+            );
+            if (!token || AccessTokens.isIssuedToAClient(token)) return;
             const claims = await verifyJWT(token, {
               jwt: {
                 issuer: options.issuer,
@@ -73,7 +72,8 @@ export const oauthBearerSession = (options: OAuthBearerSessionOptions) =>
                 activeOrganizationId: null,
                 activeTeamId: null,
                 impersonatedBy: null,
-                scopes: grantedScopesOf(claims.scope),
+                scopes: AccessTokens.scopesOf(claims.scope),
+                claims: AccessTokens.attributesOf(claims),
               },
               user,
             });

@@ -10,8 +10,8 @@
 #   - else   → Inngest event API (local dev / vercel), same standard env vars
 #              as the Node Inngest client.
 #
-# The agent-bot payload (which carries the bot's Chatwoot access token) travels
-# under `data`. The NestJS SQS consumer dispatches by the `pattern` field; the
+# The agent-bot payload (which carries the bot's platform access token as
+# `accessToken`, see `AgentBots::InnerQueueJob`) travels under `data`. The NestJS SQS consumer dispatches by the `pattern` field; the
 # Inngest consumer dispatches by the event `name`.
 class AgentBots::InnerQueuePublisher
   class MissingConfigError < StandardError; end

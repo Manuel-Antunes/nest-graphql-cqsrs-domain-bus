@@ -310,7 +310,10 @@ Postgres, database `nestposts`), `POSTGRES_SCHEMA` (default `chatwoot` — never
 Chatwoot below), `REDIS_URL`, `FRONTEND_URL` (its own origin), `AUTH_SECRET` (the platform's — it
 verifies the session cookie with it; outside production it falls back to the same development default
 as `libs/auth`), `WEB_URL`, `AUTH_ISSUER`, `AUTH_OAUTH_RESOURCES`/`GATEWAY_URL` (what an access token
-is checked against) and `PLATFORM_SIGN_IN_URL` (default `${WEB_URL}/auth/sign-in`).
+is checked against, and the `resource` an agent bot's token is asked for — the first of the list),
+`PLATFORM_SIGN_IN_URL` (default `${WEB_URL}/auth/sign-in`) and `AUTH_TOKEN_URL` (default
+`${WEB_URL}${AUTH_BASE_PATH:-/api/auth}/oauth2/token`), where an agent bot exchanges its credentials for
+the platform access token its webhook and inner-queue deliveries carry.
 
 `apps/web` takes the auth and database variables of the posts-api (it holds the same Better Auth), the
 **storage** ones (`DRIVE_*`, `src/nest/config/storage.config.ts` — its Better Auth stores avatars, see
@@ -455,6 +458,13 @@ libs/clients             domain/client (a Client of the tenant's organization: C
                          ClientsInfrastructureModule; a tenant table. Its application layer and the
                          `clients` GraphQL surface live in apps/posts-api; its Chatwoot contacts are
                          federated onto it by the `chatwoot` subgraph (see Chatwoot)
+libs/ai                  the agents' runtime (being migrated in): A2A hosting with its extensions as
+                         classes (a2a/domain, a2a/server, a2a/langchain), the files an agent works
+                         with — analysis, AttachmentDrive over @nestjs/storage and the asset model,
+                         the deepagents DriveBackend, the ingestion middleware that keeps base64 out
+                         of the checkpoint (files/) — and ChannelResponseProcessor, whose Chatwoot
+                         channel forwards the agent bot's platform token to the gateway. It has a
+                         README
 
 apps/gateway             the one GraphQL endpoint: composes the posts, notifications and chatwoot subgraphs
                          from their SDL, executes them with @graphql-tools/federation (subscriptions
@@ -1290,6 +1300,19 @@ last section is the design; the essentials:
   `/graphql` is stateless (the gateway calls it on every request) and the account it resolved reaches
   `GraphqlController` through `env['platform.account_user']`, never through the user's active account,
   which two concurrent tenants would flip.
+- **An agent bot is a platform OAuth client, kept by triggers on `access_tokens` and `agent_bots`**
+  (`CreateAgentBotOauthClients`, declared on both models too): `chatwoot-agent-bot-<id>`, its secret the
+  bot's access token hashed as Better Auth hashes one, `client_credentials` for `write:conversations`,
+  `metadata.claims` = `{ agent_bot_id }` and its `reference_id` the organization, which the platform
+  binds every token the client is issued to (`organization_id`). A bot with no organization has none, and the
+  triggers do nothing where `public.oauth_client` does not exist. `AgentBots::PlatformAccessToken` gets
+  and caches its JWT; webhook deliveries carry it as `Authorization: Bearer`, inner-queue payloads as
+  `accessToken` (the Chatwoot token no longer travels), and a bot that has none is delivered to without
+  it. Chatwoot itself never reads that JWT as the bot: the gateway reads it as a `ClientIdentity`
+  (`libs/auth`'s `AccessTokens`), and its `ChatwootSubgraphHeaderResolver` — the bot's client id, its
+  `agent_bot_id` attribute, `write:conversations`, its organization against any `x-tenant` — sends the
+  `chatwoot` subgraph the bot's own `api_access_token` instead, read from `chatwoot.access_tokens` and
+  cached under the token's `jti` until it expires — see `apps/gateway/README.md`.
 - **The SDL the gateway composes is a dump**, `apps/chatwoot/schema.graphql`
   (`graphql:generate`), because `apps/chatwoot/graphql` is Lighthouse SDL. `posts` owns `Client`,
   `Team` and `IUser`; Chatwoot contributes `Client.contacts`, `Team.workingHours`/`supportTeam` and
@@ -1344,8 +1367,11 @@ last section is the design; the essentials:
   one the subgraphs' tenant guard uses, so a cookie and an OAuth access token (`oauth-bearer-session`)
   read exactly as they do in a subgraph. `OrganizationSlugs` names the caller's active organization
   through the Nest cache (`CacheModule`, `RedisCacheOptions`), and that slug is the `x-tenant` when the
-  caller sent none — the rule the web's `/api/graphql` follows. Every subgraph is sent the same
-  headers, `GatewayContext.subgraphHeaders`, built once per request.
+  caller sent none — the rule the web's `/api/graphql` follows. The headers are decided per
+  subgraph, by a `SubgraphHeaderResolver` (`DefaultSubgraphHeaderResolver` unless one names the
+  subgraph — `ChatwootSubgraphHeaderResolver` exchanges an agent bot's platform token for its Chatwoot
+  token), each run once per request and resolved in the executor `onSubschemaConfig` wraps, as
+  `extensions.headers`: `httpExecutorOpts.headers` is synchronous, and a Promise there is `{}`.
 - **The identity is resolved in Yoga's context function, never in a guard.** `YogaDriver` registers
   `/graphql` straight on Fastify and the stitched schema has no `@Resolver` classes, so no Nest guard,
   interceptor or pipe runs for an operation — an `APP_GUARD` would guard only
@@ -1544,8 +1570,11 @@ the post mutations, answers one as "the author does not exist", ahead of the glo
 - **Auth**: only `libs/auth` knows about Better Auth, and only `libs/organizations` knows about
   organizations; everything else talks to `AuthService`, `OrganizationService`, `IdentityProvider` or a
   repository. `AuthInfrastructureModule.forRoot({ plugins, entities, imports })` installs the `/api/auth/*`
-  surface and the global guard — which requires a session, so post reads opt out with `@AllowAnonymous()`
-  and writes use `@Roles([AUTHOR_ROLE])` + `@CurrentAuthor()`. What an OAuth access token may do is its
+  surface and the global guard, `PlatformAuthGuard` — the library's own guard for whoever has a session,
+  which requires one, so post reads opt out with `@AllowAnonymous()` and writes use
+  `@Roles([AUTHOR_ROLE])` + `@CurrentAuthor()`; an OAuth client acting for itself (client credentials)
+  has no session and is admitted only on a handler that declares its scopes and asks for no user or
+  member (see `libs/auth/README.md`). What an OAuth access token may do is its
   scopes': `@RequireScopes('write:posts')` (`libs/auth`) refuses a token not granted them with
   `FORBIDDEN`, a cookie of this system's own holds every scope, and nobody passes — the post reads and
   subscriptions require `read:posts`, the writes `write:posts`. Organization-scoped handlers use
@@ -1562,6 +1591,13 @@ the post mutations, answers one as "the author does not exist", ahead of the glo
   is reused, not repeated, and `BetterAuthIdentityResolver.fromSession` is the one translation from
   Better Auth's session — `Identity.scopes` included: an access token's `scope` claim, or every one of
   `OAUTH_SCOPES` for a cookie. Nothing reads `@thallesp/nestjs-better-auth`'s raw `@Session()` any more.
+  **`Identity` is a union, as Quarkus' `SecurityIdentity`**: a `UserIdentity` (a person) or a
+  `ClientIdentity` (an OAuth client acting for itself, read by `AccessTokens` from its client-credentials
+  token and bound to the organization it was registered for, its `referenceId`). Both answer
+  `principal`, `roles`, `scopes`, `activeOrganizationId`, `credential` and `attributes` — the token's
+  custom claims, read typed through an `IdentityAttribute` declared next to whoever reads it; `userId`,
+  `email` and `name` need `kind === 'user'`, and `UserIdentity.required` refuses a client as
+  `IdentityIsNotAUserException` (`FORBIDDEN`).
 - **A request's headers are read in one place**: `RequestHeaders.from(anything)` (`libs/auth`) — a
   Fastify or Express request, a GraphQL context, Yoga's `request` (whose headers are `@whatwg-node`'s
   class, which a check for the global `Headers` used to read as empty, losing the cookie with nothing
@@ -1739,7 +1775,9 @@ creates it for the run and drops it after, and the spec runs the migrator's real
 overrides `TENANT_MIGRATIONS` with the migrator's `tenantMigrations` list, because under Vitest there
 is no `dist/migrations` to read. posts-api's e2e, tagging, the notificator, the migrator, the
 gateway, the organizations and the database libraries do. A spec that needs Redis starts one of its
-own with `ThrowawayRedis` (`@nestposts/redis/testing/throwaway-redis`) — never the one on 6379.
+own with `ThrowawayRedis` (`@nestposts/redis/testing/throwaway-redis`) — never the one on 6379 — and one
+that needs Neo4j with `ThrowawayNeo4j` (`libs/ai`'s `infrastructure/persistence/testing`), never a
+graph a stage deployed.
 
 Where a spec lives follows one rule: **next to what it covers, in the project that can see it**. A
 spec that needs more than its own library — the persistence integration specs, the delegation over

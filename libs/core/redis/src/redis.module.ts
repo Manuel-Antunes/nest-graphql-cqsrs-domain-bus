@@ -21,7 +21,12 @@ import { RedisConnection } from './redis-connection';
       useFactory: (options: RedisClientOptions) =>
         RedisConnection.open(options),
     },
+    {
+      provide: 'REDIS_CLIENT',
+      inject: [RedisConnection],
+      useFactory: (connection: RedisConnection) => connection.client,
+    },
   ],
-  exports: [RedisConnection],
+  exports: [RedisConnection, 'REDIS_CLIENT'],
 })
 export class RedisModule extends ConfigurableRedisModule {}

@@ -24,12 +24,6 @@ import { UserId } from '../../../domain/user/vo/user-id';
 import { UserName } from '../../../domain/user/vo/user-name';
 import { UserChatwootSyncTrigger } from '../triggers/chatwoot-sync.trigger';
 
-export const UserIdType = valueObjectType(UserId, {
-  columnType: `varchar(${USER_ID_MAX_LENGTH})`,
-});
-const EmailType = valueObjectType(Email, { columnType: 'varchar(320)' });
-const UserNameType = valueObjectType(UserName, { columnType: 'varchar(100)' });
-
 export const USER_KIND = 'user';
 
 export const UserEntitySchema = defineEntity({
@@ -40,9 +34,15 @@ export const UserEntitySchema = defineEntity({
   discriminatorColumn: 'kind',
   forceConstructor: true,
   properties: {
-    id: p.type(UserIdType).primary(),
-    email: p.type(EmailType),
-    name: p.type(UserNameType),
+    id: p
+      .type(
+        valueObjectType(UserId, {
+          columnType: `varchar(${USER_ID_MAX_LENGTH})`,
+        }),
+      )
+      .primary(),
+    email: p.type(valueObjectType(Email, { columnType: 'varchar(320)' })),
+    name: p.type(valueObjectType(UserName, { columnType: 'varchar(100)' })),
     role: p.string().nullable(),
     createdAt: p.datetime(),
     updatedAt: p.datetime(),

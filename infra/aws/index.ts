@@ -19,7 +19,7 @@ import {
   streaming,
   taggingWorker,
 } from './compute';
-import { database } from './data';
+import { database, graph } from './data';
 import { router } from './edge';
 import { mailSender } from './mail';
 import {
@@ -69,6 +69,8 @@ export const outputs = {
   mailSender,
 
   database: database.host,
+
+  neo4j: graph.uri,
 
   chatwoot: chatwoot.url,
 };

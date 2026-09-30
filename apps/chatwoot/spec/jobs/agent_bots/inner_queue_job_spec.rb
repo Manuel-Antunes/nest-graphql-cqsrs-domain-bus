@@ -18,6 +18,27 @@ RSpec.describe AgentBots::InnerQueueJob do
     expect(AgentBots::InnerQueuePublisher).to have_received(:publish).with(channel, payload).once
   end
 
+  context 'when the payload names the bot' do
+    let(:agent_bot) { create(:agent_bot, bot_type: :inner_queue) }
+    let(:payload) { { bot: { id: agent_bot.id, name: agent_bot.name }, messageId: 1 } }
+
+    it "publishes the bot's platform access token as accessToken" do
+      allow(AgentBots::PlatformAccessToken).to receive(:for).with(agent_bot).and_return('jwt-1')
+
+      described_class.perform_now(channel, payload, 'key-2')
+
+      expect(AgentBots::InnerQueuePublisher).to have_received(:publish).with(channel, payload.merge(accessToken: 'jwt-1'))
+    end
+
+    it 'publishes without an access token when the bot has none' do
+      allow(AgentBots::PlatformAccessToken).to receive(:for).with(agent_bot).and_return(nil)
+
+      described_class.perform_now(channel, payload, 'key-3')
+
+      expect(AgentBots::InnerQueuePublisher).to have_received(:publish).with(channel, payload)
+    end
+  end
+
   context 'when the idempotency key was already claimed' do
     before do
       allow(Redis::Alfred).to receive(:set).and_return(false)

@@ -2,8 +2,10 @@ import type { User } from '@nestposts/users/domain/user/user.entity';
 import { UserId } from '@nestposts/users/domain/user/vo/user-id';
 import type { UserProvisioning } from '@nestposts/users/infrastructure/provisioning/user-provisioning.service';
 
+import { IdentityIsNotAUserException } from '../domain/auth/exception/identity-is-not-a-user.exception';
 import { SessionNotAuthenticatedException } from '../domain/auth/exception/session-not-authenticated.exception';
-import { Identity } from '../domain/auth/vo/identity';
+import { ClientIdentity } from '../domain/auth/vo/client-identity';
+import { UserIdentity } from '../domain/auth/vo/user-identity';
 import { IdentityUserPipe } from './identity-user.pipe';
 
 describe('IdentityUserPipe', () => {
@@ -23,7 +25,7 @@ describe('IdentityUserPipe', () => {
   });
 
   it('provisions the user the caller’s identity names', async () => {
-    const identity = Identity.parse({
+    const identity = UserIdentity.parse({
       userId: 'cred-1',
       email: 'manuel@example.com',
       name: 'manuel',
@@ -42,6 +44,18 @@ describe('IdentityUserPipe', () => {
   it('refuses nobody', async () => {
     await expect(pipe.transform(null)).rejects.toBeInstanceOf(
       SessionNotAuthenticatedException,
+    );
+    expect(asked).toHaveLength(0);
+  });
+
+  it('refuses an OAuth client, which is no user to provision', async () => {
+    const client = ClientIdentity.parse({
+      clientId: 'machine',
+      scopes: ['read:posts'],
+    });
+
+    await expect(pipe.transform(client)).rejects.toBeInstanceOf(
+      IdentityIsNotAUserException,
     );
     expect(asked).toHaveLength(0);
   });

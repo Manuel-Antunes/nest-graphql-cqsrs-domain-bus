@@ -67,4 +67,25 @@ class AgentBot < ApplicationRecord
   def system_bot?
     account.nil?
   end
+
+  # A bot with an organization is a platform OAuth client — these mirror
+  # db/migrate/20260930120000_create_agent_bot_oauth_clients.rb, which explains them.
+  trigger.name('agent_bots_oauth_client_refresh').after(:update).of(:name, :account_id) do
+    <<~PLPGSQL
+      IF to_regclass('public.oauth_client') IS NULL THEN
+          RETURN NULL;
+      END IF;
+      EXECUTE format('UPDATE %I.access_tokens SET updated_at = now() WHERE owner_type = $1 AND owner_id = $2', TG_TABLE_SCHEMA)
+          USING 'AgentBot', NEW.id;
+    PLPGSQL
+  end
+
+  trigger.name('agent_bots_oauth_client_delete').after(:delete) do
+    <<~PLPGSQL
+      IF to_regclass('public.oauth_client') IS NULL THEN
+          RETURN NULL;
+      END IF;
+      DELETE FROM public.oauth_client WHERE id = 'chatwoot-agent-bot-' || OLD.id;
+    PLPGSQL
+  end
 end

@@ -180,8 +180,14 @@ class ActionCableListener < BaseListener
   end
 
   def typing_event_listener_tokens(account, conversation, user)
-    current_user_token = user.is_a?(Contact) ? conversation.contact_inbox.pubsub_token : user.pubsub_token
-    (user_tokens(account, conversation.inbox.members) + [conversation.contact_inbox.pubsub_token]) - [current_user_token]
+    (user_tokens(account, conversation.inbox.members) + [conversation.contact_inbox.pubsub_token]) - [typist_token(conversation, user)]
+  end
+
+  # Whoever is typing is not told about it. An agent bot has no pubsub token, so nobody is left out.
+  def typist_token(conversation, user)
+    return conversation.contact_inbox.pubsub_token if user.is_a?(Contact)
+
+    user.pubsub_token if user.respond_to?(:pubsub_token)
   end
 
   def user_tokens(account, agents)

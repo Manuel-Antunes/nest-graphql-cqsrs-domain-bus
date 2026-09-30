@@ -1,5 +1,6 @@
 import { Inject, Injectable, Scope } from '@nestjs/common';
 import { AuthService } from '@nestposts/auth/domain/auth/auth.service';
+import { UserIdentity } from '@nestposts/auth/domain/auth/vo/user-identity';
 import type { BetterAuthWith } from '@nestposts/auth/infrastructure/better-auth/init-auth';
 import { BETTER_AUTH } from '@nestposts/auth/infrastructure/better-auth/tokens';
 
@@ -34,7 +35,15 @@ export class BetterAuthOrganizationService extends OrganizationService {
 
   async organizations(): Promise<Organization[]> {
     const identity = await this.auth.requireIdentity();
-    return this.organizationRepository.findAllOf(identity.userId);
+    if (identity.kind === 'user') {
+      return this.organizationRepository.findAllOf(identity.userId);
+    }
+    const bound = identity.activeOrganizationId
+      ? await this.organizationRepository.findById(
+          OrganizationId.parse(identity.activeOrganizationId),
+        )
+      : null;
+    return bound ? [bound] : [];
   }
 
   async activeOrganizationId(): Promise<OrganizationId | null> {
@@ -63,7 +72,7 @@ export class BetterAuthOrganizationService extends OrganizationService {
 
   async activeMember(): Promise<Member | null> {
     const identity = await this.auth.requireIdentity();
-    if (!identity.activeOrganizationId) {
+    if (identity.kind !== 'user' || !identity.activeOrganizationId) {
       return null;
     }
     return this.memberRepository.findIn(
@@ -79,7 +88,7 @@ export class BetterAuthOrganizationService extends OrganizationService {
    * the first is a prompt, the second is a refusal — and the filter gives them different codes.
    */
   async requireActiveMember(): Promise<Member> {
-    const identity = await this.auth.requireIdentity();
+    const identity = UserIdentity.required(await this.auth.identity());
     if (!identity.activeOrganizationId) {
       throw new OrganizationNotSelectedException();
     }

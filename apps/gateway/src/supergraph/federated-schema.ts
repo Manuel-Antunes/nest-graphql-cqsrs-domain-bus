@@ -2,14 +2,16 @@ import { getStitchedSchemaFromSupergraphSdl } from '@graphql-tools/federation';
 import { Logger } from '@nestjs/common';
 import type { GraphQLSchema } from 'graphql';
 
+import type { SubgraphHeaders } from './header-resolvers/subgraph.header-resolver';
+import type { BuiltSubgraphHeaderResolverFactory } from './header-resolvers/subgraph-header-resolver.factory';
 import type { InterfaceObjectMapping } from './interface-objects';
 import { InterfaceObjects } from './interface-objects';
 import { Supergraph } from './supergraph';
-import type { SubgraphExecutor } from './traced-executor';
+import type { SubgraphExecutor, SubgraphRequest } from './traced-executor';
 import { TracedExecutor } from './traced-executor';
 
 export interface SubgraphCallContext {
-  readonly subgraphHeaders?: Readonly<Record<string, string>>;
+  readonly builtSubgraphHeaderResolverFactory?: BuiltSubgraphHeaderResolverFactory;
 }
 
 export class FederatedSchemaFactory {
@@ -38,12 +40,6 @@ export class FederatedSchemaFactory {
 
     return getStitchedSchemaFromSupergraphSdl({
       supergraphSdl: InterfaceObjects.apply(supergraphSdl, interfaceObjects),
-      httpExecutorOpts: {
-        headers: (executorRequest) => ({
-          ...(executorRequest?.context as SubgraphCallContext | undefined)
-            ?.subgraphHeaders,
-        }),
-      },
       onSubgraphAST: (subgraphName, subgraphAst) =>
         mappingsFor(subgraphName).reduce(
           (ast, mapping) =>
@@ -52,6 +48,7 @@ export class FederatedSchemaFactory {
         ),
       onSubschemaConfig: (subschemaConfig) => {
         const name = subschemaConfig.name ?? '';
+        const subgraph = graphNames.get(name) ?? name;
         const mappings = mappingsFor(name);
 
         for (const mapping of mappings) {
@@ -68,7 +65,7 @@ export class FederatedSchemaFactory {
 
         const inner = subschemaConfig.executor as SubgraphExecutor | undefined;
         if (!inner) return;
-        const executor: SubgraphExecutor = mappings.length
+        const rewritten: SubgraphExecutor = mappings.length
           ? (request) =>
               inner({
                 ...request,
@@ -78,11 +75,32 @@ export class FederatedSchemaFactory {
                 ),
               })
           : inner;
+        const executor: SubgraphExecutor = async (request) =>
+          rewritten({
+            ...request,
+            extensions: {
+              ...request.extensions,
+              headers: await FederatedSchemaFactory.headersFor(
+                request,
+                subgraph,
+              ),
+            },
+          });
         subschemaConfig.executor = TracedExecutor.wrap(
-          graphNames.get(name) ?? name,
+          subgraph,
           executor,
         ) as never;
       },
     });
+  }
+
+  private static headersFor(
+    request: SubgraphRequest,
+    subgraph: string,
+  ): Promise<SubgraphHeaders> {
+    const headers = (
+      request.context as SubgraphCallContext | undefined
+    )?.builtSubgraphHeaderResolverFactory?.resolve(subgraph);
+    return headers ?? Promise.resolve({});
   }
 }

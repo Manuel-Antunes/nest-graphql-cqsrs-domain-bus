@@ -14,9 +14,32 @@ package's.
 
 ## Who is calling: one `Identity`, however the question is asked
 
-`Identity` (`domain/auth/vo/identity.ts`) is the caller — user id, email, name, roles, the scopes its
-credential was granted and the active organization's id, as value objects — and every way of asking
-answers it:
+`Identity` (`domain/auth/vo/identity.ts`) is the caller, and every way of asking answers it. It is a
+union, told apart by `kind` — the shape Quarkus gives its `SecurityIdentity`, over Better Auth:
+
+- **`UserIdentity`** — a person: user id, email and name, through a cookie or through an OAuth access
+  token a client was granted on their behalf.
+- **`ClientIdentity`** — an OAuth client acting for itself, through a token of the client credentials
+  grant: its client id, and no user.
+
+What both answer needs no narrowing: `principal` (the user's id or the client's), `roles`, the `scopes`
+its credential was granted, `activeOrganizationId` (a user's active organization; the one a client is
+bound to), `credential` (`session`, or `access-token` with its `tokenId` and `expiresAt`) and
+`attributes` — the credential's custom claims, the "extras" a token carries beyond what an identity
+models. Each is read typed, through an `IdentityAttribute` declared once next to whoever reads it:
+
+```ts
+const AgentBotId = IdentityAttribute.of('agent_bot_id', z.coerce.number().int().positive());
+identity.attribute(AgentBotId); // number | undefined — absent or invalid is undefined, never a failure
+```
+
+What only a person has — `userId`, `email`, `name` — needs `identity.kind === 'user'`, and the compiler
+says where. `UserIdentity.required(identity)` is the caller as a user or the refusal that says why not:
+`SessionNotAuthenticatedException` for nobody (`UNAUTHENTICATED`), `IdentityIsNotAUserException` for a
+client (`FORBIDDEN`) — `@CurrentUser()`, `@CurrentAuthor()` and the organization service's
+`requireActiveMember()` use it. Each kind is a `ValidatedDto` of its own with the shared behaviour mixed
+in (`SecurityIdentity`): a top-level discriminated-union DTO substitutes its member's prototype, which
+would lose any method a subclass of the union declared.
 
 | | what it is | use it when |
 |---|---|---|
@@ -27,12 +50,26 @@ answers it:
 | `BETTER_AUTH` | the **instance**, fully typed, with every plugin's endpoints on `auth.api` | you need an endpoint the ports do not wrap |
 | `BetterAuthModule.forRoot` | the wiring itself: the instance, the ports, the tables | a composition root — `apps/posts-api`, and `apps/web`'s own Nest container |
 
-**One lookup per request, and one translation.** `BetterAuthIdentityResolver` answers a request the
-global guard (`@thallesp/nestjs-better-auth`) already authenticated from the session the guard wrote on
-it, a request presenting no credentials as nobody without asking, and anything else with
-`getSession` — remembered by the instance, which belongs to one request, so the guard, the tenant guard
-and `AuthService` asking about the same one cost what the guard cost. `BetterAuthIdentityResolver.fromSession` is the one place Better
-Auth's session becomes an `Identity`; `BetterAuthService` delegates to the resolver.
+**One lookup per request, and one translation per credential.** `BetterAuthIdentityResolver` answers a
+request the global guard already authenticated from what the guard found, a request presenting no
+credentials as nobody without asking, a token of the client credentials grant through `AccessTokens`,
+and anything else with `getSession` — remembered by the instance, which belongs to one request, so the
+guard, the tenant guard and `AuthService` asking about the same one cost what the guard cost.
+`BetterAuthIdentityResolver.fromSession` is the one place Better Auth's session becomes a
+`UserIdentity`, and `AccessTokens.clientIdentityOf` the one place a client's token becomes a
+`ClientIdentity`; `BetterAuthService` delegates to the resolver.
+
+**The global guard is `PlatformAuthGuard`**, installed by `AuthInfrastructureModule` in place of
+`@thallesp/nestjs-better-auth`'s own (`disableGlobalAuthGuard`), which it extends: every caller with a
+session goes through the library's guard untouched. A client's token is no session, so it is admitted
+here, and only where a machine can be — on a handler that declares its scopes (`@RequireScopes`;
+whether the client holds them is `ScopesGuard`'s), never on one that asks for a user or a member
+(`@Roles`, `@OrgRoles`, `@UserHasPermission`, `@MemberHasPermission`), and with `@RequireActiveOrg` only
+when it is bound to an organization. `@AllowAnonymous()` and `@OptionalAuth()` mean what they always
+did. What it found is recorded on the request, so `@CurrentIdentity()` reads the client without asking
+again, and `TenantMembershipGuard` (`@nestposts/organizations`) lets a client into its organization's
+tenant and no other. The keys it checks are read off the library's own decorators, by applying each to
+a probe — `OrgRoles` is `applyDecorators` and has no `KEY` to read.
 
 **The request is read in one place too** (`infrastructure/request/`). `RequestHeaders.from(anything)`
 turns every shape a transport calls "the request" into the `Headers` Better Auth takes: a Fastify or
@@ -223,7 +260,7 @@ application starts and attaches them to the instance's `databaseHooks`, which is
   the name a magic-link sign-up needs. A new concern for the same moment goes into the provider that
   already holds it. `after` hooks answer nothing, so any number of them compose.
 
-## An OAuth access token is a session
+## A user's OAuth access token is a session
 
 A client that went through the consent screen holds an access token, and the services behind the
 gateway accept it where they accept a cookie. `plugins/oauth-bearer-session-better-auth.plugin.ts` is
@@ -238,6 +275,11 @@ so the global guard, `@CurrentIdentity()`, `IdentityResolver` and `AuthService` 
   understands. Anything that is not a signed token falls through to Better Auth's own lookup.
 - **The user is read, not trusted.** The token carries only `sub`; the row is loaded, and a user who
   no longer exists — or is banned — gets no session.
+- **Its custom claims travel.** Whatever the issuer added beyond the registered claims is put on the
+  session as `claims`, and the `UserIdentity` keeps it as its `attributes`; the token's `jti` and expiry
+  are its `credential`.
+- **A client's own token is left alone.** A token of the client credentials grant (`sub` =
+  `client_id`) is no user's: the hook returns before verifying it, and `AccessTokens` reads it instead.
 - **One issuer for every instance.** `posts-api`, `apps/web`, the notificator and the migrator each
   hold a Better Auth instance with a base URL of their own, and the jwt plugin would sign with that
   URL as `iss`. `AUTH_ISSUER` (default `WEB_URL`) makes it one value, so a token issued by the web
@@ -265,9 +307,30 @@ that, on AWS, with a valid session. It now answers `403 OAUTH_CLIENT_ADMIN_REQUI
 `admin`: the deployed stages have one only when somebody sets `users.role` by hand, the way
 `apps/web-e2e` does for its own.
 
+## A client's own access token is a `ClientIdentity`
+
+A client that authenticates as itself — the client credentials grant, a machine with no user behind
+it, the Chatwoot agent bots — holds a token whose subject is the client. `AccessTokens`
+(`infrastructure/better-auth/identity/access-tokens.ts`) reads it:
+
+- **Verified locally, as an access token.** `jose` against the keys the jwt plugin keeps
+  (`auth.api.getJwks()`, the same rows `verifyJWT` reads — which cannot be called here, it needs a Better
+  Auth endpoint's context), for `issuer` and `oauthResources`, with `typ` `at+jwt`, so an ID token or a
+  session JWT signed with the same keys is refused, and with `sub`, `jti` and `exp` required.
+- **Bound to the organization it was registered for.** The provider's claim extension
+  (`OAuthClientClaims.forAccessToken`) writes the client's `referenceId` as `organization_id` into every
+  token of the client credentials grant — last, so nothing a client declares overrides it — and that is
+  the identity's `activeOrganizationId`. A client registered for none is bound to none.
+- **What the client declares travels.** A client whose `metadata` holds a `claims` object gets those
+  claims in every token (`OAuthClientClaims.of`), and they are the identity's `attributes` — the
+  Chatwoot agent bot's `agent_bot_id` is one.
+
+Which way a bearer is read is decided without verifying it (`AccessTokens.isIssuedToAClient`: `sub` =
+`client_id`), and whatever is read is verified — once.
+
 ### What a token may do is its scopes
 
-`Identity.scopes` is what the credential may be used for, and there are two kinds of credential:
+`Identity.scopes` is what the credential may be used for, and there are three kinds of credential:
 
 - **A cookie is this system's own.** Whoever holds one signed in through its screens and is using the
   system itself, so the identity holds **every** scope — `OAUTH_SCOPES` (`domain/auth/scopes.ts`, which
@@ -277,6 +340,8 @@ that, on AWS, with a valid session. It now answers `403 OAUTH_CLIENT_ADMIN_REQUI
   (`session.scopes`), and `BetterAuthIdentityResolver.fromSession` keeps it. A token that names no scope
   holds none — a session with no `scopes` at all is what marks the cookie, so a token can never fall
   into "everything".
+- **A client's own token** holds the scopes of its `client_credentials_scopes` it asked for, and
+  nothing else — a client is never a cookie.
 
 `@RequireScopes('write:posts')` on a handler or a class (the two add up) is where a scope is enforced:
 `ScopesGuard` asks the `IdentityResolver` and refuses with a 403 — `FORBIDDEN` in GraphQL, naming the

@@ -94,8 +94,9 @@ subscription reaching a `graphql-sse` client, in order. `GraphQLModule` runs it 
 
 ## Credentials: what each subgraph is sent
 
-Once per inbound request — never once per subgraph call — the options factory's context function
-builds the `GatewayContext` the stitched executor reads, inside a MikroORM request context:
+Once per inbound request, the options factory's context function reads who is calling, inside a
+MikroORM request context, and hands the stitched executor a per-request header resolution
+(`SubgraphHeaderResolverFactory.build`). Each subgraph call then asks it for that subgraph's headers:
 
 1. **`IdentityResolver` (`libs/auth`) reads who is calling**, from Fastify's `req`. It is Better
    Auth's `getSession`, so it reads both credentials the way every subgraph does: a cookie as a
@@ -110,19 +111,53 @@ builds the `GatewayContext` the stitched executor reads, inside a MikroORM reque
    through the Nest cache (`CacheModule` on the same Redis, `RedisCacheOptions`), five minutes a
    slug, so a busy caller costs one lookup per organization, not one per request. A slug renamed in
    between is routed by the old one for at most those five minutes.
-3. **Every subgraph is sent the same headers**: the credentials as they came (`RequestCredentials`,
-   `libs/auth`: `cookie` and `authorization`) and `x-tenant` — the one the caller sent, or, when none
-   came, the organization their session is in: the same rule the web's `/api/graphql` follows.
+3. **The headers are decided per subgraph, by a `SubgraphHeaderResolver`**
+   (`supergraph/header-resolvers`). `DefaultSubgraphHeaderResolver` answers for every subgraph that has
+   no resolver of its own: the credentials as they came (`RequestCredentials`, `libs/auth`: `cookie` and
+   `authorization`) and `x-tenant` — the one the caller sent, or, when none came, the organization their
+   session is in: the same rule the web's `/api/graphql` follows. A subgraph with rules of its own gets a
+   resolver that extends it and names the subgraph (`ChatwootSubgraphHeaderResolver`, `chatwoot`), listed
+   in `SubgraphHeaderResolverModule`. Each resolver runs at most once per request, however many calls its
+   subgraphs receive, in a MikroORM request context of its own.
+
+The headers are resolved inside the executor `onSubschemaConfig` wraps, and travel as the request's
+`extensions.headers`, which `@graphql-tools/executor-http` merges into the outbound request:
+`httpExecutorOpts.headers` is synchronous, and a resolver's Promise spread there is `{}` — every
+subgraph would be called anonymously. The caller's own `extensions.headers` is replaced, never
+merged, so nobody chooses what a subgraph is sent.
 
 Trace context is deliberately **not** forwarded: the gateway's own HTTP instrumentation writes
 `traceparent` on each outbound call, so a subgraph's span is a child of the gateway's (see Tracing).
 
 Each subgraph authenticates the caller itself, through the same Better Auth instance it always had.
-`subgraph-header-forwarding.spec.ts` boots the real `AppModule` in front of two subgraphs that report
-what they received, one of them named `main-graph`: the executor names a subgraph by its `join__Graph`
-value (`MAIN_GRAPH`), and a rule that ever keys headers by subgraph must translate with
-`Supergraph.subgraphNamesOf`, or the subgraph is called anonymously while `{ __typename }` — which
-reaches no subgraph — keeps passing.
+`subgraph-header-forwarding.spec.ts` boots the real `AppModule` in front of three subgraphs that report
+what they received, one of them named `main-graph` and one `chatwoot`: the executor names a subgraph by
+its `join__Graph` value (`MAIN_GRAPH`, `CHATWOOT`), so the resolvers are keyed by the subgraph's own
+name, translated with `Supergraph.subgraphNamesOf` — keyed by the enum value, Chatwoot's resolver would
+never be chosen and nothing would fail.
+
+### An agent bot's token, exchanged for Chatwoot
+
+A Chatwoot agent bot calls the platform with the access token its OAuth client was issued
+(`chatwoot-agent-bot-<id>`, client credentials, `write:conversations`, bound to its organization and
+carrying `agent_bot_id` — see `apps/chatwoot`'s `CreateAgentBotOauthClients`). The `IdentityResolver`
+reads it as a `ClientIdentity` (`libs/auth`'s `AccessTokens`: verified once, against the jwt plugin's
+keys, as an access token of this deployment), and no subgraph knows that caller: it has no user. For the
+`chatwoot` subgraph, `ChatwootAgentBotTokens` exchanges it for the bot's own Chatwoot access token, sent
+as `api_access_token` in place of `authorization`, so Chatwoot authenticates the bot the way its REST
+API always has:
+
+- the identity must be a client whose id is the bot's (`chatwoot-agent-bot-` + its `agent_bot_id`
+  attribute, read through `ChatwootAgentBotTokens.AGENT_BOT_ID`), granted `write:conversations`, and
+  bound to an organization — which a tenant the request names must be (`root` excepted);
+- the token is read from `chatwoot.access_tokens`, for that bot in an account of that organization, and
+  kept in the Nest cache under the platform token's `jti` (the identity's `credential.tokenId`) until
+  it expires — so a rotated bot token stops being handed out once the platform tokens issued before it
+  expire.
+
+Whatever does not hold up is forwarded as it came, and Chatwoot answers it as nobody. The exchanged
+token is a Chatwoot credential that does not expire, and while cached it sits in the Redis every
+process shares.
 
 ### Why the identity is resolved in the context, and not by a guard
 

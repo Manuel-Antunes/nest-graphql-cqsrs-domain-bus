@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2026_09_29_230000) do
+ActiveRecord::Schema[7.2].define(version: 2026_09_30_120000) do
   create_schema "chatwoot", if_not_exists: true
 
   # These extensions should be enabled to support this database
@@ -1345,6 +1345,91 @@ ActiveRecord::Schema[7.2].define(version: 2026_09_29_230000) do
       before(:insert).
       for_each(:row) do
     "NEW.display_id := nextval(format('%I.camp_dpid_seq_%s', TG_TABLE_SCHEMA, NEW.account_id));"
+  end
+
+  create_trigger("access_tokens_agent_bot_oauth_client_upsert", :generated => true, :compatibility => 1).
+      on("access_tokens").
+      after(:insert, :update).
+      where("NEW.owner_type = 'AgentBot'").
+      declare("bot_name text; organization_id text") do
+    <<-SQL_ACTIONS
+IF to_regclass('public.oauth_client') IS NULL THEN
+    RETURN NULL;
+END IF;
+EXECUTE format('SELECT b.name, a.platform_organization_id FROM %I.agent_bots b LEFT JOIN %I.accounts a ON a.id = b.account_id WHERE b.id = $1', TG_TABLE_SCHEMA, TG_TABLE_SCHEMA)
+    INTO bot_name, organization_id
+    USING NEW.owner_id;
+IF organization_id IS NULL THEN
+    DELETE FROM public.oauth_client WHERE id = 'chatwoot-agent-bot-' || NEW.owner_id;
+    RETURN NULL;
+END IF;
+INSERT INTO public.oauth_client (
+    id, client_id, client_secret, name, disabled, skip_consent, grant_types, response_types, redirect_uris,
+    scopes, client_credentials_scopes, token_endpoint_auth_method, application_type, require_pkce,
+    reference_id, metadata, created_at, updated_at
+) VALUES (
+    'chatwoot-agent-bot-' || NEW.owner_id,
+    'chatwoot-agent-bot-' || NEW.owner_id,
+    rtrim(translate(encode(sha256(convert_to(NEW.token, 'UTF8')), 'base64'), '+/', '-_'), '='),
+    left(bot_name, 255), false, true, '["client_credentials"]', '[]', '[]',
+    '["write:conversations"]', '["write:conversations"]', 'client_secret_post', 'web', false,
+    organization_id,
+    jsonb_build_object('claims', jsonb_build_object('agent_bot_id', NEW.owner_id)),
+    now(), now()
+)
+ON CONFLICT (id) DO UPDATE SET
+    client_secret = EXCLUDED.client_secret,
+    name = EXCLUDED.name,
+    disabled = EXCLUDED.disabled,
+    skip_consent = EXCLUDED.skip_consent,
+    grant_types = EXCLUDED.grant_types,
+    response_types = EXCLUDED.response_types,
+    redirect_uris = EXCLUDED.redirect_uris,
+    scopes = EXCLUDED.scopes,
+    client_credentials_scopes = EXCLUDED.client_credentials_scopes,
+    token_endpoint_auth_method = EXCLUDED.token_endpoint_auth_method,
+    application_type = EXCLUDED.application_type,
+    require_pkce = EXCLUDED.require_pkce,
+    reference_id = EXCLUDED.reference_id,
+    metadata = EXCLUDED.metadata,
+    updated_at = EXCLUDED.updated_at;
+    SQL_ACTIONS
+  end
+
+  create_trigger("access_tokens_agent_bot_oauth_client_delete", :generated => true, :compatibility => 1).
+      on("access_tokens").
+      after(:delete).
+      where("OLD.owner_type = 'AgentBot'") do
+    <<-SQL_ACTIONS
+IF to_regclass('public.oauth_client') IS NULL THEN
+    RETURN NULL;
+END IF;
+DELETE FROM public.oauth_client WHERE id = 'chatwoot-agent-bot-' || OLD.owner_id;
+    SQL_ACTIONS
+  end
+
+  create_trigger("agent_bots_oauth_client_refresh", :generated => true, :compatibility => 1).
+      on("agent_bots").
+      after(:update).
+      of(:name, :account_id) do
+    <<-SQL_ACTIONS
+IF to_regclass('public.oauth_client') IS NULL THEN
+    RETURN NULL;
+END IF;
+EXECUTE format('UPDATE %I.access_tokens SET updated_at = now() WHERE owner_type = $1 AND owner_id = $2', TG_TABLE_SCHEMA)
+    USING 'AgentBot', NEW.id;
+    SQL_ACTIONS
+  end
+
+  create_trigger("agent_bots_oauth_client_delete", :generated => true, :compatibility => 1).
+      on("agent_bots").
+      after(:delete) do
+    <<-SQL_ACTIONS
+IF to_regclass('public.oauth_client') IS NULL THEN
+    RETURN NULL;
+END IF;
+DELETE FROM public.oauth_client WHERE id = 'chatwoot-agent-bot-' || OLD.id;
+    SQL_ACTIONS
   end
 
 end

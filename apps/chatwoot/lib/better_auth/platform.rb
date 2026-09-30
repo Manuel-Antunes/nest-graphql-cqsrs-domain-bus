@@ -45,6 +45,11 @@ module BetterAuth
       ENV.fetch('WEB_URL', 'http://localhost:4200')
     end
 
+    # Where the platform's OAuth provider issues tokens: Better Auth's `/oauth2/token` under its base path.
+    def token_url
+      ENV['AUTH_TOKEN_URL'].presence || "#{web_url}#{ENV['AUTH_BASE_PATH'].presence || '/api/auth'}/oauth2/token"
+    end
+
     def organization_id_of_tenant(tenant)
       return nil if tenant.blank? || tenant == ROOT_TENANT
 

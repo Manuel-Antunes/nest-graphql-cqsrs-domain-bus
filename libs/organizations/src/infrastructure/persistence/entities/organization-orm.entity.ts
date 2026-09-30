@@ -15,27 +15,31 @@ import { OrganizationSlug } from '../../../domain/organization/vo/organization-s
 import { OrganizationChatwootSyncTrigger } from '../triggers/chatwoot-sync.triggers';
 import { OrganizationTenantSchemaTrigger } from '../triggers/tenant-schema.trigger';
 
-export const OrganizationIdType = valueObjectType(OrganizationId, {
-  columnType: `varchar(${ORGANIZATION_ID_MAX_LENGTH})`,
-});
-
-const OrganizationNameType = valueObjectType(OrganizationName, {
-  columnType: `varchar(${ORGANIZATION_NAME_MAX_LENGTH})`,
-});
-
-const OrganizationSlugType = valueObjectType(OrganizationSlug, {
-  columnType: `varchar(${ORGANIZATION_SLUG_MAX_LENGTH})`,
-});
-
 export const OrganizationEntitySchema = defineEntity({
   class: Organization,
   tableName: 'organization',
   schema: SYSTEM_SCHEMA,
   forceConstructor: true,
   properties: {
-    id: p.type(OrganizationIdType).primary(),
-    name: p.type(OrganizationNameType),
-    slug: p.type(OrganizationSlugType).unique(),
+    id: p
+      .type(
+        valueObjectType(OrganizationId, {
+          columnType: `varchar(${ORGANIZATION_ID_MAX_LENGTH})`,
+        }),
+      )
+      .primary(),
+    name: p.type(
+      valueObjectType(OrganizationName, {
+        columnType: `varchar(${ORGANIZATION_NAME_MAX_LENGTH})`,
+      }),
+    ),
+    slug: p
+      .type(
+        valueObjectType(OrganizationSlug, {
+          columnType: `varchar(${ORGANIZATION_SLUG_MAX_LENGTH})`,
+        }),
+      )
+      .unique(),
     logo: p.string().nullable(),
     metadata: p.text().nullable(),
     createdAt: p.datetime(),

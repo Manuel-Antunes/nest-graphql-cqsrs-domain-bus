@@ -26,7 +26,8 @@ describe AgentBotListener do
       it 'sends message to agent bot' do
         create(:agent_bot_inbox, inbox: inbox, agent_bot: agent_bot)
         expect(AgentBots::WebhookJob).to receive(:perform_later).with(agent_bot.outgoing_url,
-                                                                      message.webhook_data.merge(event: 'message_created')).once
+                                                                      message.webhook_data.merge(event: 'message_created'),
+                                                                      agent_bot_id: agent_bot.id).once
         listener.message_created(event)
       end
 
@@ -48,8 +49,9 @@ describe AgentBotListener do
         it 'sends message to both bots exactly once' do
           payload = message.webhook_data.merge(event: 'message_created')
 
-          expect(AgentBots::WebhookJob).to receive(:perform_later).with(agent_bot.outgoing_url, payload).once
-          expect(AgentBots::WebhookJob).to receive(:perform_later).with(conversation_bot.outgoing_url, payload).once
+          expect(AgentBots::WebhookJob).to receive(:perform_later).with(agent_bot.outgoing_url, payload, agent_bot_id: agent_bot.id).once
+          expect(AgentBots::WebhookJob).to receive(:perform_later)
+            .with(conversation_bot.outgoing_url, payload, agent_bot_id: conversation_bot.id).once
 
           listener.message_created(event)
         end
@@ -75,14 +77,15 @@ describe AgentBotListener do
         listener.message_created(event)
       end
 
-      it 'includes the bot identity and access token in the payload' do
+      it "includes the bot identity in the payload, and never the bot's Chatwoot token" do
         captured = nil
         allow(AgentBots::InnerQueueJob).to receive(:perform_later) { |_channel, payload, _key| captured = payload }
 
         listener.message_created(event)
 
         expect(captured[:bot]).to eq(id: agent_bot.id, name: agent_bot.name)
-        expect(captured[:botToken]).to eq(agent_bot.access_token.token)
+        expect(captured).not_to have_key(:botToken)
+        expect(captured.values.map(&:to_s)).not_to include(agent_bot.access_token.token)
       end
 
       it 'forwards the contact display name as pushName so the agent can address the person' do
@@ -122,7 +125,8 @@ describe AgentBotListener do
         expect(AgentBots::WebhookJob).to receive(:perform_later)
           .with(
             agent_bot.outgoing_url,
-            conversation.contact_inbox.webhook_data.merge(event: 'webwidget_triggered', event_info: { country: 'US' })
+            conversation.contact_inbox.webhook_data.merge(event: 'webwidget_triggered', event_info: { country: 'US' }),
+            agent_bot_id: agent_bot.id
           ).once
 
         listener.webwidget_triggered(event)

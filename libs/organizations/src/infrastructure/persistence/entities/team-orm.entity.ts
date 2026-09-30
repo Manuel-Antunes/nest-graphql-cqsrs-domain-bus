@@ -13,22 +13,24 @@ import { TeamName } from '../../../domain/organization/vo/team-name';
 import { TeamChatwootSyncTrigger } from '../triggers/chatwoot-sync.triggers';
 import { OrganizationEntitySchema } from './organization-orm.entity';
 
-export const TeamIdType = valueObjectType(TeamId, {
-  columnType: `varchar(${TEAM_ID_MAX_LENGTH})`,
-});
-
-const TeamNameType = valueObjectType(TeamName, {
-  columnType: `varchar(${TEAM_NAME_MAX_LENGTH})`,
-});
-
 export const TeamEntitySchema = defineEntity({
   class: Team,
   tableName: 'team',
   schema: SYSTEM_SCHEMA,
   forceConstructor: true,
   properties: {
-    id: p.type(TeamIdType).primary(),
-    name: p.type(TeamNameType),
+    id: p
+      .type(
+        valueObjectType(TeamId, {
+          columnType: `varchar(${TEAM_ID_MAX_LENGTH})`,
+        }),
+      )
+      .primary(),
+    name: p.type(
+      valueObjectType(TeamName, {
+        columnType: `varchar(${TEAM_NAME_MAX_LENGTH})`,
+      }),
+    ),
     memberCount: p.integer(),
     organization: () =>
       p.manyToOne(OrganizationEntitySchema).ref().deleteRule('cascade'),

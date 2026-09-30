@@ -10,15 +10,15 @@ import type { DevicePlatform } from '../../../domain/device/schemas/device-platf
 import { DEVICE_TOKEN_MAX_LENGTH } from '../../../domain/device/schemas/new-device.schema';
 import { DeviceId } from '../../../domain/device/vo/device-id';
 
-const DeviceIdType = valueObjectType(DeviceId, { columnType: 'varchar(36)' });
-
 export const DeviceEntitySchema = defineEntity({
   class: Device,
   tableName: 'devices',
   schema: TENANT_SCHEMA,
   forceConstructor: true,
   properties: {
-    id: p.type(DeviceIdType).primary(),
+    id: p
+      .type(valueObjectType(DeviceId, { columnType: 'varchar(36)' }))
+      .primary(),
     token: p.string().length(DEVICE_TOKEN_MAX_LENGTH).unique(),
     deviceId: p.string(),
     platform: p.string().$type<DevicePlatform>(),

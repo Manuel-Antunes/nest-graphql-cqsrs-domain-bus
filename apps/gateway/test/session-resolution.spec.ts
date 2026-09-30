@@ -18,9 +18,11 @@ import { RedisConnection } from '@nestposts/redis';
 import { ThrowawayRedis } from '@nestposts/redis/testing/throwaway-redis';
 import type { YogaInitialContext } from 'graphql-yoga';
 import { createSchema, createYoga } from 'graphql-yoga';
+import { decodeJwt } from 'jose';
 
 import { appConfig } from '../src/config/app.config';
-import { OrganizationSlugs } from '../src/graphql/organization-slugs';
+import { ChatwootAgentBotTokens } from '../src/supergraph/header-resolvers/chatwoot-agent-bot-tokens';
+import { OrganizationSlugs } from '../src/supergraph/header-resolvers/organization-slugs';
 import { Listening } from './support/listening';
 
 interface OrganizationApi {
@@ -29,6 +31,21 @@ interface OrganizationApi {
     headers: Headers;
   }): Promise<{ id: string; slug: string } | null>;
 }
+
+interface TokenApi {
+  oauth2Token(request: {
+    body: Record<string, string>;
+  }): Promise<{ access_token: string }>;
+}
+
+const CHATWOOT_SCHEMA = [
+  'create schema if not exists chatwoot',
+  `create table if not exists chatwoot.accounts (
+     id serial primary key, name text, platform_organization_id text unique, feature_flags bigint,
+     status integer not null default 0, created_at timestamptz, updated_at timestamptz)`,
+  'create table if not exists chatwoot.agent_bots (id serial primary key, name text, account_id integer)',
+  'create table if not exists chatwoot.access_tokens (id serial primary key, owner_type text, owner_id bigint, token text unique)',
+];
 
 describe('the gateway resolves who is calling, from Redis first', () => {
   const LINK =
@@ -40,6 +57,8 @@ describe('the gateway resolves who is calling, from Redis first', () => {
   let app: NestFastifyApplication;
   let url: string;
   let received: Record<string, string> = {};
+  let chatwoot: Listening;
+  let receivedByChatwoot: Record<string, string> = {};
 
   const auth = () => app.get<BetterAuth>(BETTER_AUTH);
   const inContext = <T>(work: () => Promise<T>) =>
@@ -78,15 +97,100 @@ describe('the gateway resolves who is calling, from Redis first', () => {
     return organization;
   };
 
-  const callGateway = async (headers: Record<string, string>) => {
+  const callGateway = async (
+    headers: Record<string, string>,
+    query = '{ whoami }',
+  ) => {
     received = {};
+    receivedByChatwoot = {};
     const response = await fetch(`${url}/graphql`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', ...headers },
-      body: JSON.stringify({ query: '{ whoami }' }),
+      body: JSON.stringify({ query }),
     });
     return response.json();
   };
+
+  const execute = (sql: string, params: unknown[] = []) =>
+    app
+      .get(MikroORM)
+      .em.getConnection()
+      .execute<Record<string, unknown>[]>(sql, params);
+
+  const agentBotOf = async (
+    organizationId: string,
+    secret: string,
+    scopes: readonly string[] = [ChatwootAgentBotTokens.SCOPE],
+  ) => {
+    const [account] = await execute(
+      'select id from chatwoot.accounts where platform_organization_id = ?',
+      [organizationId],
+    );
+    const [bot] = await execute(
+      'insert into chatwoot.agent_bots (name, account_id) values (?, ?) returning id',
+      ['Assistente', account.id],
+    );
+    await execute(
+      `insert into chatwoot.access_tokens (owner_type, owner_id, token) values ('AgentBot', ?, ?)`,
+      [bot.id, secret],
+    );
+    const clientId = `${ChatwootAgentBotTokens.CLIENT_ID_PREFIX}${bot.id}`;
+    await execute(
+      `insert into public.oauth_client (
+         id, client_id, client_secret, name, disabled, skip_consent, grant_types, response_types, redirect_uris,
+         scopes, client_credentials_scopes, token_endpoint_auth_method, application_type, require_pkce,
+         reference_id, metadata, created_at, updated_at
+       ) values (
+         ?, ?, rtrim(translate(encode(sha256(convert_to(?, 'UTF8')), 'base64'), '+/', '-_'), '='),
+         'Assistente', false, true, '["client_credentials"]', '[]', '[]', ?, ?, 'client_secret_post', 'web', false,
+         ?, jsonb_build_object('claims', jsonb_build_object('agent_bot_id', ?::bigint)),
+         now(), now()
+       )`,
+      [
+        clientId,
+        clientId,
+        secret,
+        JSON.stringify(scopes),
+        JSON.stringify(scopes),
+        organizationId,
+        bot.id,
+      ],
+    );
+    return { clientId, secret };
+  };
+
+  const platformTokenOf = async (bot: { clientId: string; secret: string }) => {
+    const [gateway] = app.get<AuthConfig>(authConfig.KEY).oauthResources;
+    const { access_token } = await inContext(() =>
+      (auth().api as unknown as TokenApi).oauth2Token({
+        body: {
+          grant_type: 'client_credentials',
+          client_id: bot.clientId,
+          client_secret: bot.secret,
+          resource: gateway,
+        },
+      }),
+    );
+    return access_token;
+  };
+
+  const registerGatewayResource = () =>
+    inContext(async () => {
+      const [identifier] = app.get<AuthConfig>(authConfig.KEY).oauthResources;
+      const { adapter } = await auth().$context;
+      const now = new Date();
+      await adapter.create({
+        model: 'oauthResource',
+        data: {
+          identifier,
+          name: new URL(identifier).host,
+          disabled: false,
+          dpopBoundAccessTokensRequired: false,
+          createdAt: now,
+          updatedAt: now,
+        },
+      });
+    });
 
   beforeAll(async () => {
     redis = await ThrowawayRedis.start();
@@ -115,11 +219,34 @@ describe('the gateway resolves who is calling, from Redis first', () => {
         logging: false,
       }),
     );
+    chatwoot = await Listening.on(
+      createYoga({
+        schema: createSchema({
+          typeDefs: 'type Query { inbox: String! }',
+          resolvers: {
+            Query: {
+              inbox: (_: unknown, __: unknown, context: YogaInitialContext) => {
+                receivedByChatwoot = Object.fromEntries(
+                  context.request.headers.entries(),
+                );
+                return 'chatwoot';
+              },
+            },
+          },
+        }),
+        logging: false,
+      }),
+    );
     sdlRoot = mkdtempSync(join(tmpdir(), 'gateway-sessions-'));
     mkdirSync(join(sdlRoot, 'posts'));
     writeFileSync(
       join(sdlRoot, 'posts', 'schema.graphql'),
       `${LINK}\ntype Query { whoami: String! }`,
+    );
+    mkdirSync(join(sdlRoot, 'chatwoot'));
+    writeFileSync(
+      join(sdlRoot, 'chatwoot', 'schema.graphql'),
+      `${LINK}\ntype Query { inbox: String! }`,
     );
 
     const { AppModule } = await import('../src/app.module');
@@ -130,6 +257,11 @@ describe('the gateway resolves who is calling, from Redis first', () => {
         logLevel: 'silent',
         subgraphs: [
           { name: 'posts', url: subgraph.url, sdlDir: join(sdlRoot, 'posts') },
+          {
+            name: 'chatwoot',
+            url: chatwoot.url,
+            sdlDir: join(sdlRoot, 'chatwoot'),
+          },
         ],
       })
       .compile();
@@ -138,11 +270,14 @@ describe('the gateway resolves who is calling, from Redis first', () => {
     );
     await app.listen(0, '127.0.0.1');
     url = await app.getUrl();
+    for (const statement of CHATWOOT_SCHEMA) await execute(statement);
+    await registerGatewayResource();
   }, 180_000);
 
   afterAll(async () => {
     await app?.close();
     await subgraph?.close();
+    await chatwoot?.close();
     await redis?.stop();
     delete process.env.REDIS_URL;
     if (sdlRoot) rmSync(sdlRoot, { recursive: true, force: true });
@@ -223,8 +358,199 @@ describe('the gateway resolves who is calling, from Redis first', () => {
     });
     const identity = await inContext(() => caller.identity());
 
-    expect(identity?.userId.value).toBe(userId);
+    expect(identity?.kind).toBe('user');
+    expect(identity?.principal).toBe(userId);
     expect(identity?.scopes).toEqual(['openid']);
+  });
+
+  describe('an agent bot calling Chatwoot with its platform access token', () => {
+    it('reaches Chatwoot as the bot’s own access token, and every other subgraph as the token it sent', async () => {
+      const { cookie } = await signedUp('fabio');
+      const organization = await organizationOf(
+        cookie,
+        `acme-bot-${Date.now()}`,
+      );
+      const token = await platformTokenOf(
+        await agentBotOf(organization.id, `cw-${Date.now()}-a`),
+      );
+
+      const body = await callGateway(
+        { authorization: `Bearer ${token}`, 'x-tenant': organization.slug },
+        '{ whoami inbox }',
+      );
+
+      expect(body).toEqual({ data: { whoami: 'posts', inbox: 'chatwoot' } });
+      expect(receivedByChatwoot.api_access_token).toMatch(/^cw-\d+-a$/);
+      expect(receivedByChatwoot.authorization).toBeUndefined();
+      expect(receivedByChatwoot['x-tenant']).toBe(organization.slug);
+      expect(received.authorization).toBe(`Bearer ${token}`);
+      expect(received.api_access_token).toBeUndefined();
+    });
+
+    it('reads the bot’s platform token as an OAuth client bound to its organization, its claims as attributes', async () => {
+      const { cookie } = await signedUp('eva');
+      const organization = await organizationOf(
+        cookie,
+        `umbra-bot-${Date.now()}`,
+      );
+      const bot = await agentBotOf(organization.id, `cw-${Date.now()}-g`);
+      const token = await platformTokenOf(bot);
+
+      const contextId = ContextIdFactory.create();
+      app.registerRequestByContextId(
+        new Request(`${url}/graphql`, {
+          headers: { authorization: `Bearer ${token}` },
+        }),
+        contextId,
+      );
+      const caller = await app.resolve(IdentityResolver, contextId, {
+        strict: false,
+      });
+      const identity = await inContext(() => caller.identity());
+
+      expect(identity).toMatchObject({
+        kind: 'client',
+        clientId: bot.clientId,
+        activeOrganizationId: organization.id,
+        scopes: [ChatwootAgentBotTokens.SCOPE],
+        credential: { type: 'access-token', tokenId: decodeJwt(token).jti },
+      });
+      expect(identity?.attribute(ChatwootAgentBotTokens.AGENT_BOT_ID)).toBe(
+        Number(
+          bot.clientId.slice(ChatwootAgentBotTokens.CLIENT_ID_PREFIX.length),
+        ),
+      );
+    });
+
+    it('keeps the bot’s access token in the Nest cache, under the platform token it was exchanged for', async () => {
+      const { cookie } = await signedUp('gabi');
+      const organization = await organizationOf(
+        cookie,
+        `globex-bot-${Date.now()}`,
+      );
+      const secret = `cw-${Date.now()}-b`;
+      const token = await platformTokenOf(
+        await agentBotOf(organization.id, secret),
+      );
+
+      await callGateway({ authorization: `Bearer ${token}` }, '{ inbox }');
+
+      const { jti } = decodeJwt(token);
+      await expect(
+        app
+          .get<Cache>(CACHE_MANAGER)
+          .get(ChatwootAgentBotTokens.keyOf(jti as string)),
+      ).resolves.toBe(secret);
+      expect(receivedByChatwoot.api_access_token).toBe(secret);
+    });
+
+    it('exchanges nothing in the tenant of another organization', async () => {
+      const { cookie } = await signedUp('helena');
+      const own = await organizationOf(cookie, `own-bot-${Date.now()}`);
+      const other = await organizationOf(cookie, `other-bot-${Date.now()}`);
+      const token = await platformTokenOf(
+        await agentBotOf(own.id, `cw-${Date.now()}-c`),
+      );
+
+      await callGateway(
+        { authorization: `Bearer ${token}`, 'x-tenant': other.slug },
+        '{ inbox }',
+      );
+
+      expect(receivedByChatwoot.api_access_token).toBeUndefined();
+      expect(receivedByChatwoot.authorization).toBe(`Bearer ${token}`);
+    });
+
+    it('exchanges nothing for a token not granted the conversations', async () => {
+      const { cookie } = await signedUp('igor');
+      const organization = await organizationOf(
+        cookie,
+        `initrode-bot-${Date.now()}`,
+      );
+      const token = await platformTokenOf(
+        await agentBotOf(organization.id, `cw-${Date.now()}-d`, ['read:posts']),
+      );
+
+      await callGateway({ authorization: `Bearer ${token}` }, '{ inbox }');
+
+      expect(receivedByChatwoot.api_access_token).toBeUndefined();
+    });
+
+    it('exchanges nothing for a JWT the platform signed that is no access token', async () => {
+      const { cookie } = await signedUp('joana');
+      const organization = await organizationOf(
+        cookie,
+        `vandelay-bot-${Date.now()}`,
+      );
+      const bot = await agentBotOf(organization.id, `cw-${Date.now()}-e`);
+      const [gateway] = app.get<AuthConfig>(authConfig.KEY).oauthResources;
+      const agentBotId = Number(
+        bot.clientId.slice(ChatwootAgentBotTokens.CLIENT_ID_PREFIX.length),
+      );
+      const { token } = await inContext(() =>
+        auth().api.signJWT({
+          body: {
+            payload: {
+              sub: bot.clientId,
+              aud: gateway,
+              client_id: bot.clientId,
+              scope: ChatwootAgentBotTokens.SCOPE,
+              agent_bot_id: agentBotId,
+              organization_id: organization.id,
+              jti: `forged-${Date.now()}`,
+            },
+          },
+        }),
+      );
+
+      await callGateway({ authorization: `Bearer ${token}` }, '{ inbox }');
+
+      expect(receivedByChatwoot.api_access_token).toBeUndefined();
+      expect(receivedByChatwoot.authorization).toBe(`Bearer ${token}`);
+    });
+
+    it('exchanges nothing for a platform token whose claims were altered', async () => {
+      const { cookie } = await signedUp('karla');
+      const organization = await organizationOf(
+        cookie,
+        `soylent-bot-${Date.now()}`,
+      );
+      const token = await platformTokenOf(
+        await agentBotOf(organization.id, `cw-${Date.now()}-f`),
+      );
+      const [header, payload, signature] = token.split('.');
+      const claims = JSON.parse(Buffer.from(payload, 'base64url').toString());
+      const altered = [
+        header,
+        Buffer.from(
+          JSON.stringify({
+            ...claims,
+            exp: claims.exp + 86_400,
+            jti: `altered-${claims.jti}`,
+          }),
+        ).toString('base64url'),
+        signature,
+      ].join('.');
+
+      await callGateway({ authorization: `Bearer ${altered}` }, '{ inbox }');
+
+      expect(receivedByChatwoot.api_access_token).toBeUndefined();
+    });
+
+    it('hands a user’s access token to Chatwoot as it came', async () => {
+      const { userId } = await signedUp('lia');
+      const [gateway] = app.get<AuthConfig>(authConfig.KEY).oauthResources;
+      const { token } = await inContext(() =>
+        auth().api.signJWT({
+          body: { payload: { sub: userId, aud: gateway, scope: 'openid' } },
+        }),
+      );
+
+      await callGateway({ authorization: `Bearer ${token}` }, '{ inbox }');
+
+      expect(receivedByChatwoot.authorization).toBe(`Bearer ${token}`);
+      expect(receivedByChatwoot.api_access_token).toBeUndefined();
+    });
   });
 
   it('forwards a caller with no credentials as nobody', async () => {
