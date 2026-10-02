@@ -5,6 +5,7 @@ import {
   type StreamResponse,
   TaskState,
 } from '@a2a-js/sdk';
+import { withA2AExtensions } from '@a2a-js/sdk/client';
 import { type BaseEvent, EventType } from '@ag-ui/core';
 import type { StructuredToolInterface } from '@langchain/core/tools';
 import type { LangGraphRunnableConfig } from '@langchain/langgraph';
@@ -13,6 +14,11 @@ import { z } from 'zod';
 
 import { AgUiEvents } from '../../ag-ui/langchain/ag-ui-events';
 import { A2aPart } from '../domain/a2a-part';
+import {
+  type A2uiClientCapabilities,
+  A2uiExtension,
+} from '../domain/extensions/a2ui.extension';
+import { A2uiCapabilities } from './a2ui-capabilities';
 import type { RemoteA2aAgent, RemoteA2aAgents } from './remote-a2a-agents';
 
 type DelegationConfig = LangGraphRunnableConfig & {
@@ -23,8 +29,11 @@ export class A2aDelegation {
   static readonly SESSION_HEADER =
     'X-Amzn-Bedrock-AgentCore-Runtime-Session-Id';
   private static readonly SESSION_MIN_LENGTH = 33;
+  private static readonly A2UI = new A2uiExtension();
 
   private readonly subagentRunId: string;
+  private readonly a2ui: A2uiClientCapabilities | undefined;
+  private readonly surfaces = new Map<string, unknown>();
   private answerId?: string;
   private streamed = '';
   private finalText = '';
@@ -35,6 +44,7 @@ export class A2aDelegation {
     private readonly config: DelegationConfig,
   ) {
     this.subagentRunId = config.toolCall?.id ?? randomUUID();
+    this.a2ui = A2uiCapabilities.ofCaller(config);
   }
 
   async send(task: string): Promise<string> {
@@ -57,7 +67,7 @@ export class A2aDelegation {
         },
         {
           signal: this.config.signal,
-          serviceParameters: this.sessionHeaders(),
+          serviceParameters: this.serviceParameters(),
         },
       );
       for await (const response of stream) this.onResponse(response);
@@ -70,7 +80,9 @@ export class A2aDelegation {
         result: answer,
         outcome: { type: 'success' },
       });
-      return this.reportOf(answer);
+      return A2uiCapabilities.report(this.reportOf(answer), [
+        ...this.surfaces.values(),
+      ]);
     } catch (error) {
       this.closeAnswer();
       const message = error instanceof Error ? error.message : String(error);
@@ -97,6 +109,7 @@ export class A2aDelegation {
         return;
       case 'message':
         this.finalText = A2aPart.textOf(payload.value.parts);
+        this.collect(payload.value.parts);
         this.state = TaskState.TASK_STATE_COMPLETED;
         return;
       default:
@@ -108,6 +121,14 @@ export class A2aDelegation {
     if (state !== undefined) this.state = state;
     const text = message ? A2aPart.textOf(message.parts) : '';
     if (text && A2aDelegation.isFinal(this.state)) this.finalText = text;
+    if (message) this.collect(message.parts);
+  }
+
+  private collect(parts: Message['parts']): void {
+    if (!this.a2ui) return;
+    for (const surface of A2aDelegation.A2UI.messagesIn(parts)) {
+      this.surfaces.set(JSON.stringify(surface), surface);
+    }
   }
 
   private say(delta: string): void {
@@ -157,7 +178,7 @@ export class A2aDelegation {
   }
 
   private messageOf(task: string): Message {
-    return {
+    const message: Message = {
       messageId: randomUUID(),
       contextId: this.contextId() ?? '',
       taskId: '',
@@ -167,6 +188,15 @@ export class A2aDelegation {
       extensions: [],
       referenceTaskIds: [],
     };
+    return this.a2ui
+      ? A2aDelegation.A2UI.withClientCapabilities(message, this.a2ui)
+      : message;
+  }
+
+  private serviceParameters(): Record<string, string> {
+    const parameters = this.sessionHeaders();
+    if (this.a2ui) withA2AExtensions(A2aDelegation.A2UI.uri)(parameters);
+    return parameters;
   }
 
   private sessionHeaders(): Record<string, string> {

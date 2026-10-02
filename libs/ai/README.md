@@ -31,6 +31,8 @@ src/
     drive/         AttachmentDrive (the storage), DriveBackend (the deepagents filesystem), RunScope
     ingestion/     FileIngestionMiddleware, AttachmentIngestionService, blocks, eviction, the asset tool
     specialist/    FileAnalysisSpecialistAgent and its tools
+  mcp/
+    apps/          MCP Apps in A2UI: McpAppTools, McpAppSurface, McpAppEndpoint
   channel/         ChannelResponseProcessor and its channels (in-memory, chatwoot/)
   backends/        SkillsBackend over StaticFilesBackend
 ```
@@ -48,7 +50,7 @@ the same instances.
   it is worth announcing on the card. `agent-extensions.spec.ts` asserts this as a rule.
 - **URIs are repository-anchored and versioned** (`…/vaz-twin/a2a/extensions/<name>/v1`): never derived
   from a stage, and never redefined — a new meaning is a new version. A2UI keeps the published
-  `https://a2ui.org/a2a-extension/a2ui/v0.8`. These URIs are a wire contract with the browser companion:
+  `https://a2ui.org/a2a-extension/a2ui/v0.9` — the version CopilotKit's A2UI renderer speaks. These URIs are a wire contract with the browser companion:
   changing one silently stops negotiation.
 - **Activation is structural.** `ExtensionAwareAgentExecutor` activates, per turn, every extension the
   caller requested (`AgentExtensions.activateForTurn`) — the same call records it, so the response's
@@ -210,6 +212,42 @@ conversation is one A2A context (`contextId` = the thread), and the thread is se
 session id (`X-Amzn-Bedrock-AgentCore-Runtime-Session-Id`, when it is long enough) so the remote
 agent's turns land on the microVM that holds its memory of the thread. A remote task left
 `input-required` comes back to the model as a question for the person.
+
+## MCP Apps in A2UI (`mcp/apps/`)
+
+A2UI's "MCP Apps in A2UI" pattern, over this repository's agents: an MCP App — an application an MCP
+server publishes as a `ui://` resource for some of its tools — reaches the person as a component of
+an A2UI surface, `McpApp`, that the agent which called the tool answers with, and the client
+renders. What changes from A2UI's own sample is that **the surface never carries the HTML**: it names
+the server, the resource, the tool, its input and its result, and the host reads the resource itself.
+Embedded, a 1 MB single-file bundle would travel through every model context on the way.
+
+- **`McpAppTools`** turns an MCP server's tools into what an agent offers its model. From the server's
+  raw listing (`definitionsOf`: a tool whose `_meta.ui.resourceUri` names a resource is an app
+  tool, and a read-only one **opens** the app) it wraps the LangChain MCP adapter's tools
+  (`openers`): the model reads the tool's text and a line saying the app is on screen; the
+  `ToolMessage`'s artifact carries the placement (`mcpApp`). An app tool that changes data is the
+  app's own button and is never offered. The adapter keeps `structuredContent` and `_meta` in its
+  artifact; LangGraph's v3 stream (`run.toolCalls`) gives the content alone, which is why the artifact
+  is read where the tool returns — in `A2aMiddleware` — and not off the stream.
+- **A2UI is negotiated per turn, by the catalogs the client renders.** The client declares them as
+  `a2uiClientCapabilities.supportedCatalogIds` in the message's `metadata` (A2UI's own rule, and a
+  header AgentCore might not forward is not relied on). `ReactAgentExecutor` opens an `A2uiTurn`
+  on the first id; `A2aMiddleware` offers the app tools only on such a turn and turns each placement
+  into the surface's messages (`McpAppSurface.messages`: `createSurface` on that catalog, then
+  `updateComponents` with the root `McpApp`); the executor puts them in the final message as
+  `application/json+a2ui` data parts, one A2UI message per part. A turn without the capability
+  answers in prose with the plain tools.
+- **The delegating side reads the catalogs off its own caller.** `A2aDelegation` looks in the AG-UI
+  run's context (`config.context.agUi`, which LangChain hands every tool) for the A2UI schema entries
+  CopilotKit's provider sends — `{ catalogId, components }` — and declares to the remote agent the
+  ones that include `McpApp` (`A2uiCapabilities.ofCaller`), with the extension requested as well.
+  It collects the A2UI parts of the answer and returns `{ a2ui_operations, answer }`, the shape
+  CopilotKit's A2UI middleware renders from any tool result; a caller that draws no `McpApp` makes
+  the delegation exactly what it was.
+- **`McpAppEndpoint`** addresses an app on a server: `?app=<name>&appTarget=mcp` for a server reached
+  directly, and `X-Amzn-Bedrock-AgentCore-Runtime-Custom-Mcp-App` for one behind AgentCore, which
+  forwards no query string (`apps/mcp/README.md`).
 
 ## The LangChain middleware and the system message
 

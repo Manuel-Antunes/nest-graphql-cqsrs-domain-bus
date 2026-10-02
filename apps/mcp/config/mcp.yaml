@@ -9,6 +9,13 @@ operations:
   paths:
     - operations
 
+introspection:
+  execute:
+    enabled: true
+    hint: >-
+      It is how the posts app on screen loads what it shows, and it only reads: to answer the person, use
+      the named tools.
+
 server_info:
   name: nestposts-posts
   title: Blog posts
@@ -45,11 +52,17 @@ overrides:
     CreatePost: [write:posts]
     UpdatePost: [write:posts]
     DeletePost: [write:posts]
+    execute: [read:posts]
+    ChoosePostToEdit: [read:posts]
+    EditPost: [read:posts]
+    PreviewPost: [read:posts]
+    SavePost: [write:posts]
+    PublishPost: [write:posts]
 
 transport:
   type: streamable_http
   address: ${env.POSTS_MCP_ADDRESS:-127.0.0.1}
-  port: 8000
+  port: ${env.POSTS_MCP_PORT:-8000}
   stateful_mode: false
   host_validation:
     enabled: false

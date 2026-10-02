@@ -206,6 +206,43 @@ CopilotKit, and pnpm runs no install script of `@scarf/scarf`.
 The route streams, so on AWS the server function streams: `open-next.config.ts` picks OpenNext's
 `aws-lambda-streaming` wrapper (see `infra/aws/web`).
 
+### A2UI, and the MCP Apps it carries
+
+The provider has an **A2UI catalog** (`theo/_a2ui`: CopilotKit's basic components plus `McpApp`, id
+`nestposts://a2ui/catalogs/theo/v1`), which is all it takes for CopilotKit to turn A2UI on: every
+run tells the runtime so, the runtime's A2UI middleware hands Theo a `render_a2ui` tool and the
+catalog's schema as context (Theo may draw a view of its own — the dynamic schema), and turns any tool
+result shaped `{ a2ui_operations }` into an `a2ui-surface` activity. `TheoTranscript` places
+activities where they arrived and the page draws them with `useRenderActivityMessage`, inside a
+`CopilotChatConfigurationProvider` naming Theo, which is what tells the renderers whose agent to run.
+
+`McpApp` is how the posts agent's **MCP App** (`apps/posts-app`) gets on screen: the delegation's
+result carries an A2UI surface whose root names the server, the `ui://` resource, the tool, its input
+and its result (`libs/ai/README.md`, "MCP Apps in A2UI"), and the renderer is CopilotKit's own MCP
+Apps host, `MCPAppsActivityRenderer`: the sandbox iframes, the ext-apps `AppBridge`, the tool
+input and result handed to the app, its `ui/message` and `ui/open-link`. Whatever the app asks of
+the server — `resources/read` for its HTML, `tools/call` for its queries (`execute`) and its
+buttons — the host sends to `/api/copilotkit` as a run of Theo's carrying
+`__proxiedMCPRequest`, and `McpAppsProxy` (`lib/agents/mcp-apps-proxy.ts`), the first middleware on
+Theo's per-request agent, answers it with CopilotKit's `MCPAppsMiddleware` against the posts MCP
+server, as the person (`PostsMcpApp` issues the token: `POSTS_MCP_RESOURCE`, the posts scopes) and in
+app mode (`?app=posts&appTarget=mcp`, and the AgentCore header that stands for it). Every other run
+reaches Theo untouched: the middleware would otherwise list the server's tools on every run and offer
+them to Theo itself, which is the posts agent's job. Its methods are the middleware's allowlist
+(`tools/call`, `resources/read`, `ping`, `notifications/message`), and what the server lets an app
+call is the server's: the app's tools and a read-only `execute`.
+
+- **CopilotKit's sandbox is `allow-scripts allow-same-origin`, twice, on `srcdoc`**, so the app runs
+  with the web's own origin — fine for an app this repository builds and serves, and the reason not to
+  put a third party's MCP App behind `McpApp`.
+- **A message the app adds does not replace `agent.messages`**: `addMessage` pushes onto the same
+  array, so the transcript is derived on every render rather than memoized on the array's identity
+  — memoized, a person's save reached the page only with the next run.
+- **The catalog's schemas are `zod/v3`.** `@copilotkit/a2ui-renderer` reads a component's props
+  through Zod 3's internals (`_def.typeName`) and converts them with `zod-to-json-schema`; Zod 4's
+  `zod/v3` is that implementation, but its types are not the renderer's, so the props are cast at the
+  boundary and typed by hand (`McpAppProps`).
+
 ## Federação
 
 `apps/posts-api` é um **subgraph** — driver `YogaFederationDriver` —, e `/federation` é a única tela

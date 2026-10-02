@@ -1,0 +1,27 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import '@nestposts/ui/styles/theme.css';
+@import '@nestposts/ui/styles/animations.css';
+@import '@nestposts/ui/styles/brand.css';
+@import 'shadcn/tailwind.css';
+
+@source '../../../libs/ui/src/components';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html,
+  body {
+    margin: 0;
+    background: transparent;
+  }
+
+  body {
+    @apply text-foreground;
+    letter-spacing: var(--tracking-normal);
+  }
+}

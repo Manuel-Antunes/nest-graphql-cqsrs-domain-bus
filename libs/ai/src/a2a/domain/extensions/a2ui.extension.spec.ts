@@ -2,23 +2,24 @@ import { A2aWire } from '../../testing/a2a-wire';
 import { A2aPart } from '../a2a-part';
 import { A2uiExtension } from './a2ui.extension';
 
+const CATALOG = 'nestposts://a2ui/catalogs/theo/v1';
+
 const TREE = {
-  surfaceUpdate: {
+  version: 'v0.9',
+  updateComponents: {
     surfaceId: 's1',
-    components: [
-      { id: 'root', component: { McpApp: { htmlContent: { path: '/html' } } } },
-    ],
+    components: [{ id: 'root', component: 'McpApp', server: 'posts' }],
   },
 };
 
 const a2ui = new A2uiExtension();
 
 describe('A2uiExtension', () => {
-  it('pins the published URI, mime type and catalog verbatim', () => {
-    expect(a2ui.uri).toBe('https://a2ui.org/a2a-extension/a2ui/v0.8');
+  it('pins the published URI, mime type and basic catalog verbatim', () => {
+    expect(a2ui.uri).toBe('https://a2ui.org/a2a-extension/a2ui/v0.9');
     expect(A2uiExtension.MIME_TYPE).toBe('application/json+a2ui');
-    expect(A2uiExtension.MCP_APP_CATALOG_ID).toBe(
-      'a2ui.org:a2ui/v0.8/mcp_app_catalog.json',
+    expect(A2uiExtension.BASIC_CATALOG_ID).toBe(
+      'https://a2ui.org/specification/v0_9/basic_catalog.json',
     );
   });
 
@@ -59,7 +60,7 @@ describe('A2uiExtension', () => {
 
   it('describes itself on the card with no params by default', () => {
     expect(a2ui.descriptor).toEqual({
-      uri: 'https://a2ui.org/a2a-extension/a2ui/v0.8',
+      uri: 'https://a2ui.org/a2a-extension/a2ui/v0.9',
       description: 'Provides agent driven UI using the A2UI JSON format.',
       required: false,
       params: {},
@@ -70,11 +71,11 @@ describe('A2uiExtension', () => {
     expect(
       new A2uiExtension({
         acceptsInlineCustomCatalog: true,
-        supportedCatalogIds: [A2uiExtension.MCP_APP_CATALOG_ID],
+        supportedCatalogIds: [CATALOG],
       }).params,
     ).toEqual({
       acceptsInlineCatalogs: true,
-      supportedCatalogIds: [A2uiExtension.MCP_APP_CATALOG_ID],
+      supportedCatalogIds: [CATALOG],
     });
     expect(
       new A2uiExtension({
@@ -84,13 +85,33 @@ describe('A2uiExtension', () => {
     ).toEqual({});
   });
 
-  it('announces the standard and MCP App catalogs by default', () => {
+  it('announces the basic catalog when the client names none', () => {
     expect(a2ui.clientCapabilities()).toEqual({
-      supportedCatalogIds: [
-        A2uiExtension.STANDARD_CATALOG_ID,
-        A2uiExtension.MCP_APP_CATALOG_ID,
-      ],
+      supportedCatalogIds: [A2uiExtension.BASIC_CATALOG_ID],
     });
+  });
+
+  it('reads the catalogs a client renders off the message it sent', () => {
+    const userMessage = a2ui.withClientCapabilities(
+      A2aWire.message(),
+      a2ui.clientCapabilities([CATALOG, '']),
+    );
+
+    expect(a2ui.catalogIdsFor({ userMessage })).toEqual([CATALOG]);
+    expect(a2ui.catalogIdsFor({ userMessage: A2aWire.message() })).toEqual([]);
+  });
+
+  it('reads every A2UI message out of a list of parts, in order', () => {
+    const second = { version: 'v0.9', deleteSurface: { surfaceId: 's1' } };
+
+    expect(
+      a2ui.messagesIn([
+        a2ui.part(TREE),
+        A2aPart.text('oi'),
+        A2aPart.data({ type: 'tool-call' }),
+        a2ui.part(second),
+      ]),
+    ).toEqual([TREE, second]);
   });
 
   it('stamps the capabilities on a message without dropping its metadata', () => {

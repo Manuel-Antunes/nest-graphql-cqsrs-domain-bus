@@ -39,7 +39,7 @@ import type {
   HitlRequestPayload,
   HitlResponsePayload,
 } from '../domain/extensions/human-in-the-loop.extension';
-import type { A2aRuntimeContext } from './a2a.middleware';
+import type { A2aRuntimeContext, A2uiTurn } from './a2a.middleware';
 
 type HumanContentBlock =
   | ContentBlock.Text
@@ -151,6 +151,7 @@ export class ReactAgentExecutor<T extends TurnAgent = ReactAgent>
       }
 
       const clientToolNames = new Set<string>();
+      const a2ui = this.a2uiTurnFor(requestContext);
 
       const traceName = this.observability.traceName ?? 'a2a-agent';
       const { finalResponse, clientToolCalls, isInputRequired, hitlRequests } =
@@ -196,6 +197,7 @@ export class ReactAgentExecutor<T extends TurnAgent = ReactAgent>
                     activatedExtensions:
                       requestContext.context?.activatedExtensions ?? [],
                     clientToolNames,
+                    a2ui,
                   } satisfies A2aRuntimeContext,
                 },
               });
@@ -227,6 +229,7 @@ export class ReactAgentExecutor<T extends TurnAgent = ReactAgent>
         )
           ? hitlRequests
           : [],
+        a2uiMessages: a2ui?.messages ?? [],
       });
 
       this.publishFinal(eventBus, {
@@ -245,6 +248,11 @@ export class ReactAgentExecutor<T extends TurnAgent = ReactAgent>
       this.abortControllers.delete(taskId);
       this.cancelledTasks.delete(taskId);
     }
+  }
+
+  private a2uiTurnFor(request: RequestContext): A2uiTurn | undefined {
+    const [catalogId] = this.extensions.a2ui.catalogIdsFor(request);
+    return catalogId ? { catalogId, messages: [] } : undefined;
   }
 
   private resolveAgentInput(params: {
@@ -909,6 +917,7 @@ export class ReactAgentExecutor<T extends TurnAgent = ReactAgent>
     finalResponse: string;
     clientToolCalls: ClientToolCall[];
     hitlRequests: HitlRequestPayload[];
+    a2uiMessages: readonly unknown[];
   }): Message {
     const parts: Part[] = [];
 
@@ -933,6 +942,10 @@ export class ReactAgentExecutor<T extends TurnAgent = ReactAgent>
 
     for (const request of params.hitlRequests) {
       parts.push(this.extensions.humanInTheLoop.encode(request));
+    }
+
+    for (const surface of params.a2uiMessages) {
+      parts.push(this.extensions.a2ui.part(surface));
     }
 
     return {

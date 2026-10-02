@@ -27,6 +27,8 @@ export const env = createEnv({
     POSTS_SUBGRAPH_URL: z.string().optional(),
     CHATWOOT_URL: z.string().min(1).default('http://localhost:3100'),
     THEO_AGENT_URL: z.url().default('http://localhost:8080/invocations'),
+    POSTS_MCP_URL: z.url().default('http://localhost:8000/mcp'),
+    POSTS_MCP_RESOURCE: z.url().default('http://localhost:8000/mcp'),
     THEO_AGENT_AUDIENCES: z
       .string()
       .default(

@@ -17,6 +17,7 @@ import { createAgent } from 'langchain';
 
 import type { OAuthConfig } from '../config/oauth.config';
 import { oauthConfig } from '../config/oauth.config';
+import { PostsMcpApps } from '../mcp/posts-mcp-apps';
 import { PostsMcpTools } from '../mcp/posts-mcp-tools';
 import { ConversationMemory } from '../memory/conversation-memory';
 import { ConversationMemoryMiddleware } from '../memory/conversation-memory.middleware';
@@ -72,6 +73,7 @@ export class PostsManagerAgent implements A2aAgent {
   constructor(
     @Inject('BASE_MODEL') private readonly model: BaseChatModel,
     private readonly tools: PostsMcpTools,
+    private readonly apps: PostsMcpApps,
     private readonly memory: ConversationMemory,
     @Inject(oauthConfig.KEY) private readonly oauth: OAuthConfig,
   ) {
@@ -127,9 +129,10 @@ export class PostsManagerAgent implements A2aAgent {
   readonly executor = async (): Promise<AgentExecutor> => {
     const tools = await this.tools.load();
     if (tools.length === 0) throw new PostsToolsUnavailableError();
+    const apps = await this.apps.load();
     const agent = createAgent({
       model: this.model,
-      tools,
+      tools: [...tools, ...apps],
       systemPrompt: POSTS_MANAGER_INSTRUCTIONS,
       middleware: [
         A2aMiddleware.create(),

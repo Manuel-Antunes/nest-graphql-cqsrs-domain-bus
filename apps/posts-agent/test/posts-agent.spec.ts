@@ -23,6 +23,7 @@ import { inRequestContext, MikroORM } from '@nestposts/database';
 import { migrateSystem } from '@nestposts/migrator/main';
 import { z } from 'zod';
 
+import { PostsMcpApps } from '../src/mcp/posts-mcp-apps';
 import { PostsMcpTools } from '../src/mcp/posts-mcp-tools';
 
 const ISSUER = 'https://issuer.test';
@@ -116,6 +117,8 @@ describe('the posts agent, as AgentCore Runtime runs it', () => {
       .useValue(model)
       .overrideProvider(PostsMcpTools)
       .useValue({ load: async () => [whoAmI] })
+      .overrideProvider(PostsMcpApps)
+      .useValue({ load: async () => [] })
       .compile();
     app = await moduleRef.init();
     callers = app.get(AgentCallers);

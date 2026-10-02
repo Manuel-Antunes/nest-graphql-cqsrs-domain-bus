@@ -4,7 +4,8 @@
   "private": true,
   "nx": {
     "implicitDependencies": [
-      "@nestposts/gateway"
+      "@nestposts/gateway",
+      "@nestposts/posts-app"
     ],
     "targets": {
       "prune": {
@@ -16,10 +17,17 @@
               "@nestposts/gateway"
             ],
             "target": "supergraph"
+          },
+          {
+            "projects": [
+              "@nestposts/posts-app"
+            ],
+            "target": "build"
           }
         ],
         "inputs": [
-          "{workspaceRoot}/apps/gateway/dist/supergraph/api.graphql"
+          "{workspaceRoot}/apps/gateway/dist/supergraph/api.graphql",
+          "{workspaceRoot}/apps/mcp/apps/posts/**/*"
         ],
         "outputs": [
           "{projectRoot}/schema"
@@ -46,7 +54,6 @@
         ],
         "options": {
           "args": [
-            "--platform linux/arm64",
             "--file apps/mcp/Dockerfile",
             "--tag nestposts/mcp:dev"
           ]

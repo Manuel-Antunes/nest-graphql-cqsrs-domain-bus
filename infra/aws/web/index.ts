@@ -1,7 +1,7 @@
 /// <reference path="../../../.sst/platform/config.d.ts" />
 
 import { errorReporting } from '../../sentry';
-import { theo } from '../agents';
+import { postsMcp, theo } from '../agents';
 import { streaming } from '../compute';
 import {
   authGoogleId,
@@ -99,6 +99,8 @@ export const web = new sst.aws.Nextjs('Web', {
     CHATWOOT_URL: router.url,
     THEO_AGENT_URL: theo.url,
     THEO_AGENT_AUDIENCES: $interpolate`${theoResource},${postsAgentResource},${mcpResource}`,
+    POSTS_MCP_URL: postsMcp.url,
+    POSTS_MCP_RESOURCE: mcpResource,
     COPILOTKIT_TELEMETRY_DISABLED: 'true',
   },
 });

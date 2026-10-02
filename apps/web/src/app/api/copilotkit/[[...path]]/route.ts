@@ -3,6 +3,7 @@ import {
   createCopilotRuntimeHandler,
 } from '@copilotkit/runtime/v2';
 
+import { PostsMcpApp } from '@/lib/agents/posts-mcp-app.server';
 import { TheoAgent } from '@/lib/agents/theo-agent.server';
 import { WebAuth } from '@/lib/auth/server';
 
@@ -14,7 +15,11 @@ const copilotRuntime = createCopilotRuntimeHandler({
     agents: async () => {
       const identity = await WebAuth.identity();
       if (!identity) throw new Error('Nobody is signed in to talk to Theo.');
-      return { [TheoAgent.ID]: TheoAgent.for(identity) };
+      return {
+        [TheoAgent.ID]: TheoAgent.for(identity).use(
+          PostsMcpApp.proxyFor(identity),
+        ),
+      };
     },
   }),
   basePath: '/api/copilotkit',

@@ -1,11 +1,14 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
+import type { ActivityMessage } from '@ag-ui/client';
 import {
+  CopilotChatConfigurationProvider,
   CopilotKitProvider,
   UseAgentUpdate,
   useAgent,
   useCopilotKit,
+  useRenderActivityMessage,
 } from '@copilotkit/react-core/v2';
 import {
   Alert,
@@ -42,15 +45,21 @@ import {
 import { Spinner } from '@nestposts/ui/components/ui/spinner';
 import { BotIcon, WrenchIcon } from 'lucide-react';
 
+import { theoCatalog } from '../_a2ui/catalog';
 import { DelegationCard } from './delegation-card';
+import { THEO_AGENT_ID } from './theo-agent-id';
 import { TheoTranscript, type TranscriptEntry } from './theo-transcript';
-
-export const THEO_AGENT_ID = 'theo';
 
 export function TheoChat() {
   return (
-    <CopilotKitProvider runtimeUrl="/api/copilotkit" showDevConsole={false}>
-      <TheoConversation />
+    <CopilotKitProvider
+      runtimeUrl="/api/copilotkit"
+      enableInspector={false}
+      a2ui={{ catalog: theoCatalog }}
+    >
+      <CopilotChatConfigurationProvider agentId={THEO_AGENT_ID}>
+        <TheoConversation />
+      </CopilotChatConfigurationProvider>
     </CopilotKitProvider>
   );
 }
@@ -65,10 +74,7 @@ function TheoConversation() {
   });
   const { copilotkit } = useCopilotKit();
   const [failure, setFailure] = useState<string>();
-  const entries = useMemo(
-    () => TheoTranscript.of(agent.messages),
-    [agent.messages],
-  );
+  const entries = TheoTranscript.of(agent.messages);
 
   const send = async (text: string) => {
     setFailure(undefined);
@@ -170,6 +176,8 @@ function TranscriptLine({ entry }: { entry: TranscriptEntry }) {
       );
     case 'delegation':
       return <DelegationCard {...entry} />;
+    case 'activity':
+      return <ActivityLine message={entry.message} />;
     case 'tool':
       return (
         <Marker>
@@ -183,4 +191,9 @@ function TranscriptLine({ entry }: { entry: TranscriptEntry }) {
         </Marker>
       );
   }
+}
+
+function ActivityLine({ message }: { message: ActivityMessage }) {
+  const { renderActivityMessage } = useRenderActivityMessage();
+  return <div className="w-full">{renderActivityMessage(message)}</div>;
 }

@@ -5,6 +5,8 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   plugins: [react()],
 
+  css: { postcss: { plugins: [] } },
+
   resolve: {
     alias: { '@': join(import.meta.dirname, 'src') },
   },
@@ -15,6 +17,8 @@ export default defineConfig({
     include: ['src/**/*.spec.{ts,tsx}'],
 
     setupFiles: ['./vitest.setup.ts'],
+
+    server: { deps: { inline: [/@copilotkit\//] } },
 
     reporters: process.env.CI ? ['default', 'junit'] : ['default'],
     outputFile: { junit: 'target/test-results/junit.xml' },

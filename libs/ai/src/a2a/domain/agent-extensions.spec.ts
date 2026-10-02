@@ -36,7 +36,7 @@ describe('AgentExtensions', () => {
       );
     }
     expect(extensions.a2ui.uri).toBe(
-      'https://a2ui.org/a2a-extension/a2ui/v0.8',
+      'https://a2ui.org/a2a-extension/a2ui/v0.9',
     );
   });
 

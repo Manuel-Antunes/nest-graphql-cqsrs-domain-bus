@@ -90,4 +90,94 @@ describe('the conversation with Theo, as the page shows it', () => {
       { kind: 'tool', id: 'call-2', name: 'show_toast', result: undefined },
     ]);
   });
+
+  it('puts the app a delegation brought back after it, and shows the delegate’s answer, not the operations', () => {
+    const operations = [
+      {
+        version: 'v0.9',
+        createSurface: { surfaceId: 's1', catalogId: 'theo' },
+      },
+    ];
+    const messages: Message[] = [
+      {
+        id: 'a1',
+        role: 'assistant',
+        toolCalls: [
+          {
+            id: 'call-1',
+            type: 'function',
+            function: {
+              name: DELEGATION_TOOL,
+              arguments: JSON.stringify({
+                agentName: 'Posts Manager',
+                task: 'Let the person pick a post to edit.',
+              }),
+            },
+          },
+        ],
+      },
+      {
+        id: 't1',
+        role: 'tool',
+        toolCallId: 'call-1',
+        content: JSON.stringify({
+          a2ui_operations: operations,
+          answer: 'Pick the post on screen.',
+        }),
+      },
+      {
+        id: 'a2ui-surface-call-1',
+        role: 'activity',
+        activityType: 'a2ui-surface',
+        content: { a2ui_operations: operations },
+      },
+      { id: 'a2', role: 'assistant', content: 'Pick it there.' },
+    ];
+
+    const entries = TheoTranscript.of(messages);
+
+    expect(entries.map((entry) => entry.kind)).toEqual([
+      'delegation',
+      'activity',
+      'theo',
+    ]);
+    expect(entries[0]).toMatchObject({ result: 'Pick the post on screen.' });
+    expect(entries[1]).toMatchObject({
+      id: 'a2ui-surface-call-1',
+      message: { activityType: 'a2ui-surface' },
+    });
+  });
+
+  it('draws a view Theo rendered itself without a marker for the drawing tool', () => {
+    const messages: Message[] = [
+      {
+        id: 'a1',
+        role: 'assistant',
+        toolCalls: [
+          {
+            id: 'draw-1',
+            type: 'function',
+            function: { name: 'render_a2ui', arguments: '{}' },
+          },
+        ],
+      },
+      {
+        id: 'a2ui-surface-draw-1',
+        role: 'activity',
+        activityType: 'a2ui-surface',
+        content: { a2ui_operations: [] },
+      },
+    ];
+
+    expect(TheoTranscript.of(messages).map((entry) => entry.kind)).toEqual([
+      'activity',
+    ]);
+  });
+
+  it('reads a plain answer, and a JSON one without operations, as it came', () => {
+    expect(TheoTranscript.answerOf('You have two posts.')).toBe(
+      'You have two posts.',
+    );
+    expect(TheoTranscript.answerOf('{"answer":"x"}')).toBe('{"answer":"x"}');
+  });
 });

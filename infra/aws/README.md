@@ -296,8 +296,13 @@ links include, and `permissions` adds only what is nobody's resource: invoking B
   request will reach; every Better Auth function accepts the MCP server's (`acceptedResources`), and
   the migrator registers all three (`registeredResources`).
 - **The MCP runtime speaks `MCP`** (stateless streamable HTTP on `:8000/mcp`); clients call
-  `…/runtimes/<arn>/invocations?qualifier=DEFAULT`. Its image needs the composed API schema, which
-  `build-functions` produces (`@nestposts/mcp:prune`), so it depends on `build`.
+  `…/runtimes/<arn>/invocations?qualifier=DEFAULT`. Its image needs the composed API schema and the
+  built MCP App, which `build-functions` produces (`@nestposts/mcp:prune`), so it depends on `build`.
+  AgentCore forwards no query string to the container, and Apollo MCP Server serves an MCP App only to
+  `?app=<name>&appTarget=mcp`: the runtime allowlists `X-Amzn-Bedrock-AgentCore-Runtime-Custom-Mcp-App`
+  beside `Authorization`, and Caddy, in the image, turns it into those parameters
+  (`apps/mcp/README.md`). The web reaches it too (`POSTS_MCP_URL`, `POSTS_MCP_RESOURCE`), for the
+  app's HTML and its buttons, with a token addressed to the MCP server alone.
 - **The agent runtime speaks `A2A`** (`:9000`, `POST /`); its card is at
   `…/runtimes/<arn>/invocations/.well-known/agent-card.json` (the `agents.postsAgentCard` output) and
   advertises `AGENTCORE_RUNTIME_URL`, which AgentCore injects. Its role may invoke Bedrock models and

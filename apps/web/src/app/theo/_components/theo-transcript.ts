@@ -1,6 +1,11 @@
-import type { Message } from '@ag-ui/client';
+import type { ActivityMessage, Message } from '@ag-ui/client';
 
 export const DELEGATION_TOOL = 'send_message_to_a2a_agent';
+
+export const DRAWING_TOOLS: ReadonlySet<string> = new Set([
+  'render_a2ui',
+  'log_a2ui_event',
+]);
 
 export type TranscriptEntry =
   | { kind: 'user'; id: string; text: string }
@@ -13,7 +18,8 @@ export type TranscriptEntry =
       said: string;
       result?: string;
     }
-  | { kind: 'tool'; id: string; name: string; result?: string };
+  | { kind: 'tool'; id: string; name: string; result?: string }
+  | { kind: 'activity'; id: string; message: ActivityMessage };
 
 export class TheoTranscript {
   static of(messages: readonly Message[]): TranscriptEntry[] {
@@ -33,6 +39,10 @@ export class TheoTranscript {
     const entries: TranscriptEntry[] = [];
     for (const message of messages) {
       if (message.subagentRunId !== undefined) continue;
+      if (message.role === 'activity') {
+        entries.push({ kind: 'activity', id: message.id, message });
+        continue;
+      }
       if (message.role === 'user') {
         entries.push({
           kind: 'user',
@@ -44,15 +54,20 @@ export class TheoTranscript {
       const text = TheoTranscript.textOf(message.content);
       if (text) entries.push({ kind: 'theo', id: message.id, text });
       for (const call of message.toolCalls ?? []) {
+        if (DRAWING_TOOLS.has(call.function.name)) continue;
         if (call.function.name === DELEGATION_TOOL) {
           const args = TheoTranscript.argumentsOf(call.function.arguments);
+          const result = results.get(call.id);
           entries.push({
             kind: 'delegation',
             id: call.id,
             agentName: String(args.agentName ?? 'an agent'),
             task: String(args.task ?? ''),
             said: delegated.get(call.id) ?? '',
-            result: results.get(call.id),
+            result:
+              result === undefined
+                ? undefined
+                : TheoTranscript.answerOf(result),
           });
         } else {
           entries.push({
@@ -65,6 +80,21 @@ export class TheoTranscript {
       }
     }
     return entries;
+  }
+
+  static answerOf(result: string): string {
+    try {
+      const parsed = JSON.parse(result) as {
+        a2ui_operations?: unknown;
+        answer?: unknown;
+      } | null;
+      return Array.isArray(parsed?.a2ui_operations) &&
+        typeof parsed.answer === 'string'
+        ? parsed.answer
+        : result;
+    } catch {
+      return result;
+    }
   }
 
   private static textOf(content: unknown): string {

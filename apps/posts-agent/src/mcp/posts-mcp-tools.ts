@@ -11,6 +11,7 @@ import { CallerBearerAuthProvider } from './caller-bearer.auth-provider';
 @Injectable()
 export class PostsMcpTools implements OnModuleDestroy {
   static readonly SERVER = 'posts';
+  static readonly APP_ONLY = new Set(['execute']);
 
   private readonly pool: McpClientPool;
 
@@ -37,8 +38,10 @@ export class PostsMcpTools implements OnModuleDestroy {
     });
   }
 
-  load(): Promise<StructuredToolInterface[]> {
-    return this.pool.getTools();
+  async load(): Promise<StructuredToolInterface[]> {
+    return (await this.pool.getTools()).filter(
+      (candidate) => !PostsMcpTools.APP_ONLY.has(candidate.name),
+    );
   }
 
   onModuleDestroy(): Promise<void> {

@@ -232,7 +232,8 @@ npx nx run @chatwoot/chatwoot:serve        # Rails on 3100 (CHATWOOT_PORT) and V
 npx nx run @chatwoot/chatwoot:migrate      # a new Chatwoot migration, then chatwoot:mirror
 npx nx run @chatwoot/chatwoot:graphql:generate   # apps/chatwoot/schema.graphql, the SDL the gateway composes — after any change to apps/chatwoot/graphql
 node apps/migrator/dist/main.js chatwoot:mirror  # mirror into Chatwoot what it does not have yet; migrate() already ends with it
-npx nx serve @nestposts/mcp                # Apollo MCP Server on :8000/mcp, natively (APOLLO_MCP_SERVER or apollo-mcp-server on PATH), after copying the composed API schema
+npx nx serve @nestposts/mcp                # Apollo MCP Server on :8000/mcp, natively (APOLLO_MCP_SERVER or apollo-mcp-server on PATH), after copying the composed API schema and building the MCP App
+npx nx build @nestposts/posts-app          # the posts MCP App: codegen, then one HTML file and its manifest into apps/mcp/apps/posts
 npx nx serve @nestposts/posts-agent        # the posts agent on :9000 (A2A), with AWS credentials that can call Bedrock
 node apps/posts-agent/scripts/agent-console.mjs "Who am I?"   # sign in as a seeded user, get a token for the agent and the MCP server, talk A2A
 npx nx serve @nestposts/theo-agent         # Theo on :8080 (AG-UI), delegating to the posts agent over A2A
@@ -328,7 +329,9 @@ agents it may delegate to, comma separated — the posts agent's URL), `THEO_AGE
 `THEO_AGENT_TEMPERATURE`, `AWS_REGION` and the auth, database and Redis variables of every Better Auth
 process. `apps/web` reads `THEO_AGENT_URL` (Theo's invocation URL, `http://localhost:8080/invocations`
 locally) and `THEO_AGENT_AUDIENCES` (what the token it issues for the person is addressed to: Theo, the
-posts agent, the MCP server), and is deployed with `COPILOTKIT_TELEMETRY_DISABLED=true`.
+posts agent, the MCP server), and is deployed with `COPILOTKIT_TELEMETRY_DISABLED=true`. It also reads
+`POSTS_MCP_URL` and `POSTS_MCP_RESOURCE` (both `http://localhost:8000/mcp` locally): where the MCP
+App's HTML and the app's buttons are proxied to, as the person.
 
 The gateway also reads `CHATWOOT_SUBGRAPH_URL` (default `http://localhost:3100/graphql`), and
 `apps/web` `CHATWOOT_URL` (default `http://localhost:3100`), the origin it embeds.
@@ -515,7 +518,11 @@ apps/notificator         delivers notifications — the database, email, push �
                          Notifications)
 apps/mcp                 the posts as MCP tools: Apollo MCP Server over the composed API schema, six
                          operations, configured in config/mcp.yaml; authenticates every request and
-                         passes the caller's token to the gateway. On AgentCore Runtime. README
+                         passes the caller's token to the gateway — and the posts MCP App, behind
+                         Caddy, which turns AgentCore's header into ?app=. On AgentCore Runtime. README
+apps/posts-app           the posts MCP App: React, @apollo/client-ai-apps and a memory router, five
+                         @tool operations (pick a post, edit it, preview a draft, and the app's own
+                         save and publish), built into apps/mcp/apps/posts. README
 apps/posts-agent         the posts manager, an A2A agent on Amazon Bedrock AgentCore Runtime: a Nest
                          application context whose @A2aAgent runs LangChain over a Bedrock model and
                          the MCP tools, as the caller, with AgentCore Memory. README
@@ -1477,6 +1484,15 @@ Their READMEs, `libs/ai/README.md` and `infra/aws/README.md` are the guides; the
   the CopilotKit runtime at `/api/copilotkit`, whose `HttpAgent` calls Theo with an access token the
   web's own Better Auth issues for the person signed in (`DelegatedAccessTokens`, `libs/auth`),
   addressed to Theo, the posts agent and the MCP server. The browser never holds it.
+- **MCP Apps reach the person inside A2UI.** The posts agent opens the posts MCP App
+  (`apps/posts-app`) only on a turn whose A2A client declared, in the message metadata, an A2UI catalog
+  with `McpApp`: Theo forwards the catalogs the web's CopilotKit sends it. The app tool's result comes
+  back as an A2UI surface naming the server, the `ui://` resource, the tool, its input and its result —
+  never the HTML — Theo returns it as `{ a2ui_operations, answer }`, CopilotKit's A2UI middleware
+  renders it, and the web's `McpApp` is CopilotKit's MCP Apps host, whose reads and tool calls
+  `McpAppsProxy` sends to the MCP server as the person. Saving and publishing are the app's buttons
+  (`SavePost`, `PublishPost`), never the model's. `libs/ai/README.md` ("MCP Apps in A2UI"),
+  `apps/posts-app`, `apps/mcp` and `apps/web` have the rest.
 - **`agent-console`** is a seeded public OAuth client (PKCE, loopback redirect, no consent screen)
   that `apps/posts-agent/scripts/agent-console.mjs` signs a person in with.
 
@@ -2439,6 +2455,31 @@ DTOs count.
   `Session operation in progress, please retry` transient and leaves the retry to an MCP client. The
   call never reached the server, so `McpClientPool` calls the same tool again on the same session,
   three times with backoff from `retryDelayMs`; anything else the tool answered is not repeated.
+- **AgentCore Runtime forwards neither the query string nor a sub-path to an MCP container**, and Apollo
+  MCP Server serves an MCP App only to a request whose URL says `?app=<name>`: measured on dev,
+  `…/invocations?qualifier=DEFAULT&app=posts` listed the plain tools, as if no app existed. What it does
+  forward is an allowlisted `X-Amzn-Bedrock-AgentCore-Runtime-Custom-*` header, so `apps/mcp`'s image
+  runs Caddy in front of the server to turn `X-Amzn-Bedrock-AgentCore-Runtime-Custom-Mcp-App` into the
+  parameters, and the runtime allowlists that header.
+- **Apollo MCP Server's app mode is a mode, not an addition, and it needs `appTarget=mcp`.** With
+  `?app=posts` the six operations are still listed and are `Tool … not found` when called, so the
+  posts agent keeps two connections. And a stateless server forgets the UI capability a client declared
+  at `initialize`: without `appTarget=mcp` it takes every request for the OpenAI target and refuses
+  `resources/read` (`no resource found for openai`), the app never loading.
+- **An MCP App's mutation is a tool of its own.** `@apollo/client-ai-apps` runs every operation through
+  the server's `execute`, which `mutation_mode: explicit` lets read only; `apps/posts-app`'s
+  `ServerToolLink` sends a manifest mutation to its own tool instead. The library's Vite plugin also
+  plucks only files containing `gql` — codegen's `gqlTagName: 'gql'` — and 0.7.5 imports one module
+  without its extension, which Node refuses: the app's Vitest inlines the package.
+- **LangGraph's v3 stream gives a tool call's content, not its artifact.** `run.toolCalls`' `output` for a
+  `content_and_artifact` tool is the content alone, so what a tool returns beside it — an MCP App's
+  placement — is read in the agent's `wrapToolCall` (`A2aMiddleware`), where the `ToolMessage` is whole.
+- **`@copilotkit/a2ui-renderer` reads a catalog's props through Zod 3's internals**, so its definitions
+  are `zod/v3`; Zod 4 ships that implementation but not its types, hence a cast at the boundary.
+- **`AbstractAgent.addMessage` pushes onto `agent.messages`** instead of replacing it, so anything
+  memoized on the array's identity misses a message an MCP App adds; runs do replace it, which is why
+  `/theo`'s memoized transcript only failed for that. And `showDevConsole` no longer hides the
+  CopilotKit Inspector in 1.76: `enableInspector={false}` does.
 - **Better Auth's OAuth client field is `requirePKCE`**, not `requirePkce`: written through the
   adapter under the wrong name the column is simply `null`, with nothing failing.
 - **Apollo MCP Server checks that the discovery document's `issuer` equals the server it asked**, so

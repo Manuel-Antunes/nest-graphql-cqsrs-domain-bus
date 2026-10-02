@@ -41,6 +41,7 @@ export const postsMcp = new AgentRuntime('PostsMcp', {
   dockerfile: 'apps/mcp/Dockerfile',
   dependsOn: [build, gateway, streaming],
   authorizer: { discoveryUrl, audiences: [mcpResource] },
+  headers: ['X-Amzn-Bedrock-AgentCore-Runtime-Custom-Mcp-App'],
   environment: {
     AUTH_ISSUER: router.url,
     POSTS_MCP_RESOURCE: mcpResource,
