@@ -499,6 +499,19 @@ esac
 grep -q 'data-page' "$PAGE" || fail "$DASHBOARD_PATH answered 200 without the dashboard's page"
 echo "    OK: a stranger is sent to the platform sign-in; the author's session opens $DASHBOARD_PATH"
 
+# The support page frames the dashboard's entry, and the entry redirects within https. Both failed
+# only here: the router's root is the web, not Chatwoot, and Puma hears HTTP from the load balancer,
+# so its redirect said http:// — which curl follows and a browser blocks inside an https page.
+FRAME_SRC=$(curl -sS -b "$JAR" "$TARGET/atendimento" | grep -o '<iframe src="[^"]*"' | head -1 | sed 's/^<iframe src="//; s/"$//')
+[ "$FRAME_SRC" = "$TARGET/app" ] \
+  || fail "/atendimento does not frame Chatwoot's dashboard at $TARGET/app: '$FRAME_SRC'"
+ENTRY=$(curl -sS -b "$JAR" -o /dev/null -w '%{http_code} %{redirect_url}' "$TARGET/app")
+case "$ENTRY" in
+  "302 $TARGET/app/"*) ;;
+  *) fail "Chatwoot's dashboard entry does not redirect within $TARGET: $ENTRY" ;;
+esac
+echo "    OK: /atendimento frames $FRAME_SRC, which sends the author on to ${ENTRY#302 }"
+
 TEAM=$(auth organization/create-team "$(jq -nc --arg n "Front Desk $SLUG" '{name:$n}')")
 TEAM_ID=$(echo "$TEAM" | jq -r '.id // empty')
 [ -n "$TEAM_ID" ] || fail "organization/create-team failed: $TEAM"

@@ -232,6 +232,14 @@ that path is the gateway's. The load balancer answers plain HTTP (there is no ce
 domain); the browser only ever sees CloudFront's HTTPS, and the router hands Rails the viewer's host
 as `x-forwarded-host`, which is what its absolute URLs are built from.
 
+Two things follow from sharing the origin. The root is the web's, so `/atendimento` frames the
+dashboard's entry, `/app` (`Chatwoot.DASHBOARD_PATH`, `apps/web/src/lib/chatwoot.ts`), never the bare
+`CHATWOOT_URL`. And Puma hears HTTP from the load balancer, so Rails would build its redirects with
+`http://`: production assumes TLS (`config.assume_ssl`) whenever `FRONTEND_URL` is https, which on a
+stage it is. Without it the browser blocks the framed dashboard as mixed content, while `curl -L`
+follows the same redirect happily — so `infra/scripts/e2e.sh`, step 14, reads the frame's address
+and the entry's redirect without following it.
+
 What a first deploy of a stage needs, beyond the `.env`: `sst secret set ChatwootSecretKeyBase
 $(openssl rand -hex 64)`. The order is the stack's to keep — the `Migrate` invocation waits for
 Chatwoot's web service (`Migrator`'s `after`), because `migrate()` ends by mirroring the platform's

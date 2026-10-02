@@ -1380,7 +1380,11 @@ last section is the design; the essentials:
 - **On AWS it is two Fargate services** (`infra/aws/chatwoot`, ported from `gmpa-monorepo-migrate`):
   Rails behind a load balancer and Sidekiq on the same image, **on the CloudFront router by path**
   (`/app`, `/vite`, `/cable`, `/api/v1`, … and `/chatwoot/graphql` for the gateway), so the session
-  cookie reaches it on the one origin with no domain. `infra/aws/README.md` has the rest.
+  cookie reaches it on the one origin with no domain. On that origin the root is the web's, so
+  `/atendimento` frames `/app` (`Chatwoot.DASHBOARD_PATH`), and Puma hears HTTP from the load
+  balancer, so production assumes TLS whenever `FRONTEND_URL` is https (`config.assume_ssl`) — or its
+  redirects say `http://` and the browser blocks the framed dashboard as mixed content, which `curl
+  -L` never notices. `infra/aws/README.md` has the rest.
   `db/seeds.rb`'s demo data (the `john@acme.inc` SuperAdmin, the Acme accounts) is development-only:
   the container's `db:chatwoot_prepare` seeds a production database with the installation config alone.
 - **The dashboard boots through Inertia, and its shell is `inertia/layouts/AppShell.vue`.** The Vue

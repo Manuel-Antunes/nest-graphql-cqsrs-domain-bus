@@ -34,3 +34,23 @@ describe('Chatwoot.platformPathOf', () => {
     expect(Chatwoot.platformPathOf('PLATFORM_NAVIGATE')).toBeNull();
   });
 });
+
+describe('Chatwoot.frameUrlOf', () => {
+  it('opens the dashboard, never the root, which on a shared origin is the platform', () => {
+    expect(Chatwoot.frameUrlOf('https://router.example', '')).toBe(
+      'https://router.example/app',
+    );
+    expect(Chatwoot.frameUrlOf('http://localhost:3100/', '')).toBe(
+      'http://localhost:3100/app',
+    );
+  });
+
+  it('opens a path of the dashboard where it is asked to', () => {
+    expect(
+      Chatwoot.frameUrlOf(
+        'https://router.example',
+        '/app/accounts/3/contacts/7',
+      ),
+    ).toBe('https://router.example/app/accounts/3/contacts/7');
+  });
+});
