@@ -20,6 +20,7 @@ import { appConfig } from './config/app.config';
 import { bedrockConfig } from './config/bedrock.config';
 import type { RedisConfig } from './config/redis.config';
 import { redisConfig } from './config/redis.config';
+import { webSearchConfig } from './config/web-search.config';
 
 @Module({
   imports: [
@@ -27,7 +28,13 @@ import { redisConfig } from './config/redis.config';
       isGlobal: true,
       cache: true,
       ignoreEnvFile: true,
-      load: [appConfig, bedrockConfig, agentsConfig, redisConfig],
+      load: [
+        appConfig,
+        bedrockConfig,
+        agentsConfig,
+        redisConfig,
+        webSearchConfig,
+      ],
     }),
     loggingModuleAsync({
       inject: [appConfig.KEY],

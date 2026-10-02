@@ -174,6 +174,64 @@ describe('the conversation with Theo, as the page shows it', () => {
     ]);
   });
 
+  it('shows a web search with what Theo searched for, and the sources it found once it answered', () => {
+    const search = (id: string, query: string): Message => ({
+      id: `a-${id}`,
+      role: 'assistant',
+      toolCalls: [
+        {
+          id,
+          type: 'function',
+          function: {
+            name: 'search_the_web',
+            arguments: JSON.stringify({ query }),
+          },
+        },
+      ],
+    });
+    const messages: Message[] = [
+      search('search-1', 'AgentCore news'),
+      {
+        id: 't1',
+        role: 'tool',
+        toolCallId: 'search-1',
+        content: [
+          '[1] New AgentCore Runtime',
+          'https://aws.amazon.com/new-agentcore-runtime/',
+          'Published 2026-09-15',
+          'The new runtime is generally available.',
+          '',
+          '[2] A page with no address',
+          'Its passage.',
+        ].join('\n'),
+      },
+      search('search-2', 'still searching'),
+    ];
+
+    expect(TheoTranscript.of(messages)).toEqual([
+      {
+        kind: 'search',
+        id: 'search-1',
+        query: 'AgentCore news',
+        sources: [
+          {
+            title: 'New AgentCore Runtime',
+            url: 'https://aws.amazon.com/new-agentcore-runtime/',
+          },
+        ],
+      },
+      {
+        kind: 'search',
+        id: 'search-2',
+        query: 'still searching',
+        sources: undefined,
+      },
+    ]);
+    expect(
+      TheoTranscript.sourcesOf('The web search found nothing for this.'),
+    ).toEqual([]);
+  });
+
   it('reads a plain answer, and a JSON one without operations, as it came', () => {
     expect(TheoTranscript.answerOf('You have two posts.')).toBe(
       'You have two posts.',

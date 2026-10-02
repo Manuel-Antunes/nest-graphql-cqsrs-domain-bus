@@ -15,11 +15,17 @@ import { ScriptedModel } from '@nestposts/ai/a2a/langchain/testing/scripted-mode
 import { AgentCoreAgUiServer } from '@nestposts/ai/ag-ui/agentcore/agentcore-ag-ui.server';
 import { AgentCallers } from '@nestposts/ai/agents/callers/agent-callers';
 import { PlatformCaller } from '@nestposts/ai/agents/callers/platform-caller';
+import { WebSearchTool } from '@nestposts/ai/web/web-search.tool';
 import type { BetterAuth } from '@nestposts/auth/infrastructure/better-auth/init-auth';
 import { BETTER_AUTH } from '@nestposts/auth/infrastructure/better-auth/tokens';
 import { inRequestContext, MikroORM } from '@nestposts/database';
 import { migrateSystem } from '@nestposts/migrator/main';
 import { PostsMcpTools } from '@nestposts/posts-agent/mcp/posts-mcp-tools';
+import {
+  type SearchOptions,
+  WebSearchClient,
+  type WebSearchResponse,
+} from 'bedrock-agentcore/web-search';
 import { z } from 'zod';
 
 const ISSUER = 'https://issuer.test';
@@ -63,7 +69,30 @@ describe('Theo, an AG-UI agent on AgentCore Runtime that hands posts to the post
       ],
     },
     { text: ['You are ', 'Ana.'] },
+    {
+      toolCalls: [
+        {
+          id: 'search-1',
+          name: WebSearchTool.NAME,
+          args: { query: 'AgentCore news' },
+        },
+      ],
+    },
+    { text: ['The new AgentCore Runtime is out.'] },
   ]);
+  const webSearch = {
+    search: vi.fn<
+      (query: string, options?: SearchOptions) => Promise<WebSearchResponse>
+    >(async () => ({
+      results: [
+        {
+          text: 'The new AgentCore Runtime is generally available.',
+          url: 'https://aws.amazon.com/new-agentcore-runtime/',
+          title: 'New AgentCore Runtime',
+        },
+      ],
+    })),
+  };
   const postsModel = new RecordingModel([
     { toolCalls: [{ id: 'posts-call-1', name: 'WhoAmI', args: {} }] },
     { text: ['The caller is ', 'Ana.'] },
@@ -133,6 +162,8 @@ describe('Theo, an AG-UI agent on AgentCore Runtime that hands posts to the post
       await Test.createTestingModule({ imports: [TheoModule] })
         .overrideProvider(ChatBedrockConverse)
         .useValue(theoModel)
+        .overrideProvider(WebSearchClient)
+        .useValue(webSearch)
         .compile()
     ).init();
     await theo.get(AgentCoreAgUiServer).listen();
@@ -218,6 +249,48 @@ describe('Theo, an AG-UI agent on AgentCore Runtime that hands posts to the post
     );
     expect(JSON.stringify(postsModel.prompts[0])).toContain(
       'Tell me who I am.',
+    );
+  });
+
+  it('searches the web for something recent, and answers from what it found', async () => {
+    const user = await givenAUser(`caio-${Date.now()}@example.com`);
+    const token = await tokenFor({
+      sub: user.id,
+      aud: [THEO, POSTS_AGENT, MCP],
+      scope: 'openid read:posts write:posts',
+    });
+    const events: BaseEvent[] = [];
+    const asked = theoModel.prompts.length;
+
+    await clientAs(token, 'What is new in AgentCore?').runAgent(
+      {},
+      { onEvent: ({ event }) => void events.push(event) },
+    );
+
+    expect(webSearch.search).toHaveBeenCalledWith('AgentCore news', {
+      maxResults: WebSearchTool.MAX_RESULTS,
+    });
+    expect(events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: EventType.TOOL_CALL_START,
+          toolCallId: 'search-1',
+          toolCallName: WebSearchTool.NAME,
+        }),
+        expect.objectContaining({
+          type: EventType.TOOL_CALL_RESULT,
+          toolCallId: 'search-1',
+          content: expect.stringContaining(
+            'https://aws.amazon.com/new-agentcore-runtime/',
+          ),
+        }),
+      ]),
+    );
+    expect(JSON.stringify(theoModel.prompts[asked][0])).toContain(
+      '## Searching the web',
+    );
+    expect(JSON.stringify(theoModel.prompts[asked + 1])).toContain(
+      'The new AgentCore Runtime is generally available.',
     );
   });
 

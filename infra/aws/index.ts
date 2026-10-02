@@ -9,6 +9,7 @@
  * three.
  */
 import { postsAgent, postsAgentMemory, postsMcp, theo } from './agents';
+import { webSearch } from './agents/web-search';
 import { chatwoot } from './chatwoot';
 import {
   gateway,
@@ -89,5 +90,6 @@ export const outputs = {
     postsAgentMemory: postsAgentMemory.id,
     theo: theo.url,
     theoResource,
+    webSearch: webSearch.gatewayUrl,
   },
 };

@@ -33,6 +33,7 @@ src/
     specialist/    FileAnalysisSpecialistAgent and its tools
   mcp/
     apps/          MCP Apps in A2UI: McpAppTools, McpAppSurface, McpAppEndpoint
+  web/             search_the_web (WebSearchTool) over AgentCore Web Search
   channel/         ChannelResponseProcessor and its channels (in-memory, chatwoot/)
   backends/        SkillsBackend over StaticFilesBackend
 ```
@@ -248,6 +249,20 @@ Embedded, a 1 MB single-file bundle would travel through every model context on 
 - **`McpAppEndpoint`** addresses an app on a server: `?app=<name>&appTarget=mcp` for a server reached
   directly, and `X-Amzn-Bedrock-AgentCore-Runtime-Custom-Mcp-App` for one behind AgentCore, which
   forwards no query string (`apps/mcp/README.md`).
+
+## Searching the web (`web/`)
+
+`WebSearchTool.create(client)` is a LangChain tool, `search_the_web`, over **AgentCore Web Search**:
+AWS's own web index, served as the `WebSearch` MCP tool of an AgentCore Gateway target with the
+`web-search` connector. The client is `bedrock-agentcore`'s `WebSearchClient`
+(`bedrock-agentcore/web-search`), which runs the MCP handshake and the call signed with SigV4 and
+normalizes the results; the application builds it with the gateway's URL and region and injects it, so
+the library reads no environment and a spec hands it a stub.
+
+The tool asks for at most `MAX_RESULTS` (8) results, optionally published after a date the model
+gives (connector `1.2.0`), and answers the model with each passage under `[n] title`, its URL and its
+date; the response is the artifact. Whatever is written from a search must show its sources — AWS's
+terms for the service — which is the calling agent's instruction to follow and the web's to display.
 
 ## The LangChain middleware and the system message
 

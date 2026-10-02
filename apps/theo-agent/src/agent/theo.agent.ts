@@ -8,6 +8,8 @@ import { LangChainAgUiAgent } from '@nestposts/ai/ag-ui/langchain/langchain-ag-u
 import { AgUiAgent } from '@nestposts/ai/ag-ui/server/ag-ui-agent.decorator';
 import { AgentCallers } from '@nestposts/ai/agents/callers/agent-callers';
 import { CallerBearerFetch } from '@nestposts/ai/agents/callers/caller-bearer.fetch';
+import { WebSearchTool } from '@nestposts/ai/web/web-search.tool';
+import { WebSearchClient } from 'bedrock-agentcore/web-search';
 import { createAgent } from 'langchain';
 
 import type { AgentsConfig } from '../config/agents.config';
@@ -18,7 +20,7 @@ import { TheoInstructions } from './theo.instructions';
   id: 'theo',
   name: 'Theo',
   description:
-    "The platform's assistant: it talks with the person signed in and hands what concerns posts to the posts agent, over A2A, as that person.",
+    "The platform's assistant: it talks with the person signed in, searches the web, and hands what concerns posts to the posts agent, over A2A, as that person.",
 })
 @Injectable()
 export class TheoAgent implements AgUiAgent {
@@ -26,6 +28,7 @@ export class TheoAgent implements AgUiAgent {
     @Inject('BASE_MODEL') private readonly model: BaseChatModel,
     @Inject(agentsConfig.KEY) private readonly agents: AgentsConfig,
     private readonly callers: AgentCallers,
+    @Inject(WebSearchClient) private readonly webSearch: WebSearchClient | null,
   ) {}
 
   readonly agent = async (): Promise<AbstractAgent> => {
@@ -36,8 +39,13 @@ export class TheoAgent implements AgUiAgent {
     return new LangChainAgUiAgent({
       graph: createAgent({
         model: this.model,
-        tools: [A2aDelegationTool.create(specialists)],
-        systemPrompt: TheoInstructions.with(specialists.roster()),
+        tools: [
+          A2aDelegationTool.create(specialists),
+          ...(this.webSearch ? [WebSearchTool.create(this.webSearch)] : []),
+        ],
+        systemPrompt: TheoInstructions.with(specialists.roster(), {
+          webSearch: this.webSearch !== null,
+        }),
         middleware: [AgUiMiddleware.create()],
       }),
       traceName: 'theo',

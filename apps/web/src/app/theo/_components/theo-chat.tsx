@@ -50,6 +50,7 @@ import { theoCatalog } from '../_a2ui/catalog';
 import { DelegationCard } from './delegation-card';
 import { THEO_AGENT_ID } from './theo-agent-id';
 import { TheoTranscript, type TranscriptEntry } from './theo-transcript';
+import { WebSearchLine } from './web-search-line';
 
 export function TheoChat() {
   return (
@@ -179,6 +180,8 @@ function TranscriptLine({ entry }: { entry: TranscriptEntry }) {
       return <DelegationCard {...entry} />;
     case 'activity':
       return <ActivityLine message={entry.message} />;
+    case 'search':
+      return <WebSearchLine query={entry.query} sources={entry.sources} />;
     case 'tool':
       return (
         <Marker>

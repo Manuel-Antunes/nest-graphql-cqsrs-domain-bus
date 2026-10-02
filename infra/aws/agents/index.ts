@@ -13,6 +13,7 @@ import { cache, database, postgresUrl, redisUrl } from '../data';
 import { router } from '../edge/router';
 import { vpc } from '../network';
 import { AgentRuntime } from './agent-runtime';
+import { webSearch } from './web-search';
 
 sst.Linkable.wrap(aws.bedrock.AgentcoreMemory, (memory) => ({
   properties: { id: memory.id, arn: memory.arn },
@@ -60,6 +61,8 @@ export const postsAgentMemory = new aws.bedrock.AgentcoreMemory(
 
 export const agentModel = 'global.anthropic.claude-sonnet-5-5';
 
+export const theoModel = 'us.amazon.nova-2-lite-v1:0';
+
 const invokeModels = {
   actions: ['bedrock:InvokeModel', 'bedrock:InvokeModelWithResponseStream'],
   resources: [
@@ -101,7 +104,7 @@ export const theo = new AgentRuntime('Theo', {
   dependsOn: [build, gateway, streaming],
   authorizer: { discoveryUrl, audiences: [theoResource] },
   vpc,
-  link: [postsAgent, database, cache, authSecret],
+  link: [postsAgent, webSearch, database, cache, authSecret],
   environment: {
     POSTGRES_URL: postgresUrl,
     REDIS_URL: redisUrl,
@@ -111,7 +114,8 @@ export const theo = new AgentRuntime('Theo', {
     AUTH_ISSUER: router.url,
     AUTH_OAUTH_RESOURCES: theoResource,
     THEO_A2A_AGENTS: postsAgent.url,
-    THEO_AGENT_MODEL_ID: agentModel,
+    THEO_AGENT_MODEL_ID: theoModel,
+    THEO_WEB_SEARCH_URL: webSearch.gatewayUrl,
     LOG_LEVEL: 'info',
   },
   permissions: [invokeModels],

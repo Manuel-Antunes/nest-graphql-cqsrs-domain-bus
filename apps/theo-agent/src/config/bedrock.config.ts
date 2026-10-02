@@ -4,10 +4,7 @@ import { z } from 'zod';
 
 const BedrockEnvSchema = z.object({
   AWS_REGION: z.string().min(1).default('us-east-1'),
-  THEO_AGENT_MODEL_ID: z
-    .string()
-    .min(1)
-    .default('global.anthropic.claude-sonnet-5-5'),
+  THEO_AGENT_MODEL_ID: z.string().min(1).default('us.amazon.nova-2-lite-v1:0'),
   THEO_AGENT_TEMPERATURE: z.coerce.number().min(0).max(1).optional(),
 });
 

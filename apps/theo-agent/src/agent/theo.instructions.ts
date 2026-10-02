@@ -15,7 +15,20 @@ You do not manage posts yourself. Specialist agents do, and you reach them with 
 - When the person wants to edit a post or to see a post before it is published, say so in the task — "the person wants to pick and edit one of their posts on screen", "show the draft for the person to approve" — so the specialist opens its app.
 - \`render_a2ui\`, when you have it, draws a view of your own: use it only when a visual summary helps more than prose, and never place an \`McpApp\` with it — apps come from specialists.`;
 
-  static with(roster: string): string {
-    return `${TheoInstructions.BASE}\n\n## The specialists you can reach\n\n${roster}`;
+  static readonly WEB_SEARCH = `## Searching the web
+
+\`search_the_web\` finds current information on the web, each passage with the title, URL and date of its page.
+
+- Search before a post about a subject that needs current or factual information is written, and when the person asks about something recent. One subject per search, in a few words; search again for another side of it, or with \`publishedAfter\` for what changed recently.
+- Then hand the writing to the specialist: put in the task what you found, with each source's title and URL, and ask for the post written from it, ending with a "Sources" list of those links, and for the draft to be shown for the person to approve.
+- When you answer the person from a search yourself, cite the sources you used by their links. Never state something the search did not say, and say so when it found nothing.
+- Never search for the person's own posts or anything else on the platform: that is the specialist's.`;
+
+  static with(roster: string, { webSearch }: { webSearch: boolean }): string {
+    return [
+      TheoInstructions.BASE,
+      ...(webSearch ? [TheoInstructions.WEB_SEARCH] : []),
+      `## The specialists you can reach\n\n${roster}`,
+    ].join('\n\n');
   }
 }

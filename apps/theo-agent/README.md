@@ -4,7 +4,8 @@
 Bedrock AgentCore Runtime**, which the web's chat (`/theo`) talks to through CopilotKit. Theo manages
 nothing itself. What concerns posts it hands to the posts agent (`apps/posts-agent`) over
 [A2A](https://a2a-protocol.org), **as the person it is talking to**, with that person's own access
-token, and tells them what the posts agent answered.
+token, and tells them what the posts agent answered. It also searches the web — to research a post
+before the posts agent writes it, or to answer about something recent.
 
 ```
 browser ─ /theo (CopilotKit, headless hooks on libs/ui's chat components)
@@ -17,10 +18,13 @@ apps/web ─ CopilotRuntime (v2) ─ HttpAgent ─Bearer (DelegatedAccessTokens)
 apps/theo-agent ─ Nest application context                                 │
   AgentCoreAgUiServer (libs/ai) ← AgUiRegistry.resolve(TheoAgent) ◀────────┘
   PlatformCallers (libs/ai) ← IdentityResolver (libs/auth)
-  TheoAgent (@AgUiAgent): LangChainAgUiAgent over createAgent(BASE_MODEL, send_message_to_a2a_agent)
-     │  A2A JSON-RPC, the same Bearer (CallerBearerFetch), contextId = session = the thread
-     ▼
-AgentCore (JWT authorizer, aud = posts agent) ─▶ apps/posts-agent ─▶ apps/mcp ─▶ apps/gateway
+  TheoAgent (@AgUiAgent): LangChainAgUiAgent over
+     createAgent(BASE_MODEL, send_message_to_a2a_agent, search_the_web)
+     │  A2A JSON-RPC, the same Bearer (CallerBearerFetch),     │  MCP, SigV4 as Theo's role
+     │  contextId = session = the thread                      │  (bedrock-agentcore/web-search)
+     ▼                                                         ▼
+AgentCore (JWT authorizer, aud = posts agent)          AgentCore Gateway (AWS_IAM) with the
+  ─▶ apps/posts-agent ─▶ apps/mcp ─▶ apps/gateway        web-search connector: AgentCore Web Search
 ```
 
 ## One agent class, built on the first run
@@ -29,8 +33,8 @@ AgentCore (JWT authorizer, aud = posts agent) ─▶ apps/posts-agent ─▶ app
 inside that caller's scope, because what it builds needs a credential: it reads the cards of the
 agents named in `THEO_A2A_AGENTS` (`RemoteA2aAgents.connect`, with the caller's token — AgentCore
 guards the card too), puts their roster in the system prompt, gives the model one tool,
-`send_message_to_a2a_agent` (`A2aDelegationTool`), and wraps the LangChain agent in a
-`LangChainAgUiAgent`. A build that fails — a posts agent still cold — is built again on the next run.
+`send_message_to_a2a_agent` (`A2aDelegationTool`) — and `search_the_web` when there is a web search
+gateway (below) — and wraps the LangChain agent in a `LangChainAgUiAgent`. A build that fails — a posts agent still cold — is built again on the next run.
 The model is `@Inject('BASE_MODEL')`, a `useExisting` alias of the `ChatBedrockConverse` provider.
 
 `main.ts` boots an application context and starts `AgentCoreAgUiServer`: AgentCore Runtime's AG-UI
@@ -38,6 +42,37 @@ contract on `0.0.0.0:8080` — `POST /invocations` answered as server-sent event
 admitting a request only once `PlatformCallers` has read its bearer as a person of the platform.
 `libs/ai/README.md` has the host, the translation from LangGraph's stream to AG-UI's events and the
 delegation.
+
+## A fast model, and the web
+
+Theo is a generalist: it needs to route well and answer quickly, not to write — the posts agent
+writes. So its model is **Amazon Nova 2 Lite** (`us.amazon.nova-2-lite-v1:0`), measured on Theo's own
+turn against the alternatives on Bedrock (us-east-1, median of three, the whole response):
+
+| model | a turn that delegates | a short answer |
+|---|---|---|
+| Claude Sonnet 5.5 (the posts agent's) | 1.5 s | 1.4 s |
+| GPT-5.6 Terra, reasoning `none` | 1.1 s | 1.1 s |
+| Nova 2 Lite | 1.3 s | 1.7 s |
+| Claude Sonnet 5 | 3.0 s | 2.1 s |
+
+The difference between them is small next to the delegation itself, which is where a turn's time goes.
+
+**Web search is AgentCore Web Search**, AWS's own index served as an MCP tool by an AgentCore Gateway
+target with the `web-search` connector (`infra/aws/agents/web-search.ts`). Theo calls it with
+`bedrock-agentcore`'s `WebSearchClient`, which speaks MCP to the gateway signed with SigV4 as Theo's
+role, and `libs/ai`'s `WebSearchTool` hands the model up to eight passages, each with its page's title,
+URL and date. The instructions tell Theo to search before a post that needs current facts is written,
+to hand the posts agent what it found with every source's URL, and to ask for the post with a
+"Sources" list and a preview — AWS requires the citations to reach whoever reads the result. Without
+`THEO_WEB_SEARCH_URL`, Theo has no search tool and its instructions say nothing about one.
+
+What was not used, and why: Claude's own `web_search` tool (LangChain's `tools.webSearch_…`) is not
+available on Claude in Amazon Bedrock — Anthropic lists server tools as unsupported there; it is on
+Claude Platform on AWS, which needs a separate subscription. GPT-5.6's built-in web search on Bedrock
+took 80 to 115 s per question. Nova's Web Grounding (`nova_grounding`) answers in about 5 s, but
+LangChain JS's `ChatBedrockConverse` (1.4.6) refuses a `systemTool`, and it puts a second model between
+Theo and the results. AgentCore Browser is a remote Chrome for navigating pages, not a search.
 
 ## Authentication: the same person, all the way down
 
@@ -74,15 +109,18 @@ answers in the next turn.
 | `AUTH_ISSUER` / `WEB_URL` | `http://localhost:4200` | the issuer a caller's token must name |
 | `AUTH_OAUTH_RESOURCES` | `GATEWAY_URL` | the audiences a caller's token may carry — Theo's own, on AWS |
 | `POSTGRES_URL`, `REDIS_URL`, `AUTH_SECRET`, `AUTH_URL` | the platform's | the Better Auth every process shares (`libs/auth`) |
-| `THEO_AGENT_MODEL_ID` | `global.anthropic.claude-sonnet-5-5` | a Bedrock model or inference profile |
+| `THEO_AGENT_MODEL_ID` | `us.amazon.nova-2-lite-v1:0` | a Bedrock model or inference profile |
+| `THEO_WEB_SEARCH_URL` | — | the MCP URL of the AgentCore Gateway with the web search connector; unset, Theo cannot search |
 | `THEO_AGENT_TEMPERATURE` | — | sent only when set: newer Claude models refuse it |
-| `AWS_REGION` | `us-east-1` | Bedrock |
+| `AWS_REGION` | `us-east-1` | Bedrock, and the region web search is signed for |
 
 ## Running it locally
 
 Beside the posts agent (its README says how), with `http://localhost:8080/` among the
 `AUTH_OAUTH_RESOURCES` of every process, the migrator's included (it registers it), and AWS
-credentials that can call Bedrock:
+credentials that can call Bedrock. To search, point `THEO_WEB_SEARCH_URL` at a stage's gateway
+(`sst deploy` prints it as `agents.webSearch`) with credentials allowed `bedrock-agentcore:InvokeGateway`
+on it:
 
 ```bash
 npx nx serve @nestposts/theo-agent

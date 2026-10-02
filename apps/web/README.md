@@ -206,6 +206,14 @@ CopilotKit, and pnpm runs no install script of `@scarf/scarf`.
 The route streams, so on AWS the server function streams: `open-next.config.ts` picks OpenNext's
 `aws-lambda-streaming` wrapper (see `infra/aws/web`).
 
+### Theo's web searches
+
+When Theo searches the web (`search_the_web`), the transcript shows it in its place —
+`TheoTranscript` reads the call's query and, once the result arrives, the sources it listed
+(`sourcesOf`: each `[n] title` followed by its URL) — and `WebSearchLine` draws "Theo searched the web
+for …" with a link to every source, opened in a new tab. AWS's terms for AgentCore Web Search ask for
+exactly that: the citations of a search reach whoever reads what came from it.
+
 ### A2UI, and the MCP Apps it carries
 
 The provider has an **A2UI catalog** (`theo/_a2ui`: CopilotKit's basic components plus `McpApp`, id

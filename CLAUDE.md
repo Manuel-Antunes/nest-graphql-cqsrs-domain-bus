@@ -325,9 +325,10 @@ resource its card names), the auth, database and Redis variables of every Better
 `POSTS_MCP_RESOURCE`, `POSTS_MCP_GRAPHQL_ENDPOINT` and `POSTS_MCP_ADDRESS`.
 
 `apps/theo-agent` reads `THEO_AGENT_PORT`/`THEO_AGENT_HOST` (`8080`/`0.0.0.0`), `THEO_A2A_AGENTS` (the A2A
-agents it may delegate to, comma separated — the posts agent's URL), `THEO_AGENT_MODEL_ID`,
-`THEO_AGENT_TEMPERATURE`, `AWS_REGION` and the auth, database and Redis variables of every Better Auth
-process. `apps/web` reads `THEO_AGENT_URL` (Theo's invocation URL, `http://localhost:8080/invocations`
+agents it may delegate to, comma separated — the posts agent's URL), `THEO_AGENT_MODEL_ID`
+(default `us.amazon.nova-2-lite-v1:0`), `THEO_AGENT_TEMPERATURE`, `THEO_WEB_SEARCH_URL` (the AgentCore
+Gateway with the web search connector; unset, Theo has no search), `AWS_REGION` and the auth, database
+and Redis variables of every Better Auth process. `apps/web` reads `THEO_AGENT_URL` (Theo's invocation URL, `http://localhost:8080/invocations`
 locally) and `THEO_AGENT_AUDIENCES` (what the token it issues for the person is addressed to: Theo, the
 posts agent, the MCP server), and is deployed with `COPILOTKIT_TELEMETRY_DISABLED=true`. It also reads
 `POSTS_MCP_URL` and `POSTS_MCP_RESOURCE` (both `http://localhost:8000/mcp` locally): where the MCP
@@ -1476,10 +1477,14 @@ Their READMEs, `libs/ai/README.md` and `infra/aws/README.md` are the guides; the
 - **Theo is the same shape over AG-UI.** `@AgUiAgent` on a provider whose `agent` is a function built
   on the first run; `AgentCoreAgUiServer` serves AgentCore's AG-UI contract (`POST /invocations`,
   server-sent events; `GET /ping`) with the same admission as the A2A host (`AgentCoreHost`);
-  `LangChainAgUiAgent` turns LangGraph's v3 stream into AG-UI events. Its one tool is
+  `LangChainAgUiAgent` turns LangGraph's v3 stream into AG-UI events. Its tools are
   `send_message_to_a2a_agent` (`libs/ai`'s `a2a/client`): the posts agent called over A2A with the
   caller's token, its answer streamed to the client as an AG-UI subagent of the call, Theo's thread
-  its A2A context and AgentCore session.
+  its A2A context and AgentCore session — and `search_the_web` (`libs/ai`'s `web/`): AgentCore Web
+  Search, an AgentCore Gateway with the `web-search` connector (`infra/aws/agents/web-search.ts`),
+  reached with `bedrock-agentcore`'s `WebSearchClient` signed as Theo's role. Theo's model is Nova 2
+  Lite, chosen for speed: it routes, the posts agent writes. `apps/theo-agent/README.md` has the
+  measurements and what was not used for search.
 - **The web's `/theo` is CopilotKit v2's headless hooks drawn with `libs/ui`'s chat components**, over
   the CopilotKit runtime at `/api/copilotkit`, whose `HttpAgent` calls Theo with an access token the
   web's own Better Auth issues for the person signed in (`DelegatedAccessTokens`, `libs/auth`),
@@ -2476,6 +2481,15 @@ DTOs count.
   placement — is read in the agent's `wrapToolCall` (`A2aMiddleware`), where the `ToolMessage` is whole.
 - **`@copilotkit/a2ui-renderer` reads a catalog's props through Zod 3's internals**, so its definitions
   are `zod/v3`; Zod 4 ships that implementation but not its types, hence a cast at the boundary.
+- **Claude on Amazon Bedrock has no server tools**: Anthropic's `web_search`/`web_fetch` (LangChain's
+  `tools.webSearch_…`) work with `ChatAnthropic` against the Claude API or Claude Platform on AWS, not
+  through `ChatBedrockConverse`. And `ChatBedrockConverse` (1.4.6) passes through only Bedrock tools
+  carrying `toolSpec`, so a Bedrock `systemTool` (Nova's `nova_grounding`) cannot be bound either. Web
+  search is therefore a tool of its own over AgentCore Web Search.
+- **`bedrock-agentcore` is bundled, so its imports are the app's to declare.** Theo bundles it for
+  `bedrock-agentcore/web-search` (ESM-only), and what that module `require`s stays external: `@smithy/signature-v4`,
+  `@smithy/protocol-http`, `@aws-crypto/sha256-js`, `@aws-sdk/credential-providers` and
+  `@aws-sdk/util-endpoints` are in `apps/theo-agent/package.json` for that reason alone.
 - **`AbstractAgent.addMessage` pushes onto `agent.messages`** instead of replacing it, so anything
   memoized on the array's identity misses a message an MCP App adds; runs do replace it, which is why
   `/theo`'s memoized transcript only failed for that. And `showDevConsole` no longer hides the

@@ -151,7 +151,8 @@ infra/aws/
                      is the stage's own domain when BASE_DOMAIN names one (optional)
   web/               the Next application, on the same origin
   chatwoot/          Chatwoot's two Fargate services, and the router's paths to them
-  agents/            Bedrock AgentCore Runtime: the posts MCP server, the posts agent and Theo
+  agents/            Bedrock AgentCore Runtime: the posts MCP server, the posts agent and Theo; the
+                     AgentCore Gateway Theo searches the web through
     agent-runtime.ts   AgentRuntime: ECR repository, arm64 image, execution role, the runtime
 infra/lambda/
   collector.yaml     the collector extension's configuration, travelling beside every bundle
@@ -313,7 +314,17 @@ links include, and `permissions` adds only what is nobody's resource: invoking B
   same reason as the posts agent, and links it: `THEO_A2A_AGENTS` is the posts agent's invocation URL,
   called over HTTPS with the caller's bearer, so the `InvokeAgentRuntime` the link grants is not what
   it uses. The web (`web/`) calls it from `/api/copilotkit` with a token its Better Auth issues for the
-  person signed in, addressed to the three audiences (`THEO_AGENT_AUDIENCES`).
+  person signed in, addressed to the three audiences (`THEO_AGENT_AUDIENCES`). Its model is Nova 2
+  Lite (`theoModel`), which the role's Bedrock permissions already cover.
+- **Web search is an AgentCore Gateway, `WebSearch`** (`agents/web-search.ts`): MCP, `AWS_IAM`
+  inbound, and one target with the `web-search` connector pinned to `1.2.0` (the version with
+  per-request date filters), so the tool AgentCore Web Search serves is `web-search___WebSearch`. The
+  gateway assumes `WebSearchRole`, allowed `InvokeGateway` and `InvokeWebSearch` on the service's own
+  `arn:aws:bedrock-agentcore:<region>:aws:tool/web-search.v1`; Theo links the gateway, which grants it
+  `InvokeGateway` on that gateway alone, and reads its URL as `THEO_WEB_SEARCH_URL` (also the
+  `agents.webSearch` output). The connector exists in `us-east-1`, `eu-west-1` and `ap-northeast-1`.
+  A gateway's name is `([0-9a-zA-Z][-]?){1,48}` — hyphens, no underscores — so it is
+  `<app>-<stage>-web-search`, not `AgentRuntime.nameOf`.
 - **AgentCore fetches the authorizer's discovery document on every create and update**, and refuses
   the change (`HTTP request failed against Discovery endpoint`) when it does not answer in time —
   which a cold gateway, or a cold function behind `/api/auth/jwks`, does not. So each runtime warms

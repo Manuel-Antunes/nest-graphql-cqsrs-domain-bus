@@ -2,10 +2,17 @@ import type { ActivityMessage, Message } from '@ag-ui/client';
 
 export const DELEGATION_TOOL = 'send_message_to_a2a_agent';
 
+export const WEB_SEARCH_TOOL = 'search_the_web';
+
 export const DRAWING_TOOLS: ReadonlySet<string> = new Set([
   'render_a2ui',
   'log_a2ui_event',
 ]);
+
+export interface WebSource {
+  title: string;
+  url: string;
+}
 
 export type TranscriptEntry =
   | { kind: 'user'; id: string; text: string }
@@ -18,6 +25,7 @@ export type TranscriptEntry =
       said: string;
       result?: string;
     }
+  | { kind: 'search'; id: string; query: string; sources?: WebSource[] }
   | { kind: 'tool'; id: string; name: string; result?: string }
   | { kind: 'activity'; id: string; message: ActivityMessage };
 
@@ -69,6 +77,19 @@ export class TheoTranscript {
                 ? undefined
                 : TheoTranscript.answerOf(result),
           });
+        } else if (call.function.name === WEB_SEARCH_TOOL) {
+          const result = results.get(call.id);
+          entries.push({
+            kind: 'search',
+            id: call.id,
+            query: String(
+              TheoTranscript.argumentsOf(call.function.arguments).query ?? '',
+            ),
+            sources:
+              result === undefined
+                ? undefined
+                : TheoTranscript.sourcesOf(result),
+          });
         } else {
           entries.push({
             kind: 'tool',
@@ -95,6 +116,14 @@ export class TheoTranscript {
     } catch {
       return result;
     }
+  }
+
+  static sourcesOf(result: string): WebSource[] {
+    return result.split(/\n{2,}/).flatMap((block) => {
+      const [heading = '', url = ''] = block.split('\n');
+      const title = heading.match(/^\[\d+\]\s+(.+)$/)?.[1];
+      return title && /^https?:\/\//.test(url) ? [{ title, url }] : [];
+    });
   }
 
   private static textOf(content: unknown): string {
