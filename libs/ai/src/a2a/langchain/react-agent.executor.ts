@@ -39,6 +39,7 @@ import type {
   HitlRequestPayload,
   HitlResponsePayload,
 } from '../domain/extensions/human-in-the-loop.extension';
+import { A2aTenancy } from '../server/a2a-tenancy';
 import type { A2aRuntimeContext, A2uiTurn } from './a2a.middleware';
 
 type HumanContentBlock =
@@ -125,6 +126,11 @@ export class ReactAgentExecutor<T extends TurnAgent = ReactAgent>
         configurable: {
           thread_id: contextId,
           user_id: requestContext.context?.user?.userName,
+          actor_id: A2aTenancy.actorOf(
+            requestContext.context?.tenant,
+            requestContext.context?.user,
+          ),
+          tenant: requestContext.context?.tenant,
           ...(this.observability.attachmentScope
             ? { attachment_scope: this.observability.attachmentScope }
             : {}),
@@ -981,6 +987,8 @@ type TurnStreamOptions = {
     configurable: {
       thread_id: string;
       user_id?: string;
+      actor_id?: string;
+      tenant?: string;
       attachment_scope?: string;
     };
   };

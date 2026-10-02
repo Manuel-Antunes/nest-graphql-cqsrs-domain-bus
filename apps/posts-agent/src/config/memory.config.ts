@@ -5,7 +5,6 @@ import { z } from 'zod';
 const MemoryEnvSchema = z.object({
   AWS_REGION: z.string().min(1).default('us-east-1'),
   BEDROCK_AGENTCORE_MEMORY_ID: z.string().min(1).optional(),
-  POSTS_AGENT_RECALL_LIMIT: z.coerce.number().int().positive().default(20),
 });
 
 export const memoryConfig = registerAs('memory', () => {
@@ -13,7 +12,6 @@ export const memoryConfig = registerAs('memory', () => {
   return {
     region: parsed.AWS_REGION,
     memoryId: parsed.BEDROCK_AGENTCORE_MEMORY_ID ?? null,
-    recallLimit: parsed.POSTS_AGENT_RECALL_LIMIT,
   };
 });
 

@@ -21,7 +21,8 @@ export interface OAuthBearerSessionOptions {
  * `getSession` as the user the token was issued for, and the session carries `scopes`: what the
  * token was granted, from its `scope` claim — none when it names none — and `claims`, the custom
  * claims the issuer added, which the identity keeps as its attributes. A session of this system's own
- * has no `scopes` at all, which is how the two are told apart.
+ * has no `scopes` at all, which is how the two are told apart. The token's `organization_id`, when it
+ * has one, is the session's active organization: the tenant the person delegated it in.
  *
  * A token of the client credentials grant (`sub` = `client_id`) is no user's, so it is no session:
  * it is left alone, unverified, and `AccessTokens` reads it as a `ClientIdentity` instead.
@@ -69,7 +70,10 @@ export const oauthBearerSession = (options: OAuthBearerSessionOptions) =>
                 updatedAt: issuedAt,
                 ipAddress: null,
                 userAgent: null,
-                activeOrganizationId: null,
+                activeOrganizationId:
+                  typeof claims[AccessTokens.ORGANIZATION_CLAIM] === 'string'
+                    ? claims[AccessTokens.ORGANIZATION_CLAIM]
+                    : null,
                 activeTeamId: null,
                 impersonatedBy: null,
                 scopes: AccessTokens.scopesOf(claims.scope),

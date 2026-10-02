@@ -12,6 +12,8 @@ export const OAUTH_SCOPES = [
   'write:posts',
   'read:clients',
   'write:clients',
+  'read:chats',
+  'write:chats',
   'write:conversations',
 ] as const;
 

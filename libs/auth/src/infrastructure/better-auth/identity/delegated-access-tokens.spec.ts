@@ -109,6 +109,37 @@ describe('an access token the signed-in person delegates to an agent', () => {
     ).toEqual(['openid', 'read:posts']);
   });
 
+  it("carries the person's active organization, and reads back with it active", async () => {
+    const { identity } = await signedIn();
+    const tokens = new DelegatedAccessTokens(auth as never);
+
+    const token = await inContext(() =>
+      tokens.issueFor(identity.with({ activeOrganizationId: 'org-acme' }), {
+        audiences: [AGENT],
+        scopes: ['openid'],
+      }),
+    );
+    const session = await inContext(() =>
+      auth.api.getSession({
+        headers: new Headers({ authorization: `Bearer ${token}` }),
+      }),
+    );
+
+    expect(decodeJwt(token).organization_id).toBe('org-acme');
+    expect(session?.session.activeOrganizationId).toBe('org-acme');
+  });
+
+  it('carries no organization for a person acting in none', async () => {
+    const { identity } = await signedIn();
+    const tokens = new DelegatedAccessTokens(auth as never);
+
+    const token = await inContext(() =>
+      tokens.issueFor(identity, { audiences: [AGENT], scopes: ['openid'] }),
+    );
+
+    expect(decodeJwt(token)).not.toHaveProperty('organization_id');
+  });
+
   it('is refused to an OAuth client acting for itself', async () => {
     const tokens = new DelegatedAccessTokens(auth as never);
     const client = ClientIdentity.parse({

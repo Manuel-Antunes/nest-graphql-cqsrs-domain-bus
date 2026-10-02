@@ -275,6 +275,8 @@ so the global guard, `@CurrentIdentity()`, `IdentityResolver` and `AuthService` 
   understands. Anything that is not a signed token falls through to Better Auth's own lookup.
 - **The user is read, not trusted.** The token carries only `sub`; the row is loaded, and a user who
   no longer exists — or is banned — gets no session.
+- **Its organization is the session's.** An `organization_id` claim — what a delegated token
+  carries — is the session's `activeOrganizationId`; a token without one has none.
 - **Its custom claims travel.** Whatever the issuer added beyond the registered claims is put on the
   session as `claims`, and the `UserIdentity` keeps it as its `attributes`; the token's `jti` and expiry
   are its `credential`.
@@ -344,6 +346,12 @@ that accepts one of its audiences.
   was granted.
 - **Only a person delegates.** A `ClientIdentity` is refused (`IdentityIsNotAUserException`): a client
   asks the authorization server for its own token.
+- **It carries the organization it was delegated in.** The person's active organization travels as the
+  `organization_id` claim (`AccessTokens.ORGANIZATION_CLAIM`, the claim a client's own token is bound
+  by), and `oauth-bearer-session` makes it the session's `activeOrganizationId` — so an agent holding
+  the token knows the tenant it acts in, the gateway names it as `x-tenant` when nothing else does, and
+  every memory an agent keeps is scoped by it. It grants nothing: the tenant guard still lets only the
+  organization's members in.
 
 ## A client's own access token is a `ClientIdentity`
 

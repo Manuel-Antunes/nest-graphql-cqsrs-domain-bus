@@ -1,11 +1,14 @@
 import { ChatBedrockConverse } from '@langchain/aws';
+import { BaseCheckpointSaver, BaseStore } from '@langchain/langgraph';
 import { Module } from '@nestjs/common';
+import { AgentMemories } from '@nestposts/ai/checkpoint/agent-memories';
 
 import type { BedrockConfig } from '../config/bedrock.config';
 import { bedrockConfig } from '../config/bedrock.config';
+import type { MemoryConfig } from '../config/memory.config';
+import { memoryConfig } from '../config/memory.config';
 import { PostsMcpApps } from '../mcp/posts-mcp-apps';
 import { PostsMcpTools } from '../mcp/posts-mcp-tools';
-import { ConversationMemory } from '../memory/conversation-memory';
 import { PostsManagerAgent } from './posts-manager.agent';
 
 @Module({
@@ -23,7 +26,17 @@ import { PostsManagerAgent } from './posts-manager.agent';
     { provide: 'BASE_MODEL', useExisting: ChatBedrockConverse },
     PostsMcpTools,
     PostsMcpApps,
-    ConversationMemory,
+    {
+      provide: BaseCheckpointSaver,
+      inject: [memoryConfig.KEY],
+      useFactory: (memory: MemoryConfig) =>
+        AgentMemories.checkpointerOf(memory),
+    },
+    {
+      provide: BaseStore,
+      inject: [memoryConfig.KEY],
+      useFactory: (memory: MemoryConfig) => AgentMemories.storeOf(memory),
+    },
     PostsManagerAgent,
   ],
   exports: [PostsManagerAgent],

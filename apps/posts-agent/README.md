@@ -104,12 +104,22 @@ agent gets the override.
 
 ## Memory
 
-A turn's checkpoints live in the microVM (`MemorySaver`): AgentCore keeps one per runtime session, and
-`agent-console` sends the same `X-Amzn-Bedrock-AgentCore-Runtime-Session-Id` for a whole conversation.
-A conversation outlives its microVM through **AgentCore Memory** (`BEDROCK_AGENTCORE_MEMORY_ID`):
-`ConversationMemoryMiddleware` records every turn as an event of the caller (actor) in the
-conversation's session (the A2A context id), and a thread this microVM never saw starts from what the
-memory kept of it. Without a memory id both halves are off.
+Both of the memories [AWS's LangGraph integration](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/memory-integrate-lang.html)
+describes, on the agent's AgentCore Memory (`BEDROCK_AGENTCORE_MEMORY_ID`), through `libs/ai`'s
+`AgentMemories`:
+
+- **The checkpointer** (`AgentCoreMemorySaver`, snapshot format) keeps every A2A context's checkpoints
+  under the actor `tenant:user` and the context as the session, so a conversation outlives its microVM
+  and resumes on any other; the same context id in another organization, or for another person, is
+  another conversation.
+- **The store** (`AgentCoreMemoryStore`, `LongTermMemoryMiddleware`) puts what the caller said and the
+  agent answered as conversational events, and recalls the preferences and facts the memory's
+  strategies extracted for that actor into the system message.
+
+The tenant is the caller's organization, from the token (`organization_id`), and it is A2A's own: the
+card served to a caller names their tenant, a request naming another is refused, and the task store
+files tasks under the same actor (`libs/ai`, "Multi-tenancy"). Without a memory id both memories are
+in the process (`MemorySaver`, `InMemoryStore`).
 
 ## Configuration
 
@@ -126,7 +136,7 @@ memory kept of it. Without a memory id both halves are off.
 | `POSTS_AGENT_MODEL_ID` | `global.anthropic.claude-sonnet-5-5` | a Bedrock model or inference profile |
 | `POSTS_AGENT_TEMPERATURE` | — | sent only when set: newer Claude models refuse it |
 | `AWS_REGION` | `us-east-1` | Bedrock and AgentCore Memory |
-| `BEDROCK_AGENTCORE_MEMORY_ID` | — | AgentCore Memory; unset, conversations live as long as the microVM |
+| `BEDROCK_AGENTCORE_MEMORY_ID` | — | AgentCore Memory: the checkpoints and the long-term memory; unset, both live as long as the microVM |
 
 ## Running it locally
 

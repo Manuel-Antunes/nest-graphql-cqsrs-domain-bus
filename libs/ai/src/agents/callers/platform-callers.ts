@@ -5,6 +5,7 @@ import type { Identity } from '@nestposts/auth/domain/auth/vo/identity';
 import { AccessTokens } from '@nestposts/auth/infrastructure/better-auth/identity/access-tokens';
 import { RequestHeaders } from '@nestposts/auth/infrastructure/request/request-headers';
 import { inRequestContext, MikroORM } from '@nestposts/database';
+import { TenantOrganizations } from '@nestposts/organizations/infrastructure/tenancy/tenant-organizations.service';
 
 import type { AgentCallerHeaders } from './agent-caller';
 import { PlatformCaller } from './platform-caller';
@@ -14,6 +15,7 @@ export class PlatformCallers {
   constructor(
     private readonly moduleRef: ModuleRef,
     private readonly orm: MikroORM,
+    private readonly tenants: TenantOrganizations,
   ) {}
 
   async resolve(
@@ -24,10 +26,16 @@ export class PlatformCallers {
       RequestHeaders.from(request).get('authorization'),
     );
     if (!accessToken) return undefined;
-    const identity = await inRequestContext(this.orm, () =>
-      this.identityOf(request),
-    );
-    return identity ? new PlatformCaller(identity, accessToken) : undefined;
+    return inRequestContext(this.orm, async () => {
+      const identity = await this.identityOf(request);
+      return identity
+        ? new PlatformCaller(
+            identity,
+            accessToken,
+            await this.tenants.tenantOf(identity.activeOrganizationId),
+          )
+        : undefined;
+    });
   }
 
   private async identityOf(request: object): Promise<Identity | null> {

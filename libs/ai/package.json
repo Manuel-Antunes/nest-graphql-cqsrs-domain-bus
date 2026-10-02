@@ -52,9 +52,12 @@
     "@ag-ui/client": "catalog:",
     "@ag-ui/core": "catalog:",
     "@ag-ui/encoder": "catalog:",
-    "rxjs": "^7.8.2"
+    "rxjs": "^7.8.2",
+    "@nestposts/organizations": "workspace:*",
+    "@nestposts/langgraph-checkpoint-aws": "workspace:*"
   },
   "devDependencies": {
-    "@types/mime-types": "catalog:"
+    "@types/mime-types": "catalog:",
+    "@types/express": "^5.0.6"
   }
 }

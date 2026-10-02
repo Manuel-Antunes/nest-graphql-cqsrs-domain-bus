@@ -79,7 +79,7 @@ export abstract class AgentCoreHost implements OnApplicationShutdown {
     this.callers.run(caller, serve);
   }
 
-  private async callerOf(
+  protected async callerOf(
     request: IncomingMessage,
   ): Promise<AgentCaller | undefined> {
     try {

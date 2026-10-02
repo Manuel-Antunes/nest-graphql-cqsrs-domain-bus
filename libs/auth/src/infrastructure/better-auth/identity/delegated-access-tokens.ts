@@ -5,6 +5,7 @@ import { IdentityIsNotAUserException } from '../../../domain/auth/exception/iden
 import type { Identity } from '../../../domain/auth/vo/identity';
 import type { BetterAuth } from '../init-auth';
 import { BETTER_AUTH } from '../tokens';
+import { AccessTokens } from './access-tokens';
 
 /** What a delegated token is asked for. */
 export interface DelegatedAccessTokenRequest {
@@ -27,6 +28,11 @@ export interface DelegatedAccessTokenRequest {
  * reads back exactly as one: signed with the jwt plugin's keys, this deployment's `iss`, the `sub` of
  * the person, the audiences asked for, and the `scope` they were granted, which `oauth-bearer-session`
  * turns into a session in every Better Auth process that accepts one of those audiences.
+ *
+ * It carries the person's active organization as `organization_id` — the tenant they act in, in the
+ * token, which is where AgentCore wants a tenant: the session it reads back as has that organization
+ * active, so the gateway, the agents and every subgraph behind them name the same tenant. Being a
+ * member is still checked wherever the tenant is used (`TenantMembershipGuard`).
  *
  * Only a person delegates: an OAuth client acting for itself is refused with
  * {@link IdentityIsNotAUserException}. And a token never holds more than its holder: a scope the
@@ -57,6 +63,9 @@ export class DelegatedAccessTokens {
           scope: request.scopes
             .filter((scope) => identity.scopes.includes(scope))
             .join(' '),
+          ...(identity.activeOrganizationId && {
+            [AccessTokens.ORGANIZATION_CLAIM]: identity.activeOrganizationId,
+          }),
           jti: randomUUID(),
           iat: issuedAt,
           exp:

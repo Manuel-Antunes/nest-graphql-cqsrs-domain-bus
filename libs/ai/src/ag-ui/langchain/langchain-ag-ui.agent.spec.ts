@@ -4,6 +4,9 @@ import type { BaseMessage } from '@langchain/core/messages';
 import type { ChatGenerationChunk } from '@langchain/core/outputs';
 import { tool } from '@langchain/core/tools';
 import type { LangGraphRunnableConfig } from '@langchain/langgraph';
+import { UserIdentity } from '@nestposts/auth/domain/auth/vo/user-identity';
+import { AgentCoreMemorySaver } from '@nestposts/langgraph-checkpoint-aws';
+import { FakeAgentCoreMemory } from '@nestposts/langgraph-checkpoint-aws/testing/fake-agentcore-memory';
 import { createAgent } from 'langchain';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
@@ -12,6 +15,7 @@ import {
   ScriptedModel,
   type ScriptedTurn,
 } from '../../a2a/langchain/testing/scripted-model';
+import { PlatformCaller } from '../../agents/callers/platform-caller';
 import { AgUiMiddleware } from './ag-ui.middleware';
 import { AgUiEvents } from './ag-ui-events';
 import { AgUiMessages } from './ag-ui-messages';
@@ -231,6 +235,62 @@ describe('a LangChain agent served over AG-UI', () => {
     ]);
     expect(model.prompts).toHaveLength(1);
     expect(model.prompts[0][0].text).toContain('The page:\n/feed');
+  });
+
+  it('owns the conversation once it keeps a checkpoint: what the client sends again is not added twice, and the thread is the caller’s in their tenant', async () => {
+    const model = new RecordingModel([
+      { text: ['Hi Ana.'] },
+      { text: ['Yesterday.'] },
+    ]);
+    const memory = new FakeAgentCoreMemory();
+    const checkpointer = new AgentCoreMemorySaver('memory', {
+      client: memory,
+      checkpointFormat: 'snapshot',
+    });
+    const graph = createAgent({
+      model,
+      tools: [],
+      middleware: [AgUiMiddleware.create()],
+      checkpointer,
+    });
+    const ana = new PlatformCaller(
+      UserIdentity.parse({
+        userId: 'user-ana',
+        email: 'ana@acme.test',
+        name: 'Ana',
+        scopes: [],
+      }),
+      'token',
+      'acme',
+    );
+    const agent = new LangChainAgUiAgent({
+      graph,
+      threadId: 'thread-3',
+      callerOf: () => ana,
+      initialMessages: [{ id: 'user-1', role: 'user', content: 'Hello' }],
+    });
+
+    await eventsOf(agent);
+    agent.addMessage({ id: 'user-2', role: 'user', content: 'When?' });
+    await eventsOf(agent);
+    const tuple = await checkpointer.getTuple({
+      configurable: { thread_id: 'thread-3', actor_id: 'acme:user-ana' },
+    });
+
+    const kept = (tuple?.checkpoint.channel_values.messages ??
+      []) as BaseMessage[];
+    expect(kept.map((message) => message.text)).toEqual([
+      'Hello',
+      'Hi Ana.',
+      'When?',
+      'Yesterday.',
+    ]);
+    expect(model.prompts[1].map((message) => message.text)).toEqual([
+      'Hello',
+      'Hi Ana.',
+      'When?',
+    ]);
+    expect(memory.sessionsOf('acme:user-ana')).toContain('thread-3');
   });
 
   it('ends a failed run with RUN_ERROR, naming the failure', async () => {

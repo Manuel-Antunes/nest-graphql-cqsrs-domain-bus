@@ -1,6 +1,10 @@
 import type { AgentExecutor, TaskStore } from '@a2a-js/sdk/server';
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
-import { InMemoryStore, MemorySaver } from '@langchain/langgraph';
+import {
+  BaseCheckpointSaver,
+  BaseStore,
+  InMemoryStore,
+} from '@langchain/langgraph';
 import { Inject, Injectable } from '@nestjs/common';
 import { A2aMiddleware } from '@nestposts/ai/a2a/langchain/a2a.middleware';
 import { LangChainTaskStore } from '@nestposts/ai/a2a/langchain/langchain-task-store';
@@ -13,14 +17,13 @@ import { SubAgentMiddleware } from '@nestposts/ai/agents/subagent-middleware';
 import { SkillsBackend } from '@nestposts/ai/backends/skills.backend';
 import type { Skill } from '@nestposts/ai/domain/skill.entity';
 import { EmptyToolInputMiddleware } from '@nestposts/ai/middleware/empty-tool-input.middleware';
+import { LongTermMemoryMiddleware } from '@nestposts/ai/middleware/long-term-memory.middleware';
 import { createAgent } from 'langchain';
 
 import type { OAuthConfig } from '../config/oauth.config';
 import { oauthConfig } from '../config/oauth.config';
 import { PostsMcpApps } from '../mcp/posts-mcp-apps';
 import { PostsMcpTools } from '../mcp/posts-mcp-tools';
-import { ConversationMemory } from '../memory/conversation-memory';
-import { ConversationMemoryMiddleware } from '../memory/conversation-memory.middleware';
 import { POSTS_MANAGER_INSTRUCTIONS } from './posts-manager.instructions';
 import { BROWSE_POSTS } from './skills/browse-posts.skill';
 import { CURATE_POSTS } from './skills/curate-posts.skill';
@@ -59,6 +62,8 @@ export class PostsManagerAgent implements A2aAgent {
     'write:posts': 'Publish, change and delete your posts',
   } as const;
 
+  static readonly RECALL = ['preferences', 'facts'] as const;
+
   static readonly SKILLS: readonly Skill[] = [
     BROWSE_POSTS,
     PUBLISH_POSTS,
@@ -67,18 +72,18 @@ export class PostsManagerAgent implements A2aAgent {
 
   readonly taskStore: TaskStore;
 
-  private readonly checkpointer = new MemorySaver();
-  private readonly store = new InMemoryStore();
+  private readonly tasks = new InMemoryStore();
 
   constructor(
     @Inject('BASE_MODEL') private readonly model: BaseChatModel,
     private readonly tools: PostsMcpTools,
     private readonly apps: PostsMcpApps,
-    private readonly memory: ConversationMemory,
+    private readonly checkpointer: BaseCheckpointSaver,
+    private readonly memory: BaseStore,
     @Inject(oauthConfig.KEY) private readonly oauth: OAuthConfig,
   ) {
     this.taskStore = new LangChainTaskStore({
-      store: this.store,
+      store: this.tasks,
       checkpointer: this.checkpointer,
     });
   }
@@ -136,7 +141,7 @@ export class PostsManagerAgent implements A2aAgent {
       systemPrompt: POSTS_MANAGER_INSTRUCTIONS,
       middleware: [
         A2aMiddleware.create(),
-        ConversationMemoryMiddleware.create(this.memory),
+        LongTermMemoryMiddleware.create({ recall: PostsManagerAgent.RECALL }),
         EmptyToolInputMiddleware.create(),
         ...SubAgentMiddleware.for({
           backend: SkillsBackend.mount(this.skills),
@@ -145,7 +150,7 @@ export class PostsManagerAgent implements A2aAgent {
         }),
       ],
       checkpointer: this.checkpointer,
-      store: this.store,
+      store: this.memory,
     });
     return new ReactAgentExecutor(agent, { traceName: 'posts-manager' });
   };

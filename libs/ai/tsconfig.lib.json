@@ -10,6 +10,15 @@
   "exclude": ["src/**/*.spec.ts"],
   "references": [
     {
+      "path": "../core/langgraph-checkpoint-aws/tsconfig.lib.json"
+    },
+    {
+      "path": "../organizations/tsconfig.lib.json"
+    },
+    {
+      "path": "../auth/tsconfig.lib.json"
+    },
+    {
       "path": "../database/tsconfig.lib.json"
     },
     {
@@ -17,9 +26,6 @@
     },
     {
       "path": "../asset/tsconfig.lib.json"
-    },
-    {
-      "path": "../auth/tsconfig.lib.json"
     }
   ]
 }

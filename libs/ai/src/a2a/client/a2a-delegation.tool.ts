@@ -241,7 +241,7 @@ export class A2aDelegationTool {
       async (
         { agentName, task }: { agentName: string; task: string },
         config: DelegationConfig,
-      ) => new A2aDelegation(agents.find(agentName), config).send(task),
+      ) => new A2aDelegation(await agents.reach(agentName), config).send(task),
       {
         name: A2aDelegationTool.NAME,
         description:

@@ -21,6 +21,7 @@ describe('the credential the posts MCP server is called with', () => {
           scopes: ['read:posts'],
         }),
         'the-token',
+        'root',
       ),
       () => provider.tokens(),
     );
