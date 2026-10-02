@@ -3,6 +3,7 @@
 @import '@nestposts/ui/styles/theme.css';
 @import '@nestposts/ui/styles/animations.css';
 @import '@nestposts/ui/styles/brand.css';
+@import '@nestposts/ui/styles/markdown.css';
 @import 'shadcn/tailwind.css';
 
 @source '../../../libs/ui/src/components';

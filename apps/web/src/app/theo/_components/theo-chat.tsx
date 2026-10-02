@@ -24,6 +24,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from '@nestposts/ui/components/ui/empty';
+import { Markdown } from '@nestposts/ui/components/ui/markdown';
 import {
   Marker,
   MarkerContent,
@@ -167,8 +168,8 @@ function TranscriptLine({ entry }: { entry: TranscriptEntry }) {
           <MessageContent>
             <MessageHeader>Theo</MessageHeader>
             <Bubble variant="secondary">
-              <BubbleContent className="whitespace-pre-wrap">
-                {entry.text}
+              <BubbleContent>
+                <Markdown>{entry.text}</Markdown>
               </BubbleContent>
             </Bubble>
           </MessageContent>

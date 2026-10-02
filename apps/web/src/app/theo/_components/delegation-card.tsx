@@ -1,5 +1,6 @@
 import { Badge } from '@nestposts/ui/components/ui/badge';
 import { Bubble, BubbleContent } from '@nestposts/ui/components/ui/bubble';
+import { Markdown } from '@nestposts/ui/components/ui/markdown';
 import {
   Marker,
   MarkerContent,
@@ -42,8 +43,8 @@ export function DelegationCard({
       ) : null}
       {said || result ? (
         <Bubble variant="muted">
-          <BubbleContent className="whitespace-pre-wrap">
-            {said || result}
+          <BubbleContent>
+            <Markdown>{said || result}</Markdown>
           </BubbleContent>
         </Bubble>
       ) : null}

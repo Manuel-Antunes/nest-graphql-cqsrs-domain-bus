@@ -1,5 +1,5 @@
 import { MockedProvider } from '@apollo/client/testing/react';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const useToolInfo = vi.fn();
@@ -267,6 +267,32 @@ describe('previewing a draft', () => {
     expect(openLink).toHaveBeenCalledWith({
       url: 'http://localhost:3000/posts/p9',
     });
+  });
+
+  it('renders the content as markdown, and opens its links through the host', async () => {
+    useToolInfo.mockReturnValue({
+      toolName: 'PreviewPost',
+      toolInput: {
+        title: 'Fresh post',
+        content:
+          '## Why\n\nIt is **bold**,\nand [ours](https://example.com/ours).\n\n- one\n- two',
+      },
+    });
+    mount([author()]);
+
+    const article = (
+      await screen.findByRole('heading', { name: 'Why' })
+    ).closest('article') as HTMLElement;
+    expect(within(article).getByText('bold').dataset.streamdown).toBe('strong');
+    expect(article.querySelector('p br')).toBeTruthy();
+    expect(
+      within(article)
+        .getAllByRole('listitem')
+        .map((item) => item.textContent),
+    ).toEqual(['one', 'two']);
+
+    fireEvent.click(within(article).getByRole('link', { name: 'ours' }));
+    expect(openLink).toHaveBeenCalledWith({ url: 'https://example.com/ours' });
   });
 
   it('publishes the text as the person adjusted it', async () => {

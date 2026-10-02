@@ -4,6 +4,7 @@
 @import './theme.css';
 @import './animations.css';
 @import './brand.css';
+@import './markdown.css';
 @import 'shadcn/tailwind.css';
 
 @source '../**/*.{ts,tsx}';
