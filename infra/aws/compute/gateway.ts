@@ -2,7 +2,7 @@
 
 import { vpc } from '../network';
 import { StreamingFunction } from '../support';
-import { notificationsSubgraph, streaming } from './api';
+import { chatSubgraph, notificationsSubgraph, streaming } from './api';
 import { build } from './build';
 import { gatewayEnvironment } from './environment';
 
@@ -24,6 +24,7 @@ export const gateway = new StreamingFunction('Gateway', {
       ...gatewayEnvironment,
       POSTS_SUBGRAPH_URL: graphqlOf(streaming.url),
       NOTIFICATIONS_SUBGRAPH_URL: graphqlOf(notificationsSubgraph.url),
+      CHAT_SUBGRAPH_URL: graphqlOf(chatSubgraph.url),
     },
   },
   handler: 'apps/gateway/dist/lambda/http.handler',

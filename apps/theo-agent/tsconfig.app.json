@@ -9,10 +9,10 @@
   "exclude": ["src/**/*.spec.ts"],
   "references": [
     {
-      "path": "../posts-agent/tsconfig.app.json"
+      "path": "../../libs/core/redis/tsconfig.lib.json"
     },
     {
-      "path": "../../libs/core/redis/tsconfig.lib.json"
+      "path": "../posts-agent/tsconfig.app.json"
     },
     {
       "path": "../../libs/organizations/tsconfig.lib.json"
@@ -22,6 +22,9 @@
     },
     {
       "path": "../migrator/tsconfig.app.json"
+    },
+    {
+      "path": "../../libs/core/langgraph-checkpoint-aws/tsconfig.lib.json"
     },
     {
       "path": "../../libs/database/tsconfig.lib.json"

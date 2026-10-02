@@ -1,11 +1,12 @@
 # `apps/gateway`
 
-The one GraphQL endpoint a client talks to. It federates three subgraphs:
+The one GraphQL endpoint a client talks to. It federates four subgraphs:
 
 | subgraph | served by | what it owns |
 |---|---|---|
 | `posts` | `apps/posts-api` | posts, tags, users and their subscriptions (`onPostCreated`, `onPostUpdated`, …) |
 | `notifications` | `apps/notificator` | notifications and devices, and `IUser.notifications` / `IUser.unreadNotificationCount` through `@interfaceObject` |
+| `chat` | `apps/chat-api` | the conversations people had with the agents — `chats`, `chat { messages }`, `recordChat`, `renameChat`, `deleteChat` — and `IUser.chats` through `@interfaceObject` |
 | `chatwoot` | `apps/chatwoot` (Rails) | contacts, conversations, inboxes and agents of the organization's support account, and `Client.contacts`, `Team.workingHours` / `Team.supportTeam` on the entities `posts` owns; its SDL is the dump `apps/chatwoot/schema.graphql` |
 
 It composes the supergraph from the subgraphs' SDL, executes it — queries, mutations **and
@@ -274,6 +275,7 @@ above it.
 | `GATEWAY_URL` | `http://localhost:4000/graphql` | this gateway as a resource — the audience an OAuth access token must carry |
 | `POSTS_SUBGRAPH_URL` | `http://localhost:3000/graphql` | |
 | `NOTIFICATIONS_SUBGRAPH_URL` | `http://localhost:3002/graphql` | |
+| `CHAT_SUBGRAPH_URL` | `http://localhost:3003/graphql` | |
 | `CHATWOOT_SUBGRAPH_URL` | `http://localhost:3100/graphql` | |
 | `GATEWAY_SUBGRAPHS_DIR` | `dist/subgraphs` beside `main.js` | where the baked SDL is read from |
 | `GATEWAY_CORS_ORIGINS` | `WEB_URL`, then `http://localhost:4200` | the browser calls the gateway cross-origin for SSE |

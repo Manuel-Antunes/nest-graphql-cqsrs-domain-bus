@@ -196,6 +196,22 @@ export const notificatorEnvironment = {
 };
 
 /**
+ * **The chat API keeps the tenant's chats and serves the conversations the agents kept** — a chat is
+ * a row in the tenant's schema, its messages the agent's checkpoints in that agent's AgentCore Memory,
+ * named here as `agentId=memoryId` pairs by `agents/memories.ts` through `platform.ts`.
+ */
+export const chatApiEnvironment = {
+  ...sharedEnvironment,
+  OTEL_SERVICE_NAME: 'chat-api',
+  ...errorReporting('chat-api'),
+  AUTH_SECRET: authSecret.value,
+  AUTH_URL: router.url,
+  WEB_URL: router.url,
+  GATEWAY_URL: gatewayUrl,
+  AUTH_OAUTH_RESOURCES: acceptedResources,
+};
+
+/**
  * **Who the seeders create**, from the root `.env` or the deploy's own environment:
  * `SEED_AUTHOR_EMAIL`, `SEED_AUTHOR_PASSWORD`, `SEED_AUTHOR_NAME` and the `SEED_PROMOTED_` and
  * `SEED_READER_` twins that `TestUsersSeeder` reads. Unset, it seeds its defaults.

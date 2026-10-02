@@ -45,7 +45,8 @@ The only exceptions:
    `libs/core/transport-eventbus`, `libs/core/outbox-mikro-orm`, `libs/core/event-store-mikro-orm`,
    `libs/core/microservices-aws`,
    `libs/core/microservices-inngest`, `libs/core/microservices-memory`, `libs/core/mail`,
-   `libs/core/redis`, `libs/core/graphql-response-cache`, `libs/core/observability`, `libs/notifications`, `libs/asset`, `libs/auth` and
+   `libs/core/redis`, `libs/core/graphql-response-cache`, `libs/core/observability`,
+   `libs/core/langgraph-checkpoint-aws`, `libs/notifications`, `libs/asset`, `libs/auth` and
    `libs/organizations` — may
    carry **JSDoc**, and only JSDoc
    (`/** … */`), as usage documentation of their public API. These are
@@ -61,8 +62,9 @@ The only exceptions:
    Anything that changes that library's relationship to upstream belongs there.
    **`libs/core/mail/NOTICE.md`** does the same for the port of `@adonisjs/mail`'s class-based mail,
    **`libs/auth/NOTICE.md`** for the React Email components copied from better-auth-ui's registry
-   into `libs/auth` and `libs/organizations`, and **`libs/asset/NOTICE.md`** for the port of
-   `@jrmc/adonis-attachment`.
+   into `libs/auth` and `libs/organizations`, **`libs/asset/NOTICE.md`** for the port of
+   `@jrmc/adonis-attachment`, and **`libs/core/langgraph-checkpoint-aws/NOTICE.md`** for the port of
+   Python's `langgraph-checkpoint-aws` (its AgentCore saver and store).
 
 GraphQL `"""descriptions"""` in `apps/posts-api/src/graphql/*.graphql` are **not** comments — they are
 part of the schema and are served through introspection and GraphiQL. Keep them. SDL `#` comments are
@@ -327,8 +329,14 @@ resource its card names), the auth, database and Redis variables of every Better
 `apps/theo-agent` reads `THEO_AGENT_PORT`/`THEO_AGENT_HOST` (`8080`/`0.0.0.0`), `THEO_A2A_AGENTS` (the A2A
 agents it may delegate to, comma separated — the posts agent's URL), `THEO_AGENT_MODEL_ID`
 (default `us.amazon.nova-2-lite-v1:0`), `THEO_AGENT_TEMPERATURE`, `THEO_WEB_SEARCH_URL` (the AgentCore
-Gateway with the web search connector; unset, Theo has no search), `AWS_REGION` and the auth, database
-and Redis variables of every Better Auth process. `apps/web` reads `THEO_AGENT_URL` (Theo's invocation URL, `http://localhost:8080/invocations`
+Gateway with the web search connector; unset, Theo has no search), `BEDROCK_AGENTCORE_MEMORY_ID`
+(Theo's AgentCore Memory: its checkpoints and its long-term memory; unset, both in the process),
+`CHAT_API_URL` (where it records each conversation as a chat — the gateway; unset, nothing is
+recorded), `AWS_REGION` and the auth, database and Redis variables of every Better Auth process.
+`apps/chat-api` reads `CHAT_API_PORT` (default `3003`), `CHAT_AGENT_MEMORIES` (`agentId=memoryId`,
+comma separated: whose AgentCore Memory a chat's messages are read from — `theo=<id>`), `AWS_REGION`
+and the database, Redis and auth variables of every subgraph; the gateway reaches it at
+`CHAT_SUBGRAPH_URL` (default `http://localhost:3003/graphql`). `apps/web` reads `THEO_AGENT_URL` (Theo's invocation URL, `http://localhost:8080/invocations`
 locally) and `THEO_AGENT_AUDIENCES` (what the token it issues for the person is addressed to: Theo, the
 posts agent, the MCP server), and is deployed with `COPILOTKIT_TELEMETRY_DISABLED=true`. It also reads
 `POSTS_MCP_URL` and `POSTS_MCP_RESOURCE` (both `http://localhost:8000/mcp` locally): where the MCP
@@ -465,6 +473,11 @@ libs/core/redis          Redis as one Nest provider: RedisModule (global, node-r
                          failing the boot when unreachable, closed on shutdown — RedisCacheOptions
                          (the Nest cache on that client through Keyv) and ThrowawayRedis for specs.
                          It has a README
+libs/core/langgraph-checkpoint-aws  a TypeScript port of Python's langgraph-checkpoint-aws:
+                         AgentCoreMemorySaver (LangGraph checkpoints as AgentCore Memory events,
+                         legacy and snapshot formats) and AgentCoreMemoryStore (conversation put as
+                         events for the memory's strategies, long-term records searched by
+                         namespace), with FakeAgentCoreMemory for specs. README and NOTICE
 libs/core/graphql-response-cache  GraphQL response caching for a Yoga server, stored in the Nest
                          cache manager: @graphql-yoga/plugin-response-cache over a store that
                          invalidates by version, opt-in per type or field with @cacheControl in the
@@ -484,6 +497,10 @@ libs/tanstack-query-graphql  GraphQL over TanStack Query, with Apollo's InMemory
                          normalized store underneath: GqlRpc (option builders keyed
                          ['graph', document, variables]), GraphQueryCache/GraphMutationCache and
                          useSubscription. A SOURCE package like libs/ui; it has a README
+libs/chat                domain/chat: a person's conversation with an agent (the agent's thread as
+                         id, the owner, the agent, a title) + its ORM mapping and repository, wired
+                         by ChatsInfrastructureModule; a tenant table. What a chat SAYS is the
+                         agent's checkpoints. It has a README
 libs/clients             domain/client (a Client of the tenant's organization: CPF, kind, status,
                          address, the litigation flags) + its ORM mapping and repository, wired by
                          ClientsInfrastructureModule; a tenant table. Its application layer and the
@@ -501,10 +518,13 @@ libs/ai                  the agents' runtime (being migrated in): what every age
                          with — analysis, AttachmentDrive over @nestjs/storage and the asset model,
                          the deepagents DriveBackend, the ingestion middleware that keeps base64 out
                          of the checkpoint (files/) — and ChannelResponseProcessor, whose Chatwoot
-                         channel forwards the agent bot's platform token to the gateway. It has a
-                         README
+                         channel forwards the agent bot's platform token to the gateway — and every
+                         agent's memory (checkpoint/: AgentMemories, the AgentCore checkpointer and
+                         store; LongTermMemoryMiddleware), its tenancy (A2A's tenant held to the
+                         caller's organization, the actor tenant:user) and its chats (chats/:
+                         ChatRecordingMiddleware over the chat API). It has a README
 
-apps/gateway             the one GraphQL endpoint: composes the posts, notifications and chatwoot subgraphs
+apps/gateway             the one GraphQL endpoint: composes the posts, notifications, chat and chatwoot subgraphs
                          from their SDL, executes them with @graphql-tools/federation (subscriptions
                          over SSE, @interfaceObject), reads each caller's session through the same
                          Better Auth (Redis first, Postgres on a miss) and forwards every caller's
@@ -514,6 +534,9 @@ apps/gateway             the one GraphQL endpoint: composes the posts, notificat
 apps/posts-api           application + interfaces (GraphQL, messaging), a HYBRID application:
                          HTTP (the `posts` subgraph, subscriptions over SSE) and a microservice
 apps/tagging             one step of the saga, a FULL microservice: no HTTP port at all
+apps/chat-api            the `chat` subgraph: a person's chats with the agents in the tenant
+                         (`chats`, `chat`, `recordChat`, `renameChat`, `deleteChat`, `IUser.chats`),
+                         and their messages read back from the agent's AgentCore Memory. README
 apps/notificator         delivers notifications — the database, email, push — through a command, and
                          serves the `notifications` subgraph: a HYBRID application (see
                          Notifications)
@@ -1164,7 +1187,7 @@ are three kinds:
 |---|---|---|
 | `SYSTEM_SCHEMA` (`public`) | `public` | the users (`libs/users`' `User`, which Better Auth writes as `AuthUser`), Better Auth's tables and the organizations' — `libs/users`, `libs/auth`, `libs/organizations` |
 | `TRANSPORT_SCHEMA` (`libs/database`) | `transport` | the messaging's bookkeeping: the outbox and the inbox (`libs/core/outbox-mikro-orm`) and the event store's `event_log` (`libs/core/event-store-mikro-orm`) |
-| `TENANT_SCHEMA` (`*`, MikroORM's wildcard) | `tenant_<name>` | everything else: posts, tags, authors, calendar events, clients, notifications, devices |
+| `TENANT_SCHEMA` (`*`, MikroORM's wildcard) | `tenant_<name>` | everything else: posts, tags, authors, calendar events, clients, chats, notifications, devices |
 
 A wildcard table exists once per tenant, and which copy a query reaches is the schema of the entity
 manager it runs on. `tenant_root` is the root tenant's — whoever names no tenant, the visitor who never
@@ -1403,7 +1426,7 @@ last section is the design; the essentials:
   the `read:clients`/`write:clients` scopes. The web's `/clients` screen links and creates Chatwoot
   contacts through the gateway and opens them in `/atendimento`, the embedded dashboard.
 
-### The gateway: one endpoint, three subgraphs
+### The gateway: one endpoint, four subgraphs
 
 `apps/gateway` is the only GraphQL endpoint a client calls — `apps/web` included, through its
 `/api/graphql` proxy on the server and directly for SSE subscriptions in the browser.
@@ -1478,6 +1501,24 @@ Their READMEs, `libs/ai/README.md` and `infra/aws/README.md` are the guides; the
   server's audience. Nothing holds a credential of its own.
 - **The audiences are logical** (`<router>/mcp`, `<router>/a2a/posts`, `<router>/agui/theo`): a
   runtime's authorizer cannot name the ARN its invocation URL is made of.
+- **Everything an agent keeps is the tenant's and the person's.** The token the web delegates carries
+  the person's active organization (`organization_id`), which `oauth-bearer-session` makes the
+  session's and `PlatformCallers` resolves to the tenant; the actor of every memory is `tenant:user`.
+  The A2A agents are multi-tenant in A2A's own sense: the card served to a caller names their tenant,
+  `@a2a-js/sdk`'s client puts it on every request, and a request naming another is refused
+  (`TenantScopedCallContext`). AG-UI and AgentCore have no tenant field; it rides the caller.
+- **An agent has both of AgentCore Memory's halves**, as AWS's LangGraph guide wires them: the graph
+  is compiled with an `AgentCoreMemorySaver` (the thread's checkpoints, so a conversation resumes on
+  any microVM — Theo then feeds the graph only the messages it does not hold) and an
+  `AgentCoreMemoryStore` (`LongTermMemoryMiddleware` puts the conversation for the memory's
+  preference, fact and summary strategies and recalls what they extracted). `infra/aws/agents/memories.ts`
+  creates each memory with its strategies.
+- **A conversation with Theo is a chat**, listed by the `chat` subgraph (`apps/chat-api`): Theo
+  records each run's thread there (`recordChat`, as the person — the delegated token names the
+  gateway too), and the chat API reads its messages back from Theo's checkpoints. The web's `/theo`
+  lists them and reopens one as CopilotKit's thread; its CopilotKit runtime serves only `info`, `run`
+  and `stop`, because the default runtime's `/threads` and `connect` answer anybody who names a
+  thread.
 - **Theo is the same shape over AG-UI.** `@AgUiAgent` on a provider whose `agent` is a function built
   on the first run; `AgentCoreAgUiServer` serves AgentCore's AG-UI contract (`POST /invocations`,
   server-sent events; `GET /ping`) with the same admission as the A2A host (`AgentCoreHost`);

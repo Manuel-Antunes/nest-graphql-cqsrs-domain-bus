@@ -25,6 +25,53 @@ export class TheoPage extends WebPage {
       .press('Enter');
   }
 
+  get conversations(): Locator {
+    return this.page.getByRole('navigation', {
+      name: 'Conversations with Theo',
+    });
+  }
+
+  get conversationTitles(): Locator {
+    return this.conversations
+      .getByRole('button')
+      .filter({ hasNotText: 'New conversation' })
+      .locator('[data-slot="item-title"]');
+  }
+
+  get noConversationYet(): Locator {
+    return this.conversations.getByText(
+      'Your conversations with Theo will be listed here.',
+    );
+  }
+
+  async startNewConversation(): Promise<void> {
+    await this.conversations
+      .getByRole('button', { name: 'New conversation' })
+      .click();
+  }
+
+  async reopenConversation(title: string): Promise<void> {
+    await this.conversations.getByRole('button', { name: title }).click();
+  }
+
+  async connectStatusOf(threadId: string): Promise<number> {
+    const response = await this.page.request.post(
+      '/api/copilotkit/agent/theo/connect',
+      {
+        data: {
+          threadId,
+          runId: 'replay',
+          messages: [],
+          state: {},
+          tools: [],
+          context: [],
+          forwardedProps: {},
+        },
+      },
+    );
+    return response.status();
+  }
+
   async runStatusWithoutConversation(): Promise<number> {
     const response = await this.page.request.post(
       '/api/copilotkit/agent/theo/run',

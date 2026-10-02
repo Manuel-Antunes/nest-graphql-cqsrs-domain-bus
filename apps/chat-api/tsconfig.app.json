@@ -1,0 +1,66 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "out-tsc/app",
+    "tsBuildInfoFile": "out-tsc/app/tsconfig.app.tsbuildinfo"
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/**/*.spec.ts"],
+  "references": [
+    {
+      "path": "../../libs/core/validated-dto/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/users/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/core/transport-eventbus/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/core/redis/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/platform/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/organizations/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/core/observability/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/notifications/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/core/mail/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/core/langgraph-checkpoint-aws/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/core/lambda/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/database/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/core/cqsrs/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/chat/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/auth/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/asset/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/ai/tsconfig.lib.json"
+    },
+    {
+      "path": "../migrator/tsconfig.app.json"
+    }
+  ]
+}

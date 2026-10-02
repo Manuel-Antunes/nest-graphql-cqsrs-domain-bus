@@ -98,7 +98,7 @@ export const web = new sst.aws.Nextjs('Web', {
     POLAR_WEBHOOK_SECRET: polarWebhookSecret.value,
     CHATWOOT_URL: router.url,
     THEO_AGENT_URL: theo.url,
-    THEO_AGENT_AUDIENCES: $interpolate`${theoResource},${postsAgentResource},${mcpResource}`,
+    THEO_AGENT_AUDIENCES: $interpolate`${theoResource},${postsAgentResource},${mcpResource},${gatewayUrl}`,
     POSTS_MCP_URL: postsMcp.url,
     POSTS_MCP_RESOURCE: mcpResource,
     COPILOTKIT_TELEMETRY_DISABLED: 'true',

@@ -1,0 +1,121 @@
+{
+  "name": "@nestposts/chat-api",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "@aws-sdk/client-bedrock-agentcore": "catalog:",
+    "@langchain/core": "catalog:langchain",
+    "@langchain/langgraph": "catalog:langchain",
+    "@langchain/langgraph-checkpoint": "catalog:langchain",
+    "@nestjs-modules/mailer": "catalog:",
+    "@nestposts/ai": "workspace:*",
+    "@nestposts/asset": "workspace:*",
+    "@nestposts/auth": "workspace:*",
+    "@nestposts/chat": "workspace:*",
+    "@nestposts/cqsrs": "workspace:*",
+    "@nestposts/database": "workspace:*",
+    "@nestposts/lambda": "workspace:*",
+    "@nestposts/langgraph-checkpoint-aws": "workspace:*",
+    "@nestposts/mail": "workspace:*",
+    "@nestposts/notifications": "workspace:*",
+    "@nestposts/observability": "workspace:*",
+    "@nestposts/organizations": "workspace:*",
+    "@nestposts/platform": "workspace:*",
+    "@nestposts/redis": "workspace:*",
+    "@nestposts/transport-eventbus": "workspace:*",
+    "@nestposts/users": "workspace:*",
+    "@nestposts/validated-dto": "workspace:*",
+    "blurhash": "catalog:",
+    "clsx": "catalog:",
+    "exifreader": "catalog:",
+    "file-type": "catalog:",
+    "firebase-admin": "catalog:",
+    "html-to-text": "catalog:",
+    "ical-generator": "catalog:",
+    "mime-types": "catalog:",
+    "nodemailer": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "react-email": "catalog:",
+    "sharp": "catalog:",
+    "tailwind-merge": "catalog:",
+    "zod": "catalog:"
+  },
+  "nx": {
+    "targets": {
+      "build": {
+        "executor": "nx:run-commands",
+        "cache": true,
+        "inputs": [
+          "production",
+          "^production",
+          "{workspaceRoot}/apps/migrator/src/migrations/tenant/**/*.ts",
+          "{workspaceRoot}/tools/webpack/**/*"
+        ],
+        "outputs": [
+          "{projectRoot}/dist"
+        ],
+        "options": {
+          "cwd": "{projectRoot}",
+          "command": "webpack-cli build",
+          "args": [
+            "--config-node-env=production"
+          ]
+        },
+        "configurations": {
+          "development": {
+            "args": [
+              "--config-node-env=development"
+            ]
+          }
+        }
+      },
+      "prune-lockfile": {},
+      "copy-workspace-modules": {},
+      "prune": {},
+      "serve": {
+        "continuous": true,
+        "executor": "@nx/js:node",
+        "dependsOn": [
+          {
+            "projects": [
+              "@nestposts/migrator"
+            ],
+            "target": "setup"
+          }
+        ],
+        "defaultConfiguration": "development",
+        "options": {
+          "buildTarget": "@nestposts/chat-api:build",
+          "runBuildTargetDependencies": false
+        },
+        "configurations": {
+          "development": {
+            "buildTarget": "@nestposts/chat-api:build:development"
+          },
+          "production": {
+            "buildTarget": "@nestposts/chat-api:build:production"
+          }
+        }
+      },
+      "docker:build": {
+        "options": {
+          "args": [
+            "--file apps/chat-api/Dockerfile",
+            "--tag nestposts/chat-api:dev"
+          ]
+        },
+        "parallelism": false
+      },
+      "docker:run": {
+        "options": {
+          "cwd": ".",
+          "command": "docker run {args} nestposts/chat-api:dev"
+        }
+      }
+    }
+  },
+  "devDependencies": {
+    "@nestposts/migrator": "workspace:*"
+  }
+}

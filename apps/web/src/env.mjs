@@ -32,7 +32,7 @@ export const env = createEnv({
     THEO_AGENT_AUDIENCES: z
       .string()
       .default(
-        'http://localhost:8080/,http://localhost:9000/,http://localhost:8000/mcp',
+        'http://localhost:8080/,http://localhost:9000/,http://localhost:8000/mcp,http://localhost:4000/graphql',
       )
       .transform((value) =>
         value

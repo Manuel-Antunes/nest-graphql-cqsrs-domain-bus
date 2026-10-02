@@ -16,7 +16,8 @@ src/
     lazy.ts        Lazy: built on first use, built again after a failure
   a2a/
     domain/        the A2A contract: parts, extensions, the chat → A2A part encoder
-    server/        Nest hosting: A2aModule, A2aRegistry, the protocol middleware, the executor wrapper
+    server/        Nest hosting: A2aModule, A2aRegistry, the protocol middleware, the executor wrapper,
+                   A2aTenancy and TenantScopedCallContext (A2A's tenant, held to the caller's)
     agentcore/     AgentCore Runtime hosting: AgentCoreA2aModule/Server over bedrock-agentcore's A2A app
     langchain/     the LangChain binding: ReactAgentExecutor, A2aMiddleware, LangChainTaskStore
     client/        RemoteA2aAgents, and send_message_to_a2a_agent (A2aDelegationTool) to delegate to them
@@ -34,6 +35,9 @@ src/
   mcp/
     apps/          MCP Apps in A2UI: McpAppTools, McpAppSurface, McpAppEndpoint
   web/             search_the_web (WebSearchTool) over AgentCore Web Search
+  checkpoint/      AgentMemories: the checkpointer and the store, on AgentCore Memory or in memory
+  middleware/      LongTermMemoryMiddleware, SystemGuidance, EmptyToolInputMiddleware, …
+  chats/           ChatApi and ChatRecordingMiddleware: every conversation recorded in the chat API
   channel/         ChannelResponseProcessor and its channels (in-memory, chatwoot/)
   backends/        SkillsBackend over StaticFilesBackend
 ```
@@ -182,11 +186,19 @@ when the client asks for it), and `@ag-ui/client`'s `AbstractAgent` as what an a
   against the protocol and applies it: a stream the client would reject fails them.
   `@ag-ui/langchain` streams ONE model call and runs no tool of the server's; `@ag-ui/langgraph`
   drives a LangGraph Platform deployment through its SDK — neither runs a graph in this process.
-- **The conversation is the client's.** AG-UI sends all of it on every run, so the agent keeps no
-  checkpoint: a message a subagent said (`subagentRunId`) is left out — the call's result already
-  carries it — `system`/`developer` messages become instructions, and a tool call nobody answered
-  (the run that made it was stopped, the person typed on) gets a result saying so, because a model
-  provider refuses a call without one.
+- **The conversation is the agent's, when it has a checkpointer.** AG-UI sends all of it on every
+  run, and a client that reopened a conversation sends what it was shown of it. Given a
+  `checkpointer`, the agent reads the thread's state (`graph.getState`) and feeds the graph only the
+  messages it does not hold yet (`LangChainAgUiAgent.unseen`, by id), so the thread's history is the
+  checkpoints' and a resent message is not doubled. Without one, the client's conversation is the
+  whole input. Either way a message a subagent said (`subagentRunId`) is left out — the call's
+  result already carries it — `system`/`developer` messages become instructions, and a tool call
+  nobody answered (the run that made it was stopped, the person typed on) gets a result saying so,
+  because a model provider refuses a call without one.
+- **Every run is configured with who and where.** `callerOf` names the caller; the graph's
+  `configurable` is `{ thread_id, user_id, actor_id, tenant }`, `actor_id` being
+  `AgentMemories.actorOf(tenant, user)` — what the checkpointer, the store and every middleware below
+  scope by.
 - **`AgUiMiddleware`** (LangChain middleware) gives the model the frontend's tools — CopilotKit's
   `useFrontendTool` — and ends the run at the model's call to one (`jumpTo: 'end'`): the client runs
   it and sends the result in the next run. It appends the application's `context` and the
@@ -213,6 +225,12 @@ conversation is one A2A context (`contextId` = the thread), and the thread is se
 session id (`X-Amzn-Bedrock-AgentCore-Runtime-Session-Id`, when it is long enough) so the remote
 agent's turns land on the microVM that holds its memory of the thread. A remote task left
 `input-required` comes back to the model as a question for the person.
+
+**The remote agent is reached in the caller's tenant.** `connect(urls, fetch, { tenantOf })` keeps the
+agents it reached per tenant (`reach(name)`): each card is read as the caller, and the card a
+multi-tenant agent serves names the caller's tenant (`AgentInterface.tenant`), which `@a2a-js/sdk`'s
+`TenantTransportDecorator` then puts on every request — so a delegation from `acme` is an `acme`
+request, never the tenant of whoever happened to call first.
 
 ## MCP Apps in A2UI (`mcp/apps/`)
 
@@ -263,6 +281,64 @@ The tool asks for at most `MAX_RESULTS` (8) results, optionally published after 
 gives (connector `1.2.0`), and answers the model with each passage under `[n] title`, its URL and its
 date; the response is the artifact. Whatever is written from a search must show its sources — AWS's
 terms for the service — which is the calling agent's instruction to follow and the web's to display.
+
+## Multi-tenancy: the tenant is the caller's organization
+
+Every agent here is multi-tenant in the [A2A sense](https://a2a-protocol.org/latest/topics/multi-tenancy):
+one runtime serves every organization, and everything a turn touches — the tools it calls, the
+checkpoints it reads, the memories it recalls, the tasks it lists — is scoped by the tenant **and** the
+person. The tenant is not something a request asserts; it is read off the caller:
+
+- **The token says the organization.** The web's delegated token carries `organization_id`, the
+  person's active organization (`libs/auth`), which `oauth-bearer-session` makes the session's.
+  `PlatformCallers` resolves it to the tenant — the organization's slug, `root` without one
+  (`TenantOrganizations.tenantOf`) — and `PlatformCaller.tenant` keeps it beside the identity and the
+  token; `actorId` is `tenant:user`, AWS's recommendation for pooled AgentCore Memory.
+- **A2A's own `tenant` field, held to the caller's.** `AgentCoreA2aServer` serves the card per caller,
+  with `tenant` set to theirs (`agentCardHandler`, never cached), and builds every call's context as a
+  `TenantScopedCallContext`: `context.tenant` is the caller's when the request names none, and a
+  request naming another (`setTenant`) is refused as malformed. `A2aTenancy.actorOf(tenant, caller)` is
+  what `ReactAgentExecutor` configures the graph with and `LangChainTaskStore` files tasks under.
+- **AG-UI and AgentCore have no tenant of their own.** AG-UI's `RunAgentInput` has no such field and
+  AgentCore's session is one id; the tenant rides the caller, and the actor, as above.
+- **Tools act as the caller.** The MCP tools and delegated agents get the caller's token, and so the
+  caller's organization; the gateway names the tenant from it (`x-tenant`) when the call names none.
+
+## Memory: a checkpointer and a store (`checkpoint/`, `middleware/`)
+
+An agent has the two memories [AWS's LangGraph integration](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/memory-integrate-lang.html)
+describes, both from `@nestposts/langgraph-checkpoint-aws` (a port of `langgraph-checkpoint-aws`):
+
+- **Short-term: the thread's checkpoints.** `AgentMemories.checkpointerOf({ memoryId, region })` is
+  an `AgentCoreMemorySaver` (snapshot format) on the agent's AgentCore Memory, or a `MemorySaver` when
+  there is none. A turn on another microVM, a day later, resumes the thread where it was; the actor is
+  `tenant:user` and the session the thread, so the same thread id in another tenant is another
+  conversation.
+- **Long-term: what the memory extracts.** `AgentMemories.storeOf(...)` is an `AgentCoreMemoryStore`
+  (or an `InMemoryStore`), and the graph is compiled with it beside the checkpointer —
+  `createAgent({ checkpointer, store })`, the guide's `create_react_agent(checkpointer=…, store=…)`.
+  `LongTermMemoryMiddleware.create({ recall })` is the guide's model hooks as LangChain v1 middleware,
+  and reads the graph's store (`runtime.store`) as the guide's `pre_model_hook(…, *, store)` does: it
+  puts what the person said, and the final answer (the guide's optional post-model hook), as
+  conversational events under `(actor_id, thread_id)` — the input of the memory's strategies
+  (preferences, facts, summaries, `infra/aws/agents/memories.ts`) — and before each model call searches
+  the `recall` namespaces under the actor (`("preferences", actor_id)`, `("facts", actor_id)`, limit 5)
+  with the person's last question, appending what it finds to the system message under
+  `## What you remember about this person`. Two departures, both deliberate: the person's messages are
+  put once per run (`beforeAgent`) rather than before every model call, which in a tool loop would put
+  the same message again on each call; and the recall goes to the system message, not the person's —
+  the guide leaves the placement open. A graph compiled without a store remembers nothing, and a
+  failed recall is no memory, never a failed turn.
+
+## Chats: every conversation recorded in the chat API (`chats/`)
+
+The list of a person's conversations is `apps/chat-api`'s — a `Chat` per thread, owned by the person,
+in the tenant's schema — and the agent is what fills it: `ChatRecordingMiddleware` calls
+`ChatApi.record` before each run (`recordChat` on the gateway, as the caller, with their tenant as
+`x-tenant`), with the thread as id, the agent's id and the thread's first question as the title. A
+recording that fails is logged; the run goes on. What a chat SAYS is the checkpoints': the chat API
+reads them back from the same AgentCore Memory, so the agent holds the conversation and nobody keeps
+a second copy.
 
 ## The LangChain middleware and the system message
 

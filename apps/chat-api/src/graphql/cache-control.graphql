@@ -1,0 +1,28 @@
+"""
+Serves a query that selects this type or field from the response cache for `maxAge` seconds, until a
+mutation returns an entity it contains. Nothing is cached without it.
+"""
+directive @cacheControl(
+  """
+  How long, in seconds, the response may be served from the cache.
+  """
+  maxAge: Int
+  """
+  Whose the response is: `PRIVATE` is never cached for a caller without a session.
+  """
+  scope: CacheControlScope
+) on FIELD_DEFINITION | OBJECT
+
+"""
+Whose a cached response is.
+"""
+enum CacheControlScope {
+  """
+  Anybody's: shared by every caller without a session, in the same tenant.
+  """
+  PUBLIC
+  """
+  The caller's own.
+  """
+  PRIVATE
+}

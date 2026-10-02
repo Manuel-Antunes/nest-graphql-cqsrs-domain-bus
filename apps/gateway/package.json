@@ -44,6 +44,7 @@
           "^production",
           "{workspaceRoot}/apps/posts-api/src/graphql/**/*.graphql",
           "{workspaceRoot}/apps/notificator/src/graphql/**/*.graphql",
+          "{workspaceRoot}/apps/chat-api/src/graphql/**/*.graphql",
           "{workspaceRoot}/apps/chatwoot/schema.graphql",
           "{workspaceRoot}/tools/webpack/**/*"
         ],
@@ -76,6 +77,7 @@
           "^production",
           "{workspaceRoot}/apps/posts-api/src/graphql/**/*.graphql",
           "{workspaceRoot}/apps/notificator/src/graphql/**/*.graphql",
+          "{workspaceRoot}/apps/chat-api/src/graphql/**/*.graphql",
           "{workspaceRoot}/apps/chatwoot/schema.graphql"
         ],
         "outputs": [

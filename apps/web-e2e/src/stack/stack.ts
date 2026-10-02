@@ -91,6 +91,7 @@ export class Stack {
         await FreePort.pick(),
         environment.webUrl,
         new PostsMcpApp(Stack.mcpUrl(mcpPort)),
+        endpoints.gatewayUrl,
       );
       environment.publishTheo(this.theo.url);
       await this.startWeb(endpoints, mcpPort);
@@ -153,7 +154,7 @@ export class Stack {
         ...(this.theo
           ? {
               THEO_AGENT_URL: `${this.theo.url}/invocations`,
-              THEO_AGENT_AUDIENCES: TheoStandIn.AUDIENCES.join(','),
+              THEO_AGENT_AUDIENCES: this.theo.audiences.join(','),
             }
           : {}),
         POSTS_MCP_URL: Stack.mcpUrl(mcpPort),

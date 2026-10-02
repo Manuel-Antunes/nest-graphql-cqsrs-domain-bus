@@ -39,13 +39,65 @@ test.describe('talking to Theo', () => {
       signedByTheWeb: true,
       claims: {
         sub: reader.credentialId,
-        aud: TheoStandIn.AUDIENCES,
+        aud: expect.arrayContaining(TheoStandIn.AUDIENCES),
       },
     });
     expect(String(invocation?.claims.scope).split(' ')).toEqual(
-      expect.arrayContaining(['read:posts', 'write:posts']),
+      expect.arrayContaining([
+        'read:posts',
+        'write:posts',
+        'read:chats',
+        'write:chats',
+      ]),
     );
     expect(invocation?.session).toBe(invocation?.threadId);
+  });
+
+  test('a person finds their conversations listed by the chat API, picks one up on its own thread, and nobody else sees it', async ({
+    app,
+    registration,
+    authentication,
+    theoRecords,
+    visitors,
+  }) => {
+    const person = await registration.freshAccount('Theo history');
+    const first = `What did I write last week? ${Date.now()}`;
+    const second = `Something else entirely ${Date.now()}`;
+
+    await authentication.signIn(person);
+    await app.theo.open();
+    await expect(app.theo.noConversationYet).toBeVisible();
+    await app.theo.ask(first);
+    await expect(app.theo.said(TheoStandIn.answerTo(first))).toBeVisible();
+    await expect(app.theo.conversationTitles).toHaveText([first]);
+    await app.theo.startNewConversation();
+    await expect(app.theo.said(first)).toBeHidden();
+    await app.theo.ask(second);
+    await expect(app.theo.said(TheoStandIn.answerTo(second))).toBeVisible();
+    await expect(app.theo.conversationTitles).toHaveText([second, first]);
+
+    await app.theo.open();
+    await expect(app.theo.conversationTitles).toHaveText([second, first]);
+    await app.theo.reopenConversation(first);
+    await expect(app.theo.said(second)).toBeHidden();
+    const followUp = `And the week before? ${Date.now()}`;
+    await app.theo.ask(followUp);
+    await expect(app.theo.said(TheoStandIn.answerTo(followUp))).toBeVisible();
+    const started = await theoRecords.lastAsking(first);
+    const continued = await theoRecords.lastAsking(followUp);
+    expect(continued?.threadId).toBe(started?.threadId);
+    expect(continued?.session).toBe(started?.threadId);
+    await expect(app.theo.conversationTitles).toHaveText([first, second]);
+
+    const someoneElse = await visitors.arrive();
+    await someoneElse.authentication.signIn(
+      await registration.freshAccount('Theo stranger'),
+    );
+    await someoneElse.app.theo.open();
+    await expect(someoneElse.app.theo.noConversationYet).toBeVisible();
+    expect(
+      await someoneElse.app.theo.connectStatusOf(String(started?.threadId)),
+    ).toBe(404);
   });
 
   test('a visitor who is not signed in is asked to sign in, and the runtime refuses them', async ({

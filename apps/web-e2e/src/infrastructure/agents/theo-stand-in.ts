@@ -7,6 +7,8 @@ import {
 import type { AddressInfo } from 'node:net';
 import { createRemoteJWKSet, decodeJwt, jwtVerify } from 'jose';
 
+import { GraphqlClient } from '../graphql/graphql-client';
+import { RecordChat } from '../graphql/operations/chats.operations';
 import {
   type OpenedPostsApp,
   type PostsAppOpening,
@@ -38,6 +40,10 @@ interface RunInput {
  * and the delegation's result `{ a2ui_operations, answer }` — an A2UI surface on the catalog the web
  * declared, whose root `McpApp` names the server, the `ui://` resource, the tool, its input and its
  * result. Only the model's choice is scripted.
+ *
+ * Every run is recorded as a chat the way Theo's `ChatRecordingMiddleware` records it: `recordChat`
+ * on the gateway, with the caller's own token — which is why the web addresses that token to the
+ * gateway too (`audiences`) — and the thread's first question as the title.
  */
 export class TheoStandIn {
   static readonly AUDIENCES = [
@@ -45,6 +51,7 @@ export class TheoStandIn {
     'http://posts-agent.e2e/',
     PostsMcpApp.RESOURCE,
   ];
+  static readonly AGENT_ID = 'theo';
   static readonly DELEGATE = 'Posts Manager';
   static readonly DELEGATION_TOOL = 'send_message_to_a2a_agent';
   private static readonly SESSION_HEADER =
@@ -62,8 +69,13 @@ export class TheoStandIn {
     readonly url: string,
     webUrl: string,
     private readonly postsApp: PostsMcpApp,
+    private readonly gatewayUrl: string,
   ) {
     this.keys = createRemoteJWKSet(new URL('/api/auth/jwks', webUrl));
+  }
+
+  get audiences(): string[] {
+    return [...TheoStandIn.AUDIENCES, this.gatewayUrl];
   }
 
   static answerTo(asked: string): string {
@@ -86,6 +98,7 @@ export class TheoStandIn {
     port: number,
     webUrl: string,
     postsApp: PostsMcpApp,
+    gatewayUrl: string,
   ): Promise<TheoStandIn> {
     const server = createServer();
     await new Promise<void>((resolve, reject) => {
@@ -98,6 +111,7 @@ export class TheoStandIn {
       `http://127.0.0.1:${bound}`,
       webUrl,
       postsApp,
+      gatewayUrl,
     );
     server.on('request', (request, response) => {
       void standIn.handle(request, response);
@@ -147,10 +161,10 @@ export class TheoStandIn {
       () => true,
       () => false,
     );
-    const asked = String(
-      input.messages.filter((message) => message.role === 'user').at(-1)
-        ?.content ?? '',
-    );
+    const questions = input.messages
+      .filter((message) => message.role === 'user')
+      .map((message) => String(message.content ?? ''));
+    const asked = questions.at(-1) ?? '';
     const session = request.headers[TheoStandIn.SESSION_HEADER];
     const invocation = {
       claims: token ? decodeJwt(token) : {},
@@ -174,17 +188,47 @@ export class TheoStandIn {
       return;
     }
 
+    const unrecorded = await this.recordChat(
+      input.threadId,
+      questions[0] ?? asked,
+      token,
+    );
     response.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
     });
-    for (const event of await this.runOf(input, invocation, token)) {
+    const events = unrecorded
+      ? [
+          { type: 'RUN_STARTED', threadId: input.threadId, runId: input.runId },
+          { type: 'RUN_ERROR', message: unrecorded },
+        ]
+      : await this.runOf(input, invocation, token);
+    for (const event of events) {
       response.write(TheoStandIn.sse(event));
       await new Promise((resolve) =>
         setTimeout(resolve, TheoStandIn.STREAM_PACE_MS),
       );
     }
     response.end();
+  }
+
+  private async recordChat(
+    threadId: string,
+    title: string,
+    token: string,
+  ): Promise<string | undefined> {
+    const answer = await GraphqlClient.at(this.gatewayUrl, {
+      authorization: `Bearer ${token}`,
+    })
+      .execute(RecordChat, {
+        input: { id: threadId, agentId: TheoStandIn.AGENT_ID, title },
+      })
+      .catch((failure: unknown) => ({
+        errors: [{ message: String(failure) }],
+      }));
+    return answer.errors?.length
+      ? `The chat was not recorded: ${JSON.stringify(answer.errors)}`
+      : undefined;
   }
 
   private async runOf(

@@ -8,10 +8,12 @@
  * route points at a function's URL, and `web/` last because it is the only thing that wants all
  * three.
  */
-import { postsAgent, postsAgentMemory, postsMcp, theo } from './agents';
+import { postsAgent, postsMcp, theo } from './agents';
+import { postsAgentMemory, theoMemory } from './agents/memories';
 import { webSearch } from './agents/web-search';
 import { chatwoot } from './chatwoot';
 import {
+  chatSubgraph,
   gateway,
   migrator,
   notificationsSubgraph,
@@ -48,6 +50,7 @@ export const outputs = {
   gateway: gateway.url,
 
   notificationsSubgraph: notificationsSubgraph.url,
+  chatSubgraph: chatSubgraph.url,
 
   web: web.url,
 
@@ -90,6 +93,7 @@ export const outputs = {
     postsAgentMemory: postsAgentMemory.id,
     theo: theo.url,
     theoResource,
+    theoMemory: theoMemory.id,
     webSearch: webSearch.gatewayUrl,
   },
 };

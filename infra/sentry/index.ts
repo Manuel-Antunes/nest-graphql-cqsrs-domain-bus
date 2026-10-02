@@ -83,6 +83,11 @@ const PROJECTS = {
     platform: 'node',
     appName: 'Notificator',
   },
+  'nestposts-chat-api': {
+    app: 'chat-api',
+    platform: 'node',
+    appName: 'ChatApi',
+  },
   'nestposts-migrator': {
     app: 'migrator',
     platform: 'node',

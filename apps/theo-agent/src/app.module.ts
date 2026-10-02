@@ -18,6 +18,8 @@ import { agentsConfig } from './config/agents.config';
 import type { AppConfig } from './config/app.config';
 import { appConfig } from './config/app.config';
 import { bedrockConfig } from './config/bedrock.config';
+import { chatsConfig } from './config/chats.config';
+import { memoryConfig } from './config/memory.config';
 import type { RedisConfig } from './config/redis.config';
 import { redisConfig } from './config/redis.config';
 import { webSearchConfig } from './config/web-search.config';
@@ -31,6 +33,8 @@ import { webSearchConfig } from './config/web-search.config';
       load: [
         appConfig,
         bedrockConfig,
+        memoryConfig,
+        chatsConfig,
         agentsConfig,
         redisConfig,
         webSearchConfig,

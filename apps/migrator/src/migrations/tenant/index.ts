@@ -6,6 +6,7 @@ import { Migration20260925012004_calendar_events } from './Migration202609250120
 import { Migration20260926174755_calendar_event_sequence } from './Migration20260926174755_calendar_event_sequence';
 import { Migration20260928130001_users } from './Migration20260928130001_users';
 import { Migration20260929225922_clients } from './Migration20260929225922_clients';
+import { Migration20261002160000_chats } from './Migration20261002160000_chats';
 
 export const tenantMigrations: MigrationObject[] = [
   {
@@ -31,5 +32,9 @@ export const tenantMigrations: MigrationObject[] = [
   {
     name: 'Migration20260929225922_clients',
     class: Migration20260929225922_clients,
+  },
+  {
+    name: 'Migration20261002160000_chats',
+    class: Migration20261002160000_chats,
   },
 ];

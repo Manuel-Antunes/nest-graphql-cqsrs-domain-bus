@@ -15,6 +15,8 @@ export class TheoAgent {
     'email',
     'read:posts',
     'write:posts',
+    'read:chats',
+    'write:chats',
   ] as const;
 
   static readonly SESSION_HEADER =

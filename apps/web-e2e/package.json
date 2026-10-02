@@ -66,6 +66,7 @@
               "@nestposts/posts-api",
               "@nestposts/tagging",
               "@nestposts/notificator",
+              "@nestposts/chat-api",
               "@nestposts/gateway",
               "@nestposts/mcp"
             ],

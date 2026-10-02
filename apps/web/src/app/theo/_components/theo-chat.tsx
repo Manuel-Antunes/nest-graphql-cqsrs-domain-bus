@@ -1,12 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { ActivityMessage } from '@ag-ui/client';
 import {
   CopilotChatConfigurationProvider,
   CopilotKitProvider,
   UseAgentUpdate,
   useAgent,
+  useCopilotChatConfiguration,
   useCopilotKit,
   useRenderActivityMessage,
 } from '@copilotkit/react-core/v2';
@@ -44,15 +45,18 @@ import {
   MessageScrollerViewport,
 } from '@nestposts/ui/components/ui/message-scroller';
 import { Spinner } from '@nestposts/ui/components/ui/spinner';
+import { useQueryClient } from '@tanstack/react-query';
 import { BotIcon, WrenchIcon } from 'lucide-react';
 
 import { theoCatalog } from '../_a2ui/catalog';
+import { theoChatOptions, theoChatsOptions } from '../query';
 import { DelegationCard } from './delegation-card';
 import { THEO_AGENT_ID } from './theo-agent-id';
+import { TheoHistory } from './theo-history';
 import { TheoTranscript, type TranscriptEntry } from './theo-transcript';
 import { WebSearchLine } from './web-search-line';
 
-export function TheoChat() {
+export function TheoChat({ threads }: { threads: React.ReactNode }) {
   return (
     <CopilotKitProvider
       runtimeUrl="/api/copilotkit"
@@ -60,7 +64,10 @@ export function TheoChat() {
       a2ui={{ catalog: theoCatalog }}
     >
       <CopilotChatConfigurationProvider agentId={THEO_AGENT_ID}>
-        <TheoConversation />
+        <div className="grid gap-4 md:h-[70vh] md:grid-cols-[16rem_minmax(0,1fr)]">
+          {threads}
+          <TheoConversation />
+        </div>
       </CopilotChatConfigurationProvider>
     </CopilotKitProvider>
   );
@@ -75,8 +82,43 @@ function TheoConversation() {
     ],
   });
   const { copilotkit } = useCopilotKit();
+  const configuration = useCopilotChatConfiguration();
+  const queryClient = useQueryClient();
   const [failure, setFailure] = useState<string>();
+  const [loadedThreadId, setLoadedThreadId] = useState<string>();
+  const threadId = configuration?.threadId;
+  const resumed = configuration?.hasExplicitThreadId ?? false;
+  const loading = resumed && loadedThreadId !== threadId;
   const entries = TheoTranscript.of(agent.messages);
+
+  useEffect(() => {
+    if (!isReady || !threadId) return;
+    let detached = false;
+    agent.threadId = threadId;
+    agent.setMessages([]);
+    agent.setState({});
+    setFailure(undefined);
+    if (resumed) {
+      queryClient.fetchQuery(theoChatOptions(threadId)).then(
+        ({ chat }) => {
+          if (detached) return;
+          agent.setMessages(TheoHistory.messagesOf(chat?.messages ?? []));
+          setLoadedThreadId(threadId);
+        },
+        (error: unknown) => {
+          if (detached) return;
+          setFailure(
+            `This conversation could not be loaded: ${error instanceof Error ? error.message : String(error)}`,
+          );
+          setLoadedThreadId(threadId);
+        },
+      );
+    }
+    return () => {
+      detached = true;
+      void agent.detachActiveRun().catch(() => undefined);
+    };
+  }, [agent, isReady, queryClient, resumed, threadId]);
 
   const send = async (text: string) => {
     setFailure(undefined);
@@ -85,11 +127,15 @@ function TheoConversation() {
       await copilotkit.runAgent({ agent });
     } catch (error) {
       setFailure(error instanceof Error ? error.message : String(error));
+    } finally {
+      await queryClient.invalidateQueries({
+        queryKey: theoChatsOptions().queryKey,
+      });
     }
   };
 
   return (
-    <div className="flex h-[70vh] min-h-96 flex-col gap-3 rounded-xl border bg-card p-3">
+    <div className="flex h-[70vh] min-h-96 flex-col gap-3 rounded-xl border bg-card p-3 md:h-full">
       <MessageScrollerProvider>
         <MessageScroller>
           <MessageScrollerViewport>
@@ -98,7 +144,14 @@ function TheoConversation() {
               aria-label="Conversation with Theo"
               className="p-2"
             >
-              {entries.length === 0 ? (
+              {loading ? (
+                <Marker aria-live="polite">
+                  <MarkerIcon>
+                    <Spinner />
+                  </MarkerIcon>
+                  <MarkerContent>Loading the conversation…</MarkerContent>
+                </Marker>
+              ) : entries.length === 0 ? (
                 <Empty>
                   <EmptyHeader>
                     <EmptyMedia variant="icon">
@@ -141,7 +194,7 @@ function TheoConversation() {
         onSend={(text) => void send(text)}
         placeholder="Ask Theo about your posts…"
         label="Message to Theo"
-        disabled={!isReady}
+        disabled={!isReady || loading}
         isStreaming={agent.isRunning}
         onStop={() => copilotkit.stopAgent({ agent })}
       />

@@ -13,27 +13,8 @@ import { cache, database, postgresUrl, redisUrl } from '../data';
 import { router } from '../edge/router';
 import { vpc } from '../network';
 import { AgentRuntime } from './agent-runtime';
+import { postsAgentMemory, theoMemory } from './memories';
 import { webSearch } from './web-search';
-
-sst.Linkable.wrap(aws.bedrock.AgentcoreMemory, (memory) => ({
-  properties: { id: memory.id, arn: memory.arn },
-  include: [
-    sst.aws.permission({
-      actions: [
-        'bedrock-agentcore:CreateEvent',
-        'bedrock-agentcore:GetEvent',
-        'bedrock-agentcore:ListEvents',
-        'bedrock-agentcore:DeleteEvent',
-        'bedrock-agentcore:ListSessions',
-        'bedrock-agentcore:ListActors',
-        'bedrock-agentcore:RetrieveMemoryRecords',
-        'bedrock-agentcore:ListMemoryRecords',
-        'bedrock-agentcore:GetMemoryRecord',
-      ],
-      resources: [memory.arn],
-    }),
-  ],
-}));
 
 const discoveryUrl = $interpolate`${router.url}/.well-known/openid-configuration`;
 
@@ -49,15 +30,6 @@ export const postsMcp = new AgentRuntime('PostsMcp', {
     POSTS_MCP_GRAPHQL_ENDPOINT: gatewayUrl,
   },
 });
-
-export const postsAgentMemory = new aws.bedrock.AgentcoreMemory(
-  'PostsAgentMemory',
-  {
-    name: AgentRuntime.nameOf('PostsAgentMemory'),
-    description: 'The conversations people had with the posts agent',
-    eventExpiryDuration: 30,
-  },
-);
 
 export const agentModel = 'global.anthropic.claude-sonnet-5-5';
 
@@ -104,7 +76,7 @@ export const theo = new AgentRuntime('Theo', {
   dependsOn: [build, gateway, streaming],
   authorizer: { discoveryUrl, audiences: [theoResource] },
   vpc,
-  link: [postsAgent, webSearch, database, cache, authSecret],
+  link: [postsAgent, webSearch, theoMemory, database, cache, authSecret],
   environment: {
     POSTGRES_URL: postgresUrl,
     REDIS_URL: redisUrl,
@@ -116,6 +88,8 @@ export const theo = new AgentRuntime('Theo', {
     THEO_A2A_AGENTS: postsAgent.url,
     THEO_AGENT_MODEL_ID: theoModel,
     THEO_WEB_SEARCH_URL: webSearch.gatewayUrl,
+    BEDROCK_AGENTCORE_MEMORY_ID: theoMemory.id,
+    CHAT_API_URL: gatewayUrl,
     LOG_LEVEL: 'info',
   },
   permissions: [invokeModels],

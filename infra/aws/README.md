@@ -1,6 +1,6 @@
 # The same system, on Lambda
 
-Eight functions of ours plus the Next server — none of them on a schedule —, one FIFO topic, three
+Nine functions of ours plus the Next server — none of them on a schedule —, one FIFO topic, three
 FIFO queues (and their dead-letter queues), one Postgres, one Redis (Valkey, cluster mode off: Better
 Auth's sessions and the gateway's cache), one CloudFront router and one SES identity.
 The domain, application and presentation code is **unchanged**: what a handler here does is hand AWS's
@@ -10,7 +10,9 @@ calling convention to the same container `main.ts` starts.
   CloudFront ──────► Gateway   apps/gateway/dist/lambda/http — the supergraph, composed from baked SDL
   /graphql              │ reads the session (Redis, then Postgres); forwards cookie + bearer + x-tenant
        │                ├──────────────► NotificatorApi  apps/notificator/dist/lambda/http
-       │                ▼                (the notifications subgraph)
+       │                │                (the notifications subgraph)
+       │                ├──────────────► ChatApi  apps/chat-api/dist/lambda/http
+       │                ▼                (the chat subgraph; reads TheoMemory's checkpoints)
        │            ┌─────────────────────────────────────────────────────┐
   CloudFront ──────►│ PostsApi          apps/posts-api/dist/lambda/http   │
   /api/auth         │ Function URL, InvokeMode: RESPONSE_STREAM           │
@@ -315,15 +317,24 @@ links include, and `permissions` adds only what is nobody's resource: invoking B
 - **The agent runtime speaks `A2A`** (`:9000`, `POST /`); its card is at
   `…/runtimes/<arn>/invocations/.well-known/agent-card.json` (the `agents.postsAgentCard` output) and
   advertises `AGENTCORE_RUNTIME_URL`, which AgentCore injects. Its role may invoke Bedrock models and
-  inference profiles, and write the events of `PostsAgentMemory`, the AgentCore Memory its
-  conversations outlive a microVM in (30 days).
+  inference profiles, and use `PostsAgentMemory`, the AgentCore Memory its conversations outlive a
+  microVM in (30 days).
+- **Every agent has an AgentCore Memory, with both halves** (`agents/memories.ts`): its LangGraph
+  checkpoints (short-term events, `AgentCoreMemorySaver`) and the long-term records three strategies
+  extract from what its store puts — `preferences` (`USER_PREFERENCE`, `/preferences/{actorId}`),
+  `facts` (`SEMANTIC`, `/facts/{actorId}`) and `summaries` (`SUMMARIZATION`,
+  `/summaries/{actorId}/{sessionId}`). The actor is `tenant:user`, so nothing is shared across
+  organizations. Linking a memory grants the events, the sessions and the records on it, deletion
+  included — the chat API deletes a chat's events with the chat. `TheoMemory` keeps 90 days; the chat
+  API links it as well, to read a conversation back (`CHAT_AGENT_MEMORIES=theo=<id>`).
 - **Theo speaks `AGUI`** (`:8080`, `POST /invocations` streaming server-sent events, `GET /ping`) at
   `…/runtimes/<arn>/invocations?qualifier=DEFAULT` — the `agents.theo` output. It is in the VPC for the
   same reason as the posts agent, and links it: `THEO_A2A_AGENTS` is the posts agent's invocation URL,
   called over HTTPS with the caller's bearer, so the `InvokeAgentRuntime` the link grants is not what
   it uses. The web (`web/`) calls it from `/api/copilotkit` with a token its Better Auth issues for the
-  person signed in, addressed to the three audiences (`THEO_AGENT_AUDIENCES`). Its model is Nova 2
-  Lite (`theoModel`), which the role's Bedrock permissions already cover.
+  person signed in, addressed to the three audiences and the gateway (`THEO_AGENT_AUDIENCES`) — Theo
+  records each conversation as a chat through the gateway (`CHAT_API_URL`) with that same token. Its
+  model is Nova 2 Lite (`theoModel`), which the role's Bedrock permissions already cover.
 - **Web search is an AgentCore Gateway, `WebSearch`** (`agents/web-search.ts`): MCP, `AWS_IAM`
   inbound, and one target with the `web-search` connector pinned to `1.2.0` (the version with
   per-request date filters), so the tool AgentCore Web Search serves is `web-search___WebSearch`. The
@@ -435,13 +446,14 @@ every session in Valkey keeps a copy of its user, and only Better Auth's own wri
 agent runtimes — is a dependent, and is deployed with it from the `dist` already on disk. The site's
 `next build` runs whatever the target.
 
-### The functions, from five builds
+### The functions, from six builds
 
 | function | handler | what triggers it |
 |---|---|---|
 | `Gateway` | `apps/gateway/dist/lambda/http.handler` | the Function URL, behind the router at `/graphql` |
 | `PostsApi` | `apps/posts-api/dist/lambda/http.handler` | the Function URL: the router at `/api/auth`, and the gateway |
 | `NotificatorApi` | `apps/notificator/dist/lambda/http.handler` | the Function URL, called by the gateway |
+| `ChatApi` | `apps/chat-api/dist/lambda/http.handler` | the Function URL, called by the gateway |
 | `PostsApiInbox` | `apps/posts-api/dist/lambda/sqs.handler` | the `PostsApiCompleted` queue |
 | `Tagging` | `apps/tagging/dist/lambda/sqs.handler` | the `TaggingPostEvents` queue |
 | `Notificator` | `apps/notificator/dist/lambda/sqs.handler` | the `NotificatorNotifications` queue |
@@ -628,7 +640,7 @@ installed.
 ### The tenant migrations travel beside the bundle
 
 A tenant's schema is migrated by the first function that serves it (see the root `CLAUDE.md`), from
-`join(__dirname, 'migrations', 'tenant')`. Every function of posts-api, tagging and the notificator
+`join(__dirname, 'migrations', 'tenant')`. Every function of posts-api, tagging, the notificator and the chat API
 therefore has `copyFiles: tenantMigrationsOf('<app>')` — `apps/<app>/dist/migrations` to
 `migrations`, beside the bundle — and each of those files `require`s `@mikro-orm/migrations`, which
 is why that package is on `INSTALLED_PACKAGES`: the bundle's `Migrator` and the migration files must
@@ -742,7 +754,7 @@ Two colours, both Pulumi's own. **`#AA6639`** is a parent edge, which is the com
 group. **`#246C60`** is a dependency, and that is the one worth reading: it is the order the engine
 computed, and the edge carries the property that created it (`secretId`, `secretString`). `Build` is
 the node to look for, because **every** function built from the applications hangs off it —
-`Gateway`, `Migrate`, `PostsApi`, `PostsApiInbox`, `Seed`, `Tagging` and the notificator's two —
+`ChatApi`, `Gateway`, `Migrate`, `PostsApi`, `PostsApiInbox`, `Seed`, `Tagging` and the notificator's two —
 which is `dependsOn: [build]` in `compute/platform.ts` and the whole reason that resource exists.
 
 The SVG is rendered `rankdir=LR`: top to bottom, a stack this size comes out a strip twenty times

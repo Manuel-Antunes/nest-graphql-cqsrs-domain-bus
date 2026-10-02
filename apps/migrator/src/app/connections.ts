@@ -1,6 +1,7 @@
 import { join } from 'node:path';
 import { Migrator } from '@mikro-orm/migrations';
 import { SeedManager } from '@mikro-orm/seeder';
+import { chatEntities } from '@nestposts/chat/infrastructure/chats-infrastructure.module';
 import { clientsEntities } from '@nestposts/clients/infrastructure/clients-infrastructure.module';
 import type { DatabaseEntities, PostgresOptions } from '@nestposts/database';
 import { eventStoreEntities } from '@nestposts/event-store-mikro-orm/event-store.entities';
@@ -35,6 +36,7 @@ export const migratorTables = (): DatabaseEntities => [
   ...usersEntities,
   ...eventsEntities,
   ...clientsEntities,
+  ...chatEntities,
   ...notificationsEntities,
   ...outboxEntities,
   ...eventStoreEntities,

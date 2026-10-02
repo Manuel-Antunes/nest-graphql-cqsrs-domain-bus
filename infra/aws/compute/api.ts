@@ -1,7 +1,7 @@
 /// <reference path="../../../.sst/platform/config.d.ts" />
 
 import { StreamingFunction } from '../support';
-import { notificator, posts } from './platform';
+import { chatApi, notificator, posts } from './platform';
 
 /**
  * GraphQL, Better Auth and everything else `apps/posts-api` serves — one function, answering as a
@@ -48,4 +48,19 @@ export const notificationsSubgraph = new StreamingFunction('NotificatorApi', {
   handler: 'apps/notificator/dist/lambda/http.handler',
   memory: '1024 MB',
   copyFiles: [...NOTIFICATIONS_SDL, ...tenantMigrationsOf('notificator')],
+});
+
+/**
+ * The chat subgraph: the chats of each tenant, and the conversations the agents kept of them, read
+ * from their AgentCore Memory. Its SDL and tenant migrations travel beside the bundle like the
+ * notifications subgraph's.
+ */
+export const chatSubgraph = new StreamingFunction('ChatApi', {
+  platform: chatApi,
+  handler: 'apps/chat-api/dist/lambda/http.handler',
+  memory: '1024 MB',
+  copyFiles: [
+    { from: 'apps/chat-api/dist/graphql', to: 'graphql' },
+    ...tenantMigrationsOf('chat-api'),
+  ],
 });

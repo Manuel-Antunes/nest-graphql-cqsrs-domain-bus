@@ -23,6 +23,9 @@
       "path": "../../libs/core/observability/tsconfig.lib.json"
     },
     {
+      "path": "../../libs/core/langgraph-checkpoint-aws/tsconfig.lib.json"
+    },
+    {
       "path": "../../libs/database/tsconfig.lib.json"
     },
     {

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { createServer } from 'node:http';
+import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { type BaseEvent, EventType, HttpAgent } from '@ag-ui/client';
 import { ChatBedrockConverse } from '@langchain/aws';
@@ -98,6 +98,12 @@ describe('Theo, an AG-UI agent on AgentCore Runtime that hands posts to the post
     { text: ['The caller is ', 'Ana.'] },
   ]);
   const callersSeen: (PlatformCaller | undefined)[] = [];
+  const recorded: {
+    authorization?: string;
+    tenant?: string;
+    input: Record<string, unknown>;
+  }[] = [];
+  let chatApi: Server;
 
   const auth = () => theo.get<BetterAuth>(BETTER_AUTH);
   const inContext = <T>(work: () => Promise<T>) =>
@@ -116,6 +122,24 @@ describe('Theo, an AG-UI agent on AgentCore Runtime that hands posts to the post
 
   beforeAll(async () => {
     const [postsPort, theoPort] = [await freePort(), await freePort()];
+    chatApi = createServer((request, response) => {
+      let body = '';
+      request.on('data', (chunk) => {
+        body += chunk;
+      });
+      request.on('end', () => {
+        recorded.push({
+          authorization: request.headers.authorization,
+          tenant: request.headers['x-tenant'] as string | undefined,
+          input: JSON.parse(body).variables.input,
+        });
+        response.writeHead(200, { 'content-type': 'application/json' });
+        response.end(JSON.stringify({ data: { recordChat: { id: 'x' } } }));
+      });
+    });
+    await new Promise<void>((resolve) =>
+      chatApi.listen(0, '127.0.0.1', resolve),
+    );
     const postsBase = `http://127.0.0.1:${postsPort}`;
     theoBase = `http://127.0.0.1:${theoPort}`;
     Object.assign(process.env, {
@@ -128,6 +152,7 @@ describe('Theo, an AG-UI agent on AgentCore Runtime that hands posts to the post
       THEO_AGENT_PORT: String(theoPort),
       THEO_AGENT_HOST: '127.0.0.1',
       THEO_A2A_AGENTS: `${postsBase}/`,
+      CHAT_API_URL: `http://127.0.0.1:${(chatApi.address() as AddressInfo).port}/graphql`,
     });
     await migrateSystem();
 
@@ -172,6 +197,7 @@ describe('Theo, an AG-UI agent on AgentCore Runtime that hands posts to the post
   afterAll(async () => {
     await theo?.close();
     await postsAgent?.close();
+    await new Promise<void>((resolve) => chatApi?.close(() => resolve()));
   });
 
   const clientAs = (token: string, text: string) =>
@@ -250,6 +276,11 @@ describe('Theo, an AG-UI agent on AgentCore Runtime that hands posts to the post
     expect(JSON.stringify(postsModel.prompts[0])).toContain(
       'Tell me who I am.',
     );
+    expect(recorded.at(-1)).toEqual({
+      authorization: `Bearer ${token}`,
+      tenant: 'root',
+      input: { id: client.threadId, agentId: 'theo', title: 'Who am I?' },
+    });
   });
 
   it('searches the web for something recent, and answers from what it found', async () => {

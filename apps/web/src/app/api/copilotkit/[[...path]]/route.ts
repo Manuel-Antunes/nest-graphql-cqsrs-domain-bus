@@ -3,12 +3,15 @@ import {
   createCopilotRuntimeHandler,
 } from '@copilotkit/runtime/v2';
 
+import { CopilotKitRoutes } from '@/lib/agents/copilotkit-routes';
 import { PostsMcpApp } from '@/lib/agents/posts-mcp-app.server';
 import { TheoAgent } from '@/lib/agents/theo-agent.server';
 import { WebAuth } from '@/lib/auth/server';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+
+const BASE_PATH = '/api/copilotkit';
 
 const copilotRuntime = createCopilotRuntimeHandler({
   runtime: new CopilotRuntime({
@@ -22,10 +25,16 @@ const copilotRuntime = createCopilotRuntimeHandler({
       };
     },
   }),
-  basePath: '/api/copilotkit',
+  basePath: BASE_PATH,
 });
 
 async function handle(request: Request): Promise<Response> {
+  if (!CopilotKitRoutes.isServed(request, BASE_PATH)) {
+    return Response.json(
+      { error: "Theo's conversations are served by the chat API." },
+      { status: 404 },
+    );
+  }
   if (!(await WebAuth.identity())) {
     return Response.json(
       { error: 'Sign in to talk to Theo.' },

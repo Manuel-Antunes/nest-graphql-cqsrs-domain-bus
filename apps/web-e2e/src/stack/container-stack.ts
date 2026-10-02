@@ -47,8 +47,8 @@ export interface PostsMcpOptions {
 
 /**
  * **Everything but the web and Chatwoot, as containers on one network** — Postgres, Redis, MinIO, Mailpit, the
- * broker or the Inngest dev server, the migrator, and `posts-api`, `tagging`, `notificator` and the
- * `gateway`. Every one of them that holds Better Auth is given the same Redis, the web included: a
+ * broker or the Inngest dev server, the migrator, and `posts-api`, `tagging`, `notificator`, `chat-api`
+ * and the `gateway`. Every one of them that holds Better Auth is given the same Redis, the web included: a
  * session is kept there in front of its row, and a process reading only the row would disagree with
  * the others about which sessions are still valid.
  *
@@ -84,6 +84,7 @@ export class ContainerStack {
   private static readonly REDIS_PORT = 6379;
   private static readonly TAGGING_PORT = 3001;
   private static readonly NOTIFICATOR_PORT = 3002;
+  private static readonly CHAT_API_PORT = 3003;
   private static readonly GATEWAY_PORT = 4000;
   private static readonly MCP_PORT = 8000;
 
@@ -101,6 +102,7 @@ export class ContainerStack {
   private postsApi?: StartedTestContainer;
   private tagging?: StartedTestContainer;
   private notificator?: StartedTestContainer;
+  private chatApi?: StartedTestContainer;
   private gateway?: StartedTestContainer;
   private postsMcp?: StartedTestContainer;
 
@@ -129,6 +131,7 @@ export class ContainerStack {
       this.postsApi,
       this.tagging,
       this.notificator,
+      this.chatApi,
       this.inngest,
       this.mailpit,
       this.rabbitmq,
@@ -331,6 +334,19 @@ export class ContainerStack {
       )
       .start();
 
+    this.chatApi = await new GenericContainer('nestposts/chat-api:dev')
+      .withNetwork(this.network!)
+      .withNetworkAliases('chat-api')
+      .withEnvironment({
+        ...shared,
+        CHAT_API_PORT: String(ContainerStack.CHAT_API_PORT),
+      })
+      .withWaitStrategy(Wait.forLogMessage(/the chat subgraph is at/))
+      .withLogConsumer((stream) =>
+        stream.on('data', (line) => options.logs(`chat-api ${line}`)),
+      )
+      .start();
+
     this.postsApi = await new GenericContainer('nestposts/posts-api:dev')
       .withNetwork(this.network!)
       .withNetworkAliases('posts-api')
@@ -374,6 +390,7 @@ export class ContainerStack {
         POSTS_SUBGRAPH_URL: 'http://posts-api:3000/graphql',
         NOTIFICATIONS_SUBGRAPH_URL: `http://notificator:${ContainerStack.NOTIFICATOR_PORT}/graphql`,
         CHATWOOT_SUBGRAPH_URL: `http://host.testcontainers.internal:${options.chatwootPort}/graphql`,
+        CHAT_SUBGRAPH_URL: `http://chat-api:${ContainerStack.CHAT_API_PORT}/graphql`,
         POSTGRES_URL: this.internalPostgresUrl,
         REDIS_URL: this.internalRedisUrl,
         AUTH_SECRET: options.authSecret,

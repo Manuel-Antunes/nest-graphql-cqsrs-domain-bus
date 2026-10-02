@@ -83,7 +83,10 @@ authorization code grant. AgentCore's authorizer checks it against the issuer's 
 Theo's audience; Theo reads it as the gateway reads a caller (`PlatformCallers`: `libs/auth`'s
 `IdentityResolver` for a request made of the invocation's headers, the same Better Auth on Postgres and
 Redis), so it runs in the VPC, and refuses with an AG-UI `RUN_ERROR` (`401`) a token for another
-resource or for nobody the platform knows. Every run happens in the caller's scope (`AgentCallers`),
+resource or for nobody the platform knows. The token also says the organization the person is in
+(`organization_id`), which is the run's tenant: the posts agent is reached in it (A2A's `tenant`), and
+every memory below is kept under `tenant:user`, so the same person in two organizations has two
+histories. Every run happens in the caller's scope (`AgentCallers`),
 and every call to the posts agent carries that caller's token (`CallerBearerFetch`) — Theo holds no
 credential of its own.
 
@@ -95,7 +98,23 @@ posts agent, the posts agent's answer streamed as text messages carrying the cal
 web's chat nests the first under the call — "Theo asked Posts Manager" — and, while the posts agent
 works, the stream keeps moving, which is what keeps CloudFront's read timeout from cutting it.
 
-The conversation is the client's: AG-UI sends all of it on every run, and Theo keeps no checkpoint.
+## Memory, and the conversations the person comes back to
+
+**The conversation is Theo's.** Its checkpoints live in Theo's AgentCore Memory
+(`BEDROCK_AGENTCORE_MEMORY_ID`, `AgentMemories.checkpointerOf`): the actor is `tenant:user` and the
+session the thread, so a conversation reopened tomorrow, on another microVM, resumes where it was, and
+Theo feeds the graph only the messages its checkpoints do not hold (`libs/ai`, "AG-UI agents"). Beside
+it is the **store** (`AgentMemories.storeOf`, `LongTermMemoryMiddleware`): what the person said and
+Theo answered is put as conversational events, the memory's strategies extract preferences, facts and
+summaries from them, and each model call recalls the person's preferences and facts in this
+organization into the system message. Without a memory id both are in the process.
+
+**Every conversation is a chat.** `ChatRecordingMiddleware` records each run's thread through the
+gateway's `recordChat` (`CHAT_API_URL`), as the person, with the first question as its title — which is
+what the web lists under "Conversations with Theo". The chat API reads a chat's messages back from
+Theo's checkpoints, in the same memory; Theo is the only one writing them. Without `CHAT_API_URL`
+nothing is recorded.
+
 The posts agent keeps its own, per A2A context: Theo's thread is that context and the AgentCore session
 it is invoked in, so the posts agent remembers what it asked — "are you sure?" — when the person
 answers in the next turn.
@@ -112,7 +131,9 @@ answers in the next turn.
 | `THEO_AGENT_MODEL_ID` | `us.amazon.nova-2-lite-v1:0` | a Bedrock model or inference profile |
 | `THEO_WEB_SEARCH_URL` | — | the MCP URL of the AgentCore Gateway with the web search connector; unset, Theo cannot search |
 | `THEO_AGENT_TEMPERATURE` | — | sent only when set: newer Claude models refuse it |
-| `AWS_REGION` | `us-east-1` | Bedrock, and the region web search is signed for |
+| `AWS_REGION` | `us-east-1` | Bedrock, AgentCore Memory, and the region web search is signed for |
+| `BEDROCK_AGENTCORE_MEMORY_ID` | — | Theo's AgentCore Memory: its checkpoints and its long-term memory; unset, both live in the process |
+| `CHAT_API_URL` | — | where conversations are recorded as chats — the gateway; unset, nothing is recorded |
 
 ## Running it locally
 
@@ -151,5 +172,7 @@ same token, and that a token for another resource, or for nobody, is refused bef
 `infra/aws/agents`: an arm64 image built from what the host built (this `Dockerfile`, its context this
 directory, after `prune`), an `aws.bedrock.AgentcoreAgentRuntime` with `serverProtocol: AGUI`, a custom
 JWT authorizer for Theo's audience (`<router>/agui/theo`), `Authorization` on the header allowlist, in
-the VPC's private subnets, linked to the posts agent, the database, the cache and the auth secret. Its
-role may invoke Bedrock models; the posts agent is called over HTTPS with the caller's bearer.
+the VPC's private subnets, linked to the posts agent, its memory (`TheoMemory`, 90 days, with the
+preference, fact and summary strategies), the database, the cache and the auth secret. Its role may
+invoke Bedrock models; the posts agent is called over HTTPS with the caller's bearer, and the gateway
+(`CHAT_API_URL`) with the same bearer, which the web addresses to the gateway too.

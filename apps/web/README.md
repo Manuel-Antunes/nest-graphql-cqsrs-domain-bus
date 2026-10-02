@@ -206,6 +206,25 @@ CopilotKit, and pnpm runs no install script of `@scarf/scarf`.
 The route streams, so on AWS the server function streams: `open-next.config.ts` picks OpenNext's
 `aws-lambda-streaming` wrapper (see `infra/aws/web`).
 
+### Conversations: listed by the chat API, held by Theo
+
+The page lists the person's conversations with Theo beside the chat (`TheoThreadList`): the `chats`
+query of the gateway's `chat` subgraph (`apps/chat-api`), prefetched on the server like every other
+screen. The web records nothing — Theo records each run's thread as a chat (`recordChat`, as the
+person, which is why `THEO_AGENT_AUDIENCES` names the gateway too) and keeps the conversation in its
+own checkpoints. Picking a conversation makes its id CopilotKit's thread (`setActiveThreadId`), reads
+its messages from the chat API (`chat { messages }`, which reads them from Theo's AgentCore Memory) into
+the agent (`TheoHistory`), and the next run goes on in the same thread; Theo resumes from its
+checkpoints and ignores the messages it already has. "New conversation" is `startNewThread()`. A
+reopened conversation shows Theo's words, its calls and their results; a delegate's streamed words and
+an MCP App's surface are not replayed, the call's result is.
+
+**The runtime serves only what the page uses**: `GET /info`, `POST /agent/:id/run` and
+`POST /agent/:id/stop/:threadId` (`CopilotKitRoutes`). Everything else is a `404` before any
+authentication — the default runtime's `/threads` lists every conversation it ran, whoever had it, and
+`/agent/:id/connect` replays one to whoever names its thread (`copilotkit-routes.spec.ts` shows both),
+and neither knows who is asking.
+
 ### Theo's web searches
 
 When Theo searches the web (`search_the_web`), the transcript shows it in its place —

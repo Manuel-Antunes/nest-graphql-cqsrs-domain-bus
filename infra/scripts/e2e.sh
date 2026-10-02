@@ -12,7 +12,8 @@
 # a presigned upload to the CDN, the author's notification, one operation across two subgraphs, an
 # organization's tenant, Chatwoot under that organization — its agent, its account, a client's
 # contact, a team's hours, its dashboard — Theo, the AG-UI agent, through the web's chat route and the
-# posts agent it delegates to over A2A, with a real model — and then, when it can read Better Stack,
+# posts agent it delegates to over A2A, with a real model, and the conversation it kept as a chat —
+# and then, when it can read Better Stack,
 # the same run as telemetry: every service reporting, the post's whole life as one trace, and the
 # logs inside it.
 #
@@ -567,6 +568,60 @@ if echo "$THEO_RUN" | jq -e '(.types | index("RUN_FINISHED")) and .error == null
   echo "    OK: Theo answered: $(echo "$THEO_RUN" | jq -r .answer | tr '\n' ' ' | cut -c1-160)"
 else
   problem "Theo's run through /api/copilotkit did not delegate to the posts agent and answer: $(echo "$THEO_RUN" | jq -c '{types, error, delegate, said, result}' | cut -c1-600)"
+fi
+
+echo
+echo "==> 16. Theo's conversation is a chat: listed by the chat subgraph, read back from Theo's memory, resumed from it"
+# Theo records the thread through the gateway as the author, in the tenant the token names — the
+# root one, the organization being gone — and the chat subgraph reads the messages from Theo's
+# checkpoints in AgentCore Memory, which only the agent writes.
+CHAT_QUERY='query TheoChat($id: ID!) {
+  chat(id: $id) { id agentId title messages { role content } }
+  chats(agentId: "theo") { id }
+  me { chats(agentId: "theo") { id } }
+}'
+CHAT_VARS="$(jq -nc --arg id "$THREAD" '{id:$id}')"
+CHAT=$(TENANT=root gql "$CHAT_QUERY" "$CHAT_VARS" signed)
+if echo "$CHAT" | jq -e --arg id "$THREAD" '
+    .data.chat.agentId == "theo"
+    and (.data.chat.title | startswith("Who am I on the platform?"))
+    and (.data.chat.messages[0].role == "USER")
+    and (.data.chat.messages[0].content | startswith("Who am I on the platform?"))
+    and ([.data.chat.messages[] | select(.role == "ASSISTANT" and (.content | length) > 0)] | length) > 0
+    and ([.data.chats[].id] | index($id)) != null
+    and ([.data.me.chats[].id] | index($id)) != null' >/dev/null; then
+  echo "    OK: chat=$THREAD listed (root field and me.chats), $(echo "$CHAT" | jq '.data.chat.messages | length') messages from Theo's checkpoints"
+else
+  problem "Theo's run was not a chat the chat subgraph lists and reads back: $(echo "$CHAT" | cut -c1-600)"
+fi
+FOLLOW_UP=$(jq -nc --arg t "$THREAD" --arg r "$(node -e 'console.log(crypto.randomUUID())')" \
+  --arg m "$(node -e 'console.log(crypto.randomUUID())')" \
+  '{threadId:$t, runId:$r, state:{}, tools:[], context:[], forwardedProps:{},
+    messages:[{id:$m, role:"user", content:"Thanks. Answer with one word: yes."}]}')
+curl -sSN --max-time 170 -X POST "$TARGET/api/copilotkit/agent/theo/run" \
+  -H 'content-type: application/json' -H 'accept: text/event-stream' \
+  -H "origin: $TARGET" -b "$JAR" -d "$FOLLOW_UP" >/dev/null || true
+RESUMED=$(TENANT=root gql "$CHAT_QUERY" "$CHAT_VARS" signed)
+if echo "$RESUMED" | jq -e '
+    (.data.chat.messages[0].content | startswith("Who am I on the platform?"))
+    and ([.data.chat.messages[] | select(.role == "USER")] | length) == 2
+    and (.data.chat.title | startswith("Who am I on the platform?"))' >/dev/null; then
+  echo "    OK: a run that sent only its own message went on from the checkpoints: $(echo "$RESUMED" | jq '.data.chat.messages | length') messages, the title kept"
+else
+  problem "Theo did not resume the thread from its checkpoints: $(echo "$RESUMED" | cut -c1-600)"
+fi
+for ROUTE in "agent/theo/connect" "threads?agentId=theo"; do
+  STATUS=$(curl -sS -o /dev/null -w '%{http_code}' -X POST "$TARGET/api/copilotkit/$ROUTE" \
+    -H 'content-type: application/json' -H "origin: $TARGET" -b "$JAR" -d "$RUN_INPUT")
+  [ "$STATUS" = "404" ] || problem "the CopilotKit runtime answered $STATUS on /$ROUTE, which replays or lists threads by id"
+done
+DELETED_CHAT=$(TENANT=root gql 'mutation($id: ID!) { deleteChat(id: $id) }' "$CHAT_VARS" signed)
+GONE=$(TENANT=root gql "$CHAT_QUERY" "$CHAT_VARS" signed)
+if echo "$DELETED_CHAT" | jq -e --arg id "$THREAD" '.data.deleteChat == $id' >/dev/null \
+  && echo "$GONE" | jq -e '.data.chat == null' >/dev/null; then
+  echo "    OK: deleteChat removed it, and its conversation with it"
+else
+  problem "deleteChat did not remove chat=$THREAD: $DELETED_CHAT / $GONE"
 fi
 
 # One value of the root `.env`, for the Better Stack connection when the environment has none.

@@ -49,6 +49,9 @@
       "path": "../../libs/clients/tsconfig.lib.json"
     },
     {
+      "path": "../../libs/chat/tsconfig.lib.json"
+    },
+    {
       "path": "../../libs/auth/tsconfig.lib.json"
     }
   ]
