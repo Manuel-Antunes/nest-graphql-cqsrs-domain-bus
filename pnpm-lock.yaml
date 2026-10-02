@@ -2364,9 +2364,6 @@ importers:
       '@ag-ui/mcp-apps-middleware':
         specifier: 'catalog:'
         version: 0.1.1(@ag-ui/client@1.0.1)(@cfworker/json-schema@4.1.1)(rxjs@7.8.2)(zod@4.5.4)
-      '@aws-sdk/client-bedrock-agentcore':
-        specifier: 'catalog:'
-        version: 3.1144.0
       '@base-ui/react':
         specifier: 'catalog:'
         version: 1.8.0(@date-fns/tz@1.5.0)(@types/react@19.3.0)(date-fns@4.4.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
