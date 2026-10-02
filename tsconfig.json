@@ -110,6 +110,15 @@
     },
     {
       "path": "./apps/theo-agent"
+    },
+    {
+      "path": "./libs/core/langgraph-checkpoint-aws"
+    },
+    {
+      "path": "./libs/chat"
+    },
+    {
+      "path": "./apps/chat-api"
     }
   ]
 }
