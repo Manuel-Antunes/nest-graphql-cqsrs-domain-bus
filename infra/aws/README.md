@@ -151,6 +151,8 @@ infra/aws/
                      is the stage's own domain when BASE_DOMAIN names one (optional)
   web/               the Next application, on the same origin
   chatwoot/          Chatwoot's two Fargate services, and the router's paths to them
+  agents/            Bedrock AgentCore Runtime: the posts MCP server and the posts agent
+    agent-runtime.ts   AgentRuntime: ECR repository, arm64 image, execution role, the runtime
 infra/lambda/
   collector.yaml     the collector extension's configuration, travelling beside every bundle
   otel-preload.cjs   the Lambda instrumentation, loaded through NODE_OPTIONS=--require before the handler
@@ -171,10 +173,27 @@ API's URL. Creating the router first and routing it afterwards is what unties th
 | `QueueWorker` (extends) | \+ the queue subscription, with `partialResponses` |
 | `Migrator` (extends) | \+ the `aws.lambda.Invocation` that runs the migration |
 | `StreamingFunction` (extends) | \+ the Function URL with `InvokeMode: RESPONSE_STREAM` |
+| `AgentRuntime` | the ECR repository, the arm64 image, the role and its policy, the issuer warm-up, the `aws.bedrock.AgentcoreAgentRuntime` |
+| `Neo4j` | the cluster, the Fargate service on EFS, the backup bucket, the password parameter |
 
 They buy a shared lifecycle, a URN of their own in Pulumi's state, and a deploy tree that describes
 the system. But the reason they exist here is narrower: **each one encodes a setting that fails
 silently when it is changed**, so that it cannot be forgotten by whoever adds the next function.
+
+**Every one of them is a citizen of SST, not a wrapper around it.** Each is linkable —
+`sst.Linkable.wrap(Component, …)` under the `__pulumiType` it is registered with, so SST also holds
+its name unique among linkables and writes its link ref — and its link carries what linking it should
+grant: a `NodeFunction` hands on its `sst.aws.Function`'s (its name, its URL, `lambda:InvokeFunction`),
+an `AgentRuntime` its id, ARN and invocation URL with `bedrock-agentcore:InvokeAgentRuntime`, `Neo4j`
+its Bolt connection. What one of them runs on is SST's too: it takes the `sst.aws.Vpc` itself — its
+`privateSubnets` and `securityGroups` are the ones every function uses — and `link` and `permissions`
+in the shape `sst.aws.Function` takes them, turning the links' `aws.permission` includes into its
+role's policy and their properties into `SST_RESOURCE_*` variables, as an SST container does. A
+component another stage may own has a `static get` that rebuilds it from what AWS already holds —
+`Neo4j.get(name, loadBalancerArn)`, `AgentRuntime.get(name, agentRuntimeId)`, the way
+`sst.aws.Redis.get` does. A Pulumi resource that is not ours becomes linkable the same way:
+`aws.bedrock.AgentcoreMemory` is wrapped in `agents/index.ts` with the data-plane actions on its
+events and records.
 
 ### One origin, and why the browser never leaves it
 
@@ -241,6 +260,56 @@ Nothing is linked to it yet: no function runs `libs/ai`. The first one that does
 `graph.connectionInfo()` as `NEO4J_URI`, `NEO4J_USER`, `NEO4J_PASSWORD` and `NEO4J_DATABASE`, which is
 what `libs/ai`'s configuration reads. The specs never reach it: the ones that need a graph start a
 Neo4j of their own (`ThrowawayNeo4j`), as the Redis ones do.
+
+### Agents: two runtimes on Bedrock AgentCore
+
+`agents/` runs the posts MCP server (`apps/mcp`) and the posts agent (`apps/posts-agent`) on **Amazon
+Bedrock AgentCore Runtime**, each an `AgentRuntime` (`agents/agent-runtime.ts`): an ECR repository
+that keeps ten images, the image built for `linux/arm64` by `docker-build` (the provider SST builds its
+own containers with, registered in `sst.config.ts` and global as `dockerbuild`) and pushed by digest, an
+execution role (pull, logs, X-Ray, metrics, workload identity, plus whatever the runtime adds), and an
+`aws.bedrock.AgentcoreAgentRuntime` whose `containerUri` is `repository@digest`, so a new build is a
+new runtime version. The MCP server's network is `PUBLIC`: it reaches only the router. The agent's is
+the VPC (`vpc` on `AgentRuntime`: its private subnets and its security group), because it
+reads its callers the way the gateway does — through `libs/auth`'s `IdentityResolver`, on the RDS Proxy
+and the Valkey cache — with the same `AUTH_SECRET`, `AUTH_OAUTH_RESOURCES` naming its own audience
+alone. AgentCore places a runtime only in some zones (in `us-east-1`, `use1-az1`, `use1-az2` and
+`use1-az4`); the VPC's two private subnets are in the first two. The agent links what it uses — the
+MCP runtime, its memory, the database, the cache, the auth secret — so its role is granted what those
+links include, and `permissions` adds only what is nobody's resource: invoking Bedrock models.
+
+- **Both authenticate with the platform's tokens** — a custom JWT authorizer whose `discoveryUrl` is
+  `<router>/.well-known/openid-configuration`, which the router sends to the gateway — and both put
+  `Authorization` on the header allowlist, because both pass the caller's token on: the agent to the
+  MCP server, the MCP server to the gateway.
+- **The audiences are logical**: `<router>/mcp` and `<router>/a2a/posts` (`compute/environment.ts`).
+  A runtime's authorizer is part of the runtime, so it cannot name the runtime's own ARN, which is
+  what an invocation URL is made of. A caller asks for both; every Better Auth function accepts the
+  MCP server's (`acceptedResources`), and the migrator registers both (`registeredResources`).
+- **The MCP runtime speaks `MCP`** (stateless streamable HTTP on `:8000/mcp`); clients call
+  `…/runtimes/<arn>/invocations?qualifier=DEFAULT`. Its image needs the composed API schema, which
+  `build-functions` produces (`@nestposts/mcp:prune`), so it depends on `build`.
+- **The agent runtime speaks `A2A`** (`:9000`, `POST /`); its card is at
+  `…/runtimes/<arn>/invocations/.well-known/agent-card.json` (the `agents.postsAgentCard` output) and
+  advertises `AGENTCORE_RUNTIME_URL`, which AgentCore injects. Its role may invoke Bedrock models and
+  inference profiles, and write the events of `PostsAgentMemory`, the AgentCore Memory its
+  conversations outlive a microVM in (30 days).
+- **AgentCore fetches the authorizer's discovery document on every create and update**, and refuses
+  the change (`HTTP request failed against Discovery endpoint`) when it does not answer in time —
+  which a cold gateway, or a cold function behind `/api/auth/jwks`, does not. So each runtime warms
+  both right before it is written (`<name>IssuerWarmup`, after its image, run on every deploy): run
+  once at the start of a deploy, the warm-up was minutes stale by the time a 7-minute image build
+  had finished.
+- **A runtime's name is `[a-zA-Z][a-zA-Z0-9_]{0,47}`** and replaces the runtime when it changes:
+  `AgentRuntime.nameOf` derives it from the app and the stage.
+- **The images stay small on purpose**: AgentCore refuses an image over 2 GB, and the agent's ran to
+  1.6 GB with the workspace's dependencies in it — see its `Dockerfile` for the pruned one. It is
+  1.2 GB since it holds Better Auth: the pruned lockfile resolves `better-auth`'s optional `next` peer
+  (and its SWC binaries) as the workspace does, which the agent never loads.
+
+`node apps/posts-agent/scripts/agent-console.mjs --issuer <url> --agent <agents.postsAgent>
+--agent-resource <agents.postsAgentResource> --mcp-resource <agents.postsMcpResource> "…"` talks to
+the deployed agent as a seeded user.
 
 ### Files: one bucket, served by the same router
 

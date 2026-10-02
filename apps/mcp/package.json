@@ -1,0 +1,64 @@
+{
+  "name": "@nestposts/mcp",
+  "version": "0.1.0",
+  "private": true,
+  "nx": {
+    "implicitDependencies": [
+      "@nestposts/gateway"
+    ],
+    "targets": {
+      "prune": {
+        "executor": "nx:run-commands",
+        "cache": true,
+        "dependsOn": [
+          {
+            "projects": [
+              "@nestposts/gateway"
+            ],
+            "target": "supergraph"
+          }
+        ],
+        "inputs": [
+          "{workspaceRoot}/apps/gateway/dist/supergraph/api.graphql"
+        ],
+        "outputs": [
+          "{projectRoot}/schema"
+        ],
+        "options": {
+          "command": "mkdir -p apps/mcp/schema && cp apps/gateway/dist/supergraph/api.graphql apps/mcp/schema/api.graphql"
+        }
+      },
+      "serve": {
+        "continuous": true,
+        "executor": "nx:run-commands",
+        "dependsOn": [
+          "prune"
+        ],
+        "options": {
+          "cwd": "{projectRoot}",
+          "readyWhen": "Starting MCP server",
+          "command": "\"${APOLLO_MCP_SERVER:-apollo-mcp-server}\" config/mcp.yaml"
+        }
+      },
+      "docker:build": {
+        "dependsOn": [
+          "prune"
+        ],
+        "options": {
+          "args": [
+            "--platform linux/arm64",
+            "--file apps/mcp/Dockerfile",
+            "--tag nestposts/mcp:dev"
+          ]
+        },
+        "parallelism": false
+      },
+      "docker:run": {
+        "options": {
+          "cwd": ".",
+          "command": "docker run {args} nestposts/mcp:dev"
+        }
+      }
+    }
+  }
+}

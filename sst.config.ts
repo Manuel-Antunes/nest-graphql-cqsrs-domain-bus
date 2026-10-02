@@ -26,6 +26,7 @@ export default $config({
        */
       providers: {
         command: '1.2.1',
+        'docker-build': '0.0.14',
         sentry: {
           package: '@pulumiverse/sentry',
           version: '0.0.9',

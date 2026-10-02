@@ -46,7 +46,6 @@ import { GatewayGraphQLModule } from './graphql/gateway-graphql.module';
     ),
     CacheModule.registerAsync({ isGlobal: true, useClass: RedisCacheOptions }),
     AuthInfrastructureModule.forRoot({
-      routes: false,
       guard: false,
       plugins: organizationAuthPluginProviders,
       entities: OrganizationEntities.withAuth(),

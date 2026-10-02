@@ -1,9 +1,10 @@
 /// <reference path="../../.sst/platform/config.d.ts" />
 
-import { execSync } from 'node:child_process';
+import { execFileSync, execSync } from 'node:child_process';
 
 import {
   SENTRY_ORGANIZATION as ORGANIZATION,
+  SENTRY_BASE_URL,
   SENTRY_OWNER_STAGE,
   SENTRY_TOKEN,
   SENTRY_WEB_URL,
@@ -115,6 +116,49 @@ const ADOPTED = new Set(
 );
 
 /**
+ * Whether to **adopt** the team rather than create it, the same one-shot way:
+ * `SENTRY_IMPORT_TEAM=vaz-test`. Everything here is `retainOnDelete`, so an owner stage that was
+ * removed leaves its team, its projects and their keys in GlitchTip — and GlitchTip answers the
+ * team's second create with a bare `500`. Redeploying such a stage adopts all of it:
+ *
+ *   SENTRY_IMPORT_TEAM=vaz-test SENTRY_IMPORT_PROJECTS=nestposts-web,nestposts-gateway,… npx nx run @nestposts/infra:deploy:dev
+ */
+const ADOPTED_TEAM = process.env.SENTRY_IMPORT_TEAM === TEAM_SLUG;
+
+/**
+ * **The id of the key an adopted project already has**, read from GlitchTip by its name — a key's
+ * id is a UUID only GlitchTip knows, and importing the key (rather than creating another `nestposts`
+ * one) is what keeps a stage that references keys by name from finding two. Synchronous, because an
+ * `import` has to be known when the resource is declared; the token travels in the environment, not
+ * on a command line.
+ */
+const adoptedKeyIdOf = (slug: ProjectSlug): string => {
+  const keys = JSON.parse(
+    execFileSync(
+      process.execPath,
+      [
+        '-e',
+        'fetch(process.env.KEYS_URL, { headers: { authorization: `Bearer ${process.env.SENTRY_TOKEN}` } }).then((r) => r.text()).then((t) => process.stdout.write(t))',
+      ],
+      {
+        env: {
+          ...process.env,
+          SENTRY_TOKEN,
+          KEYS_URL: `${SENTRY_BASE_URL}0/projects/${ORGANIZATION}/${slug}/keys/`,
+        },
+      },
+    ).toString(),
+  ) as { id: string; name: string }[];
+  const key = keys.find(({ name }) => name === KEY_NAME);
+  if (!key) {
+    throw new Error(
+      `${slug} has no key named "${KEY_NAME}" to adopt; drop it from SENTRY_IMPORT_PROJECTS so one is created.`,
+    );
+  }
+  return key.id;
+};
+
+/**
  * Who an issue notifies: the team's members by email, always, and a Discord channel when
  * `GLITCHTIP_DISCORD_WEBHOOK_URL` names one.
  */
@@ -156,6 +200,7 @@ const owned = (): Record<ProjectSlug, ProjectKey> => {
     {
       retainOnDelete: true,
       ignoreChanges: TEAM_FIELDS_GLITCHTIP_DOES_NOT_KEEP,
+      ...(ADOPTED_TEAM ? { import: `${ORGANIZATION}/${TEAM_SLUG}` } : {}),
     },
   );
 
@@ -179,7 +224,12 @@ const owned = (): Record<ProjectSlug, ProjectKey> => {
       const key = new sentry.SentryKey(
         `SentryKey${appName}`,
         { organization: ORGANIZATION, project: project.slug, name: KEY_NAME },
-        { retainOnDelete: true },
+        {
+          retainOnDelete: true,
+          ...(ADOPTED.has(slug)
+            ? { import: `${ORGANIZATION}/${slug}/${adoptedKeyIdOf(slug)}` }
+            : {}),
+        },
       );
       new GlitchtipAlert(
         `SentryAlert${appName}`,

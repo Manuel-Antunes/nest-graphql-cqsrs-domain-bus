@@ -14,7 +14,7 @@ async function bootstrap() {
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
     new FastifyAdapter(),
-    { bufferLogs: true },
+    { bodyParser: false, bufferLogs: true },
   );
   app.useLogger(app.get(PinoLogger));
   app.enableShutdownHooks();

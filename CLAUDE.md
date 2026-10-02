@@ -232,6 +232,9 @@ npx nx run @chatwoot/chatwoot:serve        # Rails on 3100 (CHATWOOT_PORT) and V
 npx nx run @chatwoot/chatwoot:migrate      # a new Chatwoot migration, then chatwoot:mirror
 npx nx run @chatwoot/chatwoot:graphql:generate   # apps/chatwoot/schema.graphql, the SDL the gateway composes — after any change to apps/chatwoot/graphql
 node apps/migrator/dist/main.js chatwoot:mirror  # mirror into Chatwoot what it does not have yet; migrate() already ends with it
+npx nx serve @nestposts/mcp                # Apollo MCP Server on :8000/mcp, natively (APOLLO_MCP_SERVER or apollo-mcp-server on PATH), after copying the composed API schema
+npx nx serve @nestposts/posts-agent        # the posts agent on :9000 (A2A), with AWS credentials that can call Bedrock
+node apps/posts-agent/scripts/agent-console.mjs "Who am I?"   # sign in as a seeded user, get a token for the agent and the MCP server, talk A2A
 
 docker compose up -d localstack   # SNS + SQS, with the topology docker/localstack/init creates
 docker compose up -d minio createbuckets   # the bucket a post keeps its file in, with its policies
@@ -302,6 +305,20 @@ gateway — reads **`GATEWAY_URL`** too
 a session, and the resource the migrator registers. `AUTH_ISSUER` (default `WEB_URL`) is the one
 `iss` they all sign and verify with. The notificator now reads `AUTH_SECRET`, `AUTH_URL` and
 `WEB_URL` as well: it authenticates the callers of its subgraph.
+
+`AUTH_OAUTH_RESOURCES` (default: `GATEWAY_URL` alone) is the list of audiences a Better Auth process
+accepts on a bearer token, and what the migrator registers as resources. With the agents, every
+process lists the posts MCP server's too — it forwards the caller's token, issued for it, to the
+gateway — and the migrator also the posts agent's (`.env.example`; on AWS `infra/aws/compute/environment.ts`).
+
+`apps/posts-agent` reads `POSTS_AGENT_PORT`/`POSTS_AGENT_HOST` (`9000`/`0.0.0.0`), `POSTS_AGENT_URL`
+(the URL its card advertises; on AgentCore, `AGENTCORE_RUNTIME_URL` wins), `POSTS_AGENT_RESOURCE` (the
+resource its card names), the auth, database and Redis variables of every Better Auth process —
+`AUTH_OAUTH_RESOURCES` being the audiences a caller's token may carry, its own alone on AWS —
+`AUTH_ISSUER`/`WEB_URL`, `POSTS_MCP_URL`, `POSTS_AGENT_MODEL_ID`
+(default `global.anthropic.claude-sonnet-5-5`), `POSTS_AGENT_TEMPERATURE` (sent only when set),
+`AWS_REGION` and `BEDROCK_AGENTCORE_MEMORY_ID`. `apps/mcp`'s config reads `AUTH_ISSUER`,
+`POSTS_MCP_RESOURCE`, `POSTS_MCP_GRAPHQL_ENDPOINT` and `POSTS_MCP_ADDRESS`.
 
 The gateway also reads `CHATWOOT_SUBGRAPH_URL` (default `http://localhost:3100/graphql`), and
 `apps/web` `CHATWOOT_URL` (default `http://localhost:3100`), the origin it embeds.
@@ -459,7 +476,9 @@ libs/clients             domain/client (a Client of the tenant's organization: C
                          `clients` GraphQL surface live in apps/posts-api; its Chatwoot contacts are
                          federated onto it by the `chatwoot` subgraph (see Chatwoot)
 libs/ai                  the agents' runtime (being migrated in): A2A hosting with its extensions as
-                         classes (a2a/domain, a2a/server, a2a/langchain), the files an agent works
+                         classes (a2a/domain, a2a/server, a2a/langchain) — and on Amazon Bedrock
+                         AgentCore Runtime (a2a/agentcore: the registry's card and executor served by
+                         bedrock-agentcore's A2A app) — the files an agent works
                          with — analysis, AttachmentDrive over @nestjs/storage and the asset model,
                          the deepagents DriveBackend, the ingestion middleware that keeps base64 out
                          of the checkpoint (files/) — and ChannelResponseProcessor, whose Chatwoot
@@ -470,22 +489,34 @@ apps/gateway             the one GraphQL endpoint: composes the posts, notificat
                          from their SDL, executes them with @graphql-tools/federation (subscriptions
                          over SSE, @interfaceObject), reads each caller's session through the same
                          Better Auth (Redis first, Postgres on a miss) and forwards every caller's
-                         cookie and bearer. The whole gateway lives here, not in a library. See
-                         "The gateway" below
+                         cookie and bearer. It also SERVES that Better Auth — /api/auth/* and the
+                         authorization server's discovery documents at the root. The whole gateway
+                         lives here, not in a library. See "The gateway" below
 apps/posts-api           application + interfaces (GraphQL, messaging), a HYBRID application:
                          HTTP (the `posts` subgraph, subscriptions over SSE) and a microservice
 apps/tagging             one step of the saga, a FULL microservice: no HTTP port at all
 apps/notificator         delivers notifications — the database, email, push — through a command, and
                          serves the `notifications` subgraph: a HYBRID application (see
                          Notifications)
+apps/mcp                 the posts as MCP tools: Apollo MCP Server over the composed API schema, six
+                         operations, configured in config/mcp.yaml; authenticates every request and
+                         passes the caller's token to the gateway. On AgentCore Runtime. README
+apps/posts-agent         the posts manager, an A2A agent on Amazon Bedrock AgentCore Runtime: a Nest
+                         application context whose @A2aAgent runs LangChain over a Bedrock model and
+                         the MCP tools, as the caller, with AgentCore Memory. README
 apps/migrator            the SYSTEM and the TENANT migrations and the seeders — the only thing that
                          writes system DDL, the author of every tenant migration, and the only thing
                          that seeds (see below)
 infra/aws                the deployed shape: the topic, the queues, the four functions, the bucket
                          and the router, in SST. `infra/aws/README.md` is the guide — read it before
-                         touching a filter policy or the bundling options
+                         touching a filter policy or the bundling options. Every custom component
+                         (NodeFunction, AgentRuntime, Neo4j) is linkable through `sst.Linkable.wrap`
+                         with the permissions a link grants, takes the `sst.aws.Vpc` itself, and has a
+                         `static get` where another stage may own it
 infra/sentry             the error tracker (a self-hosted GlitchTip): a project, a key and an alert
-                         per application, owned by the `dev` stage; every function gets its DSN
+                         per application, owned by the `dev` stage; every function gets its DSN.
+                         A removed `dev` keeps them (retainOnDelete): redeploying it adopts them with
+                         SENTRY_IMPORT_TEAM and SENTRY_IMPORT_PROJECTS
 apps/web-e2e             the whole system through a BROWSER: Playwright over three processes and a
                          real broker — authentication, authorization, the reading path and the saga
 apps/web                 a Next.js client of the GATEWAY (not part of the saga). It boots a Nest
@@ -1362,7 +1393,7 @@ last section is the design; the essentials:
 - **Credentials are forwarded, and decided by each subgraph.** Cookie, bearer and `x-tenant` go to
   every subgraph an operation reaches; each authenticates with its own Better Auth instance. The
   gateway reads the caller's session too — with a Better Auth instance of its own, on the same
-  Postgres and the same Redis (`AuthInfrastructureModule`, `routes: false`, `guard: false`) — only to
+  Postgres and the same Redis (`AuthInfrastructureModule`, `guard: false`) — only to
   know who it is for and which organization they are in: `libs/auth`'s `IdentityResolver`, the same
   one the subgraphs' tenant guard uses, so a cookie and an OAuth access token (`oauth-bearer-session`)
   read exactly as they do in a subgraph. `OrganizationSlugs` names the caller's active organization
@@ -1388,6 +1419,36 @@ last section is the design; the essentials:
 - **A request log never carries a credential.** `loggingModule` redacts `cookie`, `authorization` and
   `set-cookie`: a gateway forwards both on every request, and a record is a working session token in
   whatever stores it.
+
+### Agents: A2A and MCP on Amazon Bedrock AgentCore Runtime
+
+The posts manager (`apps/posts-agent`) and the posts MCP server (`apps/mcp`) run on **AgentCore
+Runtime**, each an `aws.bedrock.AgentcoreAgentRuntime` built by `infra/aws/agents`'s `AgentRuntime`.
+Their READMEs, `libs/ai/README.md` and `infra/aws/README.md` are the guides; the essentials:
+
+- **An agent is defined once, and the AgentCore SDK serves it.** One `@A2aAgent` class: the
+  decorator holds the static card, the instance the card fields configuration decides, its skills —
+  `Skill` entities, which the card advertises without their bodies and the model reads on demand from
+  `/skills/` (`SkillsBackend.mount`, `SubAgentMiddleware.for`) — and an `executor` that may be a
+  function `libs/ai` builds on the first turn, inside the caller's scope. The model is injected as
+  `@Inject('BASE_MODEL')`, a `useExisting` alias of the `ChatBedrockConverse` provider.
+  `main.ts` boots a Nest application context; `AgentCoreA2aServer` asks `A2aAgentResolver` for the
+  agent — card, hosted executor, task store — and hands it to `bedrock-agentcore`'s `buildA2AApp`,
+  with the registry's `resolveUser` in front of it.
+- **Everything acts as the caller.** One token, asked for with both resources
+  (`resource=<agent>&resource=<mcp>`): AgentCore's JWT authorizers check it against the issuer's
+  discovery document (served by the gateway), the agent reads it as the gateway reads a caller —
+  `libs/auth`'s `IdentityResolver`, resolved for a request made of the invocation's headers, the
+  `Identity` it answers turned into the A2A `User` (`PlatformCaller`) — so the agent holds the same
+  Better Auth, on Postgres and Redis, and runs in the VPC; every turn runs in the
+  caller's scope (`A2aCallers`), and the MCP client reads the token there per request
+  (`CallerBearerAuthProvider`, an MCP SDK `OAuthClientProvider`), Apollo MCP
+  Server validates it and passes it to the gateway, and every Better Auth process accepts the MCP
+  server's audience. Nothing holds a credential of its own.
+- **The audiences are logical** (`<router>/mcp`, `<router>/a2a/posts`): a runtime's authorizer
+  cannot name the ARN its invocation URL is made of.
+- **`agent-console`** is a seeded public OAuth client (PKCE, loopback redirect, no consent screen)
+  that `apps/posts-agent/scripts/agent-console.mjs` signs a person in with.
 
 ### Persistence: the domain carries no ORM decorator
 
@@ -2305,6 +2366,38 @@ DTOs count.
   the e2e's global setup) or being down makes the sign-up itself a `500`. The webhook endpoint stays
   this library's: `@polar-sh/sdk`'s
   `validateEvent` still base64-encodes a `whsec_` secret's text in 0.49.0.
+- **`bedrock-agentcore` cannot be `require()`d**: ESM-only, and its `exports` map has `import` and
+  `types` and nothing else, so `require('bedrock-agentcore/runtime/a2a')` is
+  `ERR_PACKAGE_PATH_NOT_EXPORTED` before Node's `require(esm)` gets a say. An application that uses
+  `libs/ai`'s `a2a/agentcore` bundles it (`bundledPackages: ['bedrock-agentcore']` in its
+  `webpack.config.js`); a `new Function('return import()')` loads it in Node and fails under Vitest
+  (`A dynamic import callback was not specified`).
+- **Newer Claude models on Bedrock refuse `temperature`** — `temperature is deprecated for this model`
+  from Sonnet 5.5 — so `POSTS_AGENT_TEMPERATURE` is sent only when it is set.
+- **A filtered install is the whole virtual store.** `pnpm install --prod --filter=<app>`, with or
+  without `{.}`, and `pnpm deploy --prod` all put the workspace's packages in the image — Next, the
+  SWC binaries, Playwright: the agent's image was 1.6 GB against AgentCore's 2 GB limit. Its
+  Dockerfile installs the lockfile `@nx/js:prune-lockfile` cuts to the app's own `dependencies`
+  instead (554 MB, 1.2 GB since it holds Better Auth, whose optional `next` peer the lockfile resolves),
+  which works because its bundle compiles every `@nestposts/*` library in and the
+  app declares every package the bundle requires.
+- **A tool called with no arguments is an invalid call when the model streams.** Bedrock's Converse
+  stream sends no input at all for such a call, and LangChain's streamed message — what an
+  `AgentExecutor` driving `streamEvents` gets — keeps it only as an `invalid_tool_call` content block
+  (`args: ""`, "Failed to parse tool call arguments as JSON"): no tool runs, the turn completes with no
+  text, and the next turn sends Bedrock a message with no content. `ListPosts`, whose arguments are
+  all optional, did exactly that on AgentCore while `invoke` answered correctly. `libs/ai`'s
+  `EmptyToolInputMiddleware` turns such a call into one with `{}`.
+- **Pulumi's `docker-build` parses a Dockerfile itself, and does not know `COPY --parents`**: the
+  repository's application Dockerfiles cannot be built by an SST/Pulumi image resource
+  (`dockerfile parse error … unknown flag: --parents`), while `docker build` takes them. The agent's
+  Dockerfile is built from the host's output instead — the bundle and the pruned lockfile `prune`
+  leaves in `dist`, its context the project's directory — which is also what keeps it small.
+- **Better Auth's OAuth client field is `requirePKCE`**, not `requirePkce`: written through the
+  adapter under the wrong name the column is simply `null`, with nothing failing.
+- **Apollo MCP Server checks that the discovery document's `issuer` equals the server it asked**, so
+  its `servers` is the issuer itself — the router on AWS, `apps/web` locally — and that origin must
+  answer `/.well-known/oauth-authorization-server` at its root.
 
 ## `apps/web` holds its own Better Auth, in a Nest container
 

@@ -104,6 +104,9 @@
     },
     {
       "path": "./libs/ai"
+    },
+    {
+      "path": "./apps/posts-agent"
     }
   ]
 }

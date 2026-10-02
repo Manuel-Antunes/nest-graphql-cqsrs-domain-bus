@@ -13,6 +13,7 @@ import { usersEntities } from '@nestposts/users/infrastructure/users-infrastruct
 
 import { systemMigrations } from '../migrations/system';
 import { tenantMigrations } from '../migrations/tenant';
+import { AgentConsoleClientSeeder } from '../seeders/agent-console-client.seeder';
 import { DatabaseSeeder } from '../seeders/database.seeder';
 import { OAuthResourcesSeeder } from '../seeders/oauth-resources.seeder';
 import { TestUsersSeeder } from '../seeders/test-users.seeder';
@@ -45,7 +46,12 @@ export const systemConnection = (): PostgresOptions => ({
   extensions: [Migrator, SeedManager],
   migrations: migrationFiles('system'),
   seeder: {
-    seedersList: [DatabaseSeeder, OAuthResourcesSeeder, TestUsersSeeder],
+    seedersList: [
+      DatabaseSeeder,
+      OAuthResourcesSeeder,
+      AgentConsoleClientSeeder,
+      TestUsersSeeder,
+    ],
     defaultSeeder: 'DatabaseSeeder',
     emit: 'ts',
   },

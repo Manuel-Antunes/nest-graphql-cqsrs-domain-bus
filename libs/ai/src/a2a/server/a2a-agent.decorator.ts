@@ -4,7 +4,8 @@ import type { AgentCard } from '@a2a-js/sdk';
 import type { AgentExecutor, TaskStore } from '@a2a-js/sdk/server';
 import type { Type } from '@nestjs/common';
 
-import type { Skill } from '../../domain/skill.entity';
+import { Skill } from '../../domain/skill.entity';
+import type { A2aExecutorFactory } from './lazy-agent.executor';
 
 export interface A2aSkillConfig {
   id: string;
@@ -17,6 +18,8 @@ export interface A2aSkillConfig {
   extensions?: string[];
 }
 
+export type A2aSkill = A2aSkillConfig | Skill;
+
 export type A2aAgentCardOverrides = Partial<
   Omit<AgentCard, 'skills' | 'supportedInterfaces'>
 >;
@@ -26,13 +29,14 @@ export interface A2aAgentConfig {
   name?: string;
   description?: string;
   referenceId?: string;
-  skills: A2aSkillConfig[];
+  skills?: readonly A2aSkill[];
   card?: A2aAgentCardOverrides;
 }
 
 export interface A2aAgent {
-  readonly executor: AgentExecutor;
-  readonly skills?: A2aSkillConfig[];
+  readonly executor: AgentExecutor | A2aExecutorFactory;
+  readonly skills?: readonly A2aSkill[];
+  readonly card?: A2aAgentCardOverrides;
   readonly taskStore: TaskStore;
 }
 
@@ -47,13 +51,18 @@ export class A2aAgentDeclaration {
     return Reflect.getOwnMetadata(A2aAgentDeclaration.KEY, target);
   }
 
-  static skillsOf(skills: readonly Skill[]): A2aSkillConfig[] {
-    return skills.map((skill) => ({
-      id: skill.id,
-      name: skill.name,
-      description: skill.description,
-      tags: skill.tags,
-    }));
+  static skillsOf(skills: readonly A2aSkill[]): A2aSkillConfig[] {
+    return skills.map((skill) =>
+      skill instanceof Skill
+        ? {
+            id: skill.id,
+            name: skill.name,
+            description: skill.description,
+            tags: skill.tags,
+            examples: skill.examples,
+          }
+        : skill,
+    );
   }
 }
 

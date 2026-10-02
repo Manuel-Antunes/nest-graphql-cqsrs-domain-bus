@@ -228,7 +228,7 @@ const PRELOADED_NODE_OPTIONS = `${BASE_NODE_OPTIONS} --require /var/task/otel-pr
 /** Where every function of this system lives, what it is allowed to reach, and what it waits for. */
 export interface LambdaPlatform {
   readonly vpc: sst.aws.Vpc;
-  readonly link: unknown[];
+  readonly link: sst.aws.FunctionArgs['link'];
   readonly environment: Record<string, $util.Input<string>>;
   /** The build that produces the `dist/` these handlers point at — see `compute/build.ts`. */
   readonly dependsOn?: $util.Resource[];
@@ -268,6 +268,8 @@ export interface NodeFunctionArgs {
  * - **`install`**, above.
  */
 export class NodeFunction extends $util.ComponentResource {
+  static readonly __pulumiType = 'nestposts:aws:NodeFunction';
+
   readonly fn: sst.aws.Function;
 
   constructor(
@@ -278,7 +280,7 @@ export class NodeFunction extends $util.ComponentResource {
     },
     opts?: $util.ComponentResourceOptions,
   ) {
-    super('nestposts:aws:NodeFunction', name, {}, opts);
+    super(NodeFunction.__pulumiType, name, {}, opts);
 
     this.fn = new sst.aws.Function(
       name,
@@ -289,7 +291,7 @@ export class NodeFunction extends $util.ComponentResource {
         timeout: args.timeout ?? '30 seconds',
         memory: args.memory ?? '1024 MB',
         vpc: args.platform.vpc,
-        link: args.platform.link as never[],
+        link: args.platform.link,
         layers: [COLLECTOR_LAYER],
         url: args.url,
         streaming: args.streaming,
@@ -550,3 +552,5 @@ export class StreamingFunction extends NodeFunction {
     return this.fn.url as unknown as $util.Output<string>;
   }
 }
+
+sst.Linkable.wrap(NodeFunction, (node) => node.fn.getSSTLink());

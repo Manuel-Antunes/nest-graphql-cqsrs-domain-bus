@@ -16,7 +16,7 @@ export type A2aUserResolver = (
 ) => Promise<User | undefined>;
 
 export abstract class A2aModuleOptions {
-  declare readonly card: A2aCardDefaults;
+  declare readonly card?: Partial<A2aCardDefaults>;
   declare readonly basePath?: string;
   declare readonly baseUrl?: string;
   declare readonly agentProviders?: Type<A2aAgent>[];

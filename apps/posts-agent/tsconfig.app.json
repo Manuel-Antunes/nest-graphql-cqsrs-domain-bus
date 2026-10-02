@@ -1,0 +1,33 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "out-tsc/app",
+    "tsBuildInfoFile": "out-tsc/app/tsconfig.app.tsbuildinfo"
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/**/*.spec.ts"],
+  "references": [
+    {
+      "path": "../../libs/core/redis/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/organizations/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/core/observability/tsconfig.lib.json"
+    },
+    {
+      "path": "../migrator/tsconfig.app.json"
+    },
+    {
+      "path": "../../libs/database/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/auth/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/ai/tsconfig.lib.json"
+    }
+  ]
+}

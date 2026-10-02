@@ -11,6 +11,7 @@ src/
   a2a/
     domain/        the A2A contract: parts, extensions, the chat → A2A part encoder
     server/        Nest hosting: A2aModule, A2aRegistry, the protocol middleware, the executor wrapper
+    agentcore/     AgentCore Runtime hosting: AgentCoreA2aModule/Server over bedrock-agentcore's A2A app
     langchain/     the LangChain binding: ReactAgentExecutor, A2aMiddleware, LangChainTaskStore
     testing/       A2aWire, the fixtures every A2A spec shares
   files/
@@ -54,6 +55,64 @@ the same instances.
   store does not stamp them yet: the checkpoint time of a message is not part of the fold.
 - `human-in-the-loop.assert.ts` pins, at compile time, that the HITL wire types and LangChain's
   `HITLRequest`/`HITLResponse`/`InterruptOnConfig` are the same shapes in both directions.
+
+## Defining an agent once, and resolving it for a host
+
+An agent is one class: `@A2aAgent({ id, name, description, card, skills })` states what is static —
+its card's descriptive fields and, optionally, skills — and the instance adds what only DI knows:
+
+- **`card`** (optional, on the instance): card fields that come from configuration — a security
+  scheme whose URLs are the issuer's, the provider. It is merged last, over the module's defaults
+  (`A2aModuleOptions.card`, now optional) and the decorator's `card`.
+- **`executor`**: an `AgentExecutor`, or **a function that builds one**, synchronously or not.
+  `LazyAgentExecutor` calls it on the first turn and keeps what it built; a build that fails is
+  built again on the next turn. That is what an executor whose tools need the caller's credential
+  needs — the posts agent lists its MCP tools with the first caller's token — and a `Promise`
+  created in the constructor could not give: it would run at boot, as nobody, once.
+- **`skills`** (on the decorator, the instance, or both): `A2aSkillConfig`s or **`Skill` entities**
+  (`domain/skill.entity.ts`), the same objects the agent's LangChain graph loads its procedures from.
+  The registry advertises an entity by its name, description, tags and examples, and never by its
+  body: the body is an internal procedure, often naming tools a caller has no business seeing, and
+  the card is public. The decorator's come first and an `id` is advertised once. One list is then
+  both what the card promises and what the model can do: `SkillsBackend.mount(skills)` serves every
+  `SKILL.md` under `/skills/` beside the agent's own files, and
+  `SubAgentMiddleware.for({ backend, skills, tools: ['read_file'] })` lists them in the system
+  message — name, description, path — for the model to read the one a request needs, when it needs
+  it. Only the frontmatter is paid for on every turn.
+- **Every turn runs as its caller.** The registry wraps every executor in `CallerScopedExecutor`,
+  which runs the turn — and a lazy executor's build — inside `A2aCallers` (an `AsyncLocalStorage`
+  of the call context's `User`). Anything the turn reaches asks `callers.currentAs(SomeUser)`;
+  nothing threads the caller through LangChain's config, where a checkpoint could keep it.
+
+`A2aAgentResolver.resolve(agent)` — by class, by `referenceId`, or the root agent with neither —
+answers what a host serves: the card, the **hosted executor** (the very instance the registry's own
+`DefaultRequestHandler` runs: extension-aware, caller-scoped, lazy) and the task store.
+
+## Hosting an agent on Amazon Bedrock AgentCore Runtime
+
+Two hosts serve the registry. `A2aProtocolMiddleware` serves it from a Nest HTTP application
+(`/a2a/...`). `AgentCoreA2aServer` (`a2a/agentcore/`) serves one agent on AgentCore Runtime's A2A
+contract: it resolves `AgentCoreA2aOptions.agent` with `A2aAgentResolver` and hands the result to
+`bedrock-agentcore`'s `buildA2AApp`.
+
+- **The card is the agent's, its interfaces the runtime's.** AgentCore serves JSON-RPC on `POST /`
+  only, at the runtime's invocation URL (`AGENTCORE_RUNTIME_URL`, injected by the platform). So the
+  card advertises a JSON-RPC interface there in A2A 1.0 and its 0.3 mirror
+  (`duplicateInterfacesForLegacy`), which the SDK's server routes through its compat layer — and
+  which AgentCore's documented shape still speaks.
+- **Authentication is the registry's.** The SDK trusts every request — AgentCore's authorizer stands in
+  front of the container — and builds no user. The server puts the registry's `resolveUser` in front
+  of the SDK's app: a POST without a caller is a `401` before the executor runs, and the caller it
+  resolved reaches `requestContext.context.user` — and `A2aCallers` — through a context builder
+  wrapping the SDK's own (`bedrockCallContextBuilder`, which keeps AgentCore's headers in the call
+  context's state). A run outside AgentCore is authenticated the same way.
+- **`bedrock-agentcore` is ESM-only and has no `require` condition**, so an application that uses this
+  folder bundles it: `bundledPackages: ['bedrock-agentcore']` in its `webpack.config.js` (`tools/webpack`).
+  Its own imports — `express`, `@a2a-js/sdk` — stay external, so the bundle loads the same
+  `@a2a-js/sdk` build as everything else; a `new Function('return import()')` was tried and fails under
+  Vitest, whose modules run in a `vm` context.
+
+`apps/posts-agent` is the first agent hosted this way.
 
 ## The LangChain middleware and the system message
 

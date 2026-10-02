@@ -267,6 +267,7 @@ describe('the gateway resolves who is calling, from Redis first', () => {
       .compile();
     app = moduleRef.createNestApplication<NestFastifyApplication>(
       new FastifyAdapter(),
+      { bodyParser: false },
     );
     await app.listen(0, '127.0.0.1');
     url = await app.getUrl();
@@ -281,6 +282,51 @@ describe('the gateway resolves who is calling, from Redis first', () => {
     await redis?.stop();
     delete process.env.REDIS_URL;
     if (sdlRoot) rmSync(sdlRoot, { recursive: true, force: true });
+  });
+
+  it('is the authorization server’s discovery endpoint, answering as the issuer', async () => {
+    const config = app.get<AuthConfig>(authConfig.KEY);
+
+    const metadata = await (
+      await fetch(`${url}/.well-known/oauth-authorization-server`)
+    ).json();
+    const openId = await (
+      await fetch(`${url}/.well-known/openid-configuration`)
+    ).json();
+
+    expect(metadata).toMatchObject({
+      issuer: config.issuer,
+      token_endpoint: `${config.baseUrl}${config.basePath}/oauth2/token`,
+      jwks_uri: `${config.baseUrl}${config.basePath}/jwks`,
+    });
+    expect(openId).toMatchObject({
+      issuer: config.issuer,
+      jwks_uri: metadata.jwks_uri,
+    });
+  });
+
+  it('serves Better Auth itself: its keys, and a sign-in that sets the session cookie', async () => {
+    const email = `gateway-${Date.now()}@example.com`;
+    await inContext(() =>
+      auth().api.signUpEmail({
+        body: { email, name: 'gateway', password: 'senha-super-secreta' },
+      }),
+    );
+    await execute(
+      'update public.users set email_verified = true where email = ?',
+      [email],
+    );
+
+    const jwks = await (await fetch(`${url}/api/auth/jwks`)).json();
+    const signIn = await fetch(`${url}/api/auth/sign-in/email`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email, password: 'senha-super-secreta' }),
+    });
+
+    expect(jwks.keys.length).toBeGreaterThan(0);
+    expect(signIn.status).toBe(200);
+    expect(signIn.headers.getSetCookie().join(';')).toContain('session_token');
   });
 
   it('reads a cookie session, and routes the caller to the organization it is in', async () => {

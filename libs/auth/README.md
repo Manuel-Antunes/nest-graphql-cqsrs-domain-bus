@@ -307,6 +307,16 @@ that, on AWS, with a valid session. It now answers `403 OAUTH_CLIENT_ADMIN_REQUI
 `admin`: the deployed stages have one only when somebody sets `users.role` by hand, the way
 `apps/web-e2e` does for its own.
 
+### Discovery, at the issuer's root
+
+`AuthInfrastructureModule` with its routes on also serves `/.well-known/oauth-authorization-server`
+and `/.well-known/openid-configuration` at the root (`OAuthDiscoveryController`): the oauth provider
+plugin's own documents (`auth.api.getOAuthServerConfig`/`getOpenIdConfig`), which its handler answers
+only for a request that reaches it — under `/api/auth`. A resource server (an MCP server, an AgentCore
+JWT authorizer) finds the JWKS there, and checks that the `issuer` inside equals the origin it asked:
+so the origin that answers is the issuer's — the router on AWS, which sends both paths to the gateway,
+and `apps/web` locally, whose routes hand the request to the same handler.
+
 ## A client's own access token is a `ClientIdentity`
 
 A client that authenticates as itself — the client credentials grant, a machine with no user behind

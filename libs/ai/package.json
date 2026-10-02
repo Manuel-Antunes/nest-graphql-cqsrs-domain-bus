@@ -46,7 +46,9 @@
     "@nestposts/auth": "workspace:*",
     "mikro-orm-neo4j": "catalog:",
     "@google/genai": "catalog:",
-    "openai": "catalog:"
+    "openai": "catalog:",
+    "bedrock-agentcore": "catalog:",
+    "express": "catalog:"
   },
   "devDependencies": {
     "@types/mime-types": "catalog:"
