@@ -8,7 +8,7 @@
  * route points at a function's URL, and `web/` last because it is the only thing that wants all
  * three.
  */
-import { postsAgent, postsAgentMemory, postsMcp } from './agents';
+import { postsAgent, postsAgentMemory, postsMcp, theo } from './agents';
 import { chatwoot } from './chatwoot';
 import {
   gateway,
@@ -20,7 +20,11 @@ import {
   streaming,
   taggingWorker,
 } from './compute';
-import { mcpResource, postsAgentResource } from './compute/environment';
+import {
+  mcpResource,
+  postsAgentResource,
+  theoResource,
+} from './compute/environment';
 import { database, graph } from './data';
 import { router } from './edge';
 import { mailSender } from './mail';
@@ -83,5 +87,7 @@ export const outputs = {
     postsAgentCard: $interpolate`${postsAgent.url}.well-known/agent-card.json`,
     postsAgentResource,
     postsAgentMemory: postsAgentMemory.id,
+    theo: theo.url,
+    theoResource,
   },
 };

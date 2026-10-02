@@ -181,6 +181,31 @@ here. Both scopes are on — personal and organization — because `libs/billing
 `referenceId` the Polar plugin would otherwise take on trust. On the server, `WebAuth.billing()`
 resolves the request-scoped `BillingService`, the same endpoints through `auth.api`.
 
+## Theo: CopilotKit over the components this design system already has
+
+`/theo` is a chat with Theo, the AG-UI agent on AgentCore (`apps/theo-agent`). The page is
+CopilotKit v2's **headless** hooks — `useAgent({ agentId: 'theo' })` for the conversation and its run
+status, `useCopilotKit().copilotkit.runAgent`/`stopAgent` to send and stop — drawn with `libs/ui`'s own
+chat components (`MessageScroller`, `Message`, `Bubble`, `Marker`, `ChatComposer`), not CopilotKit's
+styled ones. `TheoTranscript` reads the AG-UI messages the agent keeps into what the page shows: a
+`send_message_to_a2a_agent` call is a **delegation card** ("Theo asked Posts Manager, over A2A"), and
+the messages the posts agent said as an AG-UI subagent of that call (`subagentRunId` = the call's id)
+are shown inside it, not as Theo's.
+
+The provider talks to `/api/copilotkit`, where the **CopilotKit runtime** (`@copilotkit/runtime/v2`,
+`createCopilotRuntimeHandler`) runs: for a signed-in person only — anyone else is a `401` before the
+runtime is reached — with an agents factory that builds, per request, an `@ag-ui/client` `HttpAgent`
+for Theo (`lib/agents/theo-agent.server.ts`). Its `fetch` adds what AgentCore needs and the browser
+must never hold: an access token for the person, issued here by `WebAuth.delegatedToken` —
+`libs/auth`'s `DelegatedAccessTokens`, this application being the authorization server — addressed to
+Theo, the posts agent and the MCP server (`THEO_AGENT_AUDIENCES`), with the posts scopes the person
+holds, and the thread as AgentCore's session id. The token is minted when a run is sent, not when the
+runtime lists its agents. `COPILOTKIT_TELEMETRY_DISABLED=true` keeps the runtime from reporting to
+CopilotKit, and pnpm runs no install script of `@scarf/scarf`.
+
+The route streams, so on AWS the server function streams: `open-next.config.ts` picks OpenNext's
+`aws-lambda-streaming` wrapper (see `infra/aws/web`).
+
 ## Federação
 
 `apps/posts-api` é um **subgraph** — driver `YogaFederationDriver` —, e `/federation` é a única tela

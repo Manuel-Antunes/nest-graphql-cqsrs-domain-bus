@@ -9,6 +9,8 @@ const McpEnvSchema = z.object({
     .int()
     .positive()
     .default(15_000),
+  POSTS_MCP_CONNECT_ATTEMPTS: z.coerce.number().int().positive().default(3),
+  POSTS_MCP_RETRY_DELAY_MS: z.coerce.number().int().positive().default(2_000),
 });
 
 export const mcpConfig = registerAs('mcp', () => {
@@ -16,6 +18,8 @@ export const mcpConfig = registerAs('mcp', () => {
   return {
     url: parsed.POSTS_MCP_URL,
     connectTimeoutMs: parsed.POSTS_MCP_CONNECT_TIMEOUT_MS,
+    attempts: parsed.POSTS_MCP_CONNECT_ATTEMPTS,
+    retryDelayMs: parsed.POSTS_MCP_RETRY_DELAY_MS,
   };
 });
 

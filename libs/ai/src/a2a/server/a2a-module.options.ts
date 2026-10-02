@@ -1,7 +1,7 @@
 import type { AgentCard } from '@a2a-js/sdk';
-import type { User } from '@a2a-js/sdk/server';
 import type { FactoryProvider, ModuleMetadata, Type } from '@nestjs/common';
 
+import type { AgentCallerResolver } from '../../agents/callers/agent-caller';
 import type { A2aAgent } from './a2a-agent.decorator';
 
 export type A2aCardDefaults = Omit<
@@ -11,16 +11,12 @@ export type A2aCardDefaults = Omit<
   supportedInterfaces?: AgentCard['supportedInterfaces'];
 };
 
-export type A2aUserResolver = (
-  headers: Record<string, string | string[] | undefined>,
-) => Promise<User | undefined>;
-
 export abstract class A2aModuleOptions {
   declare readonly card?: Partial<A2aCardDefaults>;
   declare readonly basePath?: string;
   declare readonly baseUrl?: string;
   declare readonly agentProviders?: Type<A2aAgent>[];
-  declare readonly resolveUser?: A2aUserResolver;
+  declare readonly resolveUser?: AgentCallerResolver;
   declare readonly allowAnonymous?: boolean;
 }
 

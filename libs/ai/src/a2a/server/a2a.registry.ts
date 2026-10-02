@@ -18,6 +18,7 @@ import {
 } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 
+import { AgentCallers } from '../../agents/callers/agent-callers';
 import { AgentExtensions } from '../domain/agent-extensions';
 import {
   type A2aAgent,
@@ -27,7 +28,6 @@ import {
   type A2aSkill,
   type A2aSkillConfig,
 } from './a2a-agent.decorator';
-import { A2aCallers } from './a2a-callers';
 import { A2aModuleOptions } from './a2a-module.options';
 import { CallerScopedExecutor } from './caller-scoped.executor';
 import { ExtensionAwareAgentExecutor } from './extension-aware.executor';
@@ -86,7 +86,7 @@ export class A2aRegistry implements OnModuleInit {
   constructor(
     @Inject(A2aModuleOptions) private readonly options: A2aModuleOptions,
     private readonly moduleRef: ModuleRef,
-    private readonly callers: A2aCallers = new A2aCallers(),
+    private readonly callers: AgentCallers = new AgentCallers(),
   ) {}
 
   async onModuleInit(): Promise<void> {

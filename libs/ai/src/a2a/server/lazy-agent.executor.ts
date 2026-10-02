@@ -4,12 +4,16 @@ import type {
   RequestContext,
 } from '@a2a-js/sdk/server';
 
+import { Lazy } from '../../agents/lazy';
+
 export type A2aExecutorFactory = () => AgentExecutor | Promise<AgentExecutor>;
 
 export class LazyAgentExecutor implements AgentExecutor {
-  private built?: Promise<AgentExecutor>;
+  private readonly executor: Lazy<AgentExecutor>;
 
-  constructor(private readonly factory: A2aExecutorFactory) {}
+  constructor(factory: A2aExecutorFactory) {
+    this.executor = new Lazy(factory);
+  }
 
   static of(executor: AgentExecutor | A2aExecutorFactory): AgentExecutor {
     return typeof executor === 'function'
@@ -28,21 +32,12 @@ export class LazyAgentExecutor implements AgentExecutor {
     context: RequestContext,
     eventBus: ExecutionEventBus,
   ): Promise<void> {
-    return (await this.executor()).execute(context, eventBus);
+    return (await this.executor.get()).execute(context, eventBus);
   }
 
   async cancelTask(taskId: string, eventBus: ExecutionEventBus): Promise<void> {
-    if (!this.built) return;
-    return (await this.built).cancelTask(taskId, eventBus);
-  }
-
-  private executor(): Promise<AgentExecutor> {
-    this.built ??= Promise.resolve()
-      .then(this.factory)
-      .catch((error: unknown) => {
-        this.built = undefined;
-        throw error;
-      });
-    return this.built;
+    const built = this.executor.peek();
+    if (!built) return;
+    return (await built).cancelTask(taskId, eventBus);
   }
 }

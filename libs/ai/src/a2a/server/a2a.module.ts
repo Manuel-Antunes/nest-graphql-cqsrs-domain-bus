@@ -7,9 +7,9 @@ import {
   RequestMethod,
 } from '@nestjs/common';
 
+import { AgentCallersModule } from '../../agents/callers/agent-callers.module';
 import { A2aRegistry } from './a2a.registry';
 import { A2aAgentResolver } from './a2a-agent.resolver';
-import { A2aCallers } from './a2a-callers';
 import {
   type A2aAsyncModuleOptions,
   A2aModuleOptions,
@@ -32,15 +32,15 @@ export class A2aModule implements NestModule {
   static register(options: A2aModuleOptions): DynamicModule {
     return {
       module: A2aModule,
+      imports: [AgentCallersModule],
       providers: [
         { provide: A2aModuleOptions, useValue: options },
         A2aRegistry,
-        A2aCallers,
         A2aAgentResolver,
         A2aProtocolMiddleware,
         ...(options.agentProviders ?? []),
       ],
-      exports: [A2aRegistry, A2aCallers, A2aAgentResolver, A2aModuleOptions],
+      exports: [A2aRegistry, A2aAgentResolver, A2aModuleOptions],
     };
   }
 
@@ -48,7 +48,7 @@ export class A2aModule implements NestModule {
     const basePath = options.basePath ?? 'a2a';
     return {
       module: A2aModule,
-      imports: options.imports ?? [],
+      imports: [AgentCallersModule, ...(options.imports ?? [])],
       providers: [
         {
           provide: A2aModuleOptions,
@@ -61,11 +61,10 @@ export class A2aModule implements NestModule {
           }),
         },
         A2aRegistry,
-        A2aCallers,
         A2aAgentResolver,
         A2aProtocolMiddleware,
       ],
-      exports: [A2aRegistry, A2aCallers, A2aAgentResolver, A2aModuleOptions],
+      exports: [A2aRegistry, A2aAgentResolver, A2aModuleOptions],
     };
   }
 }

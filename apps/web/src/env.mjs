@@ -26,6 +26,19 @@ export const env = createEnv({
     ...StorageEnvSchema.shape,
     POSTS_SUBGRAPH_URL: z.string().optional(),
     CHATWOOT_URL: z.string().min(1).default('http://localhost:3100'),
+    THEO_AGENT_URL: z.url().default('http://localhost:8080/invocations'),
+    THEO_AGENT_AUDIENCES: z
+      .string()
+      .default(
+        'http://localhost:8080/,http://localhost:9000/,http://localhost:8000/mcp',
+      )
+      .transform((value) =>
+        value
+          .split(',')
+          .map((audience) => audience.trim())
+          .filter(Boolean),
+      )
+      .pipe(z.array(z.url()).min(1)),
   },
   client: {
     NEXT_PUBLIC_API_URL: z.string().min(1).default('http://localhost:3000'),

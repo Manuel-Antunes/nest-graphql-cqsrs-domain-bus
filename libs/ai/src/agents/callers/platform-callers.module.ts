@@ -6,4 +6,4 @@ import { PlatformCallers } from './platform-callers';
   providers: [PlatformCallers],
   exports: [PlatformCallers],
 })
-export class CallerModule {}
+export class PlatformCallersModule {}

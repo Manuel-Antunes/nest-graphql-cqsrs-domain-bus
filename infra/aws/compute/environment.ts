@@ -104,14 +104,16 @@ export const sharedEnvironment = {
 export const gatewayUrl = $interpolate`${router.url}/graphql`;
 
 /**
- * **The audiences of the two Bedrock AgentCore runtimes** (`infra/aws/agents`): the posts MCP server
- * and the posts agent. Logical identifiers under the router's origin, not the runtimes' invocation
+ * **The audiences of the Bedrock AgentCore runtimes** (`infra/aws/agents`): the posts MCP server,
+ * the posts agent and Theo. Logical identifiers under the router's origin, not the runtimes' invocation
  * URLs: a runtime's JWT authorizer is part of the runtime, so it cannot name an ARN that only exists
  * once the runtime does.
  */
 export const mcpResource = $interpolate`${router.url}/mcp`;
 
 export const postsAgentResource = $interpolate`${router.url}/a2a/posts`;
+
+export const theoResource = $interpolate`${router.url}/agui/theo`;
 
 /**
  * **The audiences a Better Auth instance accepts on a bearer token.** The gateway's, and the MCP
@@ -121,7 +123,7 @@ export const postsAgentResource = $interpolate`${router.url}/a2a/posts`;
 export const acceptedResources = $interpolate`${gatewayUrl},${mcpResource}`;
 
 /** **The resources a client may ask a token for**, which the migrator registers. */
-export const registeredResources = $interpolate`${acceptedResources},${postsAgentResource}`;
+export const registeredResources = $interpolate`${acceptedResources},${postsAgentResource},${theoResource}`;
 
 export const postsEnvironment = {
   ...sharedEnvironment,

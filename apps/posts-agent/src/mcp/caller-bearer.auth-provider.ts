@@ -3,9 +3,8 @@ import type {
   OAuthClientMetadata,
   OAuthTokens,
 } from '@modelcontextprotocol/sdk/shared/auth.js';
-import type { A2aCallers } from '@nestposts/ai/a2a/server/a2a-callers';
-
-import { PlatformCaller } from '../caller/platform-caller';
+import type { AgentCallers } from '@nestposts/ai/agents/callers/agent-callers';
+import { PlatformCaller } from '@nestposts/ai/agents/callers/platform-caller';
 
 export class CallerNotAuthorizedError extends Error {
   constructor() {
@@ -17,7 +16,7 @@ export class CallerNotAuthorizedError extends Error {
 }
 
 export class CallerBearerAuthProvider implements OAuthClientProvider {
-  constructor(private readonly callers: A2aCallers) {}
+  constructor(private readonly callers: AgentCallers) {}
 
   get redirectUrl(): undefined {
     return undefined;

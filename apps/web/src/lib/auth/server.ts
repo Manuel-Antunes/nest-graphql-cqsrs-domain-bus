@@ -7,6 +7,10 @@ import { authConfig } from '@nestposts/auth/config/auth.config';
 import type { PermissionRequest } from '@nestposts/auth/domain/auth/auth.service';
 import { AuthService } from '@nestposts/auth/domain/auth/auth.service';
 import type { Identity } from '@nestposts/auth/domain/auth/vo/identity';
+import {
+  type DelegatedAccessTokenRequest,
+  DelegatedAccessTokens,
+} from '@nestposts/auth/infrastructure/better-auth/identity/delegated-access-tokens';
 import { BETTER_AUTH } from '@nestposts/auth/infrastructure/better-auth/tokens';
 import { billingConfig } from '@nestposts/billing/config/billing.config';
 import { BillingService } from '@nestposts/billing/infrastructure/better-auth/billing.service';
@@ -104,6 +108,18 @@ export class WebAuth {
    */
   static async identity(): Promise<Identity | null> {
     return (await WebAuth.auth()).identity().catch(() => null);
+  }
+
+  /**
+   * An access token for the person signed in, for a process that acts for them where their cookie
+   * does not travel — an agent on AgentCore Runtime reads a bearer and nothing else. This server
+   * holds the authorization server, so it issues the token itself: `DelegatedAccessTokens`.
+   */
+  static async delegatedToken(
+    identity: Identity,
+    request: DelegatedAccessTokenRequest,
+  ): Promise<string> {
+    return (await Nest.get(DelegatedAccessTokens)).issueFor(identity, request);
   }
 
   /**

@@ -2,7 +2,7 @@
 
 import { chatwoot } from '../chatwoot';
 import { Migrator, Seeder } from '../support';
-import { seedEnvironment } from './environment';
+import { registeredResources, seedEnvironment } from './environment';
 import { migrations } from './platform';
 
 /**
@@ -26,12 +26,15 @@ export const migrator = new Migrator('Migrate', {
  * ledger and re-running it costs one query, so it runs on every deploy; a seeder writes rows a person
  * can edit afterwards, so it runs when the **seeders** change — `Seeder` hashes the sources and lets
  * Pulumi decide. `SEED_*` in the environment is what changes who gets created without touching code,
- * and changing them runs it again.
+ * and changing them runs it again — and so does changing the OAuth resources it registers.
  */
 export const seeder = new Seeder('Seed', {
   platform: migrations,
   handler: 'apps/migrator/dist/lambda.seedHandler',
   seeds: ['apps/migrator/src/seeders'],
-  configuration: seedEnvironment,
+  configuration: {
+    ...seedEnvironment,
+    AUTH_OAUTH_RESOURCES: registeredResources,
+  },
   after: migrator,
 });

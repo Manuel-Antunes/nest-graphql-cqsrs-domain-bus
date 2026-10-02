@@ -12,7 +12,7 @@ A2A client ──Bearer──▶ AgentCore (JWT authorizer, aud = agent)
                apps/posts-agent  ─ Nest application context
                  AgentCoreA2aServer (libs/ai) ← A2aAgentResolver.resolve(PostsManagerAgent)
                    └─ bedrock-agentcore's buildA2AApp: /ping, /.well-known/agent-card.json, POST /
-                 PlatformCallers ← IdentityResolver (libs/auth, the gateway's Better Auth)
+                 PlatformCallers (libs/ai) ← IdentityResolver (libs/auth, the gateway's Better Auth)
                  PostsManagerAgent (@A2aAgent, its skills Skill entities)
                    ReactAgentExecutor over createAgent(BASE_MODEL, MCP tools + read_file, middleware)
                          │  the same Bearer (CallerBearerAuthProvider)
@@ -22,6 +22,12 @@ A2A client ──Bearer──▶ AgentCore (JWT authorizer, aud = agent)
                                                           ▼
                                                      apps/gateway ──▶ posts subgraph
 ```
+
+Its callers are people, through an OAuth client (`scripts/agent-console.mjs`), and **Theo**
+(`apps/theo-agent`), the AG-UI agent behind the web's chat, which hands it what concerns posts with
+`send_message_to_a2a_agent`: the same person's token, the same A2A context for the whole of Theo's
+conversation (its thread id), and that thread id as the AgentCore session, so a confirmation asked in
+one turn is answered in the next by the same microVM.
 
 ## The DI container builds the agent; the AgentCore SDK serves it
 
@@ -50,7 +56,8 @@ package.
 
 AgentCore's JWT authorizer verifies every invocation against the platform's discovery document
 (`<router>/.well-known/openid-configuration`, served by the gateway) and the agent's audience. The
-container then reads the caller the way the gateway does: `PlatformCallers` — the registry's
+container then reads the caller the way the gateway does: `PlatformCallers` (`libs/ai`, `agents/callers/`,
+shared with Theo, `apps/theo-agent`) — the registry's
 `resolveUser` — makes a request of the invocation's headers, registers it under a context id of its
 own (`ContextIdFactory.create()`, `registerRequestByContextId`) and resolves `libs/auth`'s
 request-scoped `IdentityResolver` for it, inside a MikroORM request context. That is the same Better
@@ -58,12 +65,13 @@ Auth every process holds — the organization plugin included, so its tables are
 maps — reading the bearer as `oauth-bearer-session` does: verified against the keys the jwt plugin
 keeps in Postgres, for `AUTH_ISSUER` and the audiences in `AUTH_OAUTH_RESOURCES` (the agent's own, on
 AWS), and answered as the user it was issued to — none for a user who no longer exists or is banned.
-The `Identity` it answers becomes the A2A `User` as a `PlatformCaller`: the identity, its principal as
+The `Identity` it answers becomes the A2A `User` as a `PlatformCaller` — an `AgentCaller`, which is
+the A2A `User`'s shape and the one AG-UI agents are run as too: the identity, its principal as
 `userName`, and the access token it was read from. A caller with no bearer, or one the platform does
 not recognise, is a `401` before the executor runs.
 
 The agent then **acts as the caller**: `libs/ai` runs every turn inside the caller's scope
-(`A2aCallers`), and `CallerBearerAuthProvider` — the MCP SDK's `OAuthClientProvider`, the documented
+(`AgentCallers`), and `CallerBearerAuthProvider` — the MCP SDK's `OAuthClientProvider`, the documented
 hook for a token that changes per request — hands the MCP client that caller's token
 (`callers.currentAs(PlatformCaller)`) on every request. So the token must
 also be addressed to the MCP server: a caller asks for it with both resources,
@@ -73,7 +81,10 @@ with a credential of the agent's own: what the agent may do is exactly what the 
 
 The MCP tools are listed on the first turn, with that caller's token — AgentCore refuses even
 `tools/list` without one — and kept: the agent's `executor` is a function that loads them and builds
-the LangChain agent, which `libs/ai` calls then, and calls again on the next turn if it failed.
+the LangChain agent, which `libs/ai` calls then, and calls again on the next turn if it failed. A
+listing that comes back empty is tried again within the turn (`POSTS_MCP_CONNECT_ATTEMPTS`), and why
+the server refused is logged: a new MCP microVM validates the first token against the issuer's
+discovery, and the first turn of a conversation used to fail whole when that was slow.
 
 ## Skills: one list for the card and for the model
 
@@ -111,6 +122,7 @@ memory kept of it. Without a memory id both halves are off.
 | `AUTH_OAUTH_RESOURCES` | `GATEWAY_URL` | the audiences a caller's token may carry — the agent's own, on AWS |
 | `POSTGRES_URL`, `REDIS_URL`, `AUTH_SECRET`, `AUTH_URL` | the platform's | the Better Auth every process shares (`libs/auth`) |
 | `POSTS_MCP_URL` | `http://localhost:8000/mcp` | the posts MCP server |
+| `POSTS_MCP_CONNECT_ATTEMPTS` / `POSTS_MCP_RETRY_DELAY_MS` | `3` / `2000` | how many times a turn lists the tools before giving up, and the pause between |
 | `POSTS_AGENT_MODEL_ID` | `global.anthropic.claude-sonnet-5-5` | a Bedrock model or inference profile |
 | `POSTS_AGENT_TEMPERATURE` | — | sent only when set: newer Claude models refuse it |
 | `AWS_REGION` | `us-east-1` | Bedrock and AgentCore Memory |

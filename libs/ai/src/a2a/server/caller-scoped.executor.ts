@@ -4,11 +4,11 @@ import type {
   RequestContext,
 } from '@a2a-js/sdk/server';
 
-import type { A2aCallers } from './a2a-callers';
+import type { AgentCallers } from '../../agents/callers/agent-callers';
 
 export class CallerScopedExecutor implements AgentExecutor {
   constructor(
-    private readonly callers: A2aCallers,
+    private readonly callers: AgentCallers,
     private readonly delegate: AgentExecutor,
   ) {}
 

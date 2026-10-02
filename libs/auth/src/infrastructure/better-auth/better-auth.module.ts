@@ -24,6 +24,7 @@ import { UserDatabaseHooks } from './hooks/user-database.hooks';
 import { AccessTokens } from './identity/access-tokens';
 import { BetterAuthIdentityProvider } from './identity/better-auth-identity.provider';
 import { BetterAuthIdentityResolver } from './identity/better-auth-identity.resolver';
+import { DelegatedAccessTokens } from './identity/delegated-access-tokens';
 import type { BetterAuthPluginProvider } from './plugins/registry';
 import { BetterAuthPlugins } from './plugins/registry';
 import { BetterAuthService } from './services/better-auth.service';
@@ -95,6 +96,7 @@ export class BetterAuthModule {
         BetterAuthPluginsFactory(providers),
         BetterAuthFactory,
         AccessTokens,
+        DelegatedAccessTokens,
         { provide: IdentityResolver, useClass: BetterAuthIdentityResolver },
         {
           provide: AuthService,
@@ -112,6 +114,7 @@ export class BetterAuthModule {
         AuthService,
         IdentityResolver,
         IdentityProvider,
+        DelegatedAccessTokens,
         OnDemandNotifications,
         BetterAuthEmails,
       ],

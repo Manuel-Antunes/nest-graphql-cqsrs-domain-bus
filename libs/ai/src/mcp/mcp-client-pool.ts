@@ -20,7 +20,10 @@ export interface McpClientPoolOptions {
    * baked into the spawned child's env); for the tenant-agnostic chat HTTP MCP
    * it's the fixed `'default'`.
    */
-  build: (key: string, onError: () => void) => MultiServerMCPClient;
+  build: (
+    key: string,
+    onError: (error?: unknown) => void,
+  ) => MultiServerMCPClient;
   /**
    * Optional hook run once a client has connected and loaded its tools — used by
    * the legal stdio pool to pipe the child's stderr into the logger. Best-effort.
@@ -40,10 +43,18 @@ export interface McpClientPoolOptions {
    * next borrow.
    */
   connectTimeoutMs?: number;
+  attempts?: number;
+  retryDelayMs?: number;
 }
 
 /** Default connect ceiling; override per pool or via `MCP_CONNECT_TIMEOUT_MS`. */
 const DEFAULT_CONNECT_TIMEOUT_MS = 15_000;
+const DEFAULT_RETRY_DELAY_MS = 1_000;
+const PROVISIONING_RETRIES = 3;
+
+type Invocable = {
+  invoke: (input: unknown, config?: unknown) => Promise<unknown>;
+};
 
 /**
  * Long-lived pool of `MultiServerMCPClient`s, keyed by an arbitrary string, that
@@ -131,6 +142,35 @@ export class McpClientPool implements OnModuleDestroy {
     );
   }
 
+  private isProvisioningError(error: unknown): boolean {
+    const message = error instanceof Error ? error.message : String(error);
+    return /session operation in progress|health check (failed|timed out)/i.test(
+      message,
+    );
+  }
+
+  private async invokeOnceProvisioned(
+    tool: StructuredToolInterface,
+    input: unknown,
+    config?: unknown,
+  ): Promise<unknown> {
+    const delay = this.opts.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS;
+    for (let retry = 0; ; retry += 1) {
+      try {
+        return await (tool as unknown as Invocable).invoke(input, config);
+      } catch (error) {
+        if (!this.isProvisioningError(error) || retry >= PROVISIONING_RETRIES) {
+          throw error;
+        }
+        const wait = delay * 2 ** retry;
+        this.logger.warn(
+          `${this.opts.label} MCP session still being provisioned on tool '${tool.name}' — retry ${retry + 1} of ${PROVISIONING_RETRIES} in ${wait}ms`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, wait));
+      }
+    }
+  }
+
   /** Wrap each tool so a session loss reconnects + retries the call once. */
   private wrap(
     key: string,
@@ -158,11 +198,7 @@ export class McpClientPool implements OnModuleDestroy {
         if (prop !== 'invoke') return Reflect.get(target, prop, receiver);
         return async (input: unknown, config?: unknown) => {
           try {
-            return await (
-              target as unknown as {
-                invoke: (i: unknown, c?: unknown) => Promise<unknown>;
-              }
-            ).invoke(input, config);
+            return await this.invokeOnceProvisioned(target, input, config);
           } catch (error) {
             if (!this.isSessionError(error)) throw error;
             this.logger.warn(
@@ -173,11 +209,7 @@ export class McpClientPool implements OnModuleDestroy {
               (t) => t.name === target.name,
             );
             if (!fresh) throw error;
-            return await (
-              fresh as unknown as {
-                invoke: (i: unknown, c?: unknown) => Promise<unknown>;
-              }
-            ).invoke(input, config);
+            return await this.invokeOnceProvisioned(fresh, input, config);
           }
         };
       },
@@ -221,6 +253,28 @@ export class McpClientPool implements OnModuleDestroy {
   }
 
   private async reconnect(key: string): Promise<StructuredToolInterface[]> {
+    const attempts = Math.max(1, this.opts.attempts ?? 1);
+    const delay = this.opts.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS;
+    for (let attempt = 1; ; attempt += 1) {
+      const tools = await this.connect(key);
+      if (tools.length > 0 || attempt >= attempts) return tools;
+      this.logger.warn(
+        `${this.opts.label} listed no tool [key=${key}] on attempt ${attempt} of ${attempts} — retrying in ${delay}ms`,
+      );
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+
+  private connectionFailed(key: string, error: unknown): void {
+    this.logger.warn(
+      `${this.opts.label} connection failed [key=${key}]: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+    this.markUnhealthy(key);
+  }
+
+  private async connect(key: string): Promise<StructuredToolInterface[]> {
     // Tear down a previous (unhealthy) client first so its child/sockets don't
     // leak when we replace it.
     await this.entries
@@ -228,7 +282,9 @@ export class McpClientPool implements OnModuleDestroy {
       ?.client?.close()
       .catch(() => undefined);
 
-    const client = this.opts.build(key, () => this.markUnhealthy(key));
+    const client = this.opts.build(key, (error) =>
+      this.connectionFailed(key, error),
+    );
     try {
       const tools = await this.withConnectTimeout(
         client.getTools(this.opts.serverKey),

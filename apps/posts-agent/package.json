@@ -2,6 +2,13 @@
   "name": "@nestposts/posts-agent",
   "version": "0.1.0",
   "private": true,
+  "exports": {
+    "./package.json": "./package.json",
+    "./*": {
+      "@nestposts/source": "./src/*.ts",
+      "types": "./out-tsc/app/*.d.ts"
+    }
+  },
   "dependencies": {
     "@a2a-js/sdk": "catalog:",
     "@automapper/classes": "^9.0.2",

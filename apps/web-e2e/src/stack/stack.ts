@@ -3,6 +3,7 @@ import { join } from 'node:path';
 
 import type { Endpoints } from '../environment/run-environment';
 import { RunEnvironment } from '../environment/run-environment';
+import { TheoStandIn } from '../infrastructure/agents/theo-stand-in';
 import { Storage } from '../infrastructure/storage/storage';
 import { BillingStack } from './billing-stack';
 import { ChatwootStack } from './chatwoot-stack';
@@ -32,6 +33,10 @@ import { HttpHealth, Launch, Service } from './service';
  * the webhook's secret. Without a token the web runs with billing off, as it does for anyone who has
  * not configured Polar.
  *
+ * Theo, the AG-UI agent the web's `/theo` talks to, is a script on a port of its own
+ * (`TheoStandIn`): the browser suite runs no model and no AgentCore, and what it proves is the web's
+ * half — the chat, the CopilotKit runtime behind it and the token it hands the agent.
+ *
  * `AUTH_SECRET` is one value for all of them, and that is the point rather than a convenience:
  * `apps/web` holds its own Better Auth and signs the session cookie itself, and `apps/posts-api`
  * resolves that same cookie against the same row. A different secret per process and the browser
@@ -42,6 +47,7 @@ export class Stack {
   private readonly chatwoot = new ChatwootStack();
   private web?: Service;
   private billing?: BillingStack;
+  private theo?: TheoStandIn;
 
   constructor(readonly environment: RunEnvironment = new RunEnvironment()) {}
 
@@ -75,6 +81,11 @@ export class Stack {
       this.billing =
         (await BillingStack.up(environment.webPort, logs)) ?? undefined;
       this.billing?.publish();
+      this.theo = await TheoStandIn.listen(
+        await FreePort.pick(),
+        environment.webUrl,
+      );
+      environment.publishTheo(this.theo.url);
       await this.startWeb(endpoints);
       await this.billing?.verify();
     } catch (failure) {
@@ -89,6 +100,8 @@ export class Stack {
     this.chatwoot.down();
     await this.billing?.down();
     this.billing = undefined;
+    await this.theo?.close();
+    this.theo = undefined;
     await this.containers.down();
   }
 
@@ -120,6 +133,13 @@ export class Stack {
         DRIVE_S3_FORCE_PATH_STYLE: 'true',
         POLAR_ACCESS_TOKEN: '',
         ...this.billing?.webEnvironment(),
+        ...(this.theo
+          ? {
+              THEO_AGENT_URL: `${this.theo.url}/invocations`,
+              THEO_AGENT_AUDIENCES: TheoStandIn.AUDIENCES.join(','),
+            }
+          : {}),
+        COPILOTKIT_TELEMETRY_DISABLED: 'true',
         WEB_TRANSPORT: environment.transport,
         INNGEST_DEV: 'true',
         ...(endpoints.inngestUrl

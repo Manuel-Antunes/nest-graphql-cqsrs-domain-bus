@@ -2,7 +2,7 @@
 
 import { join } from 'node:path';
 
-export type AgentRuntimeProtocol = 'HTTP' | 'MCP' | 'A2A';
+export type AgentRuntimeProtocol = 'HTTP' | 'MCP' | 'A2A' | 'AGUI';
 
 export interface AgentRuntimeAuthorizer {
   readonly discoveryUrl: $util.Input<string>;

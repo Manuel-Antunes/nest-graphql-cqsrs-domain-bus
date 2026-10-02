@@ -15,14 +15,14 @@ import type { INestApplicationContext } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { AgentCoreA2aServer } from '@nestposts/ai/a2a/agentcore/agentcore-a2a.server';
 import { ScriptedModel } from '@nestposts/ai/a2a/langchain/testing/scripted-model';
-import { A2aCallers } from '@nestposts/ai/a2a/server/a2a-callers';
+import { AgentCallers } from '@nestposts/ai/agents/callers/agent-callers';
+import { PlatformCaller } from '@nestposts/ai/agents/callers/platform-caller';
 import type { BetterAuth } from '@nestposts/auth/infrastructure/better-auth/init-auth';
 import { BETTER_AUTH } from '@nestposts/auth/infrastructure/better-auth/tokens';
 import { inRequestContext, MikroORM } from '@nestposts/database';
 import { migrateSystem } from '@nestposts/migrator/main';
 import { z } from 'zod';
 
-import { PlatformCaller } from '../src/caller/platform-caller';
 import { PostsMcpTools } from '../src/mcp/posts-mcp-tools';
 
 const ISSUER = 'https://issuer.test';
@@ -99,7 +99,7 @@ describe('the posts agent, as AgentCore Runtime runs it', () => {
     await migrateSystem();
     const { AppModule } = await import('../src/app.module');
 
-    let callers: A2aCallers | undefined;
+    let callers: AgentCallers | undefined;
     const whoAmI = tool(
       async () => {
         callersSeen.push(callers?.currentAs(PlatformCaller));
@@ -118,7 +118,7 @@ describe('the posts agent, as AgentCore Runtime runs it', () => {
       .useValue({ load: async () => [whoAmI] })
       .compile();
     app = await moduleRef.init();
-    callers = app.get(A2aCallers);
+    callers = app.get(AgentCallers);
     await app.get(AgentCoreA2aServer).listen();
   });
 

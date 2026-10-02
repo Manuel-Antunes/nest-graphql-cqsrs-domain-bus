@@ -7,14 +7,14 @@ import type {
 } from '@a2a-js/sdk/server';
 import type { ModuleRef } from '@nestjs/core';
 
+import { AgentCallers } from '../../agents/callers/agent-callers';
 import { Skill } from '../../domain/skill.entity';
 import { A2aRegistry } from './a2a.registry';
 import { A2aAgent } from './a2a-agent.decorator';
 import { A2aAgentResolver } from './a2a-agent.resolver';
-import { A2aCallers } from './a2a-callers';
 import type { A2aModuleOptions } from './a2a-module.options';
 
-const callers = new A2aCallers();
+const callers = new AgentCallers();
 const seen: { caller?: string; turn: string }[] = [];
 let builds = 0;
 let failNextBuild = false;

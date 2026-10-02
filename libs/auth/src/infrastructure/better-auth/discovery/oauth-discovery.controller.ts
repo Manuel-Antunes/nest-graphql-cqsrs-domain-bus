@@ -3,6 +3,7 @@ import { AllowAnonymous } from '@thallesp/nestjs-better-auth';
 
 import type { BetterAuth } from '../init-auth';
 import { BETTER_AUTH } from '../tokens';
+import { DISCOVERY_CACHE_CONTROL } from './discovery-cache';
 
 /**
  * **Where a client discovers this authorization server**: RFC 8414's
@@ -17,19 +18,16 @@ import { BETTER_AUTH } from '../tokens';
 @Controller('.well-known')
 @AllowAnonymous()
 export class OAuthDiscoveryController {
-  private static readonly CACHE_CONTROL =
-    'public, max-age=15, stale-while-revalidate=15, stale-if-error=86400';
-
   constructor(@Inject(BETTER_AUTH) private readonly auth: BetterAuth) {}
 
   @Get('oauth-authorization-server')
-  @Header('Cache-Control', OAuthDiscoveryController.CACHE_CONTROL)
+  @Header('Cache-Control', DISCOVERY_CACHE_CONTROL)
   authorizationServer(): Promise<unknown> {
     return this.auth.api.getOAuthServerConfig({});
   }
 
   @Get('openid-configuration')
-  @Header('Cache-Control', OAuthDiscoveryController.CACHE_CONTROL)
+  @Header('Cache-Control', DISCOVERY_CACHE_CONTROL)
   openIdConfiguration(): Promise<unknown> {
     return this.auth.api.getOpenIdConfig({});
   }

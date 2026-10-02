@@ -6,10 +6,13 @@
     "build": "graphql-codegen --config codegen.ts && next build"
   },
   "dependencies": {
+    "@ag-ui/client": "catalog:",
     "@base-ui/react": "catalog:",
     "@better-auth-ui/core": "catalog:",
     "@better-auth-ui/react": "catalog:",
     "@better-auth/oauth-provider": "^1.7.3",
+    "@copilotkit/react-core": "catalog:",
+    "@copilotkit/runtime": "catalog:",
     "@dnd-kit/core": "^6.3.1",
     "@graphql-typed-document-node/core": "^3.2.0",
     "@hookform/resolvers": "^5.2.1",

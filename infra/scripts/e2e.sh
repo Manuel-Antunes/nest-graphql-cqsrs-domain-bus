@@ -11,8 +11,10 @@
 # SQS, the two subscriptions over SSE through the gateway, the screens the browser opens, a file from
 # a presigned upload to the CDN, the author's notification, one operation across two subgraphs, an
 # organization's tenant, Chatwoot under that organization — its agent, its account, a client's
-# contact, a team's hours, its dashboard — and then, when it can read Better Stack, the same run as
-# telemetry: every service reporting, the post's whole life as one trace, and the logs inside it.
+# contact, a team's hours, its dashboard — Theo, the AG-UI agent, through the web's chat route and the
+# posts agent it delegates to over A2A, with a real model — and then, when it can read Better Stack,
+# the same run as telemetry: every service reporting, the post's whole life as one trace, and the
+# logs inside it.
 #
 #   ./infra/scripts/e2e.sh dev
 #
@@ -518,6 +520,42 @@ echo "$DELETED_ORGANIZATION" | jq -e '(type != "object") or (has("code") | not)'
 ORGANIZATION_ID=''
 echo "    OK: the organization is deleted, and its schema with it"
 
+echo
+echo "==> 15. Theo, through the web's chat: CopilotKit -> AG-UI on AgentCore -> A2A -> the posts agent -> MCP -> the gateway"
+[ "$(page /theo signed)" = "200" ] && grep -q 'Theo' "$PAGE" \
+  || problem "/theo did not open the chat for the author"
+page /theo >/dev/null
+grep -q 'Sign in to talk to Theo' "$PAGE" || problem "/theo did not ask a visitor to sign in"
+THREAD=$(node -e 'console.log(crypto.randomUUID())')
+RUN_INPUT=$(jq -nc --arg t "$THREAD" --arg r "$(node -e 'console.log(crypto.randomUUID())')" \
+  --arg m "$(node -e 'console.log(crypto.randomUUID())')" \
+  '{threadId:$t, runId:$r, state:{}, tools:[], context:[], forwardedProps:{},
+    messages:[{id:$m, role:"user", content:"Who am I on the platform? Answer in one short sentence."}]}')
+REFUSED=$(curl -sS -o /dev/null -w '%{http_code}' -X POST "$TARGET/api/copilotkit/agent/theo/run" \
+  -H 'content-type: application/json' -H 'accept: text/event-stream' -d "$RUN_INPUT")
+[ "$REFUSED" = "401" ] || problem "the CopilotKit runtime answered $REFUSED to a visitor, not 401"
+THEO_EVENTS="$(mktemp -t nestposts-theo)"; TEMPS+=("$THEO_EVENTS")
+curl -sSN --max-time 170 -X POST "$TARGET/api/copilotkit/agent/theo/run" \
+  -H 'content-type: application/json' -H 'accept: text/event-stream' \
+  -H "origin: $TARGET" -b "$JAR" -d "$RUN_INPUT" \
+  | sed -un 's/^data: //p' >"$THEO_EVENTS" || true
+THEO_RUN=$(jq -sc '{
+    types: [.[].type],
+    error: ([.[] | select(.type == "RUN_ERROR") | .message] | first),
+    delegate: ([.[] | select(.type == "SUBAGENT_STARTED") | .name] | first),
+    said: ([.[] | select(.type == "TEXT_MESSAGE_CONTENT" and .subagentRunId != null) | .delta] | join("")),
+    result: ([.[] | select(.type == "TOOL_CALL_RESULT") | .content] | first),
+    answer: ([.[] | select(.type == "TEXT_MESSAGE_CONTENT" and .subagentRunId == null) | .delta] | join(""))
+  }' "$THEO_EVENTS" 2>/dev/null || echo '{}')
+if echo "$THEO_RUN" | jq -e '(.types | index("RUN_FINISHED")) and .error == null
+    and .delegate == "Posts Manager" and (.said | length) > 0 and (.result | length) > 0
+    and (.answer | length) > 0' >/dev/null; then
+  echo "    OK: Theo asked $(echo "$THEO_RUN" | jq -r .delegate), which said: $(echo "$THEO_RUN" | jq -r .said | tr '\n' ' ' | cut -c1-160)"
+  echo "    OK: Theo answered: $(echo "$THEO_RUN" | jq -r .answer | tr '\n' ' ' | cut -c1-160)"
+else
+  problem "Theo's run through /api/copilotkit did not delegate to the posts agent and answer: $(echo "$THEO_RUN" | jq -c '{types, error, delegate, said, result}' | cut -c1-600)"
+fi
+
 # One value of the root `.env`, for the Better Stack connection when the environment has none.
 from_env_file() { [ -f .env ] && sed -n "s/^$1=//p" .env | tail -1 | sed "s/^['\"]//; s/['\"]\$//" || true; }
 BETTER_STACK_QUERY_URL="${BETTER_STACK_QUERY_URL:-$(from_env_file BETTER_STACK_QUERY_URL)}"
@@ -526,7 +564,7 @@ BETTER_STACK_QUERY_PASSWORD="${BETTER_STACK_QUERY_PASSWORD:-$(from_env_file BETT
 BETTER_STACK_COLLECTION="${BETTER_STACK_COLLECTION:-$(from_env_file BETTER_STACK_COLLECTION)}"
 
 echo
-echo "==> 15. the same run, as telemetry: Better Stack"
+echo "==> 16. the same run, as telemetry: Better Stack"
 TELEMETRY="AND THE WHOLE RUN IS ONE STORY IN BETTER STACK"
 if [ -z "$BETTER_STACK_QUERY_URL" ] || [ -z "$BETTER_STACK_QUERY_USERNAME" ] \
   || [ -z "$BETTER_STACK_QUERY_PASSWORD" ] || [ -z "$BETTER_STACK_COLLECTION" ]; then

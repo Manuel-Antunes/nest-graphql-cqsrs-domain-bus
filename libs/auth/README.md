@@ -317,6 +317,34 @@ JWT authorizer) finds the JWKS there, and checks that the `issuer` inside equals
 so the origin that answers is the issuer's — the router on AWS, which sends both paths to the gateway,
 and `apps/web` locally, whose routes hand the request to the same handler.
 
+Both documents and the JWKS (`/api/auth/jwks`, which the jwt plugin is wrapped to mark —
+`cacheableJwt`) answer with `DISCOVERY_CACHE_CONTROL`: five minutes fresh, a day stale while a cache
+revalidates or the origin fails. Whoever validates a token fetches them first, and the functions that
+answer them may be cold: measured on AWS, Apollo MCP Server in a new microVM gave up on discovery
+while the gateway started (`All discovery URLs failed`) and refused a valid token, and AgentCore's
+authorizer refused runtime updates and first invocations the same way. CloudFront keeps them now, and
+answers from its copy while it refreshes.
+
+## A token the signed-in person delegates
+
+`DelegatedAccessTokens.issueFor(identity, { audiences, scopes, expiresIn })`
+(`infrastructure/better-auth/identity/delegated-access-tokens.ts`, provided and exported by
+`BetterAuthModule`) issues an access token for the person a process is serving, for a process of this
+deployment that must act for them where their cookie does not travel: `apps/web`, calling Theo on
+AgentCore Runtime, whose JWT authorizer reads a bearer and nothing else. It is the token the
+authorization code grant would have produced, without the round trip through the browser — the
+process asking holds the authorization server and the person's session — signed by the jwt plugin
+(`signJWT`) with this deployment's `iss`, the person as `sub`, the audiences asked for (every one the
+request will reach on their behalf) and a fresh `jti`, fifteen minutes by default. So it reads back as
+every OAuth access token does: `oauth-bearer-session` makes it the person's session in every process
+that accepts one of its audiences.
+
+- **Never more than its holder.** `scope` is what was asked for, less whatever the person does not
+  hold: a cookie of this system's holds every scope; a session that is itself a token holds what it
+  was granted.
+- **Only a person delegates.** A `ClientIdentity` is refused (`IdentityIsNotAUserException`): a client
+  asks the authorization server for its own token.
+
 ## A client's own access token is a `ClientIdentity`
 
 A client that authenticates as itself — the client credentials grant, a machine with no user behind

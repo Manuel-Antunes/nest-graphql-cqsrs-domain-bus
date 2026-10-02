@@ -48,7 +48,11 @@
     "@google/genai": "catalog:",
     "openai": "catalog:",
     "bedrock-agentcore": "catalog:",
-    "express": "catalog:"
+    "express": "catalog:",
+    "@ag-ui/client": "catalog:",
+    "@ag-ui/core": "catalog:",
+    "@ag-ui/encoder": "catalog:",
+    "rxjs": "^7.8.2"
   },
   "devDependencies": {
     "@types/mime-types": "catalog:"

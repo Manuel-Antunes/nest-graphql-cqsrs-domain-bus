@@ -107,6 +107,9 @@
     },
     {
       "path": "./apps/posts-agent"
+    },
+    {
+      "path": "./apps/theo-agent"
     }
   ]
 }

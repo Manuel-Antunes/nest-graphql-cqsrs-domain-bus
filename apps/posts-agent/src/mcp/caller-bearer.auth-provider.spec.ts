@@ -1,14 +1,14 @@
-import { A2aCallers } from '@nestposts/ai/a2a/server/a2a-callers';
+import { AgentCallers } from '@nestposts/ai/agents/callers/agent-callers';
+import { PlatformCaller } from '@nestposts/ai/agents/callers/platform-caller';
 import { UserIdentity } from '@nestposts/auth/domain/auth/vo/user-identity';
 
-import { PlatformCaller } from '../caller/platform-caller';
 import {
   CallerBearerAuthProvider,
   CallerNotAuthorizedError,
 } from './caller-bearer.auth-provider';
 
 describe('the credential the posts MCP server is called with', () => {
-  const callers = new A2aCallers();
+  const callers = new AgentCallers();
   const provider = new CallerBearerAuthProvider(callers);
 
   it('is the caller’s own access token, for the turn they are in', () => {

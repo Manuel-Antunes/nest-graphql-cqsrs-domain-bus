@@ -235,6 +235,8 @@ node apps/migrator/dist/main.js chatwoot:mirror  # mirror into Chatwoot what it 
 npx nx serve @nestposts/mcp                # Apollo MCP Server on :8000/mcp, natively (APOLLO_MCP_SERVER or apollo-mcp-server on PATH), after copying the composed API schema
 npx nx serve @nestposts/posts-agent        # the posts agent on :9000 (A2A), with AWS credentials that can call Bedrock
 node apps/posts-agent/scripts/agent-console.mjs "Who am I?"   # sign in as a seeded user, get a token for the agent and the MCP server, talk A2A
+npx nx serve @nestposts/theo-agent         # Theo on :8080 (AG-UI), delegating to the posts agent over A2A
+node apps/theo-agent/scripts/theo-console.mjs "Who am I?"     # the same sign-in, a token for Theo, the posts agent and the MCP server, talk AG-UI
 
 docker compose up -d localstack   # SNS + SQS, with the topology docker/localstack/init creates
 docker compose up -d minio createbuckets   # the bucket a post keeps its file in, with its policies
@@ -244,6 +246,7 @@ docker compose --profile apps up -d --build   # the infrastructure AND the four 
 npx nx run @nestposts/posts-api:docker:build  # one image; `-t docker:build` builds all four
 npx sst deploy --stage <name>     # the topic, the queues and apps/tagging as a Lambda
 pnpm graph:stack <name>           # the DEPLOYED graph: sst state export → pulumi stack graph
+npx sst tunnel --stage <name>     # the stage's Postgres and Valkey through its bastion (not production; `sudo sst tunnel install` once)
 ```
 
 The system schema is **never** created by an application, and a tenant's only by its own first
@@ -319,6 +322,13 @@ resource its card names), the auth, database and Redis variables of every Better
 (default `global.anthropic.claude-sonnet-5-5`), `POSTS_AGENT_TEMPERATURE` (sent only when set),
 `AWS_REGION` and `BEDROCK_AGENTCORE_MEMORY_ID`. `apps/mcp`'s config reads `AUTH_ISSUER`,
 `POSTS_MCP_RESOURCE`, `POSTS_MCP_GRAPHQL_ENDPOINT` and `POSTS_MCP_ADDRESS`.
+
+`apps/theo-agent` reads `THEO_AGENT_PORT`/`THEO_AGENT_HOST` (`8080`/`0.0.0.0`), `THEO_A2A_AGENTS` (the A2A
+agents it may delegate to, comma separated — the posts agent's URL), `THEO_AGENT_MODEL_ID`,
+`THEO_AGENT_TEMPERATURE`, `AWS_REGION` and the auth, database and Redis variables of every Better Auth
+process. `apps/web` reads `THEO_AGENT_URL` (Theo's invocation URL, `http://localhost:8080/invocations`
+locally) and `THEO_AGENT_AUDIENCES` (what the token it issues for the person is addressed to: Theo, the
+posts agent, the MCP server), and is deployed with `COPILOTKIT_TELEMETRY_DISABLED=true`.
 
 The gateway also reads `CHATWOOT_SUBGRAPH_URL` (default `http://localhost:3100/graphql`), and
 `apps/web` `CHATWOOT_URL` (default `http://localhost:3100`), the origin it embeds.
@@ -475,10 +485,15 @@ libs/clients             domain/client (a Client of the tenant's organization: C
                          ClientsInfrastructureModule; a tenant table. Its application layer and the
                          `clients` GraphQL surface live in apps/posts-api; its Chatwoot contacts are
                          federated onto it by the `chatwoot` subgraph (see Chatwoot)
-libs/ai                  the agents' runtime (being migrated in): A2A hosting with its extensions as
-                         classes (a2a/domain, a2a/server, a2a/langchain) — and on Amazon Bedrock
-                         AgentCore Runtime (a2a/agentcore: the registry's card and executor served by
-                         bedrock-agentcore's A2A app) — the files an agent works
+libs/ai                  the agents' runtime (being migrated in): what every agent shares whatever it
+                         speaks (agents/: its callers — AgentCallers, PlatformCallers — and
+                         AgentCoreHost), A2A hosting with its extensions as classes (a2a/domain,
+                         a2a/server, a2a/langchain) and on Amazon Bedrock AgentCore Runtime
+                         (a2a/agentcore), AG-UI hosting (ag-ui/server, ag-ui/agentcore: POST
+                         /invocations on :8080) with LangChain over it (ag-ui/langchain:
+                         LangGraph's v3 stream → AG-UI events), the A2A client an agent delegates
+                         with (a2a/client: send_message_to_a2a_agent, the remote agent an AG-UI
+                         subagent of the call) — the files an agent works
                          with — analysis, AttachmentDrive over @nestjs/storage and the asset model,
                          the deepagents DriveBackend, the ingestion middleware that keeps base64 out
                          of the checkpoint (files/) — and ChannelResponseProcessor, whose Chatwoot
@@ -504,6 +519,10 @@ apps/mcp                 the posts as MCP tools: Apollo MCP Server over the comp
 apps/posts-agent         the posts manager, an A2A agent on Amazon Bedrock AgentCore Runtime: a Nest
                          application context whose @A2aAgent runs LangChain over a Bedrock model and
                          the MCP tools, as the caller, with AgentCore Memory. README
+apps/theo-agent          Theo, the platform's assistant: an AG-UI agent on AgentCore Runtime whose
+                         @AgUiAgent runs LangChain over a Bedrock model and hands what concerns posts
+                         to the posts agent over A2A, as the caller. The web's /theo talks to it
+                         through CopilotKit. README
 apps/migrator            the SYSTEM and the TENANT migrations and the seeders — the only thing that
                          writes system DDL, the author of every tenant migration, and the only thing
                          that seeds (see below)
@@ -1420,10 +1439,10 @@ last section is the design; the essentials:
   `set-cookie`: a gateway forwards both on every request, and a record is a working session token in
   whatever stores it.
 
-### Agents: A2A and MCP on Amazon Bedrock AgentCore Runtime
+### Agents: AG-UI, A2A and MCP on Amazon Bedrock AgentCore Runtime
 
-The posts manager (`apps/posts-agent`) and the posts MCP server (`apps/mcp`) run on **AgentCore
-Runtime**, each an `aws.bedrock.AgentcoreAgentRuntime` built by `infra/aws/agents`'s `AgentRuntime`.
+Theo (`apps/theo-agent`, AG-UI), the posts manager (`apps/posts-agent`, A2A) and the posts MCP server
+(`apps/mcp`) run on **AgentCore Runtime**, each an `aws.bedrock.AgentcoreAgentRuntime` built by `infra/aws/agents`'s `AgentRuntime`.
 Their READMEs, `libs/ai/README.md` and `infra/aws/README.md` are the guides; the essentials:
 
 - **An agent is defined once, and the AgentCore SDK serves it.** One `@A2aAgent` class: the
@@ -1441,12 +1460,23 @@ Their READMEs, `libs/ai/README.md` and `infra/aws/README.md` are the guides; the
   `libs/auth`'s `IdentityResolver`, resolved for a request made of the invocation's headers, the
   `Identity` it answers turned into the A2A `User` (`PlatformCaller`) — so the agent holds the same
   Better Auth, on Postgres and Redis, and runs in the VPC; every turn runs in the
-  caller's scope (`A2aCallers`), and the MCP client reads the token there per request
+  caller's scope (`AgentCallers`), and the MCP client reads the token there per request
   (`CallerBearerAuthProvider`, an MCP SDK `OAuthClientProvider`), Apollo MCP
   Server validates it and passes it to the gateway, and every Better Auth process accepts the MCP
   server's audience. Nothing holds a credential of its own.
-- **The audiences are logical** (`<router>/mcp`, `<router>/a2a/posts`): a runtime's authorizer
-  cannot name the ARN its invocation URL is made of.
+- **The audiences are logical** (`<router>/mcp`, `<router>/a2a/posts`, `<router>/agui/theo`): a
+  runtime's authorizer cannot name the ARN its invocation URL is made of.
+- **Theo is the same shape over AG-UI.** `@AgUiAgent` on a provider whose `agent` is a function built
+  on the first run; `AgentCoreAgUiServer` serves AgentCore's AG-UI contract (`POST /invocations`,
+  server-sent events; `GET /ping`) with the same admission as the A2A host (`AgentCoreHost`);
+  `LangChainAgUiAgent` turns LangGraph's v3 stream into AG-UI events. Its one tool is
+  `send_message_to_a2a_agent` (`libs/ai`'s `a2a/client`): the posts agent called over A2A with the
+  caller's token, its answer streamed to the client as an AG-UI subagent of the call, Theo's thread
+  its A2A context and AgentCore session.
+- **The web's `/theo` is CopilotKit v2's headless hooks drawn with `libs/ui`'s chat components**, over
+  the CopilotKit runtime at `/api/copilotkit`, whose `HttpAgent` calls Theo with an access token the
+  web's own Better Auth issues for the person signed in (`DelegatedAccessTokens`, `libs/auth`),
+  addressed to Theo, the posts agent and the MCP server. The browser never holds it.
 - **`agent-console`** is a seeded public OAuth client (PKCE, loopback redirect, no consent screen)
   that `apps/posts-agent/scripts/agent-console.mjs` signs a person in with.
 
@@ -2393,11 +2423,62 @@ DTOs count.
   (`dockerfile parse error … unknown flag: --parents`), while `docker build` takes them. The agent's
   Dockerfile is built from the host's output instead — the bundle and the pruned lockfile `prune`
   leaves in `dist`, its context the project's directory — which is also what keeps it small.
+- **Every token validation starts with the issuer's documents, and those are served by functions
+  that may be cold.** AgentCore's JWT authorizers fetch the discovery document on every runtime create
+  and update (and on a cold invocation), Apollo MCP Server in every new microVM — measured: `All
+  discovery URLs failed` while the gateway started, a valid token refused, and the posts agent's first
+  turn answering that the MCP server listed no tool. The discovery documents and the JWKS answer with
+  `DISCOVERY_CACHE_CONTROL` (`libs/auth`, stale-while-revalidate) so CloudFront keeps them, each
+  runtime warms them right before it is written (`<name>IssuerWarmup`), and `McpClientPool` lists
+  again within the turn when a listing comes back empty, logging why.
+- **AgentCore re-provisions an MCP session's microVM under the same `Mcp-Session-Id`, and the
+  calls that arrive meanwhile fail.** The posts agent's pooled MCP client keeps one session; on dev
+  its microVM was gone three minutes after it started, and the next `CreatePost` and the check after it
+  came back as errors about the runtime's health check (`UserErrors` on the MCP runtime, nothing in
+  any container log) until a new microVM answered the following turn. AgentCore's own guide calls
+  `Session operation in progress, please retry` transient and leaves the retry to an MCP client. The
+  call never reached the server, so `McpClientPool` calls the same tool again on the same session,
+  three times with backoff from `retryDelayMs`; anything else the tool answered is not repeated.
 - **Better Auth's OAuth client field is `requirePKCE`**, not `requirePkce`: written through the
   adapter under the wrong name the column is simply `null`, with nothing failing.
 - **Apollo MCP Server checks that the discovery document's `issuer` equals the server it asked**, so
   its `servers` is the issuer itself — the router on AWS, `apps/web` locally — and that origin must
   answer `/.well-known/oauth-authorization-server` at its root.
+- **A tool a LangChain middleware adds in `wrapModelCall` needs a `wrapToolCall` of the same
+  middleware**, or the run fails with `You have added a new tool in "wrapModelCall" hook … This is not
+  supported unless a middleware provides a "wrapToolCall" handler`. `AgUiMiddleware` adds the
+  frontend's tools that way and ends the run at their call; its `wrapToolCall` answers one that ever
+  reaches the tools node.
+- **`@ag-ui/*` and `@copilotkit/*` pin `rxjs` to 7.8.1** and the workspace has 7.8.2: two copies, and an
+  `Observable` of one is not an `Observable` of the other to TypeScript (they carry protected members).
+  `pnpm-workspace.yaml` overrides `rxjs` to `^7.8.2`, one copy for everything.
+- **The web's server function did not stream.** OpenNext's default wrapper is `aws-lambda`, buffered
+  (`.open-next/open-next.output.json`: `"streaming": false`), so the chat's server-sent events would
+  have reached the browser all at once, after the run — and a run past CloudFront's 60-second read
+  timeout not at all. `apps/web/open-next.config.ts` picks `aws-lambda-streaming`, which makes SST
+  create the function URL in `RESPONSE_STREAM` mode; a delegation keeps the stream moving while the
+  posts agent works, because its answer reaches the client as it is written.
+- **`AbstractAgent.clone()` (`@ag-ui/client`) copies the base agent's fields only** — it is
+  `Object.create(prototype)` — and the CopilotKit runtime clones agents. `HttpAgent` restores its
+  own; `LangChainAgUiAgent` and `LazyAgUiAgent` override `clone()` for theirs.
+- **An OAuth resource exists once `OAuthResourcesSeeder` has written it, and on AWS the seed runs
+  only when its input changes.** `Seed`'s invocation is a digest of the seeders and of the
+  configuration they read; `AUTH_OAUTH_RESOURCES` was not in it, so adding Theo's audience to
+  `registeredResources` reached nothing — the authorization server refused the token request with
+  `invalid_target … is not configured`. It is in it now (`infra/aws/compute/migrations.ts`).
+- **One `class-validator`, or two Nests.** `@nestjs/common` takes it as an optional peer, so when
+  `@copilotkit/runtime` brought `class-validator@0.14` into the workspace beside `0.15`, pnpm resolved
+  some importers' `@nestjs/common` against each: two `@nestjs/core` in the agents' pruned installs, the
+  bundle requiring one and `nestjs-pino` the other, and both agents died at boot on AgentCore with
+  `Nest can't resolve dependencies of the LoggerModule (pino-params, ?) … ApplicationConfig` — while
+  every local suite, on the workspace's own `node_modules`, passed. `pnpm-workspace.yaml` overrides
+  `class-validator` to `^0.15.1`, and `apps/theo-agent/test/single-nest.spec.ts` fails when the
+  lockfile holds a second `@nestjs/core` or `@nestjs/common`.
+- **The AWS provider is pinned to 7.48.0** (`sst.config.ts`): SST 4.17.1's 7.20.0 refuses
+  `serverProtocol: 'AGUI'` on `AgentcoreAgentRuntime`.
+- **The CopilotKit runtime reports telemetry unless told not to**, and `@copilotkit/*` depends on
+  `@scarf/scarf`, an install-time analytics script. `COPILOTKIT_TELEMETRY_DISABLED=true` on the web, and
+  pnpm runs no install script it was not told to (`onlyBuiltDependencies`).
 
 ## `apps/web` holds its own Better Auth, in a Nest container
 

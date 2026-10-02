@@ -151,7 +151,7 @@ infra/aws/
                      is the stage's own domain when BASE_DOMAIN names one (optional)
   web/               the Next application, on the same origin
   chatwoot/          Chatwoot's two Fargate services, and the router's paths to them
-  agents/            Bedrock AgentCore Runtime: the posts MCP server and the posts agent
+  agents/            Bedrock AgentCore Runtime: the posts MCP server, the posts agent and Theo
     agent-runtime.ts   AgentRuntime: ECR repository, arm64 image, execution role, the runtime
 infra/lambda/
   collector.yaml     the collector extension's configuration, travelling beside every bundle
@@ -261,9 +261,17 @@ Nothing is linked to it yet: no function runs `libs/ai`. The first one that does
 what `libs/ai`'s configuration reads. The specs never reach it: the ones that need a graph start a
 Neo4j of their own (`ThrowawayNeo4j`), as the Redis ones do.
 
-### Agents: two runtimes on Bedrock AgentCore
+### Agents: three runtimes on Bedrock AgentCore
 
-`agents/` runs the posts MCP server (`apps/mcp`) and the posts agent (`apps/posts-agent`) on **Amazon
+**The AWS provider is pinned newer than SST's** (`sst.config.ts`: `aws: { version: '7.48.0' }`, where
+SST 4.17.1 pins 7.20.0): 7.20's `AgentcoreAgentRuntime` refuses `serverProtocol: 'AGUI'`
+(`Valid Values: [MCP HTTP A2A]`), which the AgentCore API takes. The bump changed no resource but
+Theo's: `sst diff` lists the web's resources as deleted while Theo's URL, which the web's
+environment holds, is still unknown — a preview that cannot build the site — and the deploy updates
+them.
+
+`agents/` runs the posts MCP server (`apps/mcp`), the posts agent (`apps/posts-agent`) and Theo
+(`apps/theo-agent`) on **Amazon
 Bedrock AgentCore Runtime**, each an `AgentRuntime` (`agents/agent-runtime.ts`): an ECR repository
 that keeps ten images, the image built for `linux/arm64` by `docker-build` (the provider SST builds its
 own containers with, registered in `sst.config.ts` and global as `dockerbuild`) and pushed by digest, an
@@ -282,10 +290,11 @@ links include, and `permissions` adds only what is nobody's resource: invoking B
   `<router>/.well-known/openid-configuration`, which the router sends to the gateway — and both put
   `Authorization` on the header allowlist, because both pass the caller's token on: the agent to the
   MCP server, the MCP server to the gateway.
-- **The audiences are logical**: `<router>/mcp` and `<router>/a2a/posts` (`compute/environment.ts`).
-  A runtime's authorizer is part of the runtime, so it cannot name the runtime's own ARN, which is
-  what an invocation URL is made of. A caller asks for both; every Better Auth function accepts the
-  MCP server's (`acceptedResources`), and the migrator registers both (`registeredResources`).
+- **The audiences are logical**: `<router>/mcp`, `<router>/a2a/posts` and `<router>/agui/theo`
+  (`compute/environment.ts`). A runtime's authorizer is part of the runtime, so it cannot name the
+  runtime's own ARN, which is what an invocation URL is made of. A caller asks for every one its
+  request will reach; every Better Auth function accepts the MCP server's (`acceptedResources`), and
+  the migrator registers all three (`registeredResources`).
 - **The MCP runtime speaks `MCP`** (stateless streamable HTTP on `:8000/mcp`); clients call
   `…/runtimes/<arn>/invocations?qualifier=DEFAULT`. Its image needs the composed API schema, which
   `build-functions` produces (`@nestposts/mcp:prune`), so it depends on `build`.
@@ -294,6 +303,12 @@ links include, and `permissions` adds only what is nobody's resource: invoking B
   advertises `AGENTCORE_RUNTIME_URL`, which AgentCore injects. Its role may invoke Bedrock models and
   inference profiles, and write the events of `PostsAgentMemory`, the AgentCore Memory its
   conversations outlive a microVM in (30 days).
+- **Theo speaks `AGUI`** (`:8080`, `POST /invocations` streaming server-sent events, `GET /ping`) at
+  `…/runtimes/<arn>/invocations?qualifier=DEFAULT` — the `agents.theo` output. It is in the VPC for the
+  same reason as the posts agent, and links it: `THEO_A2A_AGENTS` is the posts agent's invocation URL,
+  called over HTTPS with the caller's bearer, so the `InvokeAgentRuntime` the link grants is not what
+  it uses. The web (`web/`) calls it from `/api/copilotkit` with a token its Better Auth issues for the
+  person signed in, addressed to the three audiences (`THEO_AGENT_AUDIENCES`).
 - **AgentCore fetches the authorizer's discovery document on every create and update**, and refuses
   the change (`HTTP request failed against Discovery endpoint`) when it does not answer in time —
   which a cold gateway, or a cold function behind `/api/auth/jwks`, does not. So each runtime warms
@@ -309,7 +324,8 @@ links include, and `permissions` adds only what is nobody's resource: invoking B
 
 `node apps/posts-agent/scripts/agent-console.mjs --issuer <url> --agent <agents.postsAgent>
 --agent-resource <agents.postsAgentResource> --mcp-resource <agents.postsMcpResource> "…"` talks to
-the deployed agent as a seeded user.
+the deployed agent as a seeded user, and `apps/theo-agent/scripts/theo-console.mjs` to Theo the same
+way (`--agent <agents.theo> --agent-resource <agents.theoResource>`, plus the other two resources).
 
 ### Files: one bucket, served by the same router
 
@@ -364,8 +380,11 @@ code that is correct. Re-run `sst deploy`; every deploy after the first has no r
 invocation's **input**. `Migrate` takes `Date.now()`, so it runs every time: migrations are a ledger,
 repeating costs one query, and a migration that fails should fail the deploy. Seeding writes rows a
 person can edit afterwards, so running it on every deploy is a deploy that quietly undoes their work.
-Its input is a **digest of `apps/migrator/src/seeders`**, so Pulumi re-runs it when those sources
-change and leaves it alone when they do not.
+Its input is a **digest of `apps/migrator/src/seeders`** and of the configuration they read — the
+`SEED_*` variables and the OAuth resources `OAuthResourcesSeeder` registers (`registeredResources`) —
+so Pulumi re-runs it when either changes and leaves it alone when neither does. The resources were
+not in it at first, and adding Theo's audience to the list reached nothing: the seed did not run, and
+the authorization server refused a token for it as `invalid_target … is not configured`.
 
 What it seeds is `DatabaseSeeder` (the default tag, a domain fact) plus `TestUsersSeeder` — the
 accounts a deployed stage should have, created **through Better Auth itself**, which is why they come
@@ -373,6 +392,24 @@ with a credential account and a password that signs in rather than a row with a 
 up. `SEED_AUTHOR_EMAIL`, `SEED_AUTHOR_PASSWORD` and their `SEED_READER_` twins change who is created
 without touching code. They are ordinary credentials in a deployed database: for anything but a demo
 stage, set them.
+
+### Reaching the database: the bastion
+
+Postgres and Valkey answer only inside the VPC, so outside production the VPC carries SST's bastion —
+a `t4g.nano` in a public subnet, SSH open to the internet with a key SST generates and keeps in SSM
+(`/sst/vpc/<vpc id>/private-key-value`). `sst tunnel --stage <name>` routes the VPC's subnets through
+it, once `sudo sst tunnel install` has created its network interface. Without `sudo`, an SSH forward
+with that key does the same for one port at a time: the RDS proxy speaks plain TCP, and Valkey TLS
+whose certificate names the cache's host, so a client keeps that name and has it resolve to the
+loopback rather than connecting to `localhost`.
+
+A person's roles are changed through Better Auth — `IdentityProvider.addRole` on the migrator's
+container, with the stage's `POSTGRES_URL`, `REDIS_URL` and `AUTH_*` — never with an `update users`:
+every session in Valkey keeps a copy of its user, and only Better Auth's own write refreshes them.
+
+`sst deploy --target Vpc` is not the VPC alone: everything that sits in it — the functions, the
+agent runtimes — is a dependent, and is deployed with it from the `dist` already on disk. The site's
+`next build` runs whatever the target.
 
 ### The functions, from five builds
 
@@ -692,7 +729,8 @@ like.
 
 **Two** NAT gateways — SST puts one per availability zone — a `t4g.micro` Postgres and a `t4g.micro`
 Valkey (about US$ 9 a month of it), on the order of **US$ 0.12/hour**, running whether anything is
-invoked or not. Chatwoot adds a load balancer and two Fargate tasks of 0.5 vCPU / 1 GB each (Spot
+invoked or not. Outside production the bastion adds a `t4g.nano` and its public address, about
+**US$ 0.01/hour**. Chatwoot adds a load balancer and two Fargate tasks of 0.5 vCPU / 1 GB each (Spot
 outside production), roughly another **US$ 0.05/hour**. The functions themselves are billed per invocation and round to nothing at this
 scale. `sst remove` is not optional.
 

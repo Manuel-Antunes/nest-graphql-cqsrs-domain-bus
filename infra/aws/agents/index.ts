@@ -7,6 +7,7 @@ import {
   gatewayUrl,
   mcpResource,
   postsAgentResource,
+  theoResource,
 } from '../compute/environment';
 import { cache, database, postgresUrl, redisUrl } from '../data';
 import { router } from '../edge/router';
@@ -56,7 +57,15 @@ export const postsAgentMemory = new aws.bedrock.AgentcoreMemory(
   },
 );
 
-export const postsAgentModel = 'global.anthropic.claude-sonnet-5-5';
+export const agentModel = 'global.anthropic.claude-sonnet-5-5';
+
+const invokeModels = {
+  actions: ['bedrock:InvokeModel', 'bedrock:InvokeModelWithResponseStream'],
+  resources: [
+    'arn:aws:bedrock:*::foundation-model/*',
+    'arn:aws:bedrock:*:*:inference-profile/*',
+  ],
+};
 
 export const postsAgent = new AgentRuntime('PostsAgent', {
   protocol: 'A2A',
@@ -77,17 +86,32 @@ export const postsAgent = new AgentRuntime('PostsAgent', {
     AUTH_OAUTH_RESOURCES: postsAgentResource,
     POSTS_AGENT_RESOURCE: postsAgentResource,
     POSTS_MCP_URL: postsMcp.url,
-    POSTS_AGENT_MODEL_ID: postsAgentModel,
+    POSTS_AGENT_MODEL_ID: agentModel,
     BEDROCK_AGENTCORE_MEMORY_ID: postsAgentMemory.id,
     LOG_LEVEL: 'info',
   },
-  permissions: [
-    {
-      actions: ['bedrock:InvokeModel', 'bedrock:InvokeModelWithResponseStream'],
-      resources: [
-        'arn:aws:bedrock:*::foundation-model/*',
-        'arn:aws:bedrock:*:*:inference-profile/*',
-      ],
-    },
-  ],
+  permissions: [invokeModels],
+});
+
+export const theo = new AgentRuntime('Theo', {
+  protocol: 'AGUI',
+  context: 'apps/theo-agent',
+  dockerfile: 'apps/theo-agent/Dockerfile',
+  dependsOn: [build, gateway, streaming],
+  authorizer: { discoveryUrl, audiences: [theoResource] },
+  vpc,
+  link: [postsAgent, database, cache, authSecret],
+  environment: {
+    POSTGRES_URL: postgresUrl,
+    REDIS_URL: redisUrl,
+    AUTH_SECRET: authSecret.value,
+    AUTH_URL: router.url,
+    WEB_URL: router.url,
+    AUTH_ISSUER: router.url,
+    AUTH_OAUTH_RESOURCES: theoResource,
+    THEO_A2A_AGENTS: postsAgent.url,
+    THEO_AGENT_MODEL_ID: agentModel,
+    LOG_LEVEL: 'info',
+  },
+  permissions: [invokeModels],
 });

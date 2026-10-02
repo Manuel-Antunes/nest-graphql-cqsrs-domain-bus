@@ -1,19 +1,30 @@
 # @nestposts/ai
 
-The agents' runtime: A2A hosting and its extensions, the LangChain executor that runs a turn, the
-files an agent works with, and the channels a reply is delivered through. This README is the design
+The agents' runtime: what every agent shares whatever protocol it speaks (its callers, AgentCore
+Runtime hosting), A2A hosting and its extensions, AG-UI hosting, the LangChain bindings that run a
+turn over either, the A2A client an agent delegates to another with, the files an agent works with,
+and the channels a reply is delivered through. This README is the design
 record for the parts that were reorganised — the code carries no comments, so the reasons live here.
 
 ## Layout
 
 ```
 src/
+  agents/
+    callers/       AgentCaller, AgentCallers (the caller's scope), PlatformCaller(s), CallerBearerFetch
+    agentcore/     AgentCoreHost: one agent on the AgentCore Runtime contract, its callers admitted
+    lazy.ts        Lazy: built on first use, built again after a failure
   a2a/
     domain/        the A2A contract: parts, extensions, the chat → A2A part encoder
     server/        Nest hosting: A2aModule, A2aRegistry, the protocol middleware, the executor wrapper
     agentcore/     AgentCore Runtime hosting: AgentCoreA2aModule/Server over bedrock-agentcore's A2A app
     langchain/     the LangChain binding: ReactAgentExecutor, A2aMiddleware, LangChainTaskStore
+    client/        RemoteA2aAgents, and send_message_to_a2a_agent (A2aDelegationTool) to delegate to them
     testing/       A2aWire, the fixtures every A2A spec shares
+  ag-ui/
+    server/        AgUiModule, AgUiRegistry, @AgUiAgent, LazyAgUiAgent
+    agentcore/     AgentCoreAgUiModule/Server: POST /invocations (SSE) and GET /ping on :8080
+    langchain/     LangChainAgUiAgent (LangGraph's v3 stream → AG-UI events), AgUiMiddleware, AgUiEvents
   files/
     domain/        media kinds, sidecars, the attachment scope, attachment references
     analysis/      FileAnalysisService and its collaborators (vision, PDF, extraction)
@@ -80,8 +91,8 @@ its card's descriptive fields and, optionally, skills — and the instance adds 
   message — name, description, path — for the model to read the one a request needs, when it needs
   it. Only the frontmatter is paid for on every turn.
 - **Every turn runs as its caller.** The registry wraps every executor in `CallerScopedExecutor`,
-  which runs the turn — and a lazy executor's build — inside `A2aCallers` (an `AsyncLocalStorage`
-  of the call context's `User`). Anything the turn reaches asks `callers.currentAs(SomeUser)`;
+  which runs the turn — and a lazy executor's build — inside `AgentCallers` (an `AsyncLocalStorage`
+  of the call context's `User`, an `AgentCaller`). Anything the turn reaches asks `callers.currentAs(SomeUser)`;
   nothing threads the caller through LangChain's config, where a checkpoint could keep it.
 
 `A2aAgentResolver.resolve(agent)` — by class, by `referenceId`, or the root agent with neither —
@@ -103,7 +114,7 @@ contract: it resolves `AgentCoreA2aOptions.agent` with `A2aAgentResolver` and ha
 - **Authentication is the registry's.** The SDK trusts every request — AgentCore's authorizer stands in
   front of the container — and builds no user. The server puts the registry's `resolveUser` in front
   of the SDK's app: a POST without a caller is a `401` before the executor runs, and the caller it
-  resolved reaches `requestContext.context.user` — and `A2aCallers` — through a context builder
+  resolved reaches `requestContext.context.user` — and `AgentCallers` — through a context builder
   wrapping the SDK's own (`bedrockCallContextBuilder`, which keeps AgentCore's headers in the call
   context's state). A run outside AgentCore is authenticated the same way.
 - **`bedrock-agentcore` is ESM-only and has no `require` condition**, so an application that uses this
@@ -113,6 +124,92 @@ contract: it resolves `AgentCoreA2aOptions.agent` with `A2aAgentResolver` and ha
   Vitest, whose modules run in a `vm` context.
 
 `apps/posts-agent` is the first agent hosted this way.
+
+## What every agent shares, whatever it speaks (`agents/`)
+
+An agent served over A2A and one served over AG-UI are hosted the same way, and that part is one
+piece of code, not two:
+
+- **`AgentCaller`** is who a turn runs for — the A2A `User`'s shape, `isAuthenticated` and `userName`,
+  which AG-UI has no word for and gets the same way. **`AgentCallers`** is its scope, an
+  `AsyncLocalStorage`, provided by `AgentCallersModule` — global, so an application holds ONE, whichever
+  protocol modules it imports; both `A2aModule` and `AgUiModule` import it. Code a turn reaches reads
+  `callers.currentAs(PlatformCaller)`.
+- **`PlatformCaller` / `PlatformCallers`** are the platform's identity as the caller, for every agent of
+  this repository: the invocation's headers made into a request, `libs/auth`'s request-scoped
+  `IdentityResolver` resolved for it (the gateway's way), and the `Identity` it answers kept with the
+  access token it was read from. Each protocol module takes it as `resolveUser`. **`CallerBearerFetch`**
+  is a `fetch` that sends the current caller's token — what an agent calling another agent uses.
+- **`AgentCoreHost`** is the AgentCore Runtime host: `listen()` on the contract's port, closing with the
+  application, and **admission** — the module's `resolveUser` run on the request's headers, a refusal
+  before anything runs when there is no caller (unless `allowAnonymous`), and the request served inside
+  the caller's scope. `AgentCoreA2aServer` (port 9000) and `AgentCoreAgUiServer` (port 8080) are its two
+  subclasses: each says only how its protocol is served and how it refuses.
+- **`Lazy`** is a value built on first use and built again after a failed build: the A2A
+  `LazyAgentExecutor` and the AG-UI `LazyAgUiAgent` are both one. An agent whose tools need the
+  caller's credential — MCP tools listed with the first caller's token, a remote agent's card fetched
+  with it — is declared as a function, built inside the first caller's scope.
+
+## AG-UI agents (`ag-ui/`)
+
+[AG-UI](https://docs.ag-ui.com) is the protocol between an agent and a user interface: a
+`RunAgentInput` in — the thread, the run, **the whole conversation**, the frontend's tools, the
+application's context — and a stream of typed events out. The SDK's own pieces are used as they are:
+`@ag-ui/core` for the types and `RunAgentInputSchema`, `@ag-ui/encoder` for the wire (SSE, or protobuf
+when the client asks for it), and `@ag-ui/client`'s `AbstractAgent` as what an agent IS.
+
+- **An agent is declared like an A2A one.** `@AgUiAgent({ id, name, description })` on a provider whose
+  `agent` is an `AbstractAgent`, or a function that builds one (`LazyAgUiAgent`, built in the first
+  caller's scope). `AgUiModule.registerAsync({ useFactory: → { agentProviders, resolveUser } })` and
+  `AgUiRegistry.resolve(agent)` — by class, by id, or the only one.
+- **`AgentCoreAgUiServer` is AgentCore Runtime's AG-UI contract**: `POST /invocations`, a
+  `RunAgentInput`, answered as server-sent events; `GET /ping`, `HealthyBusy` while a run is in flight
+  (so the session is kept) and `Healthy` otherwise, never with a moving `time_of_last_update`. A caller
+  that does not resolve is a `401` whose body is an AG-UI `RUN_ERROR` (`UNAUTHORIZED`), with
+  `WWW-Authenticate: Bearer`; a body that is not a `RunAgentInput` is a `400` `VALIDATION_ERROR`; a
+  client that hangs up aborts the run. It is not `bedrock-agentcore`'s `BedrockAgentCoreApp`: that one
+  cannot be closed, and exits the process when it cannot listen.
+- **`LangChainAgUiAgent` runs a LangChain agent (`createAgent`) for one AG-UI run.** It converts the
+  conversation (`AgUiMessages`) and streams the graph with LangGraph's v3 protocol, whose ONE ordered
+  stream of events — `messages`, `tools`, `custom` — `AgUiProtocolTranslator` turns into AG-UI's:
+  `TEXT_MESSAGE_*` for the model's text (a new message after each tool call it makes),
+  `TOOL_CALL_START` as a call begins, `TOOL_CALL_ARGS`/`END` once its arguments are final,
+  `TOOL_CALL_RESULT` when the tool answers or fails, and `RUN_STARTED`/`RUN_FINISHED`/`RUN_ERROR`
+  around them. Its specs run it through `@ag-ui/client`'s own `runAgent`, which verifies the stream
+  against the protocol and applies it: a stream the client would reject fails them.
+  `@ag-ui/langchain` streams ONE model call and runs no tool of the server's; `@ag-ui/langgraph`
+  drives a LangGraph Platform deployment through its SDK — neither runs a graph in this process.
+- **The conversation is the client's.** AG-UI sends all of it on every run, so the agent keeps no
+  checkpoint: a message a subagent said (`subagentRunId`) is left out — the call's result already
+  carries it — `system`/`developer` messages become instructions, and a tool call nobody answered
+  (the run that made it was stopped, the person typed on) gets a result saying so, because a model
+  provider refuses a call without one.
+- **`AgUiMiddleware`** (LangChain middleware) gives the model the frontend's tools — CopilotKit's
+  `useFrontendTool` — and ends the run at the model's call to one (`jumpTo: 'end'`): the client runs
+  it and sends the result in the next run. It appends the application's `context` and the
+  conversation's instructions to the system message.
+- **A tool speaks AG-UI too.** `AgUiEvents.emit(config, …events)` writes AG-UI events on LangGraph's
+  `custom` stream, and the translator passes them through, in order. That is how a delegation shows
+  its subagent.
+
+## Delegating to an A2A agent (`a2a/client/`)
+
+`RemoteA2aAgents.connect(urls, fetch)` reads each agent's card — through `@a2a-js/sdk`'s own card
+resolver and JSON-RPC transport, both on the `fetch` given (`CallerBearerFetch`: the caller's token,
+because AgentCore guards the card too) — and keeps a client per agent and a **roster** for the
+prompt (names, descriptions, skills). `A2aDelegationTool.create(agents)` is
+`send_message_to_a2a_agent({ agentName, task })`, the name and shape of CopilotKit's A2A middleware,
+whose roster-and-tool pattern this is — run by the agent itself, as its caller, instead of by a
+middleware that would hold no credential.
+
+A delegation streams the remote task (`sendMessageStream`) and **is an AG-UI subagent of the call**:
+`SUBAGENT_STARTED` (its `subagentRunId` is the tool call's id, `parentToolCallId` the same), the remote
+agent's answer as `TEXT_MESSAGE_*` events carrying that `subagentRunId`, then `SUBAGENT_FINISHED` with
+the result — or `SUBAGENT_ERROR`, and a result telling the model the agent could not be reached. The
+conversation is one A2A context (`contextId` = the thread), and the thread is sent as AgentCore's
+session id (`X-Amzn-Bedrock-AgentCore-Runtime-Session-Id`, when it is long enough) so the remote
+agent's turns land on the microVM that holds its memory of the thread. A remote task left
+`input-required` comes back to the model as a question for the person.
 
 ## The LangChain middleware and the system message
 

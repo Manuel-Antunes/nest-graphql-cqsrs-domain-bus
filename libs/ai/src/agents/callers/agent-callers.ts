@@ -1,20 +1,21 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
-import type { User } from '@a2a-js/sdk/server';
 import { Injectable } from '@nestjs/common';
 
-@Injectable()
-export class A2aCallers {
-  private readonly storage = new AsyncLocalStorage<User | undefined>();
+import type { AgentCaller } from './agent-caller';
 
-  run<T>(caller: User | undefined, work: () => T): T {
+@Injectable()
+export class AgentCallers {
+  private readonly storage = new AsyncLocalStorage<AgentCaller | undefined>();
+
+  run<T>(caller: AgentCaller | undefined, work: () => T): T {
     return this.storage.run(caller, work);
   }
 
-  current(): User | undefined {
+  current(): AgentCaller | undefined {
     return this.storage.getStore();
   }
 
-  currentAs<T extends User>(
+  currentAs<T extends AgentCaller>(
     type: abstract new (...args: never[]) => T,
   ): T | undefined {
     const caller = this.current();

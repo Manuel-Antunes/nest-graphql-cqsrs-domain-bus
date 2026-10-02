@@ -1,7 +1,7 @@
 import type { StructuredToolInterface } from '@langchain/core/tools';
 import { MultiServerMCPClient } from '@langchain/mcp-adapters';
 import { Inject, Injectable, type OnModuleDestroy } from '@nestjs/common';
-import { A2aCallers } from '@nestposts/ai/a2a/server/a2a-callers';
+import { AgentCallers } from '@nestposts/ai/agents/callers/agent-callers';
 import { McpClientPool } from '@nestposts/ai/mcp/mcp-client-pool';
 
 import type { McpConfig } from '../config/mcp.config';
@@ -14,11 +14,13 @@ export class PostsMcpTools implements OnModuleDestroy {
 
   private readonly pool: McpClientPool;
 
-  constructor(@Inject(mcpConfig.KEY) config: McpConfig, callers: A2aCallers) {
+  constructor(@Inject(mcpConfig.KEY) config: McpConfig, callers: AgentCallers) {
     this.pool = new McpClientPool({
       label: 'PostsMcp',
       serverKey: PostsMcpTools.SERVER,
       connectTimeoutMs: config.connectTimeoutMs,
+      attempts: config.attempts,
+      retryDelayMs: config.retryDelayMs,
       build: (_key, onError) =>
         new MultiServerMCPClient({
           mcpServers: {
@@ -30,7 +32,7 @@ export class PostsMcpTools implements OnModuleDestroy {
             },
           },
           useStandardContentBlocks: true,
-          onConnectionError: () => onError(),
+          onConnectionError: ({ error }) => onError(error),
         }),
     });
   }

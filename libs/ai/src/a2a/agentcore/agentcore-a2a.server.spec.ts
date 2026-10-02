@@ -16,10 +16,10 @@ import {
 import type { ModuleRef } from '@nestjs/core';
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { AgentCallers } from '../../agents/callers/agent-callers';
 import { A2aRegistry } from '../server/a2a.registry';
 import { A2aAgent } from '../server/a2a-agent.decorator';
 import { A2aAgentResolver } from '../server/a2a-agent.resolver';
-import { A2aCallers } from '../server/a2a-callers';
 import type { A2aModuleOptions } from '../server/a2a-module.options';
 import type { AgentCoreA2aOptions } from './agentcore-a2a.options';
 import { AgentCoreA2aServer } from './agentcore-a2a.server';
@@ -127,7 +127,7 @@ async function listening(): Promise<string> {
     get: (Provider: new () => unknown) => new Provider(),
     resolve: async (Provider: new () => unknown) => new Provider(),
   } as unknown as ModuleRef;
-  const callers = new A2aCallers();
+  const callers = new AgentCallers();
   const registry = new A2aRegistry(options, moduleRef, callers);
   await registry.onModuleInit();
 

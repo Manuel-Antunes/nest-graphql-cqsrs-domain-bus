@@ -6,9 +6,8 @@ import { AccessTokens } from '@nestposts/auth/infrastructure/better-auth/identit
 import { RequestHeaders } from '@nestposts/auth/infrastructure/request/request-headers';
 import { inRequestContext, MikroORM } from '@nestposts/database';
 
+import type { AgentCallerHeaders } from './agent-caller';
 import { PlatformCaller } from './platform-caller';
-
-export type CallerHeaders = Record<string, string | string[] | undefined>;
 
 @Injectable()
 export class PlatformCallers {
@@ -17,7 +16,9 @@ export class PlatformCallers {
     private readonly orm: MikroORM,
   ) {}
 
-  async resolve(headers: CallerHeaders): Promise<PlatformCaller | undefined> {
+  async resolve(
+    headers: AgentCallerHeaders,
+  ): Promise<PlatformCaller | undefined> {
     const request = { headers };
     const accessToken = AccessTokens.bearerOf(
       RequestHeaders.from(request).get('authorization'),
