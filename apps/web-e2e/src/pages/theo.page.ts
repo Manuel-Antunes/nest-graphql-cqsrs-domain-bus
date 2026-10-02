@@ -1,5 +1,6 @@
 import type { Locator, Page } from '@playwright/test';
 
+import { PostsApp } from '../components/posts-app.component';
 import { WebPage } from './web-page';
 
 export class TheoPage extends WebPage {
@@ -40,5 +41,16 @@ export class TheoPage extends WebPage {
 
   said(text: string): Locator {
     return this.conversation.getByText(text, { exact: true });
+  }
+
+  heard(text: string): Locator {
+    return this.conversation.getByText(text);
+  }
+
+  postsAppOn(tool: string): PostsApp {
+    return new PostsApp(
+      this.page,
+      this.conversation.getByRole('region', { name: `${tool} app` }),
+    );
   }
 }

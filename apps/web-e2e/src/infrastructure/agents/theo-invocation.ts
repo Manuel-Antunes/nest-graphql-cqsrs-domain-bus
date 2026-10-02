@@ -6,4 +6,5 @@ export interface TheoInvocation {
   readonly threadId: string;
   readonly session: string | null;
   readonly asked: string;
+  readonly catalogs: readonly string[];
 }

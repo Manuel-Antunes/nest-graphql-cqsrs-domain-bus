@@ -197,11 +197,30 @@ server routes between them, and the client is Chromium on `apps/web`.
    `GET /received` (`TheoRecords`). Each run answers the way Theo does when it hands a question to the
    posts agent: a `send_message_to_a2a_agent` call, the posts agent as an AG-UI subagent of it, its
    result and Theo's answer. The chain behind the real one is `apps/theo-agent`'s spec.
+
+   A question a spec scripts first (`theoScript.opensThePostsApp(question, { tool, input })`,
+   `POST /openings`) is answered the way the posts agent answers when its model opens the **posts MCP
+   App**: the stand-in calls that tool on the real MCP server, with the person's token, in app mode
+   (`PostsMcpApp`), and the delegation's result is `{ a2ui_operations, answer }` — an A2UI surface on
+   the catalog the web declared in the run's context, whose root `McpApp` names the server, the
+   `ui://` resource, the tool, its input and its result. Only the model's choice is scripted; it keeps
+   the catalogs the web declared beside each invocation.
 5. **`apps/web` starts as a process**, by `next start` the way `nx` serves it everywhere else, with
    its log in `target/logs`. It is the thing under the browser: keeping it out of an image keeps a
    failure one `tail` away. It publishes on the run's transport too — the emails its Better Auth asks
-   for are notifications.
-6. **Three accounts are registered** through the web's own sign-up endpoint and verified by the link
+   for are notifications. It is told where the posts MCP server will be (`POSTS_MCP_URL`, a port
+   picked up front, and `POSTS_MCP_RESOURCE`), which its `/api/copilotkit` proxies the app's reads and
+   buttons to, as the person.
+6. **The posts MCP server starts once the web answers**, from `apps/mcp`'s image (`nestposts/mcp:dev`:
+   Apollo MCP Server and the posts MCP App behind Caddy), calling the gateway's container. The web is
+   its authorization server — it validates every token against the web's discovery document and keys,
+   and checks that the document's issuer is the URL it asked, `localhost` on the web's port — so its
+   Caddy is given one site more than the image's: that port, forwarded to the host
+   (`host.testcontainers.internal`). Everything else in its Caddyfile, the rewrite of AgentCore's header
+   into `?app=` included, is `apps/mcp/config/Caddyfile` as it is. Every service that reads a bearer
+   accepts the MCP server's audience (`AUTH_OAUTH_RESOURCES`), because the server passes the person's
+   token to the gateway as it is.
+7. **Three accounts are registered** through the web's own sign-up endpoint and verified by the link
    in their email (`Registration.seed`): an author, a reader and an admin. They reach the workers
    through `target/accounts.json`.
 
@@ -276,6 +295,7 @@ whose mail lands in Mailpit like every other. The paid plan is the Stripe test c
 | `settings` | a session with no user agent is listed as an unknown browser instead of breaking the page |
 | `tenancy` | an organization is a tenant: switching organizations switches the feed, a post is not found from another tenant, and a tenant nobody belongs to is refused |
 | `theo` | a signed-in person asks Theo in `/theo` and sees the posts agent's answer inside the delegation that asked for it, and Theo's own answer; the agent was called with a token of theirs — signed by the web, their user as `sub`, addressed to Theo, the posts agent and the MCP server, with the posts scopes — and the thread as AgentCore's session; a visitor is asked to sign in, and the runtime refuses them `401` |
+| `theo-posts-app` | the posts MCP App inside the conversation with Theo, everything but the model real: asked to edit a post, the app opens on the author's own posts (read through the MCP server, the gateway and the posts API with the person's token), the post picked is retitled and saved from the app's own button — version 3 in the database — and the conversation hears it; Theo was asked once, so the app's reads and its save never reached the agent, and the web had declared its A2UI catalog with `McpApp`. Asked for a preview, the draft is shown as the blog will show it and nothing exists until the author publishes it there; then the post is theirs, the saga tags it, and the app opens it on the blog in a new tab. Discarding publishes nothing and is heard; and a reader's publish is refused by the posts API, because the app acts as the person |
 
 Everything goes through the browser and `/api/graphql` — the proxy the page itself uses, which puts
 the request's cookie and its `x-tenant` on the way out. The exceptions are deliberate:

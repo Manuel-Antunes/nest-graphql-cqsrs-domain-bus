@@ -3,6 +3,7 @@ import { join } from 'node:path';
 
 import type { Endpoints } from '../environment/run-environment';
 import { RunEnvironment } from '../environment/run-environment';
+import { PostsMcpApp } from '../infrastructure/agents/posts-mcp-app';
 import { TheoStandIn } from '../infrastructure/agents/theo-stand-in';
 import { Storage } from '../infrastructure/storage/storage';
 import { BillingStack } from './billing-stack';
@@ -36,6 +37,10 @@ import { HttpHealth, Launch, Service } from './service';
  * Theo, the AG-UI agent the web's `/theo` talks to, is a script on a port of its own
  * (`TheoStandIn`): the browser suite runs no model and no AgentCore, and what it proves is the web's
  * half — the chat, the CopilotKit runtime behind it and the token it hands the agent.
+ *
+ * The posts MCP server is the real one, `apps/mcp`'s image, on a port picked up front: the web proxies
+ * the posts MCP App's reads and buttons to it, and the stand-in opens the app on it, both as the
+ * person. It starts last, because the web is the authorization server it validates tokens against.
  *
  * `AUTH_SECRET` is one value for all of them, and that is the point rather than a convenience:
  * `apps/web` holds its own Better Auth and signs the session cookie itself, and `apps/posts-api`
@@ -81,12 +86,20 @@ export class Stack {
       this.billing =
         (await BillingStack.up(environment.webPort, logs)) ?? undefined;
       this.billing?.publish();
+      const mcpPort = await FreePort.pick();
       this.theo = await TheoStandIn.listen(
         await FreePort.pick(),
         environment.webUrl,
+        new PostsMcpApp(Stack.mcpUrl(mcpPort)),
       );
       environment.publishTheo(this.theo.url);
-      await this.startWeb(endpoints);
+      await this.startWeb(endpoints, mcpPort);
+      await this.containers.startPostsMcp({
+        mcpPort,
+        webPort: environment.webPort,
+        webUrl: environment.webUrl,
+        logs,
+      });
       await this.billing?.verify();
     } catch (failure) {
       await this.down();
@@ -105,7 +118,11 @@ export class Stack {
     await this.containers.down();
   }
 
-  private async startWeb(endpoints: Endpoints): Promise<void> {
+  private static mcpUrl(port: number): string {
+    return `http://localhost:${port}/mcp`;
+  }
+
+  private async startWeb(endpoints: Endpoints, mcpPort: number): Promise<void> {
     const { environment } = this;
     this.web = new Service(
       'web',
@@ -139,6 +156,8 @@ export class Stack {
               THEO_AGENT_AUDIENCES: TheoStandIn.AUDIENCES.join(','),
             }
           : {}),
+        POSTS_MCP_URL: Stack.mcpUrl(mcpPort),
+        POSTS_MCP_RESOURCE: PostsMcpApp.RESOURCE,
         COPILOTKIT_TELEMETRY_DISABLED: 'true',
         WEB_TRANSPORT: environment.transport,
         INNGEST_DEV: 'true',

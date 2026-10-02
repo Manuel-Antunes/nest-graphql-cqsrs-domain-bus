@@ -9,9 +9,13 @@ export class TheoRecords {
     ).json()) as TheoInvocation[];
   }
 
+  async asking(text: string): Promise<TheoInvocation[]> {
+    return (await this.received()).filter(
+      (invocation) => invocation.asked === text,
+    );
+  }
+
   async lastAsking(text: string): Promise<TheoInvocation | undefined> {
-    return (await this.received())
-      .filter((invocation) => invocation.asked === text)
-      .at(-1);
+    return (await this.asking(text)).at(-1);
   }
 }
