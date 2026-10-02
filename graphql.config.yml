@@ -1,6 +1,7 @@
 projects:
   posts-api:
     schema: apps/posts-api/src/graphql/**/*.graphql
+    documents: []
     include:
       - apps/posts-api/src/**
     extensions:
@@ -10,7 +11,17 @@ projects:
           headers:
             Authorization: Bearer ${env:GRAPHQL_TOKEN}
           introspect: false
-
+  posts-app:
+    schema:
+      - apps/posts-api/src/graphql/**/*.graphql
+      - '!apps/posts-api/src/graphql/federation.graphql'
+      - apps/posts-app/mcp-apps.graphql
+    documents:
+      - apps/posts-app/src/**/*.{ts,tsx}
+    include:
+      - apps/posts-app/src/**
+    exclude:
+      - apps/posts-app/src/graphql/__gen__/**
   web:
     schema:
       - apps/posts-api/src/graphql/**/*.graphql
