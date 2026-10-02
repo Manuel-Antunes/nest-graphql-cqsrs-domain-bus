@@ -60,7 +60,7 @@ test.describe('talking to Theo', () => {
     theoRecords,
     visitors,
   }) => {
-    const person = await registration.freshAccount('Theo history');
+    const person = await registration.freshAccount('TheoHistory');
     const first = `What did I write last week? ${Date.now()}`;
     const second = `Something else entirely ${Date.now()}`;
 
@@ -91,7 +91,7 @@ test.describe('talking to Theo', () => {
 
     const someoneElse = await visitors.arrive();
     await someoneElse.authentication.signIn(
-      await registration.freshAccount('Theo stranger'),
+      await registration.freshAccount('TheoStranger'),
     );
     await someoneElse.app.theo.open();
     await expect(someoneElse.app.theo.noConversationYet).toBeVisible();
