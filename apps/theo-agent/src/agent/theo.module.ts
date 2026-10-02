@@ -4,10 +4,9 @@ import { Module } from '@nestjs/common';
 import type { BedrockConfig } from '../config/bedrock.config';
 import { bedrockConfig } from '../config/bedrock.config';
 import { TheoAgent } from './theo.agent';
-import { theoAgUi } from './theo-agent.ag-ui';
 
 @Module({
-  imports: [theoAgUi],
+  imports: [],
   providers: [
     {
       provide: ChatBedrockConverse,

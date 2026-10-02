@@ -1,6 +1,9 @@
 import { Module } from '@nestjs/common';
 import { ConditionalModule, ConfigModule } from '@nestjs/config';
 import { AgentCoreA2aModule } from '@nestposts/ai/a2a/agentcore/agentcore-a2a.module';
+import { A2aModule } from '@nestposts/ai/a2a/server/a2a.module';
+import { PlatformCallers } from '@nestposts/ai/agents/callers/platform-callers';
+import { PlatformCallersModule } from '@nestposts/ai/agents/callers/platform-callers.module';
 import { AuthInfrastructureModule } from '@nestposts/auth/infrastructure/auth-infrastructure.module';
 import { DatabaseModule } from '@nestposts/database';
 import { loggingModuleAsync } from '@nestposts/observability';
@@ -9,7 +12,6 @@ import { OrganizationsInfrastructureModule } from '@nestposts/organizations/infr
 import { OrganizationEntities } from '@nestposts/organizations/infrastructure/persistence/organization-entities';
 import { RedisModule } from '@nestposts/redis';
 
-import { postsAgentA2a } from './agent/posts-agent.a2a';
 import { PostsManagerAgent } from './agent/posts-manager.agent';
 import { PostsManagerModule } from './agent/posts-manager.module';
 import type { AppConfig } from './config/app.config';
@@ -60,7 +62,17 @@ import { redisConfig } from './config/redis.config';
     }),
     PostsManagerModule,
     AgentCoreA2aModule.registerAsync({
-      imports: [postsAgentA2a],
+      imports: [
+        A2aModule.registerAsync({
+          imports: [PostsManagerModule, PlatformCallersModule],
+          inject: [appConfig.KEY, PlatformCallers],
+          useFactory: (app: AppConfig, callers: PlatformCallers) => ({
+            baseUrl: app.url ?? `http://localhost:${app.port}/`,
+            agentProviders: [PostsManagerAgent],
+            resolveUser: (headers) => callers.resolve(headers),
+          }),
+        }),
+      ],
       inject: [appConfig.KEY],
       useFactory: ({ port, host, url }: AppConfig) => ({
         agent: PostsManagerAgent,
