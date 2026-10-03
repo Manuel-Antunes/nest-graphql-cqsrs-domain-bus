@@ -5,7 +5,8 @@ import { copilotkitMiddleware } from '@copilotkit/sdk-js/langgraph';
 import type { CallbackManagerForLLMRun } from '@langchain/core/callbacks/manager';
 import type { BaseMessage } from '@langchain/core/messages';
 import type { ChatGenerationChunk } from '@langchain/core/outputs';
-import { MemorySaver } from '@langchain/langgraph';
+import { type BaseCheckpointSaver, MemorySaver } from '@langchain/langgraph';
+import { FakeAgentCoreMemory } from '@nestposts/langgraph-checkpoint-aws/testing/fake-agentcore-memory';
 import { createAgent } from 'langchain';
 import { describe, expect, it } from 'vitest';
 
@@ -20,6 +21,9 @@ import {
   ScriptedModel,
   type ScriptedTurn,
 } from '../../a2a/langchain/testing/scripted-model';
+import type { AgentContext } from '../../agents/context/agent-context';
+import { AgentRunContext } from '../../agents/context/agent-run-context';
+import { AgentMemories } from '../../checkpoint/agent-memories';
 import { InProcessLangGraphClient } from '../langgraph/in-process-langgraph.client';
 import { A2aMiddlewareAgent } from './a2a-middleware.agent';
 import { DelegatedMessages } from './delegated-messages';
@@ -101,6 +105,7 @@ const postsManager = () => {
 const middlewareWith = (
   turns: ScriptedTurn[],
   model = new RecordingModel(turns),
+  checkpointer: BaseCheckpointSaver = new MemorySaver(),
 ) => {
   const { agents, sent } = postsManager();
   const graph = createAgent({
@@ -108,7 +113,7 @@ const middlewareWith = (
     tools: [],
     systemPrompt: 'You are Theo.',
     middleware: [copilotkitMiddleware],
-    checkpointer: new MemorySaver(),
+    checkpointer,
   });
   const agent = new A2aMiddlewareAgent({
     orchestrationAgent: InProcessLangGraphClient.agentOver(graph, {
@@ -206,6 +211,37 @@ describe('an AG-UI agent that consumes A2A agents as A2AMiddlewareAgent does', (
       ]),
     );
     expect(messages).toHaveLength(5);
+  });
+
+  it('gives each call one answer over AgentCore Memory, kept as for an agent whose tool calls the client answers', async () => {
+    const ana: AgentContext = {
+      isAuthenticated: true,
+      userName: 'user-ana',
+      tenant: 'acme',
+      actorId: 'acme:user-ana',
+      credential: 'the-callers-token',
+    };
+    const { agent, model } = middlewareWith(
+      [delegatingTo('Posts Manager'), { text: ['You are Ana.'] }],
+      undefined,
+      AgentMemories.checkpointerOn('memory', 'us-east-1', {
+        ...AgentMemories.FOR_CLIENT_TOOLS,
+        client: new FakeAgentCoreMemory(),
+      }),
+    );
+
+    const { events } = await AgentRunContext.within(ana, () =>
+      run(agent, [ask('Who am I?')]),
+    );
+
+    expect(events.at(-1)?.type).toBe(EventType.RUN_FINISHED);
+    expect(model.prompts[1].map((message) => message.type)).toEqual([
+      'system',
+      'human',
+      'ai',
+      'tool',
+    ]);
+    expect(model.prompts[1].at(-1)?.text).toBe('The caller is Ana.');
   });
 
   it('keeps what the remote agent said in the conversation the next run starts from', async () => {

@@ -176,6 +176,55 @@ describe.each<CheckpointFormat>(['legacy', 'snapshot'])(
       });
     });
 
+    it('leaves a call unanswered when told the client answers it in the next run, so its result is the only one', async () => {
+      const memory = new FakeAgentCoreMemory();
+      const saver = () =>
+        new AgentCoreMemorySaver(MEMORY, {
+          client: memory,
+          checkpointFormat,
+          patchOrphanToolCalls: false,
+        });
+      const graph = new StateGraph(MessagesAnnotation)
+        .addNode('call', ({ messages }) =>
+          ToolMessage.isInstance(messages.at(-1))
+            ? { messages: [new AIMessage('Found it.')] }
+            : {
+                messages: [
+                  new AIMessage({
+                    content: '',
+                    tool_calls: [{ id: 'call-1', name: 'show', args: {} }],
+                  }),
+                ],
+              },
+        )
+        .addEdge(START, 'call')
+        .addEdge('call', END)
+        .compile({ checkpointer: saver() });
+      await graph.invoke(
+        { messages: [new HumanMessage('Show it')] },
+        configOf('thread-1'),
+      );
+
+      const pending = (await saver().getTuple(configOf('thread-1')))?.checkpoint
+        .channel_values.messages as BaseMessage[];
+      await graph.invoke(
+        {
+          messages: [
+            new ToolMessage({ tool_call_id: 'call-1', content: 'shown' }),
+          ],
+        },
+        configOf('thread-1'),
+      );
+      const answered = (await saver().getTuple(configOf('thread-1')))
+        ?.checkpoint.channel_values.messages as BaseMessage[];
+
+      expect(pending.at(-1)).toBeInstanceOf(AIMessage);
+      expect(
+        answered.filter((message) => ToolMessage.isInstance(message)),
+      ).toHaveLength(1);
+      expect(textsOf(answered)).toEqual(['Show it', '', 'shown', 'Found it.']);
+    });
+
     it('deletes everything of a thread, and needs to be told whose thread it is', async () => {
       const memory = new FakeAgentCoreMemory();
       const saver = saverOn(memory);

@@ -85,6 +85,7 @@ export class EventProcessor {
     writes: readonly WriteItem[],
     channelData: ReadonlyMap<string, unknown>,
     config: CheckpointerConfig,
+    patchOrphanToolCalls = true,
   ): CheckpointTuple {
     const pendingWrites: CheckpointPendingWrite[] = writes.map((write) => [
       write.task_id,
@@ -101,7 +102,7 @@ export class EventProcessor {
       const key = EventProcessor.channelKey(channel, String(version));
       if (channelData.has(key)) channelValues[channel] = channelData.get(key);
     }
-    if ('messages' in channelValues && !hasInterrupts) {
+    if ('messages' in channelValues && patchOrphanToolCalls && !hasInterrupts) {
       channelValues.messages = EventProcessor.patchOrphanToolCalls(
         channelValues.messages,
       );

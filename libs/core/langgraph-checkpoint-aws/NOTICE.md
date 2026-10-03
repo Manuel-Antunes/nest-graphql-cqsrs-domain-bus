@@ -45,6 +45,13 @@ pending writes in a session per checkpoint.
 - **Channel versions are LangGraph.js's integers**, not upstream's 32-digit-and-random-fraction
   strings: `compile({ checkpointer })` types its saver with numeric versions, and every saver of
   LangGraph.js (`MemorySaver`, `PostgresSaver`) counts them that way.
+- **`patchOrphanToolCalls` can be turned off.** Upstream's `patch_orphan_tool_calls` answers, on every
+  read, each tool call the checkpoint holds no result for — right for a run cut short in the middle
+  of a tool, wrong for one that ends at a call by design: a client tool, a CopilotKit frontend tool,
+  the A2A delegation `send_message_to_a2a_agent` an AG-UI orchestrator hands back to be run outside
+  the graph. Read back for the next run, such a call was answered "interrupted before completion",
+  and the client's real result became a second answer to the same call — on AWS, Theo's every
+  delegation. On by default, as upstream.
 
 The two halves AWS documents for LangGraph came across: the saver, short-term memory — the
 conversation and the graph's state, as blobs — and the store, long-term memory — messages put as

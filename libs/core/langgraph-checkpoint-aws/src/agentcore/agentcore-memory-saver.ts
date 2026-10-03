@@ -62,6 +62,14 @@ export interface AgentCoreMemorySaverOptions
    * going back.
    */
   readonly checkpointFormat?: CheckpointFormat;
+  /**
+   * Answers, on every read, each tool call the checkpoint holds no result for with an error
+   * `ToolMessage` — Python's `patch_orphan_tool_calls`, and the default. Turn it off for an agent
+   * whose runs end at a call the client answers in the next run (a client tool, CopilotKit's
+   * frontend tools): the patch answers that call first, and the client's result becomes a second
+   * answer to the same call, which Bedrock refuses.
+   */
+  readonly patchOrphanToolCalls?: boolean;
 }
 
 /**
@@ -76,6 +84,7 @@ export class AgentCoreMemorySaver extends BaseCheckpointSaver {
   readonly limit?: number;
   readonly maxResults?: number;
   readonly checkpointFormat: CheckpointFormat;
+  readonly patchOrphanToolCalls: boolean;
   readonly events: AgentCoreEventClient;
 
   constructor(
@@ -100,6 +109,7 @@ export class AgentCoreMemorySaver extends BaseCheckpointSaver {
     this.limit = limit;
     this.maxResults = maxResults;
     this.checkpointFormat = checkpointFormat;
+    this.patchOrphanToolCalls = options.patchOrphanToolCalls ?? true;
     const serializer = new EventSerializer(this.serde);
     this.events =
       checkpointFormat === 'snapshot'
@@ -179,6 +189,7 @@ export class AgentCoreMemorySaver extends BaseCheckpointSaver {
       writes,
       channelData,
       where,
+      this.patchOrphanToolCalls,
     );
   }
 
@@ -231,6 +242,7 @@ export class AgentCoreMemorySaver extends BaseCheckpointSaver {
         writes,
         channelData,
         where,
+        this.patchOrphanToolCalls,
       );
       count += 1;
     }

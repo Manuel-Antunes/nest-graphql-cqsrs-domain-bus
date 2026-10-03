@@ -39,7 +39,7 @@ import { TheoAgent } from './theo.agent';
       provide: BaseCheckpointSaver,
       inject: [memoryConfig.KEY],
       useFactory: (memory: MemoryConfig) =>
-        AgentMemories.checkpointerOf(memory),
+        AgentMemories.checkpointerOf(memory, AgentMemories.FOR_CLIENT_TOOLS),
     },
     {
       provide: BaseStore,

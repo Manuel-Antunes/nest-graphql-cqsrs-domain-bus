@@ -218,6 +218,11 @@ when the client asks for it), and `@ag-ui/client`'s `AbstractAgent` as what an a
   result under a random message id, so the snapshot replaces the client's copy and the client keeps
   it after the messages it already had — the order on screen is the client's, the checkpoint's order
   is the model's.
+- **A run that ends at a client tool's call leaves the call unanswered until the next run**, so the
+  agent's checkpointer must not answer it in between: `AgentMemories.FOR_CLIENT_TOOLS` turns off
+  `AgentCoreMemorySaver`'s `patchOrphanToolCalls`, which otherwise reads the call back answered
+  "interrupted" and makes the client's result a second answer Bedrock refuses. Theo's checkpointer is
+  built with it; a call the person moved on from is closed by `DelegatedMessages` instead.
 - **Every run is configured with who and where**, read from `AgentRunContext`: the graph's
   `configurable` is `{ thread_id, actor_id, tenant, user_id }` — what the checkpointer, the store and
   every middleware scope by. The client puts no `context` on a run.
