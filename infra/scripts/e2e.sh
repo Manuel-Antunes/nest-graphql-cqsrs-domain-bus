@@ -632,7 +632,7 @@ BETTER_STACK_QUERY_PASSWORD="${BETTER_STACK_QUERY_PASSWORD:-$(from_env_file BETT
 BETTER_STACK_COLLECTION="${BETTER_STACK_COLLECTION:-$(from_env_file BETTER_STACK_COLLECTION)}"
 
 echo
-echo "==> 16. the same run, as telemetry: Better Stack"
+echo "==> 17. the same run, as telemetry: Better Stack"
 TELEMETRY="AND THE WHOLE RUN IS ONE STORY IN BETTER STACK"
 if [ -z "$BETTER_STACK_QUERY_URL" ] || [ -z "$BETTER_STACK_QUERY_USERNAME" ] \
   || [ -z "$BETTER_STACK_QUERY_PASSWORD" ] || [ -z "$BETTER_STACK_COLLECTION" ]; then
