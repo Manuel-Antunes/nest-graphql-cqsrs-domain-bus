@@ -251,13 +251,27 @@ input and result handed to the app, its `ui/message` and `ui/open-link`. Whateve
 the server — `resources/read` for its HTML, `tools/call` for its queries (`execute`) and its
 buttons — the host sends to `/api/copilotkit` as a run of Theo's carrying
 `__proxiedMCPRequest`, and `McpAppsProxy` (`lib/agents/mcp-apps-proxy.ts`), the first middleware on
-Theo's per-request agent, answers it with CopilotKit's `MCPAppsMiddleware` against the posts MCP
-server, as the person (`PostsMcpApp` issues the token: `POSTS_MCP_RESOURCE`, the posts scopes) and in
-app mode (`?app=posts&appTarget=mcp`, and the AgentCore header that stands for it). Every other run
-reaches Theo untouched: the middleware would otherwise list the server's tools on every run and offer
-them to Theo itself, which is the posts agent's job. Its methods are the middleware's allowlist
-(`tools/call`, `resources/read`, `ping`, `notifications/message`), and what the server lets an app
-call is the server's: the app's tools and a read-only `execute`.
+Theo's per-request agent, answers it against the posts MCP server, as the person (`PostsMcpApp`
+issues the token: `POSTS_MCP_RESOURCE`, the posts scopes) and in app mode
+(`?app=posts&appTarget=mcp`, and the AgentCore header that stands for it). Every other run reaches
+Theo untouched: CopilotKit's `MCPAppsMiddleware` would otherwise list the server's tools on every run
+and offer them to Theo itself, which is the posts agent's job. Its methods are that middleware's
+allowlist (`tools/call`, `resources/read`, `ping`, `notifications/message`), and what the server lets
+an app call is the server's: the app's tools and a read-only `execute`.
+
+`McpAppConnection` sends each request on an MCP client of its own, with the MCP SDK, as the
+middleware does — and two things the middleware does not:
+
+- **A stream that drops is a failure at once.** The server answers a request over server-sent
+  events; when that stream drops before the answer, the SDK only reports it (`SSE stream
+  disconnected`) and leaves the request pending for its 60-second timeout, so the app's button said
+  "Publishing…" for a minute. The connection fails the request with that cause, logged on the server,
+  and the app hears `MCP request failed`. Measured on CI: the stream of a `PublishPost` dropped a
+  millisecond after its headers, the post was created all the same, and the app never heard it.
+- **Every request travels on a connection of its own** (`connection: close`). The only call that
+  dropped was the one made a second and a half after the previous app request's client had closed —
+  inside Node's keep-alive window, on a socket that request had left in the pool. A connection per
+  request costs a handshake per request, which an app's button can afford.
 
 - **CopilotKit's sandbox is `allow-scripts allow-same-origin`, twice, on `srcdoc`**, so the app runs
   with the web's own origin — fine for an app this repository builds and serves, and the reason not to

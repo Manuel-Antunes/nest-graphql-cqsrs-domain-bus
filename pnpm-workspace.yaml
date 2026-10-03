@@ -86,7 +86,6 @@ catalog:
   "@copilotkit/a2ui-renderer": 1.76.0
   "@copilotkit/sdk-js": 1.76.0
   "@ag-ui/langgraph": 0.0.42
-  "@ag-ui/mcp-apps-middleware": 0.1.1
   bedrock-agentcore: ^0.4.5
   "@aws-sdk/client-bedrock-agentcore": ^3.1065.0
   "@aws-sdk/util-endpoints": ^3.996.0

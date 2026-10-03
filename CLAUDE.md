@@ -2577,6 +2577,14 @@ DTOs count.
   its closing `MESSAGES_SNAPSHOT` replaces the client's copy and the client appends the checkpoint's
   after the messages it already held. The checkpoint's order is the model's; the client's is only
   for display, and `/theo` groups by `toolCallId`.
+- **An MCP request whose response stream drops is left pending for a minute.** The MCP SDK's
+  streamable HTTP client (1.30, and 1.32 alike) only reports `SSE stream disconnected` when the stream
+  answering a POST drops before the answer, and the request waits for its 60-second timeout. On CI a
+  `PublishPost` from the posts MCP App lost its stream a millisecond after its headers — on a socket
+  an earlier app request had left in Node's keep-alive pool — the post was created, and the app said
+  "Publishing…" until the test gave up. `McpAppConnection` (`apps/web`) fails the request at once and
+  sends every app request on a connection of its own; `mcp-apps-proxy.spec` drops a stream and counts
+  sockets.
 - **`@ag-ui/*` and `@copilotkit/*` pin `rxjs` to 7.8.1** and the workspace has 7.8.2: two copies, and an
   `Observable` of one is not an `Observable` of the other to TypeScript (they carry protected members).
   `pnpm-workspace.yaml` overrides `rxjs` to `^7.8.2`, one copy for everything.

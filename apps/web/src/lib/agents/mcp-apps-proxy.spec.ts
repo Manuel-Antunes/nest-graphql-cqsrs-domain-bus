@@ -1,5 +1,5 @@
-import { createServer, type Server } from 'node:http';
-import type { AddressInfo } from 'node:net';
+import { createServer, type IncomingMessage, type Server } from 'node:http';
+import type { AddressInfo, Socket } from 'node:net';
 import {
   type AbstractAgent,
   type BaseEvent,
@@ -15,7 +15,13 @@ import { z } from 'zod';
 import { McpAppServer, McpAppsProxy } from './mcp-apps-proxy';
 
 const RESOURCE = 'ui://widget/posts#abc';
-const seen: { query: string; authorization?: string; app?: string }[] = [];
+const DROPS_THE_STREAM = 'DropsTheStream';
+const seen: {
+  query: string;
+  authorization?: string;
+  app?: string;
+  socket: Socket;
+}[] = [];
 let server: Server;
 let url: string;
 
@@ -37,6 +43,17 @@ function mcpServer(): McpServer {
   return mcp;
 }
 
+const bodyOf = async (request: IncomingMessage): Promise<unknown> => {
+  if (request.method !== 'POST') return undefined;
+  let body = '';
+  for await (const chunk of request) body += chunk;
+  return JSON.parse(body);
+};
+
+const dropsTheStream = (body: unknown): boolean =>
+  (body as { method?: string; params?: { name?: string } } | undefined)?.params
+    ?.name === DROPS_THE_STREAM;
+
 beforeAll(async () => {
   server = createServer(async (request, response) => {
     seen.push({
@@ -45,12 +62,20 @@ beforeAll(async () => {
       app: request.headers[McpAppServer.AGENTCORE_HEADER.toLowerCase()] as
         | string
         | undefined,
+      socket: request.socket,
     });
+    const body = await bodyOf(request);
+    if (dropsTheStream(body)) {
+      response.writeHead(200, { 'content-type': 'text/event-stream' });
+      response.flushHeaders();
+      setTimeout(() => request.socket.destroy(), 10);
+      return;
+    }
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
     });
     await mcpServer().connect(transport);
-    await transport.handleRequest(request, response);
+    await transport.handleRequest(request, response, body);
   });
   await new Promise<void>((resolve) =>
     server.listen(0, '127.0.0.1', () => resolve()),
@@ -143,6 +168,47 @@ describe('McpAppsProxy', () => {
         result: { data: { updatePost: { id: 'p1', title: 'New' } } },
       },
     });
+  });
+
+  it('answers the app at once with a failure when the stream that would carry the answer drops, instead of leaving it waiting', async () => {
+    const started = Date.now();
+
+    const result = await resultOf({
+      __proxiedMCPRequest: {
+        serverHash: 'posts',
+        serverId: 'posts',
+        method: 'tools/call',
+        params: { name: DROPS_THE_STREAM, arguments: {} },
+      },
+    });
+
+    expect(result).toEqual({ error: McpAppsProxy.FAILED });
+    expect(Date.now() - started).toBeLessThan(2_000);
+  });
+
+  it('sends every request of an app on a connection of its own, never on one an earlier request left open', async () => {
+    const before = seen.length;
+
+    await resultOf({
+      __proxiedMCPRequest: {
+        serverHash: 'posts',
+        serverId: 'posts',
+        method: 'resources/read',
+        params: { uri: RESOURCE },
+      },
+    });
+    await resultOf({
+      __proxiedMCPRequest: {
+        serverHash: 'posts',
+        serverId: 'posts',
+        method: 'tools/call',
+        params: { name: 'SavePost', arguments: { id: 'p1', title: 'New' } },
+      },
+    });
+
+    const sockets = seen.slice(before).map((request) => request.socket);
+    expect(sockets.length).toBeGreaterThan(2);
+    expect(new Set(sockets).size).toBe(sockets.length);
   });
 
   it('refuses a server the app does not know', async () => {

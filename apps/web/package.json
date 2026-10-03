@@ -7,7 +7,6 @@
   },
   "dependencies": {
     "@ag-ui/client": "catalog:",
-    "@ag-ui/mcp-apps-middleware": "catalog:",
     "@base-ui/react": "catalog:",
     "@better-auth-ui/core": "catalog:",
     "@better-auth-ui/react": "catalog:",
