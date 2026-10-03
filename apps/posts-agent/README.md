@@ -9,10 +9,10 @@ server (`apps/mcp`), which calls the gateway.
 A2A client ──Bearer──▶ AgentCore (JWT authorizer, aud = agent)
                          │  Authorization allowlisted
                          ▼
-               apps/posts-agent  ─ Nest application context
-                 AgentCoreA2aServer (libs/ai) ← A2aAgentResolver.resolve(PostsManagerAgent)
-                   └─ bedrock-agentcore's buildA2AApp: /ping, /.well-known/agent-card.json, POST /
-                 PlatformCallers (libs/ai) ← IdentityResolver (libs/auth, the gateway's Better Auth)
+               apps/posts-agent  ─ Nest application (Fastify), created in main.ts
+                 AgentCoreA2aServer (libs/ai), handed the app: /ping, /.well-known/agent-card.json, POST /
+                   └─ A2aAgentResolver.resolve(PostsManagerAgent), @a2a-js/sdk's express handlers
+                 PlatformAgentContexts (this app) ← IdentityResolver (libs/auth, the gateway's Better Auth)
                  PostsManagerAgent (@A2aAgent, its skills Skill entities)
                    ReactAgentExecutor over createAgent(BASE_MODEL, MCP tools + read_file, middleware)
                          │  the same Bearer (CallerBearerAuthProvider)
@@ -29,51 +29,52 @@ Its callers are people, through an OAuth client (`scripts/agent-console.mjs`), a
 conversation (its thread id), and that thread id as the AgentCore session, so a confirmation asked in
 one turn is answered in the next by the same microVM.
 
-## The DI container builds the agent; the AgentCore SDK serves it
+## `main.ts` creates the app; `AgentCoreA2aServer` serves the agent on it
 
-There is no HTTP server of Nest's here. The agent is defined once, in `PostsManagerAgent`: the
-decorator holds its name, description, skills and static card fields; the instance its security
-scheme (`card`, from the issuer's configuration) and its executor — a function, which `libs/ai`
-builds on the first turn. `main.ts` boots an **application context** and asks it for
-`AgentCoreA2aServer` (`libs/ai`, `a2a/agentcore/`), which:
+The agent is defined once, in `PostsManagerAgent`: the decorator holds its name, description, skills
+and static card fields; the instance its security scheme (`card`, from the issuer's configuration) and
+its executor — a function, which `libs/ai` builds on the first turn. `main.ts` creates the Nest
+application — `NestFactory.create(AppModule, new FastifyAdapter())` — and hands it to
+`AgentCoreA2aServer` (`libs/ai`, `a2a/agentcore/`), which registers AgentCore Runtime's A2A contract on
+it (`app.use`) and listens on the contract's port:
 
-1. resolves the agent — `A2aAgentResolver.resolve(PostsManagerAgent)` answers its card, its
-   **hosted executor** (extension-aware, caller-scoped, lazy: the one the registry's own
+1. it resolves the agent — `A2aAgentResolver.resolve(PostsManagerAgent)` answers its card, its
+   **hosted executor** (extension-aware, context-scoped, lazy: the one the registry's own
    `DefaultRequestHandler` runs) and its task store;
-2. hands them to `bedrock-agentcore`'s `buildA2AApp` — the SDK's A2A server on the AgentCore Runtime
-   contract: `GET /ping`, `GET /.well-known/agent-card.json` and JSON-RPC on `POST /`, both A2A 1.0 and
-   the 0.3 methods AgentCore's documented shape still speaks (the card declares a JSON-RPC interface of
-   each version, at the runtime's URL — `AGENTCORE_RUNTIME_URL`, which the platform injects);
-3. puts in front of it the registry's own `resolveUser`, so a POST without a valid bearer is a `401`
+2. it serves `GET /ping`, `GET /.well-known/agent-card.json` and JSON-RPC on `POST /`, both A2A 1.0
+   and the 0.3 methods AgentCore's documented shape still speaks, with `@a2a-js/sdk`'s express handlers
+   (the card declares a JSON-RPC interface of each version, at the runtime's URL —
+   `AGENTCORE_RUNTIME_URL`, which the platform injects);
+3. it runs the module's `context` on every invocation, so a POST without a valid bearer is a `401`
    before the executor runs, and the verified caller reaches the executor as
    `requestContext.context.user`.
 
 `bedrock-agentcore` is ESM-only and publishes no `require` condition, so the webpack build **bundles**
 it (`bundledPackages` in `webpack.config.js`); its own dependencies stay external like every other
-package.
+package. The image installs the app's own dependencies only, which is why `@nestjs/platform-fastify` is
+declared here.
 
 ## Authentication: the platform's identity, as the A2A user
 
 AgentCore's JWT authorizer verifies every invocation against the platform's discovery document
 (`<router>/.well-known/openid-configuration`, served by the gateway) and the agent's audience. The
-container then reads the caller the way the gateway does: `PlatformCallers` (`libs/ai`, `agents/callers/`,
-shared with Theo, `apps/theo-agent`) — the registry's
-`resolveUser` — makes a request of the invocation's headers, registers it under a context id of its
-own (`ContextIdFactory.create()`, `registerRequestByContextId`) and resolves `libs/auth`'s
+container then reads the caller the way the gateway does: `PlatformAgentContexts`
+(`src/agent-context/`, the `A2aModule`'s `context`) registers the invocation's request under a context
+id of its own (`ContextIdFactory.create()`, `registerRequestByContextId`) and resolves `libs/auth`'s
 request-scoped `IdentityResolver` for it, inside a MikroORM request context. That is the same Better
 Auth every process holds — the organization plugin included, so its tables are the ones the migrator
 maps — reading the bearer as `oauth-bearer-session` does: verified against the keys the jwt plugin
 keeps in Postgres, for `AUTH_ISSUER` and the audiences in `AUTH_OAUTH_RESOURCES` (the agent's own, on
 AWS), and answered as the user it was issued to — none for a user who no longer exists or is banned.
-The `Identity` it answers becomes the A2A `User` as a `PlatformCaller` — an `AgentCaller`, which is
-the A2A `User`'s shape and the one AG-UI agents are run as too: the identity, its principal as
-`userName`, and the access token it was read from. A caller with no bearer, or one the platform does
+The `Identity` it answers becomes the A2A `User` as a `PlatformAgentContext` — `libs/ai`'s
+`AgentContext`, the A2A `User`'s shape and what AG-UI agents run with too: the identity, its principal
+as `userName`, the tenant, and the access token it was read from as the `credential`. A caller with no bearer, or one the platform does
 not recognise, is a `401` before the executor runs.
 
-The agent then **acts as the caller**: `libs/ai` runs every turn inside the caller's scope
-(`AgentCallers`), and `CallerBearerAuthProvider` — the MCP SDK's `OAuthClientProvider`, the documented
-hook for a token that changes per request — hands the MCP client that caller's token
-(`callers.currentAs(PlatformCaller)`) on every request. So the token must
+The agent then **acts as the caller**: `libs/ai` runs every turn inside its context
+(`AgentRunContext`), and `CallerBearerAuthProvider` — the MCP SDK's `OAuthClientProvider`, the
+documented hook for a token that changes per request — hands the MCP client that caller's token
+(`AgentRunContext.current()?.credential`) on every request. So the token must
 also be addressed to the MCP server: a caller asks for it with both resources,
 `resource=<agent>&resource=<mcp>`, and every Better Auth process accepts the MCP server's audience
 (`AUTH_OAUTH_RESOURCES`), because the MCP server forwards the token to the gateway. Nothing ever acts

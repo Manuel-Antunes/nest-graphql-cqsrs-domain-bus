@@ -1,7 +1,6 @@
 import type { StructuredToolInterface } from '@langchain/core/tools';
 import { MultiServerMCPClient } from '@langchain/mcp-adapters';
 import { Inject, Injectable, type OnModuleDestroy } from '@nestjs/common';
-import { AgentCallers } from '@nestposts/ai/agents/callers/agent-callers';
 import { McpClientPool } from '@nestposts/ai/mcp/mcp-client-pool';
 
 import type { McpConfig } from '../config/mcp.config';
@@ -15,7 +14,7 @@ export class PostsMcpTools implements OnModuleDestroy {
 
   private readonly pool: McpClientPool;
 
-  constructor(@Inject(mcpConfig.KEY) config: McpConfig, callers: AgentCallers) {
+  constructor(@Inject(mcpConfig.KEY) config: McpConfig) {
     this.pool = new McpClientPool({
       label: 'PostsMcp',
       serverKey: PostsMcpTools.SERVER,
@@ -28,7 +27,7 @@ export class PostsMcpTools implements OnModuleDestroy {
             [PostsMcpTools.SERVER]: {
               transport: 'http',
               url: config.url,
-              authProvider: new CallerBearerAuthProvider(callers),
+              authProvider: new CallerBearerAuthProvider(),
               automaticSSEFallback: false,
             },
           },

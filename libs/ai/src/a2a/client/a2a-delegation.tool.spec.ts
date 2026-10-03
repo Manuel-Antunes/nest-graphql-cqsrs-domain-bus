@@ -1,24 +1,27 @@
-import { createServer } from 'node:http';
+import { createServer, type IncomingMessage } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { InMemoryTaskStore } from '@a2a-js/sdk/server';
 import { type BaseEvent, EventType } from '@ag-ui/core';
 import { MemorySaver } from '@langchain/langgraph';
-import type { ModuleRef } from '@nestjs/core';
+import type { INestApplication } from '@nestjs/common';
+import { FastifyAdapter } from '@nestjs/platform-fastify';
+import { Test } from '@nestjs/testing';
 import { createAgent } from 'langchain';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { AgUiEvents } from '../../ag-ui/langchain/ag-ui-events';
-import type { AgentCaller } from '../../agents/callers/agent-caller';
-import { AgentCallers } from '../../agents/callers/agent-callers';
+import type {
+  AgentContext,
+  AgentRequest,
+} from '../../agents/context/agent-context';
 import { AgentCoreA2aServer } from '../agentcore/agentcore-a2a.server';
 import { ReactAgentExecutor } from '../langchain/react-agent.executor';
 import {
   ScriptedModel,
   type ScriptedTurn,
 } from '../langchain/testing/scripted-model';
-import { A2aRegistry } from '../server/a2a.registry';
+import { A2aModule } from '../server/a2a.module';
 import { A2aAgent } from '../server/a2a-agent.decorator';
-import { A2aAgentResolver } from '../server/a2a-agent.resolver';
 import type { A2aModuleOptions } from '../server/a2a-module.options';
 import { A2aDelegation, A2aDelegationTool } from './a2a-delegation.tool';
 import { RemoteA2aAgents } from './remote-a2a-agents';
@@ -26,13 +29,13 @@ import { RemoteA2aAgents } from './remote-a2a-agents';
 const TOKEN = 'the-callers-token';
 const THREAD = '0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0';
 
-class BearerUser implements AgentCaller {
-  constructor(readonly userName: string) {}
-
-  get isAuthenticated(): boolean {
-    return true;
-  }
-}
+const caller: AgentContext = {
+  isAuthenticated: true,
+  userName: 'user-1',
+  tenant: '',
+  actorId: 'user-1',
+  credential: TOKEN,
+};
 
 const turns: ScriptedTurn[] = [
   { text: ['The post ', 'is published.'] },
@@ -59,7 +62,7 @@ class PostsAgent implements A2aAgent {
 }
 
 const headersSeen: Headers[] = [];
-let host: AgentCoreA2aServer;
+let host: INestApplication;
 let base: string;
 
 const bearerFetch: typeof fetch = (input, init) => {
@@ -73,10 +76,8 @@ beforeAll(async () => {
     baseUrl: 'https://agent.test',
     agentProviders: [PostsAgent],
     allowAnonymous: false,
-    resolveUser: async (headers: Record<string, unknown>) =>
-      headers.authorization === `Bearer ${TOKEN}`
-        ? new BearerUser('user-1')
-        : undefined,
+    context: async ({ headers }: AgentRequest) =>
+      headers.authorization === `Bearer ${TOKEN}` ? caller : undefined,
     card: {
       name: 'Posts Manager',
       description: 'Manages the posts.',
@@ -94,31 +95,29 @@ beforeAll(async () => {
       securityRequirements: [{ schemes: { bearer: { list: [] } } }],
     },
   } as unknown as A2aModuleOptions;
-  const moduleRef = {
-    get: (Provider: new () => unknown) => new Provider(),
-  } as unknown as ModuleRef;
-  const callers = new AgentCallers();
-  const registry = new A2aRegistry(options, moduleRef, callers);
-  await registry.onModuleInit();
+  const testing = await Test.createTestingModule({
+    imports: [A2aModule.register(options)],
+  }).compile();
+  host = testing.createNestApplication(new FastifyAdapter(), {
+    logger: false,
+  });
   const probe = createServer();
   await new Promise<void>((resolve) => probe.listen(0, '127.0.0.1', resolve));
   const { port } = probe.address() as AddressInfo;
   await new Promise<void>((resolve) => probe.close(() => resolve()));
   base = `http://127.0.0.1:${port}/`;
-  host = new AgentCoreA2aServer(
-    new A2aAgentResolver(registry),
-    callers,
-    options,
-    { port, host: '127.0.0.1', agent: PostsAgent, url: base },
+  await new AgentCoreA2aServer(host, { agent: PostsAgent, url: base }).listen(
+    port,
+    '127.0.0.1',
   );
-  const server = await host.listen();
-  server.prependListener('request', (request) => {
+  const server = host.getHttpServer();
+  server.prependListener('request', (request: IncomingMessage) => {
     headersSeen.push(new Headers(request.headers as Record<string, string>));
   });
 });
 
 afterAll(async () => {
-  await host?.onApplicationShutdown();
+  await host?.close();
 });
 
 const delegating = (toolCallId: string) => {

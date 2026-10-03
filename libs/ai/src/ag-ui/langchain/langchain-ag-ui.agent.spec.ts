@@ -4,7 +4,6 @@ import type { BaseMessage } from '@langchain/core/messages';
 import type { ChatGenerationChunk } from '@langchain/core/outputs';
 import { tool } from '@langchain/core/tools';
 import type { LangGraphRunnableConfig } from '@langchain/langgraph';
-import { UserIdentity } from '@nestposts/auth/domain/auth/vo/user-identity';
 import { AgentCoreMemorySaver } from '@nestposts/langgraph-checkpoint-aws';
 import { FakeAgentCoreMemory } from '@nestposts/langgraph-checkpoint-aws/testing/fake-agentcore-memory';
 import { createAgent } from 'langchain';
@@ -15,7 +14,8 @@ import {
   ScriptedModel,
   type ScriptedTurn,
 } from '../../a2a/langchain/testing/scripted-model';
-import { PlatformCaller } from '../../agents/callers/platform-caller';
+import type { AgentContext } from '../../agents/context/agent-context';
+import { AgentRunContext } from '../../agents/context/agent-run-context';
 import { AgUiMiddleware } from './ag-ui.middleware';
 import { AgUiEvents } from './ag-ui-events';
 import { AgUiMessages } from './ag-ui-messages';
@@ -253,26 +253,22 @@ describe('a LangChain agent served over AG-UI', () => {
       middleware: [AgUiMiddleware.create()],
       checkpointer,
     });
-    const ana = new PlatformCaller(
-      UserIdentity.parse({
-        userId: 'user-ana',
-        email: 'ana@acme.test',
-        name: 'Ana',
-        scopes: [],
-      }),
-      'token',
-      'acme',
-    );
+    const ana: AgentContext = {
+      isAuthenticated: true,
+      userName: 'user-ana',
+      tenant: 'acme',
+      actorId: 'acme:user-ana',
+      credential: 'token',
+    };
     const agent = new LangChainAgUiAgent({
       graph,
       threadId: 'thread-3',
-      callerOf: () => ana,
       initialMessages: [{ id: 'user-1', role: 'user', content: 'Hello' }],
     });
 
-    await eventsOf(agent);
+    await AgentRunContext.within(ana, () => eventsOf(agent));
     agent.addMessage({ id: 'user-2', role: 'user', content: 'When?' });
-    await eventsOf(agent);
+    await AgentRunContext.within(ana, () => eventsOf(agent));
     const tuple = await checkpointer.getTuple({
       configurable: { thread_id: 'thread-3', actor_id: 'acme:user-ana' },
     });

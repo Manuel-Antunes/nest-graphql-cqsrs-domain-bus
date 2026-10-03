@@ -1,24 +1,24 @@
 import { RequestMalformedError } from '@a2a-js/sdk/errors';
+import type { User } from '@a2a-js/sdk/server';
 import {
   ServerCallContext,
   type ServerCallContextOptions,
 } from '@a2a-js/sdk/server';
 
-import type { AgentCaller } from '../../agents/callers/agent-caller';
-import { PlatformCaller } from '../../agents/callers/platform-caller';
+import { AgentContexts } from '../../agents/context/agent-context';
 import { AgentMemories } from '../../checkpoint/agent-memories';
 
 export class A2aTenancy {
-  static tenantOf(caller: AgentCaller | undefined): string {
-    return caller instanceof PlatformCaller ? caller.tenant : '';
+  static tenantOf(user: User | undefined): string {
+    return AgentContexts.isAgentContext(user) ? user.tenant : '';
   }
 
   static actorOf(
     tenant: string | undefined,
-    caller: AgentCaller | undefined,
+    user: User | undefined,
   ): string | undefined {
-    if (!caller?.isAuthenticated) return undefined;
-    return AgentMemories.actorOf(tenant, caller.userName);
+    if (!user?.isAuthenticated) return undefined;
+    return AgentMemories.actorOf(tenant, user.userName);
   }
 }
 
@@ -32,9 +32,9 @@ export class TenantScopedCallContext extends ServerCallContext {
 
   static of(
     context: ServerCallContext,
-    caller: AgentCaller | undefined,
+    user: User | undefined,
   ): ServerCallContext {
-    const tenant = A2aTenancy.tenantOf(caller);
+    const tenant = A2aTenancy.tenantOf(user);
     if (!tenant) return context;
     return new TenantScopedCallContext(
       {

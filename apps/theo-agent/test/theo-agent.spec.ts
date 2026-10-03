@@ -7,19 +7,21 @@ import type { CallbackManagerForLLMRun } from '@langchain/core/callbacks/manager
 import type { BaseMessage } from '@langchain/core/messages';
 import type { ChatGenerationChunk } from '@langchain/core/outputs';
 import { tool } from '@langchain/core/tools';
-import type { INestApplicationContext } from '@nestjs/common';
+import type { INestApplication } from '@nestjs/common';
+import { FastifyAdapter } from '@nestjs/platform-fastify';
 import { Test } from '@nestjs/testing';
 import { AgentCoreA2aServer } from '@nestposts/ai/a2a/agentcore/agentcore-a2a.server';
 import { A2aDelegationTool } from '@nestposts/ai/a2a/client/a2a-delegation.tool';
 import { ScriptedModel } from '@nestposts/ai/a2a/langchain/testing/scripted-model';
 import { AgentCoreAgUiServer } from '@nestposts/ai/ag-ui/agentcore/agentcore-ag-ui.server';
-import { AgentCallers } from '@nestposts/ai/agents/callers/agent-callers';
-import { PlatformCaller } from '@nestposts/ai/agents/callers/platform-caller';
+import type { AgentContext } from '@nestposts/ai/agents/context/agent-context';
+import { AgentRunContext } from '@nestposts/ai/agents/context/agent-run-context';
 import { WebSearchTool } from '@nestposts/ai/web/web-search.tool';
 import type { BetterAuth } from '@nestposts/auth/infrastructure/better-auth/init-auth';
 import { BETTER_AUTH } from '@nestposts/auth/infrastructure/better-auth/tokens';
 import { inRequestContext, MikroORM } from '@nestposts/database';
 import { migrateSystem } from '@nestposts/migrator/main';
+import { PostsManagerAgent } from '@nestposts/posts-agent/agent/posts-manager.agent';
 import { PostsMcpTools } from '@nestposts/posts-agent/mcp/posts-mcp-tools';
 import {
   type SearchOptions,
@@ -27,6 +29,8 @@ import {
   type WebSearchResponse,
 } from 'bedrock-agentcore/web-search';
 import { z } from 'zod';
+
+import { TheoAgent } from '../src/agent/theo.agent';
 
 const ISSUER = 'https://issuer.test';
 const THEO = 'https://issuer.test/agui/theo';
@@ -55,8 +59,8 @@ class RecordingModel extends ScriptedModel {
 }
 
 describe('Theo, an AG-UI agent on AgentCore Runtime that hands posts to the posts agent over A2A', () => {
-  let postsAgent: INestApplicationContext;
-  let theo: INestApplicationContext;
+  let postsAgent: INestApplication;
+  let theo: INestApplication;
   let theoBase: string;
   const theoModel = new RecordingModel([
     {
@@ -97,7 +101,7 @@ describe('Theo, an AG-UI agent on AgentCore Runtime that hands posts to the post
     { toolCalls: [{ id: 'posts-call-1', name: 'WhoAmI', args: {} }] },
     { text: ['The caller is ', 'Ana.'] },
   ]);
-  const callersSeen: (PlatformCaller | undefined)[] = [];
+  const callersSeen: (AgentContext | undefined)[] = [];
   const recorded: {
     authorization?: string;
     tenant?: string;
@@ -159,10 +163,9 @@ describe('Theo, an AG-UI agent on AgentCore Runtime that hands posts to the post
     const { AppModule: PostsAgentModule } = await import(
       '@nestposts/posts-agent/app.module'
     );
-    let postsCallers: AgentCallers | undefined;
     const whoAmI = tool(
       async () => {
-        callersSeen.push(postsCallers?.currentAs(PlatformCaller));
+        callersSeen.push(AgentRunContext.current());
         return JSON.stringify({ data: { me: { name: 'Ana' } } });
       },
       {
@@ -171,27 +174,32 @@ describe('Theo, an AG-UI agent on AgentCore Runtime that hands posts to the post
         schema: z.object({}),
       },
     );
-    postsAgent = await (
+    postsAgent = (
       await Test.createTestingModule({ imports: [PostsAgentModule] })
         .overrideProvider(ChatBedrockConverse)
         .useValue(postsModel)
         .overrideProvider(PostsMcpTools)
         .useValue({ load: async () => [whoAmI] })
         .compile()
-    ).init();
-    postsCallers = postsAgent.get(AgentCallers);
-    await postsAgent.get(AgentCoreA2aServer).listen();
+    ).createNestApplication(new FastifyAdapter(), { logger: false });
+    await new AgentCoreA2aServer(postsAgent, {
+      agent: PostsManagerAgent,
+      url: `${postsBase}/`,
+    }).listen(postsPort, '127.0.0.1');
 
     const { AppModule: TheoModule } = await import('../src/app.module');
-    theo = await (
+    theo = (
       await Test.createTestingModule({ imports: [TheoModule] })
         .overrideProvider(ChatBedrockConverse)
         .useValue(theoModel)
         .overrideProvider(WebSearchClient)
         .useValue(webSearch)
         .compile()
-    ).init();
-    await theo.get(AgentCoreAgUiServer).listen();
+    ).createNestApplication(new FastifyAdapter(), { logger: false });
+    await new AgentCoreAgUiServer(theo, { agent: TheoAgent }).listen(
+      theoPort,
+      '127.0.0.1',
+    );
   });
 
   afterAll(async () => {
@@ -268,7 +276,7 @@ describe('Theo, an AG-UI agent on AgentCore Runtime that hands posts to the post
     );
     expect(newMessages).toHaveLength(4);
     expect(callersSeen).toHaveLength(1);
-    expect(callersSeen[0]?.accessToken).toBe(token);
+    expect(callersSeen[0]?.credential).toBe(token);
     expect(callersSeen[0]?.userName).toBe(user.id);
     expect(JSON.stringify(theoModel.prompts[0][0])).toContain(
       '### Posts Manager',

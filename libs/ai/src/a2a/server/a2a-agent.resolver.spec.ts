@@ -3,25 +3,26 @@ import type {
   ExecutionEventBus,
   RequestContext,
   TaskStore,
-  User,
 } from '@a2a-js/sdk/server';
 import type { ModuleRef } from '@nestjs/core';
 
-import { AgentCallers } from '../../agents/callers/agent-callers';
+import type { AgentContext } from '../../agents/context/agent-context';
+import { AgentRunContext } from '../../agents/context/agent-run-context';
 import { Skill } from '../../domain/skill.entity';
 import { A2aRegistry } from './a2a.registry';
 import { A2aAgent } from './a2a-agent.decorator';
 import { A2aAgentResolver } from './a2a-agent.resolver';
 import type { A2aModuleOptions } from './a2a-module.options';
 
-const callers = new AgentCallers();
 const seen: { caller?: string; turn: string }[] = [];
 let builds = 0;
 let failNextBuild = false;
 
-const caller = (userName: string): User => ({
+const caller = (userName: string): AgentContext => ({
   isAuthenticated: true,
   userName,
+  tenant: '',
+  actorId: userName,
 });
 
 const turn = (userName: string, id: string) =>
@@ -76,7 +77,7 @@ class LazyAgent implements A2aAgent {
 
   readonly executor = async (): Promise<AgentExecutor> => {
     builds += 1;
-    const builtFor = callers.current()?.userName;
+    const builtFor = AgentRunContext.current()?.userName;
     if (failNextBuild) {
       failNextBuild = false;
       throw new Error(`no tools for ${builtFor}`);
@@ -84,7 +85,7 @@ class LazyAgent implements A2aAgent {
     return {
       execute: async (context) => {
         seen.push({
-          caller: callers.current()?.userName,
+          caller: AgentRunContext.current()?.userName,
           turn: `${context.taskId} built for ${builtFor}`,
         });
       },
@@ -121,7 +122,7 @@ async function resolver(): Promise<A2aAgentResolver> {
     get: (Provider: new () => unknown) => new Provider(),
     resolve: async (Provider: new () => unknown) => new Provider(),
   } as unknown as ModuleRef;
-  const registry = new A2aRegistry(options, moduleRef, callers);
+  const registry = new A2aRegistry(options, moduleRef);
   await registry.onModuleInit();
   return new A2aAgentResolver(registry);
 }
@@ -178,9 +179,7 @@ describe('resolving an agent to what a host serves', () => {
   it('builds an executor handed over as a function once, on the first turn, as that turn’s caller', async () => {
     const { executor } = (await resolver()).resolve(LazyAgent);
 
-    await callers.run(caller('ana'), () =>
-      executor.execute(turn('ana', 't1'), BUS),
-    );
+    await executor.execute(turn('ana', 't1'), BUS);
     await executor.execute(turn('bruno', 't2'), BUS);
 
     expect(builds).toBe(1);

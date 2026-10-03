@@ -2,22 +2,25 @@ import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { InMemoryTaskStore } from '@a2a-js/sdk/server';
 import { MemorySaver } from '@langchain/langgraph';
-import type { ModuleRef } from '@nestjs/core';
+import type { INestApplication } from '@nestjs/common';
+import { FastifyAdapter } from '@nestjs/platform-fastify';
+import { Test } from '@nestjs/testing';
 import { createAgent, tool } from 'langchain';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
-import type { AgentCaller } from '../../agents/callers/agent-caller';
-import { AgentCallers } from '../../agents/callers/agent-callers';
+import type {
+  AgentContext,
+  AgentRequest,
+} from '../../agents/context/agent-context';
 import { McpAppTools } from '../../mcp/apps/mcp-app-tools';
 import { AgentCoreA2aServer } from '../agentcore/agentcore-a2a.server';
 import { A2uiExtension } from '../domain/extensions/a2ui.extension';
 import { A2aMiddleware } from '../langchain/a2a.middleware';
 import { ReactAgentExecutor } from '../langchain/react-agent.executor';
 import { ScriptedModel } from '../langchain/testing/scripted-model';
-import { A2aRegistry } from '../server/a2a.registry';
+import { A2aModule } from '../server/a2a.module';
 import { A2aAgent } from '../server/a2a-agent.decorator';
-import { A2aAgentResolver } from '../server/a2a-agent.resolver';
 import type { A2aModuleOptions } from '../server/a2a-module.options';
 import { A2aDelegation } from './a2a-delegation.tool';
 import { RemoteA2aAgents } from './remote-a2a-agents';
@@ -27,13 +30,13 @@ const CATALOG = 'nestposts://a2ui/catalogs/theo/v1';
 const RESOURCE = 'ui://widget/posts#abc';
 const STRUCTURED = { result: { data: { me: { id: 'u1' } } } };
 
-class BearerUser implements AgentCaller {
-  constructor(readonly userName: string) {}
-
-  get isAuthenticated(): boolean {
-    return true;
-  }
-}
+const caller: AgentContext = {
+  isAuthenticated: true,
+  userName: 'user-1',
+  tenant: '',
+  actorId: 'user-1',
+  credential: TOKEN,
+};
 
 const choosePost = McpAppTools.openers(
   'posts',
@@ -77,7 +80,7 @@ class PostsAgent implements A2aAgent {
 }
 
 const sent: { headers: Headers; body: Record<string, unknown> }[] = [];
-let host: AgentCoreA2aServer;
+let host: INestApplication;
 let base: string;
 
 const bearerFetch: typeof fetch = async (input, init) => {
@@ -94,10 +97,8 @@ beforeAll(async () => {
     baseUrl: 'https://agent.test',
     agentProviders: [PostsAgent],
     allowAnonymous: false,
-    resolveUser: async (headers: Record<string, unknown>) =>
-      headers.authorization === `Bearer ${TOKEN}`
-        ? new BearerUser('user-1')
-        : undefined,
+    context: async ({ headers }: AgentRequest) =>
+      headers.authorization === `Bearer ${TOKEN}` ? caller : undefined,
     card: {
       name: 'Posts Manager',
       description: 'Manages the posts.',
@@ -115,28 +116,25 @@ beforeAll(async () => {
       securityRequirements: [{ schemes: { bearer: { list: [] } } }],
     },
   } as unknown as A2aModuleOptions;
-  const moduleRef = {
-    get: (Provider: new () => unknown) => new Provider(),
-  } as unknown as ModuleRef;
-  const callers = new AgentCallers();
-  const registry = new A2aRegistry(options, moduleRef, callers);
-  await registry.onModuleInit();
+  const testing = await Test.createTestingModule({
+    imports: [A2aModule.register(options)],
+  }).compile();
+  host = testing.createNestApplication(new FastifyAdapter(), {
+    logger: false,
+  });
   const probe = createServer();
   await new Promise<void>((resolve) => probe.listen(0, '127.0.0.1', resolve));
   const { port } = probe.address() as AddressInfo;
   await new Promise<void>((resolve) => probe.close(() => resolve()));
   base = `http://127.0.0.1:${port}/`;
-  host = new AgentCoreA2aServer(
-    new A2aAgentResolver(registry),
-    callers,
-    options,
-    { port, host: '127.0.0.1', agent: PostsAgent, url: base },
+  await new AgentCoreA2aServer(host, { agent: PostsAgent, url: base }).listen(
+    port,
+    '127.0.0.1',
   );
-  await host.listen();
 });
 
 afterAll(async () => {
-  await host?.onApplicationShutdown();
+  await host?.close();
 });
 
 const callerRendering = (catalogs: Record<string, unknown>[]) => ({

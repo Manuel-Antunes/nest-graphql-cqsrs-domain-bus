@@ -1,19 +1,18 @@
-import { AgentCallers } from '@nestposts/ai/agents/callers/agent-callers';
-import { PlatformCaller } from '@nestposts/ai/agents/callers/platform-caller';
+import { AgentRunContext } from '@nestposts/ai/agents/context/agent-run-context';
 import { UserIdentity } from '@nestposts/auth/domain/auth/vo/user-identity';
 
+import { PlatformAgentContext } from '../agent-context/platform-agent-context';
 import {
   CallerBearerAuthProvider,
   CallerNotAuthorizedError,
 } from './caller-bearer.auth-provider';
 
 describe('the credential the posts MCP server is called with', () => {
-  const callers = new AgentCallers();
-  const provider = new CallerBearerAuthProvider(callers);
+  const provider = new CallerBearerAuthProvider();
 
   it('is the caller’s own access token, for the turn they are in', () => {
-    const tokens = callers.run(
-      new PlatformCaller(
+    const tokens = AgentRunContext.within(
+      new PlatformAgentContext(
         UserIdentity.parse({
           userId: 'user-1',
           email: 'ana@example.com',
@@ -32,8 +31,9 @@ describe('the credential the posts MCP server is called with', () => {
   it('is nothing outside a turn, or for a caller with no bearer', () => {
     expect(provider.tokens()).toBeUndefined();
     expect(
-      callers.run({ isAuthenticated: false, userName: '' }, () =>
-        provider.tokens(),
+      AgentRunContext.within(
+        { isAuthenticated: false, userName: '', tenant: '', actorId: '' },
+        () => provider.tokens(),
       ),
     ).toBeUndefined();
   });

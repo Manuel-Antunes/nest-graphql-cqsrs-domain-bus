@@ -11,8 +11,7 @@ import { CallbackHandler } from '@langfuse/langchain';
 import { propagateAttributes } from '@langfuse/tracing';
 import { Observable, type Subscriber } from 'rxjs';
 
-import { A2aTenancy } from '../../a2a/server/a2a-tenancy';
-import type { AgentCaller } from '../../agents/callers/agent-caller';
+import { AgentRunContext } from '../../agents/context/agent-run-context';
 import type { AgUiRuntimeContext } from './ag-ui.middleware';
 import { AgUiMessages } from './ag-ui-messages';
 import { AgUiProtocolTranslator } from './ag-ui-protocol.translator';
@@ -25,7 +24,6 @@ export interface AgUiGraph {
 export interface LangChainAgUiAgentConfig extends AgentConfig {
   readonly graph: AgUiGraph;
   readonly traceName?: string;
-  readonly callerOf?: () => AgentCaller | undefined;
 }
 
 type GetState = (config: unknown) => Promise<{
@@ -103,14 +101,13 @@ export class LangChainAgUiAgent extends AbstractAgent {
     subscriber.next({ type: EventType.RUN_STARTED, threadId, runId });
     try {
       const traceName = this.config.traceName ?? 'ag-ui-agent';
-      const caller = this.config.callerOf?.();
-      const userId = caller?.isAuthenticated ? caller.userName : undefined;
-      const tenant = A2aTenancy.tenantOf(caller) || undefined;
+      const agent = AgentRunContext.current();
+      const userId = agent?.isAuthenticated ? agent.userName : undefined;
       const configurable = {
         thread_id: threadId,
         user_id: userId,
-        actor_id: A2aTenancy.actorOf(tenant, caller),
-        tenant,
+        actor_id: agent?.actorId,
+        tenant: agent?.tenant,
       };
       await propagateAttributes(
         {
@@ -136,6 +133,7 @@ export class LangChainAgUiAgent extends AbstractAgent {
               signal,
               callbacks: [new CallbackHandler()],
               context: {
+                [AgentRunContext.KEY]: agent,
                 agUi: {
                   tools: input.tools,
                   context: input.context,

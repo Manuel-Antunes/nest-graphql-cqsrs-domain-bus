@@ -1,9 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConditionalModule, ConfigModule } from '@nestjs/config';
-import { AgentCoreAgUiModule } from '@nestposts/ai/ag-ui/agentcore/agentcore-ag-ui.module';
 import { AgUiModule } from '@nestposts/ai/ag-ui/server/ag-ui.module';
-import { PlatformCallers } from '@nestposts/ai/agents/callers/platform-callers';
-import { PlatformCallersModule } from '@nestposts/ai/agents/callers/platform-callers.module';
 import { AuthInfrastructureModule } from '@nestposts/auth/infrastructure/auth-infrastructure.module';
 import { DatabaseModule } from '@nestposts/database';
 import { loggingModuleAsync } from '@nestposts/observability';
@@ -14,6 +11,8 @@ import { RedisModule } from '@nestposts/redis';
 
 import { TheoAgent } from './agent/theo.agent';
 import { TheoModule } from './agent/theo.module';
+import { AgentContextsModule } from './agent-context/agent-contexts.module';
+import { PlatformAgentContexts } from './agent-context/platform-agent-contexts';
 import { agentsConfig } from './config/agents.config';
 import type { AppConfig } from './config/app.config';
 import { appConfig } from './config/app.config';
@@ -63,22 +62,12 @@ import { webSearchConfig } from './config/web-search.config';
       imports: [OrganizationsInfrastructureModule],
     }),
     TheoModule,
-    AgentCoreAgUiModule.registerAsync({
-      imports: [
-        AgUiModule.registerAsync({
-          imports: [PlatformCallersModule, TheoModule],
-          inject: [PlatformCallers],
-          useFactory: (callers: PlatformCallers) => ({
-            agentProviders: [TheoAgent],
-            resolveUser: (headers) => callers.resolve(headers),
-          }),
-        }),
-      ],
-      inject: [appConfig.KEY],
-      useFactory: ({ port, host }: AppConfig) => ({
-        agent: TheoAgent,
-        port,
-        host,
+    AgUiModule.registerAsync({
+      imports: [AgentContextsModule, TheoModule],
+      inject: [PlatformAgentContexts],
+      useFactory: (contexts: PlatformAgentContexts) => ({
+        agentProviders: [TheoAgent],
+        context: (request) => contexts.of(request),
       }),
     }),
   ],

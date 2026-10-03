@@ -15,12 +15,12 @@ apps/web ─ CopilotRuntime (v2) ─ HttpAgent ─Bearer (DelegatedAccessTokens)
                                                                             ▼
                       AgentCore (JWT authorizer, aud = Theo; AG-UI, POST /invocations, SSE)
                                                                             │
-apps/theo-agent ─ Nest application context                                 │
-  AgentCoreAgUiServer (libs/ai) ← AgUiRegistry.resolve(TheoAgent) ◀────────┘
-  PlatformCallers (libs/ai) ← IdentityResolver (libs/auth)
+apps/theo-agent ─ Nest application (Fastify), created in main.ts            │
+  AgentCoreAgUiServer (libs/ai), handed the app ← AgUiRegistry.resolve ◀────┘
+  PlatformAgentContexts (this app) ← IdentityResolver (libs/auth)
   TheoAgent (@AgUiAgent): LangChainAgUiAgent over
      createAgent(BASE_MODEL, send_message_to_a2a_agent, search_the_web)
-     │  A2A JSON-RPC, the same Bearer (CallerBearerFetch),     │  MCP, SigV4 as Theo's role
+     │  A2A JSON-RPC, the same Bearer (bearerFetch),           │  MCP, SigV4 as Theo's role
      │  contextId = session = the thread                      │  (bedrock-agentcore/web-search)
      ▼                                                         ▼
 AgentCore (JWT authorizer, aud = posts agent)          AgentCore Gateway (AWS_IAM) with the
@@ -37,9 +37,11 @@ guards the card too), puts their roster in the system prompt, gives the model on
 gateway (below) — and wraps the LangChain agent in a `LangChainAgUiAgent`. A build that fails — a posts agent still cold — is built again on the next run.
 The model is `@Inject('BASE_MODEL')`, a `useExisting` alias of the `ChatBedrockConverse` provider.
 
-`main.ts` boots an application context and starts `AgentCoreAgUiServer`: AgentCore Runtime's AG-UI
+`main.ts` creates the Nest application (`NestFactory.create(AppModule, new FastifyAdapter())`) and
+hands it to `AgentCoreAgUiServer`, which registers AgentCore Runtime's AG-UI
 contract on `0.0.0.0:8080` — `POST /invocations` answered as server-sent events, `GET /ping` —
-admitting a request only once `PlatformCallers` has read its bearer as a person of the platform.
+admitting a request only once `PlatformAgentContexts` (`src/agent-context/`, the `AgUiModule`'s
+`context`) has read its bearer as a person of the platform.
 `libs/ai/README.md` has the host, the translation from LangGraph's stream to AG-UI's events and the
 delegation.
 
@@ -80,14 +82,14 @@ The web asks Theo with an access token its own Better Auth issued for whoever is
 (`DelegatedAccessTokens`, `libs/auth`), addressed to Theo, the posts agent and the posts MCP server;
 `scripts/theo-console.mjs` asks the authorization server for the same token through the OAuth
 authorization code grant. AgentCore's authorizer checks it against the issuer's discovery document and
-Theo's audience; Theo reads it as the gateway reads a caller (`PlatformCallers`: `libs/auth`'s
+Theo's audience; Theo reads it as the gateway reads a caller (`PlatformAgentContexts`: `libs/auth`'s
 `IdentityResolver` for a request made of the invocation's headers, the same Better Auth on Postgres and
 Redis), so it runs in the VPC, and refuses with an AG-UI `RUN_ERROR` (`401`) a token for another
 resource or for nobody the platform knows. The token also says the organization the person is in
 (`organization_id`), which is the run's tenant: the posts agent is reached in it (A2A's `tenant`), and
 every memory below is kept under `tenant:user`, so the same person in two organizations has two
-histories. Every run happens in the caller's scope (`AgentCallers`),
-and every call to the posts agent carries that caller's token (`CallerBearerFetch`) — Theo holds no
+histories. Every run happens in the caller's context (`AgentRunContext`),
+and every call to the posts agent carries that caller's token (`AgentRunContext.bearerFetch()`) — Theo holds no
 credential of its own.
 
 ## What the client sees

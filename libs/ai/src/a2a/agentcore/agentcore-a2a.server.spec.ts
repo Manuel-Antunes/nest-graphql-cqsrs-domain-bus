@@ -12,31 +12,32 @@ import {
   type AgentExecutor,
   InMemoryTaskStore,
   type RequestContext,
-  type User,
 } from '@a2a-js/sdk/server';
-import type { ModuleRef } from '@nestjs/core';
-import { UserIdentity } from '@nestposts/auth/domain/auth/vo/user-identity';
+import type { INestApplication } from '@nestjs/common';
+import { FastifyAdapter } from '@nestjs/platform-fastify';
+import { Test } from '@nestjs/testing';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { AgentCallers } from '../../agents/callers/agent-callers';
-import { PlatformCaller } from '../../agents/callers/platform-caller';
-import { A2aRegistry } from '../server/a2a.registry';
+import type { AgentContext } from '../../agents/context/agent-context';
+import { A2aModule } from '../server/a2a.module';
 import { A2aAgent } from '../server/a2a-agent.decorator';
-import { A2aAgentResolver } from '../server/a2a-agent.resolver';
 import type { A2aModuleOptions } from '../server/a2a-module.options';
-import type { AgentCoreA2aOptions } from './agentcore-a2a.options';
 import { AgentCoreA2aServer } from './agentcore-a2a.server';
 
 const TOKEN = 'a-verified-token';
 const ACME_TOKEN = 'a-token-of-acme';
 
-class BearerUser implements User {
-  constructor(readonly userName: string) {}
-
-  get isAuthenticated(): boolean {
-    return true;
-  }
-}
+const contextOf = (
+  userName: string,
+  tenant: string,
+  credential: string,
+): AgentContext => ({
+  isAuthenticated: true,
+  userName,
+  tenant,
+  actorId: tenant ? `${tenant}:${userName}` : userName,
+  credential,
+});
 
 class EchoExecutor implements AgentExecutor {
   readonly callers: (string | undefined)[] = [];
@@ -96,10 +97,10 @@ const SECURITY = {
   securityRequirements: [{ schemes: { bearer: { list: [] } } }],
 };
 
-let agentCore: AgentCoreA2aServer | undefined;
+let agentCore: INestApplication | undefined;
 
 afterEach(async () => {
-  await agentCore?.onApplicationShutdown();
+  await agentCore?.close();
   agentCore = undefined;
   executor.callers.length = 0;
   executor.tenants.length = 0;
@@ -114,23 +115,16 @@ async function freePort(): Promise<number> {
 }
 
 async function listening(): Promise<string> {
+  const port = await freePort();
+  const base = `http://127.0.0.1:${port}`;
   const options = {
     baseUrl: 'https://agent.test',
     agentProviders: [EchoAgent],
-    resolveUser: async (headers: Record<string, unknown>) =>
+    context: async ({ headers }) =>
       headers.authorization === `Bearer ${TOKEN}`
-        ? new BearerUser('user-1')
+        ? contextOf('user-1', '', TOKEN)
         : headers.authorization === `Bearer ${ACME_TOKEN}`
-          ? new PlatformCaller(
-              UserIdentity.parse({
-                userId: 'user-2',
-                email: 'bia@acme.test',
-                name: 'Bia',
-                scopes: [],
-              }),
-              ACME_TOKEN,
-              'acme',
-            )
+          ? contextOf('user-2', 'acme', ACME_TOKEN)
           : undefined,
     card: {
       name: 'Echo',
@@ -140,29 +134,17 @@ async function listening(): Promise<string> {
       defaultOutputModes: ['text'],
       ...SECURITY,
     },
-  } as unknown as A2aModuleOptions;
-  const moduleRef = {
-    get: (Provider: new () => unknown) => new Provider(),
-    resolve: async (Provider: new () => unknown) => new Provider(),
-  } as unknown as ModuleRef;
-  const callers = new AgentCallers();
-  const registry = new A2aRegistry(options, moduleRef, callers);
-  await registry.onModuleInit();
-
-  const port = await freePort();
-  const base = `http://127.0.0.1:${port}`;
-  agentCore = new AgentCoreA2aServer(
-    new A2aAgentResolver(registry),
-    callers,
-    options,
-    {
-      port,
-      host: '127.0.0.1',
-      agent: EchoAgent,
-      url: `${base}/`,
-    } satisfies AgentCoreA2aOptions,
-  );
-  await agentCore.listen();
+  } as A2aModuleOptions;
+  const testing = await Test.createTestingModule({
+    imports: [A2aModule.register(options)],
+  }).compile();
+  agentCore = testing.createNestApplication(new FastifyAdapter(), {
+    logger: false,
+  });
+  await new AgentCoreA2aServer(agentCore, {
+    agent: EchoAgent,
+    url: `${base}/`,
+  }).listen(port, '127.0.0.1');
   return base;
 }
 

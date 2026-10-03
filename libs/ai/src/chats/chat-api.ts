@@ -1,6 +1,6 @@
 import { Logger } from '@nestjs/common';
 
-import type { PlatformCaller } from '../agents/callers/platform-caller';
+import type { AgentContext } from '../agents/context/agent-context';
 
 export interface ChatRecord {
   readonly id: string;
@@ -20,13 +20,13 @@ export class ChatApi {
     private readonly fetchImpl: typeof fetch = fetch,
   ) {}
 
-  async record(chat: ChatRecord, caller: PlatformCaller): Promise<void> {
+  async record(chat: ChatRecord, caller: AgentContext): Promise<void> {
     try {
       const response = await this.fetchImpl(this.url, {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
-          authorization: `Bearer ${caller.accessToken}`,
+          authorization: `Bearer ${caller.credential}`,
           'x-tenant': caller.tenant,
         },
         body: JSON.stringify({

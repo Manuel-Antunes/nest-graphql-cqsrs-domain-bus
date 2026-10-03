@@ -507,8 +507,9 @@ libs/clients             domain/client (a Client of the tenant's organization: C
                          `clients` GraphQL surface live in apps/posts-api; its Chatwoot contacts are
                          federated onto it by the `chatwoot` subgraph (see Chatwoot)
 libs/ai                  the agents' runtime (being migrated in): what every agent shares whatever it
-                         speaks (agents/: its callers — AgentCallers, PlatformCallers — and
-                         AgentCoreHost), A2A hosting with its extensions as classes (a2a/domain,
+                         speaks (agents/: AgentContext — who and where a run is for, which each
+                         application builds per request — AgentRunContext and AgentCoreHealth),
+                         A2A hosting with its extensions as classes (a2a/domain,
                          a2a/server, a2a/langchain) and on Amazon Bedrock AgentCore Runtime
                          (a2a/agentcore), AG-UI hosting (ag-ui/server, ag-ui/agentcore: POST
                          /invocations on :8080) with LangChain over it (ag-ui/langchain:
@@ -1484,18 +1485,29 @@ Their READMEs, `libs/ai/README.md` and `infra/aws/README.md` are the guides; the
   decorator holds the static card, the instance the card fields configuration decides, its skills —
   `Skill` entities, which the card advertises without their bodies and the model reads on demand from
   `/skills/` (`SkillsBackend.mount`, `SubAgentMiddleware.for`) — and an `executor` that may be a
-  function `libs/ai` builds on the first turn, inside the caller's scope. The model is injected as
+  function `libs/ai` builds on the first turn, inside the caller's context. The model is injected as
   `@Inject('BASE_MODEL')`, a `useExisting` alias of the `ChatBedrockConverse` provider.
-  `main.ts` boots a Nest application context; `AgentCoreA2aServer` asks `A2aAgentResolver` for the
-  agent — card, hosted executor, task store — and hands it to `bedrock-agentcore`'s `buildA2AApp`,
-  with the registry's `resolveUser` in front of it.
+  **`main.ts` creates the Nest application** (`NestFactory.create(AppModule, new FastifyAdapter())`)
+  and hands it to the protocol's host — `new AgentCoreA2aServer(app, { agent, url }).listen(port,
+  host)`, `new AgentCoreAgUiServer(app, { agent })` for Theo — which registers AgentCore's contract on
+  that app with `app.use` and never builds or picks an adapter. The A2A host serves the agent the
+  registry resolves with `@a2a-js/sdk`'s express handlers, 1.0 and 0.3 on `POST /`.
+- **Who calls is the application's to say.** `A2aModule` and `AgUiModule` take a `context` option,
+  `(request) => Promise<AgentContext | undefined>`, as `GraphQLModule` takes one: each agent's
+  `PlatformAgentContexts` resolves `libs/auth`'s request-scoped `IdentityResolver` for the request
+  under a context id of its own (the gateway's way) and the tenant with `TenantOrganizations`, so
+  `libs/ai` knows neither MikroORM nor organizations. No context is a `401` before anything runs. The
+  context travels to the graph as LangGraph's runtime `context` (`context.agent`, never
+  checkpointed), and `AgentRunContext` carries it where no parameter can — LangChain's ambient config
+  drops `context` inside a nested runnable, and the MCP SDK asks its `OAuthClientProvider` from inside
+  the tool.
 - **Everything acts as the caller.** One token, asked for with both resources
   (`resource=<agent>&resource=<mcp>`): AgentCore's JWT authorizers check it against the issuer's
   discovery document (served by the gateway), the agent reads it as the gateway reads a caller —
   `libs/auth`'s `IdentityResolver`, resolved for a request made of the invocation's headers, the
-  `Identity` it answers turned into the A2A `User` (`PlatformCaller`) — so the agent holds the same
+  `Identity` it answers turned into the A2A `User` (`PlatformAgentContext`) — so the agent holds the same
   Better Auth, on Postgres and Redis, and runs in the VPC; every turn runs in the
-  caller's scope (`AgentCallers`), and the MCP client reads the token there per request
+  caller's context (`AgentRunContext`), and the MCP client reads the token there per request
   (`CallerBearerAuthProvider`, an MCP SDK `OAuthClientProvider`), Apollo MCP
   Server validates it and passes it to the gateway, and every Better Auth process accepts the MCP
   server's audience. Nothing holds a credential of its own.
@@ -1503,7 +1515,7 @@ Their READMEs, `libs/ai/README.md` and `infra/aws/README.md` are the guides; the
   runtime's authorizer cannot name the ARN its invocation URL is made of.
 - **Everything an agent keeps is the tenant's and the person's.** The token the web delegates carries
   the person's active organization (`organization_id`), which `oauth-bearer-session` makes the
-  session's and `PlatformCallers` resolves to the tenant; the actor of every memory is `tenant:user`.
+  session's and `PlatformAgentContexts` resolves to the tenant; the actor of every memory is `tenant:user`.
   The A2A agents are multi-tenant in A2A's own sense: the card served to a caller names their tenant,
   `@a2a-js/sdk`'s client puts it on every request, and a request naming another is refused
   (`TenantScopedCallContext`). AG-UI and AgentCore have no tenant field; it rides the caller.
@@ -1521,7 +1533,8 @@ Their READMEs, `libs/ai/README.md` and `infra/aws/README.md` are the guides; the
   thread.
 - **Theo is the same shape over AG-UI.** `@AgUiAgent` on a provider whose `agent` is a function built
   on the first run; `AgentCoreAgUiServer` serves AgentCore's AG-UI contract (`POST /invocations`,
-  server-sent events; `GET /ping`) with the same admission as the A2A host (`AgentCoreHost`);
+  server-sent events; `GET /ping`) on the app `main.ts` created, with the same admission as the A2A
+  host (`AgentContexts.admits`);
   `LangChainAgUiAgent` turns LangGraph's v3 stream into AG-UI events. Its tools are
   `send_message_to_a2a_agent` (`libs/ai`'s `a2a/client`): the posts agent called over A2A with the
   caller's token, its answer streamed to the client as an AG-UI subagent of the call, Theo's thread

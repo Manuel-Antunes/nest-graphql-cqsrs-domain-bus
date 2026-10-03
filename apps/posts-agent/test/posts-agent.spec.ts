@@ -11,18 +11,20 @@ import type { CallbackManagerForLLMRun } from '@langchain/core/callbacks/manager
 import type { BaseMessage } from '@langchain/core/messages';
 import type { ChatGenerationChunk } from '@langchain/core/outputs';
 import { tool } from '@langchain/core/tools';
-import type { INestApplicationContext } from '@nestjs/common';
+import type { INestApplication } from '@nestjs/common';
+import { FastifyAdapter } from '@nestjs/platform-fastify';
 import { Test } from '@nestjs/testing';
 import { AgentCoreA2aServer } from '@nestposts/ai/a2a/agentcore/agentcore-a2a.server';
 import { ScriptedModel } from '@nestposts/ai/a2a/langchain/testing/scripted-model';
-import { AgentCallers } from '@nestposts/ai/agents/callers/agent-callers';
-import { PlatformCaller } from '@nestposts/ai/agents/callers/platform-caller';
+import { AgentRunContext } from '@nestposts/ai/agents/context/agent-run-context';
 import type { BetterAuth } from '@nestposts/auth/infrastructure/better-auth/init-auth';
 import { BETTER_AUTH } from '@nestposts/auth/infrastructure/better-auth/tokens';
 import { inRequestContext, MikroORM } from '@nestposts/database';
 import { migrateSystem } from '@nestposts/migrator/main';
 import { z } from 'zod';
 
+import { PostsManagerAgent } from '../src/agent/posts-manager.agent';
+import type { PlatformAgentContext } from '../src/agent-context/platform-agent-context';
 import { PostsMcpApps } from '../src/mcp/posts-mcp-apps';
 import { PostsMcpTools } from '../src/mcp/posts-mcp-tools';
 
@@ -54,7 +56,7 @@ class RecordingModel extends ScriptedModel {
 }
 
 describe('the posts agent, as AgentCore Runtime runs it', () => {
-  let app: INestApplicationContext;
+  let app: INestApplication;
   let base: string;
   const model = new RecordingModel([
     {
@@ -69,7 +71,7 @@ describe('the posts agent, as AgentCore Runtime runs it', () => {
     { toolCalls: [{ id: 'call-2', name: 'WhoAmI', args: {} }] },
     { text: ['You are ', 'Ana.'] },
   ]);
-  const callersSeen: (PlatformCaller | undefined)[] = [];
+  const callersSeen: (PlatformAgentContext | undefined)[] = [];
 
   const auth = () => app.get<BetterAuth>(BETTER_AUTH);
   const inContext = <T>(work: () => Promise<T>) =>
@@ -100,10 +102,11 @@ describe('the posts agent, as AgentCore Runtime runs it', () => {
     await migrateSystem();
     const { AppModule } = await import('../src/app.module');
 
-    let callers: AgentCallers | undefined;
     const whoAmI = tool(
       async () => {
-        callersSeen.push(callers?.currentAs(PlatformCaller));
+        callersSeen.push(
+          AgentRunContext.current() as PlatformAgentContext | undefined,
+        );
         return JSON.stringify({ data: { me: { name: 'Ana' } } });
       },
       {
@@ -120,9 +123,13 @@ describe('the posts agent, as AgentCore Runtime runs it', () => {
       .overrideProvider(PostsMcpApps)
       .useValue({ load: async () => [] })
       .compile();
-    app = await moduleRef.init();
-    callers = app.get(AgentCallers);
-    await app.get(AgentCoreA2aServer).listen();
+    app = moduleRef.createNestApplication(new FastifyAdapter(), {
+      logger: false,
+    });
+    await new AgentCoreA2aServer(app, {
+      agent: PostsManagerAgent,
+      url: `${base}/`,
+    }).listen(port, '127.0.0.1');
   });
 
   afterAll(async () => {
@@ -206,7 +213,7 @@ describe('the posts agent, as AgentCore Runtime runs it', () => {
 
     expect(textOf(answer)).toContain('You are Ana.');
     expect(callersSeen).toHaveLength(1);
-    expect(callersSeen[0]?.accessToken).toBe(token);
+    expect(callersSeen[0]?.credential).toBe(token);
     expect(callersSeen[0]?.userName).toBe(user.id);
     expect(callersSeen[0]?.identity.kind).toBe('user');
     expect(callersSeen[0]?.identity.scopes).toEqual([

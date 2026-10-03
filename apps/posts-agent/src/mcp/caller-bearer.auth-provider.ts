@@ -3,8 +3,7 @@ import type {
   OAuthClientMetadata,
   OAuthTokens,
 } from '@modelcontextprotocol/sdk/shared/auth.js';
-import type { AgentCallers } from '@nestposts/ai/agents/callers/agent-callers';
-import { PlatformCaller } from '@nestposts/ai/agents/callers/platform-caller';
+import { AgentRunContext } from '@nestposts/ai/agents/context/agent-run-context';
 
 export class CallerNotAuthorizedError extends Error {
   constructor() {
@@ -16,8 +15,6 @@ export class CallerNotAuthorizedError extends Error {
 }
 
 export class CallerBearerAuthProvider implements OAuthClientProvider {
-  constructor(private readonly callers: AgentCallers) {}
-
   get redirectUrl(): undefined {
     return undefined;
   }
@@ -31,9 +28,9 @@ export class CallerBearerAuthProvider implements OAuthClientProvider {
   }
 
   tokens(): OAuthTokens | undefined {
-    const caller = this.callers.currentAs(PlatformCaller);
-    return caller
-      ? { access_token: caller.accessToken, token_type: 'Bearer' }
+    const credential = AgentRunContext.current()?.credential;
+    return credential
+      ? { access_token: credential, token_type: 'Bearer' }
       : undefined;
   }
 

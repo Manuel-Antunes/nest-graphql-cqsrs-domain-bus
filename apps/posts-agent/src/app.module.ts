@@ -1,9 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConditionalModule, ConfigModule } from '@nestjs/config';
-import { AgentCoreA2aModule } from '@nestposts/ai/a2a/agentcore/agentcore-a2a.module';
 import { A2aModule } from '@nestposts/ai/a2a/server/a2a.module';
-import { PlatformCallers } from '@nestposts/ai/agents/callers/platform-callers';
-import { PlatformCallersModule } from '@nestposts/ai/agents/callers/platform-callers.module';
 import { AuthInfrastructureModule } from '@nestposts/auth/infrastructure/auth-infrastructure.module';
 import { DatabaseModule } from '@nestposts/database';
 import { loggingModuleAsync } from '@nestposts/observability';
@@ -14,6 +11,8 @@ import { RedisModule } from '@nestposts/redis';
 
 import { PostsManagerAgent } from './agent/posts-manager.agent';
 import { PostsManagerModule } from './agent/posts-manager.module';
+import { AgentContextsModule } from './agent-context/agent-contexts.module';
+import { PlatformAgentContexts } from './agent-context/platform-agent-contexts';
 import type { AppConfig } from './config/app.config';
 import { appConfig } from './config/app.config';
 import { bedrockConfig } from './config/bedrock.config';
@@ -61,24 +60,13 @@ import { redisConfig } from './config/redis.config';
       imports: [OrganizationsInfrastructureModule],
     }),
     PostsManagerModule,
-    AgentCoreA2aModule.registerAsync({
-      imports: [
-        A2aModule.registerAsync({
-          imports: [PostsManagerModule, PlatformCallersModule],
-          inject: [appConfig.KEY, PlatformCallers],
-          useFactory: (app: AppConfig, callers: PlatformCallers) => ({
-            baseUrl: app.url ?? `http://localhost:${app.port}/`,
-            agentProviders: [PostsManagerAgent],
-            resolveUser: (headers) => callers.resolve(headers),
-          }),
-        }),
-      ],
-      inject: [appConfig.KEY],
-      useFactory: ({ port, host, url }: AppConfig) => ({
-        agent: PostsManagerAgent,
-        port,
-        host,
-        url,
+    A2aModule.registerAsync({
+      imports: [PostsManagerModule, AgentContextsModule],
+      inject: [appConfig.KEY, PlatformAgentContexts],
+      useFactory: (app: AppConfig, contexts: PlatformAgentContexts) => ({
+        baseUrl: app.url ?? `http://localhost:${app.port}/`,
+        agentProviders: [PostsManagerAgent],
+        context: (request) => contexts.of(request),
       }),
     }),
   ],

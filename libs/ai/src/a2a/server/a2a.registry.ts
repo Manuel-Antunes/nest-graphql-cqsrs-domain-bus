@@ -18,7 +18,6 @@ import {
 } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 
-import { AgentCallers } from '../../agents/callers/agent-callers';
 import { AgentExtensions } from '../domain/agent-extensions';
 import {
   type A2aAgent,
@@ -29,7 +28,7 @@ import {
   type A2aSkillConfig,
 } from './a2a-agent.decorator';
 import { A2aModuleOptions } from './a2a-module.options';
-import { CallerScopedExecutor } from './caller-scoped.executor';
+import { ContextScopedExecutor } from './context-scoped.executor';
 import { ExtensionAwareAgentExecutor } from './extension-aware.executor';
 import {
   type A2aExecutorFactory,
@@ -86,7 +85,6 @@ export class A2aRegistry implements OnModuleInit {
   constructor(
     @Inject(A2aModuleOptions) private readonly options: A2aModuleOptions,
     private readonly moduleRef: ModuleRef,
-    private readonly callers: AgentCallers = new AgentCallers(),
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -96,10 +94,7 @@ export class A2aRegistry implements OnModuleInit {
       agent.card = this.buildAgentCard(agent);
       this.assertDiscoverable(agent);
       agent.hostedExecutor = new ExtensionAwareAgentExecutor(
-        new CallerScopedExecutor(
-          this.callers,
-          LazyAgentExecutor.of(agent.executor),
-        ),
+        new ContextScopedExecutor(LazyAgentExecutor.of(agent.executor)),
         this.extensions,
       );
       agent.requestHandler = this.buildRequestHandler(agent);

@@ -23,6 +23,7 @@ import {
   type NestMiddleware,
 } from '@nestjs/common';
 
+import { AgentContexts } from '../../agents/context/agent-context';
 import { A2aRegistry, UnknownAgentReferenceError } from './a2a.registry';
 import { A2aModuleOptions } from './a2a-module.options';
 
@@ -147,19 +148,9 @@ export class A2aProtocolMiddleware implements NestMiddleware {
     return AgentCardCodec.toJSON(this.registry.getAgentCard(reference));
   }
 
-  private async resolveUser(req: IncomingMessage): Promise<User | undefined> {
-    const resolve = this.options.resolveUser;
-    if (!resolve) return undefined;
-    return (
-      (await resolve(
-        req.headers as Record<string, string | string[] | undefined>,
-      )) ?? undefined
-    );
-  }
-
   private async buildContext(req: IncomingMessage): Promise<ServerCallContext> {
-    const user = await this.resolveUser(req);
-    if (!user && this.options.allowAnonymous !== true) {
+    const user = await AgentContexts.of(this.options, req, this.logger);
+    if (!AgentContexts.admits(this.options, user)) {
       throw new UnauthenticatedError();
     }
 

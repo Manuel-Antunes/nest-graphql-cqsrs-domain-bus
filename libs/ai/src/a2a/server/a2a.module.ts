@@ -7,7 +7,6 @@ import {
   RequestMethod,
 } from '@nestjs/common';
 
-import { AgentCallersModule } from '../../agents/callers/agent-callers.module';
 import { A2aRegistry } from './a2a.registry';
 import { A2aAgentResolver } from './a2a-agent.resolver';
 import {
@@ -32,7 +31,6 @@ export class A2aModule implements NestModule {
   static register(options: A2aModuleOptions): DynamicModule {
     return {
       module: A2aModule,
-      imports: [AgentCallersModule],
       providers: [
         { provide: A2aModuleOptions, useValue: options },
         A2aRegistry,
@@ -48,7 +46,7 @@ export class A2aModule implements NestModule {
     const basePath = options.basePath ?? 'a2a';
     return {
       module: A2aModule,
-      imports: [AgentCallersModule, ...(options.imports ?? [])],
+      imports: [...(options.imports ?? [])],
       providers: [
         {
           provide: A2aModuleOptions,

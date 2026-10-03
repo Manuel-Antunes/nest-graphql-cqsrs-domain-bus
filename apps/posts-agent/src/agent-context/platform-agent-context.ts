@@ -1,12 +1,11 @@
+import type { AgentContext } from '@nestposts/ai/agents/context/agent-context';
+import { AgentMemories } from '@nestposts/ai/checkpoint/agent-memories';
 import type { Identity } from '@nestposts/auth/domain/auth/vo/identity';
 
-import { AgentMemories } from '../../checkpoint/agent-memories';
-import type { AgentCaller } from './agent-caller';
-
-export class PlatformCaller implements AgentCaller {
+export class PlatformAgentContext implements AgentContext {
   constructor(
     readonly identity: Identity,
-    readonly accessToken: string,
+    readonly credential: string,
     readonly tenant: string,
   ) {}
 

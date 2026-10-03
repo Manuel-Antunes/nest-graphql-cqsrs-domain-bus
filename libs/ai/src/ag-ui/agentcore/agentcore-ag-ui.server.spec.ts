@@ -7,34 +7,35 @@ import {
   HttpAgent,
   type RunAgentInput,
 } from '@ag-ui/client';
-import type { ModuleRef } from '@nestjs/core';
+import type { INestApplication } from '@nestjs/common';
+import { FastifyAdapter } from '@nestjs/platform-fastify';
+import { Test } from '@nestjs/testing';
 import { Observable } from 'rxjs';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import type { AgentCaller } from '../../agents/callers/agent-caller';
-import { AgentCallers } from '../../agents/callers/agent-callers';
-import { AgUiRegistry } from '../server/ag-ui.registry';
+import type { AgentContext } from '../../agents/context/agent-context';
+import { AgentRunContext } from '../../agents/context/agent-run-context';
+import { AgUiModule } from '../server/ag-ui.module';
 import { AgUiAgent } from '../server/ag-ui-agent.decorator';
 import type { AgUiModuleOptions } from '../server/ag-ui-module.options';
 import { AgentCoreAgUiServer } from './agentcore-ag-ui.server';
 
 const TOKEN = 'a-verified-token';
 
-class BearerUser implements AgentCaller {
-  constructor(readonly userName: string) {}
+const caller: AgentContext = {
+  isAuthenticated: true,
+  userName: 'user-1',
+  tenant: '',
+  actorId: 'user-1',
+  credential: TOKEN,
+};
 
-  get isAuthenticated(): boolean {
-    return true;
-  }
-}
-
-const callers = new AgentCallers();
 const seen: (string | undefined)[] = [];
 let release: (() => void) | undefined;
 
 class EchoAgent extends AbstractAgent {
   run(input: RunAgentInput): Observable<BaseEvent> {
-    seen.push(callers.current()?.userName);
+    seen.push(AgentRunContext.current()?.userName);
     return new Observable<BaseEvent>((subscriber) => {
       void (async () => {
         const { threadId, runId } = input;
@@ -76,10 +77,10 @@ class EchoProvider implements AgUiAgent {
   };
 }
 
-let host: AgentCoreAgUiServer | undefined;
+let host: INestApplication | undefined;
 
 afterEach(async () => {
-  await host?.onApplicationShutdown();
+  await host?.close();
   host = undefined;
   seen.length = 0;
   release = undefined;
@@ -97,22 +98,17 @@ async function freePort(): Promise<number> {
 async function listening(): Promise<string> {
   const options = {
     agentProviders: [EchoProvider],
-    resolveUser: async (headers: Record<string, unknown>) =>
-      headers.authorization === `Bearer ${TOKEN}`
-        ? new BearerUser('user-1')
-        : undefined,
+    context: async ({ headers }) =>
+      headers.authorization === `Bearer ${TOKEN}` ? caller : undefined,
   } satisfies AgUiModuleOptions;
-  const moduleRef = {
-    get: (Provider: new () => unknown) => new Provider(),
-  } as unknown as ModuleRef;
-  const registry = new AgUiRegistry(options, moduleRef);
-  await registry.onModuleInit();
-  const port = await freePort();
-  host = new AgentCoreAgUiServer(registry, callers, options, {
-    port,
-    host: '127.0.0.1',
+  const testing = await Test.createTestingModule({
+    imports: [AgUiModule.register(options)],
+  }).compile();
+  host = testing.createNestApplication(new FastifyAdapter(), {
+    logger: false,
   });
-  await host.listen();
+  const port = await freePort();
+  await new AgentCoreAgUiServer(host).listen(port, '127.0.0.1');
   return `http://127.0.0.1:${port}`;
 }
 

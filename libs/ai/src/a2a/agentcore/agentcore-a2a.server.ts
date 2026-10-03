@@ -1,98 +1,65 @@
-import type {
-  IncomingMessage,
-  RequestListener,
-  ServerResponse,
-} from 'node:http';
+import type { IncomingMessage, ServerResponse } from 'node:http';
 import { A2A_PROTOCOL_VERSION, type AgentCard } from '@a2a-js/sdk';
 import { duplicateInterfacesForLegacy } from '@a2a-js/sdk/compat/v0_3';
-import { agentCardHandler } from '@a2a-js/sdk/server/express';
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { DefaultRequestHandler, type User } from '@a2a-js/sdk/server';
+import {
+  agentCardHandler,
+  jsonRpcHandler,
+  UserBuilder,
+} from '@a2a-js/sdk/server/express';
+import { type INestApplication, Logger, type Type } from '@nestjs/common';
 import {
   agentCoreRuntimeUrl,
   bedrockCallContextBuilder,
-  buildA2AApp,
 } from 'bedrock-agentcore/runtime/a2a';
-import express from 'express';
+import express, { type Express, type Request } from 'express';
 
-import { AgentCoreHost } from '../../agents/agentcore/agentcore-host';
-import { AgentCallers } from '../../agents/callers/agent-callers';
+import { AgentCoreHealth } from '../../agents/agentcore/agentcore-health';
+import {
+  type AgentContext,
+  AgentContexts,
+} from '../../agents/context/agent-context';
+import type { A2aAgent } from '../server/a2a-agent.decorator';
 import { A2aAgentResolver } from '../server/a2a-agent.resolver';
 import { A2aModuleOptions } from '../server/a2a-module.options';
 import { A2aTenancy, TenantScopedCallContext } from '../server/a2a-tenancy';
-import { AgentCoreA2aLogger } from './agentcore-a2a.logger';
-import { AgentCoreA2aOptions } from './agentcore-a2a.options';
 
-@Injectable()
-export class AgentCoreA2aServer extends AgentCoreHost {
+export interface AgentCoreA2aServerOptions {
+  readonly agent?: Type<A2aAgent>;
+  readonly url?: string;
+}
+
+type AdmittedRequest = Request & { agentContext?: AgentContext };
+
+export class AgentCoreA2aServer {
   static readonly CONTRACT_PORT = 9000;
   static readonly CARD_PATH = '/.well-known/agent-card.json';
 
-  protected readonly logger = new Logger(AgentCoreA2aServer.name);
+  private readonly logger = new Logger(AgentCoreA2aServer.name);
+  private readonly health = new AgentCoreHealth();
+  private served?: Express;
 
   constructor(
-    private readonly agents: A2aAgentResolver,
-    callers: AgentCallers,
-    @Inject(A2aModuleOptions) a2a: A2aModuleOptions,
-    @Inject(AgentCoreA2aOptions) private readonly options: AgentCoreA2aOptions,
-  ) {
-    super(callers, a2a, options, AgentCoreA2aServer.CONTRACT_PORT);
-  }
+    private readonly app: INestApplication,
+    private readonly options: AgentCoreA2aServerOptions = {},
+  ) {}
 
-  handler(): RequestListener {
-    const { card, executor, taskStore } = this.agents.resolve(
-      this.agentReference,
+  async listen(
+    port = AgentCoreA2aServer.CONTRACT_PORT,
+    host = '0.0.0.0',
+  ): Promise<void> {
+    this.app.use(
+      (
+        request: IncomingMessage,
+        response: ServerResponse,
+        next: (error?: unknown) => void,
+      ) => {
+        this.served ??= this.contract(port);
+        this.served(request as Request, response as never, next);
+      },
     );
-    const url = this.urlOf(this.port);
-    const app = buildA2AApp({
-      executor,
-      taskStore,
-      port: this.port,
-      agentCard: AgentCoreA2aServer.cardServedAt(card, url),
-      contextBuilder: (options) =>
-        TenantScopedCallContext.of(
-          bedrockCallContextBuilder({
-            ...options,
-            user: this.callers.current() ?? options.user,
-          }),
-          this.callers.current(),
-        ),
-      logger: new AgentCoreA2aLogger(this.logger),
-    }) as RequestListener;
-    const cards = express().use(
-      AgentCoreA2aServer.CARD_PATH,
-      agentCardHandler({
-        agentCardProvider: async () =>
-          AgentCoreA2aServer.cardServedAt(
-            card,
-            url,
-            A2aTenancy.tenantOf(this.callers.current()),
-          ),
-        cache: { maxAge: 0 },
-        legacyCompat: { enabled: true },
-      }),
-    ) as unknown as RequestListener;
-    return (request, response) => {
-      if (
-        request.method === 'GET' &&
-        new URL(request.url ?? '/', 'http://agent').pathname ===
-          AgentCoreA2aServer.CARD_PATH
-      ) {
-        void this.callerOf(request).then((caller) =>
-          this.callers.run(caller, () => cards(request, response)),
-        );
-        return;
-      }
-      if (request.method !== 'POST') {
-        app(request, response);
-        return;
-      }
-      void this.admit(
-        request,
-        response,
-        () => app(request, response),
-        AgentCoreA2aServer.refuse,
-      );
-    };
+    await this.app.listen(port, host);
+    this.logger.log(`AgentCore's A2A contract on ${host}:${port}`);
   }
 
   static cardServedAt(card: AgentCard, url: string, tenant = ''): AgentCard {
@@ -112,24 +79,71 @@ export class AgentCoreA2aServer extends AgentCoreHost {
     };
   }
 
-  protected describe(): string {
-    return `A2A agent "${this.agents.resolve(this.agentReference).card.name}"`;
-  }
-
-  private get agentReference() {
-    return this.options.agent ?? this.options.referenceId;
-  }
-
-  private urlOf(port: number): string {
-    return (
-      this.options.url ?? agentCoreRuntimeUrl() ?? `http://localhost:${port}/`
+  private contract(port: number): Express {
+    const admission = this.app.get(A2aModuleOptions, { strict: false });
+    const { card, executor, taskStore } = this.app
+      .get(A2aAgentResolver, { strict: false })
+      .resolve(this.options.agent);
+    const url =
+      this.options.url ?? agentCoreRuntimeUrl() ?? `http://localhost:${port}/`;
+    const requestHandler = new DefaultRequestHandler(
+      AgentCoreA2aServer.cardServedAt(card, url),
+      taskStore,
+      this.health.tracking(executor),
     );
+    const admit = async (request: AdmittedRequest) => {
+      request.agentContext ??= await AgentContexts.of(
+        admission,
+        request,
+        this.logger,
+      );
+      return request.agentContext;
+    };
+    return express()
+      .get(AgentCoreHealth.PING_PATH, (_request, response) => {
+        response.json(this.health.status());
+      })
+      .use(AgentCoreA2aServer.CARD_PATH, (request, response, next) => {
+        void admit(request).then((context) =>
+          agentCardHandler({
+            agentCardProvider: async () =>
+              AgentCoreA2aServer.cardServedAt(
+                card,
+                url,
+                A2aTenancy.tenantOf(context),
+              ),
+            cache: { maxAge: 0 },
+            legacyCompat: { enabled: true },
+          })(request, response, next),
+        );
+      })
+      .post(
+        '/',
+        (request, response, next) => {
+          void admit(request).then((context) => {
+            if (!AgentContexts.admits(admission, context)) {
+              AgentCoreA2aServer.refuse(response);
+              return;
+            }
+            next();
+          });
+        },
+        jsonRpcHandler({
+          requestHandler,
+          userBuilder: async (request) =>
+            (request as AdmittedRequest).agentContext ??
+            (await UserBuilder.noAuthentication()),
+          contextBuilder: (options) =>
+            TenantScopedCallContext.of(
+              bedrockCallContextBuilder(options),
+              options.user as User | undefined,
+            ),
+          legacyCompat: { enabled: true },
+        }),
+      );
   }
 
-  private static refuse(
-    this: void,
-    response: ServerResponse<IncomingMessage>,
-  ): void {
+  private static refuse(response: ServerResponse): void {
     response.writeHead(401, {
       'Content-Type': 'application/json',
       'WWW-Authenticate': 'Bearer',

@@ -167,11 +167,11 @@ describe('discovery, which must work before any credential exists', () => {
   });
 
   it('does not even ask who is calling', async () => {
-    // Not a detail: `resolveUser` reaches better-auth, and making discovery
+    // Not a detail: the `context` function reaches better-auth, and making discovery
     // depend on the session store would make an agent undiscoverable whenever
     // auth is degraded — for a route whose answer is identical either way.
-    const resolveUser = vi.fn();
-    const { middleware } = build({ resolveUser });
+    const context = vi.fn();
+    const { middleware } = build({ context });
 
     await middleware.use(
       fakeRequest('GET', '/a2a/.well-known/agent-card.json'),
@@ -179,7 +179,7 @@ describe('discovery, which must work before any credential exists', () => {
       () => undefined,
     );
 
-    expect(resolveUser).not.toHaveBeenCalled();
+    expect(context).not.toHaveBeenCalled();
   });
 });
 
@@ -204,7 +204,7 @@ describe('everything else, which must refuse an unidentified caller', () => {
     'refuses %s %s when the credential does not resolve',
     async (method, path, body) => {
       const { middleware, seen } = build({
-        resolveUser: async () => undefined,
+        context: async () => undefined,
       });
       const out = fakeResponse();
 
@@ -236,7 +236,12 @@ describe('everything else, which must refuse an unidentified caller', () => {
 describe('a caller the app did identify', () => {
   it('reaches the agent, carrying the subject id', async () => {
     const { middleware, seen } = build({
-      resolveUser: async () => ({ isAuthenticated: true, userName: 'user-42' }),
+      context: async () => ({
+        isAuthenticated: true,
+        userName: 'user-42',
+        tenant: '',
+        actorId: 'user-42',
+      }),
     });
 
     await middleware.use(
@@ -260,10 +265,13 @@ describe('a caller the app did identify', () => {
   });
 
   it('is resolved from the raw headers the app can actually read', async () => {
-    const resolveUser = vi
-      .fn()
-      .mockResolvedValue({ isAuthenticated: true, userName: 'u' });
-    const { middleware } = build({ resolveUser });
+    const context = vi.fn().mockResolvedValue({
+      isAuthenticated: true,
+      userName: 'u',
+      tenant: '',
+      actorId: 'u',
+    });
+    const { middleware } = build({ context });
 
     await middleware.use(
       fakeRequest('GET', '/a2a/rest/v1/tasks/t1', {
@@ -276,10 +284,12 @@ describe('a caller the app did identify', () => {
 
     // Both credentials survive the hop: the browser session AND the bearer the
     // extension presents. Dropping either silently halves who can call.
-    expect(resolveUser).toHaveBeenCalledWith(
+    expect(context).toHaveBeenCalledWith(
       expect.objectContaining({
-        authorization: 'Bearer good',
-        cookie: 'session=abc',
+        headers: expect.objectContaining({
+          authorization: 'Bearer good',
+          cookie: 'session=abc',
+        }),
       }),
     );
   });

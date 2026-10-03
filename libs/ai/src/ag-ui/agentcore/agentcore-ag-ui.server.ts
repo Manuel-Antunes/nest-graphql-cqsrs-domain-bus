@@ -1,8 +1,4 @@
-import type {
-  IncomingMessage,
-  RequestListener,
-  ServerResponse,
-} from 'node:http';
+import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { AbstractAgent } from '@ag-ui/client';
 import {
   type BaseEvent,
@@ -12,70 +8,92 @@ import {
 } from '@ag-ui/core';
 import { RunAgentInputSchema } from '@ag-ui/core/schemas';
 import { EventEncoder } from '@ag-ui/encoder';
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { type INestApplication, Logger, type Type } from '@nestjs/common';
 
-import { AgentCoreHost } from '../../agents/agentcore/agentcore-host';
-import { AgentCallers } from '../../agents/callers/agent-callers';
+import { AgentCoreHealth } from '../../agents/agentcore/agentcore-health';
+import {
+  type AgentContext,
+  AgentContexts,
+} from '../../agents/context/agent-context';
+import { AgentRunContext } from '../../agents/context/agent-run-context';
 import { AgUiRegistry } from '../server/ag-ui.registry';
+import type { AgUiAgent } from '../server/ag-ui-agent.decorator';
 import { AgUiModuleOptions } from '../server/ag-ui-module.options';
-import { AgentCoreAgUiOptions } from './agentcore-ag-ui.options';
 
-@Injectable()
-export class AgentCoreAgUiServer extends AgentCoreHost {
+export interface AgentCoreAgUiServerOptions {
+  readonly agent?: Type<AgUiAgent> | string;
+}
+
+export class AgentCoreAgUiServer {
   static readonly CONTRACT_PORT = 8080;
+  static readonly INVOCATIONS_PATH = '/invocations';
   static readonly MAX_BODY_BYTES = 10 * 1024 * 1024;
 
-  protected readonly logger = new Logger(AgentCoreAgUiServer.name);
-
-  private running = 0;
+  private readonly logger = new Logger(AgentCoreAgUiServer.name);
+  private readonly health = new AgentCoreHealth();
 
   constructor(
-    private readonly registry: AgUiRegistry,
-    callers: AgentCallers,
-    @Inject(AgUiModuleOptions) agUi: AgUiModuleOptions,
-    @Inject(AgentCoreAgUiOptions)
-    private readonly options: AgentCoreAgUiOptions,
-  ) {
-    super(callers, agUi, options, AgentCoreAgUiServer.CONTRACT_PORT);
-  }
+    private readonly app: INestApplication,
+    private readonly options: AgentCoreAgUiServerOptions = {},
+  ) {}
 
-  handler(): RequestListener {
-    const { agent } = this.registry.resolve(this.options.agent);
-    return (request, response) => {
-      const path = new URL(request.url ?? '/', 'http://agent').pathname;
-      if (request.method === 'GET' && path === '/ping') {
-        this.ping(response);
-        return;
-      }
-      if (request.method === 'POST' && path === '/invocations') {
-        void this.admit(
-          request,
-          response,
-          () => void this.invoke(agent, request, response),
-          AgentCoreAgUiServer.refuse,
-        );
-        return;
-      }
-      response.writeHead(404, { 'Content-Type': 'application/json' });
-      response.end(JSON.stringify({ error: `No route for ${path}` }));
-    };
-  }
-
-  protected describe(): string {
-    return `AG-UI agent "${this.registry.resolve(this.options.agent).config.id}"`;
-  }
-
-  private ping(response: ServerResponse): void {
-    response.writeHead(200, { 'Content-Type': 'application/json' });
-    response.end(
-      JSON.stringify({ status: this.running > 0 ? 'HealthyBusy' : 'Healthy' }),
+  async listen(
+    port = AgentCoreAgUiServer.CONTRACT_PORT,
+    host = '0.0.0.0',
+  ): Promise<void> {
+    this.app.use(
+      (
+        request: IncomingMessage,
+        response: ServerResponse,
+        next: (error?: unknown) => void,
+      ) => this.serve(request, response, next),
     );
+    await this.app.listen(port, host);
+    this.logger.log(`AgentCore's AG-UI contract on ${host}:${port}`);
+  }
+
+  private serve(
+    request: IncomingMessage,
+    response: ServerResponse,
+    next: (error?: unknown) => void,
+  ): void {
+    const path = new URL(request.url ?? '/', 'http://agent').pathname;
+    if (request.method === 'GET' && path === AgentCoreHealth.PING_PATH) {
+      response.writeHead(200, { 'Content-Type': 'application/json' });
+      response.end(JSON.stringify(this.health.status()));
+      return;
+    }
+    if (
+      request.method === 'POST' &&
+      path === AgentCoreAgUiServer.INVOCATIONS_PATH
+    ) {
+      void this.invoke(request, response);
+      return;
+    }
+    next();
   }
 
   private async invoke(
+    request: IncomingMessage,
+    response: ServerResponse,
+  ): Promise<void> {
+    const admission = this.app.get(AgUiModuleOptions, { strict: false });
+    const { agent } = this.app
+      .get(AgUiRegistry, { strict: false })
+      .resolve(this.options.agent);
+    const context = await AgentContexts.of(admission, request, this.logger);
+    if (!AgentContexts.admits(admission, context)) {
+      AgentCoreAgUiServer.refuse(response);
+      return;
+    }
+    await this.run(agent, request, response, context);
+  }
+
+  private async run(
     agent: AbstractAgent,
     request: IncomingMessage,
     response: ServerResponse,
+    context: AgentContext | undefined,
   ): Promise<void> {
     const encoder = new EventEncoder({ accept: request.headers.accept });
     const parsed = RunAgentInputSchema.safeParse(
@@ -98,13 +116,13 @@ export class AgentCoreAgUiServer extends AgentCoreHost {
       'X-Accel-Buffering': 'no',
     });
 
-    this.running += 1;
+    const end = this.health.begin();
     let terminal = false;
     let finished = false;
     const finish = () => {
       if (finished) return;
       finished = true;
-      this.running -= 1;
+      end();
       response.end();
     };
     const write = (event: BaseEvent) => {
@@ -114,22 +132,24 @@ export class AgentCoreAgUiServer extends AgentCoreHost {
       if (!response.writableEnded) response.write(encoder.encodeBinary(event));
     };
 
-    const subscription = agent.run(input).subscribe({
-      next: write,
-      error: (error: unknown) => {
-        this.logger.error(
-          `run ${input.runId} of thread ${input.threadId} failed: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`,
-        );
-        if (!terminal) {
-          write({
-            type: EventType.RUN_ERROR,
-            message: error instanceof Error ? error.message : String(error),
-          } satisfies RunErrorEvent);
-        }
-        finish();
-      },
-      complete: finish,
-    });
+    const subscription = AgentRunContext.within(context, () =>
+      agent.run(input).subscribe({
+        next: write,
+        error: (error: unknown) => {
+          this.logger.error(
+            `run ${input.runId} of thread ${input.threadId} failed: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`,
+          );
+          if (!terminal) {
+            write({
+              type: EventType.RUN_ERROR,
+              message: error instanceof Error ? error.message : String(error),
+            } satisfies RunErrorEvent);
+          }
+          finish();
+        },
+        complete: finish,
+      }),
+    );
     response.on('close', () => {
       subscription.unsubscribe();
       finish();
@@ -162,7 +182,7 @@ export class AgentCoreAgUiServer extends AgentCoreHost {
     response.end(new EventEncoder().encodeSSE(event));
   }
 
-  private static refuse(this: void, response: ServerResponse): void {
+  private static refuse(response: ServerResponse): void {
     AgentCoreAgUiServer.fail(
       response,
       401,

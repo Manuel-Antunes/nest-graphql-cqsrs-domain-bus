@@ -6,7 +6,6 @@ import {
   Logger,
   type OnModuleDestroy,
 } from '@nestjs/common';
-import { AgentCallers } from '@nestposts/ai/agents/callers/agent-callers';
 import { McpAppEndpoint } from '@nestposts/ai/mcp/apps/mcp-app-endpoint';
 import {
   type McpAppToolDefinition,
@@ -27,7 +26,7 @@ export class PostsMcpApps implements OnModuleDestroy {
   private readonly pool: McpClientPool;
   private definitions: McpAppToolDefinition[] = [];
 
-  constructor(@Inject(mcpConfig.KEY) config: McpConfig, callers: AgentCallers) {
+  constructor(@Inject(mcpConfig.KEY) config: McpConfig) {
     const endpoint = McpAppEndpoint.of(config.url, PostsMcpApps.APP);
     this.pool = new McpClientPool({
       label: 'PostsMcpApps',
@@ -42,7 +41,7 @@ export class PostsMcpApps implements OnModuleDestroy {
               transport: 'http',
               url: endpoint.url,
               headers: { ...endpoint.headers },
-              authProvider: new CallerBearerAuthProvider(callers),
+              authProvider: new CallerBearerAuthProvider(),
               automaticSSEFallback: false,
             },
           },

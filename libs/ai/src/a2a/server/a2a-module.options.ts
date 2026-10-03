@@ -1,7 +1,7 @@
 import type { AgentCard } from '@a2a-js/sdk';
 import type { FactoryProvider, ModuleMetadata, Type } from '@nestjs/common';
 
-import type { AgentCallerResolver } from '../../agents/callers/agent-caller';
+import type { AgentContextFunction } from '../../agents/context/agent-context';
 import type { A2aAgent } from './a2a-agent.decorator';
 
 export type A2aCardDefaults = Omit<
@@ -16,7 +16,7 @@ export abstract class A2aModuleOptions {
   declare readonly basePath?: string;
   declare readonly baseUrl?: string;
   declare readonly agentProviders?: Type<A2aAgent>[];
-  declare readonly resolveUser?: AgentCallerResolver;
+  declare readonly context?: AgentContextFunction;
   declare readonly allowAnonymous?: boolean;
 }
 
