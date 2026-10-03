@@ -20,12 +20,13 @@ src/
                    A2aTenancy and TenantScopedCallContext (A2A's tenant, held to the caller's)
     agentcore/     AgentCoreA2aServer: AgentCore's A2A contract, registered on the app main.ts created
     langchain/     the LangChain binding: ReactAgentExecutor, A2aMiddleware, LangChainTaskStore
-    client/        RemoteA2aAgents, and send_message_to_a2a_agent (A2aDelegationTool) to delegate to them
+    client/        RemoteA2aAgents, and A2aDelegation: one call to one of them, as an AG-UI subagent
     testing/       A2aWire, the fixtures every A2A spec shares
   ag-ui/
     server/        AgUiModule, AgUiRegistry, @AgUiAgent, LazyAgUiAgent
     agentcore/     AgentCoreAgUiServer: POST /invocations (SSE) and GET /ping, on the app main.ts created
-    langchain/     LangChainAgUiAgent (LangGraph's v3 stream → AG-UI events), AgUiMiddleware, AgUiEvents
+    langgraph/     InProcessLangGraphClient: @ag-ui/langgraph's LangGraphAgent over a graph in this process
+    a2a/           A2aMiddlewareAgent: CopilotKit's A2A middleware loop, the A2A agents an AG-UI agent calls
   files/
     domain/        media kinds, sidecars, the attachment scope, attachment references
     analysis/      FileAnalysisService and its collaborators (vision, PDF, extraction)
@@ -100,8 +101,10 @@ its card's descriptive fields and, optionally, skills — and the instance adds 
 - **Every turn runs in its caller's context.** The registry wraps every executor in
   `ContextScopedExecutor`, which runs the turn — and a lazy executor's build — inside
   `AgentRunContext` with the call context's `User`, the `AgentContext` the application built for the
-  request. The executor also hands it to the graph as LangGraph's runtime `context`
-  (`context.agent`), which is not checkpointed (measured: the credential never reaches the saver).
+  request. That is the only way it reaches a run: the graph's `configurable` carries who and where
+  (`thread_id`, `actor_id`, `tenant`, `user_id`), never the credential, and nothing puts the
+  `AgentContext` in the graph's runtime `context` — `copilotkitMiddleware` writes that `context` into
+  the prompt as "App Context" whenever the state has none of its own.
 
 `A2aAgentResolver.resolve(agent)` — by class, by `referenceId`, or the root agent with neither —
 answers what a host serves: the card, the **hosted executor** (the very instance the registry's own
@@ -192,46 +195,40 @@ when the client asks for it), and `@ag-ui/client`'s `AbstractAgent` as what an a
   client that hangs up aborts the run. The run is subscribed inside `AgentRunContext.within(context)`.
   It is not `bedrock-agentcore`'s `BedrockAgentCoreApp`: that one cannot be closed, and exits the
   process when it cannot listen.
-- **`LangChainAgUiAgent` runs a LangChain agent (`createAgent`) for one AG-UI run.** It converts the
-  conversation (`AgUiMessages`) and streams the graph with LangGraph's v3 protocol, whose ONE ordered
-  stream of events — `messages`, `tools`, `custom` — `AgUiProtocolTranslator` turns into AG-UI's:
-  `TEXT_MESSAGE_*` for the model's text (a new message after each tool call it makes),
-  `TOOL_CALL_START` as a call begins, `TOOL_CALL_ARGS`/`END` once its arguments are final,
-  `TOOL_CALL_RESULT` when the tool answers or fails, and `RUN_STARTED`/`RUN_FINISHED`/`RUN_ERROR`
-  around them. Its specs run it through `@ag-ui/client`'s own `runAgent`, which verifies the stream
-  against the protocol and applies it: a stream the client would reject fails them.
-  `@ag-ui/langchain` streams ONE model call and runs no tool of the server's; `@ag-ui/langgraph`
-  drives a LangGraph Platform deployment through its SDK — neither runs a graph in this process.
-- **The conversation is the agent's, when it has a checkpointer.** AG-UI sends all of it on every
-  run, and a client that reopened a conversation sends what it was shown of it. Given a
-  `checkpointer`, the agent reads the thread's state (`graph.getState`) and feeds the graph only the
-  messages it does not hold yet (`LangChainAgUiAgent.unseen`, by id), so the thread's history is the
-  checkpoints' and a resent message is not doubled. Without one, the client's conversation is the
-  whole input. Either way a message a subagent said (`subagentRunId`) is left out — the call's
-  result already carries it — `system`/`developer` messages become instructions, and a tool call
-  nobody answered (the run that made it was stopped, the person typed on) gets a result saying so,
-  because a model provider refuses a call without one.
-- **Every run is configured with who and where.** The agent reads the run's `AgentContext`; the
-  graph's `configurable` is `{ thread_id, user_id, actor_id, tenant }` — what the checkpointer, the
-  store and every middleware below scope by — and its runtime `context` carries the `AgentContext`
-  itself as `agent`, beside `agUi`.
-- **`AgUiMiddleware`** (LangChain middleware) gives the model the frontend's tools — CopilotKit's
-  `useFrontendTool` — and ends the run at the model's call to one (`jumpTo: 'end'`): the client runs
-  it and sends the result in the next run. It appends the application's `context` and the
-  conversation's instructions to the system message.
-- **A tool speaks AG-UI too.** `AgUiEvents.emit(config, …events)` writes AG-UI events on LangGraph's
-  `custom` stream, and the translator passes them through, in order. That is how a delegation shows
-  its subagent.
+- **A LangGraph agent is served the way CopilotKit serves one: `@ag-ui/langgraph`'s `LangGraphAgent`,
+  with `@copilotkit/sdk-js`'s `copilotkitMiddleware` in the graph.** `LangGraphAgent` is written for a
+  LangGraph Platform deployment, through `@langchain/langgraph-sdk`'s `Client`; it takes the client as
+  an option, and `InProcessLangGraphClient` is that client over a compiled graph in this process —
+  the ten methods it calls (`assistants.search/get/getGraph/getSchemas`,
+  `threads.get/create/getState/updateState/getHistory`, `runs.stream/cancel`), `runs.stream` being
+  `graph.streamEvents(…, { version: 'v2' })` and a last `values` chunk.
+  `InProcessLangGraphClient.agentOver(graph, { graphId })` is the agent. What comes with it is
+  CopilotKit's whole translation: text, tool calls and results, reasoning, steps, interrupts, and a
+  `MESSAGES_SNAPSHOT` of the checkpoint at the end of every run.
+- **`getSchemas` declares `messages`, `tools`, `copilotkit` and `ag-ui` as the graph's input**, or
+  `LangGraphAgent` filters the client's tools out of what it sends; `copilotkitMiddleware` reads them
+  from `state.copilotkit.actions`, binds them to the model and ends the run at the model's call to one,
+  which the client runs and answers in the next run.
+- **The conversation is the checkpoint's.** `LangGraphAgent` reads the thread's state and sends the
+  graph only the messages it does not hold, by id, and the snapshot it ends with gives the client
+  those ids — so a resent conversation is not doubled. Two things make the ids agree in process:
+  LangChain gives a streamed chunk the id `run-<run id>` only AFTER the model's callback has emitted
+  it, and `LangGraphAgent` names the message by the chunk's id, so the client gives the chunk that id
+  first, as LangChain will (`_updateId`, which `concat` reads); and `LangGraphAgent` answers a tool's
+  result under a random message id, so the snapshot replaces the client's copy and the client keeps
+  it after the messages it already had — the order on screen is the client's, the checkpoint's order
+  is the model's.
+- **Every run is configured with who and where**, read from `AgentRunContext`: the graph's
+  `configurable` is `{ thread_id, actor_id, tenant, user_id }` — what the checkpointer, the store and
+  every middleware scope by. The client puts no `context` on a run.
 
 ## Delegating to an A2A agent (`a2a/client/`)
 
 `RemoteA2aAgents.connect(urls, fetch)` reads each agent's card — through `@a2a-js/sdk`'s own card
 resolver and JSON-RPC transport, both on the `fetch` given (`AgentRunContext.bearerFetch()`: the caller's token,
 because AgentCore guards the card too) — and keeps a client per agent and a **roster** for the
-prompt (names, descriptions, skills). `A2aDelegationTool.create(agents)` is
-`send_message_to_a2a_agent({ agentName, task })`, the name and shape of CopilotKit's A2A middleware,
-whose roster-and-tool pattern this is — run by the agent itself, as its caller, instead of by a
-middleware that would hold no credential.
+prompt (names, descriptions, skills). `new A2aDelegation(agent, { toolCallId, contextId, a2ui,
+signal, emit }).send(task)` is one call to one of them.
 
 A delegation streams the remote task (`sendMessageStream`) and **is an AG-UI subagent of the call**:
 `SUBAGENT_STARTED` (its `subagentRunId` is the tool call's id, `parentToolCallId` the same), the remote
@@ -247,6 +244,33 @@ agents it reached per tenant (`reach(name)`): each card is read as the caller, a
 multi-tenant agent serves names the caller's tenant (`AgentInterface.tenant`), which `@a2a-js/sdk`'s
 `TenantTransportDecorator` then puts on every request — so a delegation from `acme` is an `acme`
 request, never the tenant of whoever happened to call first.
+
+## An AG-UI agent that calls A2A agents (`ag-ui/a2a/`)
+
+`A2aMiddlewareAgent` is `@ag-ui/a2a-middleware`'s `A2AMiddlewareAgent` loop, written on
+`AbstractAgent` without extending it: the package's agent builds one unauthenticated client per URL
+in its constructor, sends blocking `message/send`, keeps only the first text part and replaces the
+system prompt with its own, and it would bring `@a2a-js/sdk` 0.2 and `ai` 4 into the bundle. The loop
+is the same:
+
+- `send_message_to_a2a_agent({ agentName, task })` — the name and shape of CopilotKit's — is added to
+  the run's tools as a **client** tool, its `agentName` an enum of the agents' names, so the
+  orchestrator (`LangGraphAgent`, `copilotkitMiddleware`) ends its run at the call;
+- each call is sent by `A2aDelegation` — streamed, with the caller's token, the thread as the A2A
+  context, the client's A2UI catalogs in the message metadata — its answer streamed to the client as
+  an AG-UI subagent of the call, and its result is a `TOOL_CALL_RESULT` and a tool message;
+- the orchestrator runs again with its snapshot and those results, until it answers without
+  delegating (eight rounds at most).
+
+The client sees ONE run: the orchestrator's `RUN_STARTED`/`RUN_FINISHED` are the agent's own, its
+intermediate snapshots are held back, and the last one goes out with what the remote agents said
+put back in (`DelegatedMessages.withDelegated`), because a `MESSAGES_SNAPSHOT` removes from the
+client whatever it does not list. Raw events and state snapshots are not forwarded: their metadata is
+the graph's configuration. The orchestrator is handed the conversation without what remote agents
+said, without the messages only the client draws (`activity`), and with a result for every call the
+person moved on from — `DelegatedMessages.forOrchestrator` — because a model provider refuses a call
+without one. A failure is a `RUN_ERROR` naming it, and the run is traced in Langfuse under the agent's
+name, its session the thread.
 
 ## MCP Apps in A2UI (`mcp/apps/`)
 

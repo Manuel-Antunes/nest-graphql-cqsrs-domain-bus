@@ -9,7 +9,6 @@ import { Test } from '@nestjs/testing';
 import { createAgent } from 'langchain';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { AgUiEvents } from '../../ag-ui/langchain/ag-ui-events';
 import type {
   AgentContext,
   AgentRequest,
@@ -23,7 +22,7 @@ import {
 import { A2aModule } from '../server/a2a.module';
 import { A2aAgent } from '../server/a2a-agent.decorator';
 import type { A2aModuleOptions } from '../server/a2a-module.options';
-import { A2aDelegation, A2aDelegationTool } from './a2a-delegation.tool';
+import { A2aDelegation } from './a2a-delegation';
 import { RemoteA2aAgents } from './remote-a2a-agents';
 
 const TOKEN = 'the-callers-token';
@@ -122,15 +121,14 @@ afterAll(async () => {
 
 const delegating = (toolCallId: string) => {
   const events: BaseEvent[] = [];
-  const config = {
-    toolCall: { id: toolCallId, name: A2aDelegationTool.NAME, args: {} },
-    configurable: { thread_id: THREAD },
-    writer: (chunk: unknown) => {
-      const event = AgUiEvents.of(chunk);
-      if (event) events.push(event);
+  const options = {
+    toolCallId,
+    contextId: THREAD,
+    emit: (event: BaseEvent) => {
+      events.push(event);
     },
   };
-  return { events, config };
+  return { events, options };
 };
 
 describe('delegating a task to a remote A2A agent', () => {
@@ -146,11 +144,11 @@ describe('delegating a task to a remote A2A agent', () => {
 
   it('streams the remote answer as an AG-UI subagent of the call, and answers the model with it', async () => {
     const agents = await RemoteA2aAgents.connect([base], bearerFetch);
-    const { events, config } = delegating('call-1');
+    const { events, options } = delegating('call-1');
 
     const report = await new A2aDelegation(
       agents.find('Posts Manager'),
-      config,
+      options,
     ).send('Publish "Hello".');
 
     expect(report).toBe('The post is published.');
@@ -181,16 +179,13 @@ describe('delegating a task to a remote A2A agent', () => {
 
   it('keeps the conversation: the same thread is one remote context', async () => {
     const agents = await RemoteA2aAgents.connect([base], bearerFetch);
-    const tool = A2aDelegationTool.create(agents);
 
-    const answer = await tool.invoke(
-      { agentName: 'Posts Manager', task: 'Now delete it.' },
-      delegating('call-2').config,
-    );
+    const answer = await new A2aDelegation(
+      await agents.reach('Posts Manager'),
+      delegating('call-2').options,
+    ).send('Now delete it.');
 
-    expect((answer as { content: unknown }).content).toBe(
-      'Are you sure you want to delete it?',
-    );
+    expect(answer).toBe('Are you sure you want to delete it?');
   });
 
   it('tells the model, and the client, when the remote agent cannot be reached', async () => {
@@ -204,9 +199,9 @@ describe('delegating a task to a remote A2A agent', () => {
         },
       },
     } as never;
-    const { events, config } = delegating('call-3');
+    const { events, options } = delegating('call-3');
 
-    const report = await new A2aDelegation(unreachable, config).send('Hi');
+    const report = await new A2aDelegation(unreachable, options).send('Hi');
 
     expect(report).toBe(
       'Posts Manager could not be reached: connection refused',

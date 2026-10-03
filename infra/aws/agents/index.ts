@@ -90,6 +90,7 @@ export const theo = new AgentRuntime('Theo', {
     THEO_WEB_SEARCH_URL: webSearch.gatewayUrl,
     BEDROCK_AGENTCORE_MEMORY_ID: theoMemory.id,
     CHAT_API_URL: gatewayUrl,
+    COPILOTKIT_TELEMETRY_DISABLED: 'true',
     LOG_LEVEL: 'info',
   },
   permissions: [invokeModels],

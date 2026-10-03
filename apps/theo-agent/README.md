@@ -18,8 +18,8 @@ apps/web ─ CopilotRuntime (v2) ─ HttpAgent ─Bearer (DelegatedAccessTokens)
 apps/theo-agent ─ Nest application (Fastify), created in main.ts            │
   AgentCoreAgUiServer (libs/ai), handed the app ← AgUiRegistry.resolve ◀────┘
   PlatformAgentContexts (this app) ← IdentityResolver (libs/auth)
-  TheoAgent (@AgUiAgent): LangChainAgUiAgent over
-     createAgent(BASE_MODEL, send_message_to_a2a_agent, search_the_web)
+  TheoAgent (@AgUiAgent): A2aMiddlewareAgent over LangGraphAgent over
+     createAgent(BASE_MODEL, search_the_web, copilotkitMiddleware) — send_message_to_a2a_agent
      │  A2A JSON-RPC, the same Bearer (bearerFetch),           │  MCP, SigV4 as Theo's role
      │  contextId = session = the thread                      │  (bedrock-agentcore/web-search)
      ▼                                                         ▼
@@ -32,9 +32,13 @@ AgentCore (JWT authorizer, aud = posts agent)          AgentCore Gateway (AWS_IA
 `TheoAgent` is an `@AgUiAgent` whose `agent` is a function. `libs/ai` calls it on the first run,
 inside that caller's scope, because what it builds needs a credential: it reads the cards of the
 agents named in `THEO_A2A_AGENTS` (`RemoteA2aAgents.connect`, with the caller's token — AgentCore
-guards the card too), puts their roster in the system prompt, gives the model one tool,
-`send_message_to_a2a_agent` (`A2aDelegationTool`) — and `search_the_web` when there is a web search
-gateway (below) — and wraps the LangChain agent in a `LangChainAgUiAgent`. A build that fails — a posts agent still cold — is built again on the next run.
+guards the card too), puts their roster in the system prompt, and builds the agent the way CopilotKit serves a LangGraph
+one: a `createAgent` graph — `search_the_web` when there is a web search gateway (below),
+`copilotkitMiddleware` for the client's tools, the chat recording and the long-term memory, the
+AgentCore checkpointer and store — served by `@ag-ui/langgraph`'s `LangGraphAgent` over
+`InProcessLangGraphClient`, inside an `A2aMiddlewareAgent` that adds `send_message_to_a2a_agent` to the
+run's tools and sends each call to the posts agent. A build that fails — a posts agent still cold —
+is built again on the next run.
 The model is `@Inject('BASE_MODEL')`, a `useExisting` alias of the `ChatBedrockConverse` provider.
 
 `main.ts` creates the Nest application (`NestFactory.create(AppModule, new FastifyAdapter())`) and
@@ -42,7 +46,7 @@ hands it to `AgentCoreAgUiServer`, which registers AgentCore Runtime's AG-UI
 contract on `0.0.0.0:8080` — `POST /invocations` answered as server-sent events, `GET /ping` —
 admitting a request only once `PlatformAgentContexts` (`src/agent-context/`, the `AgUiModule`'s
 `context`) has read its bearer as a person of the platform.
-`libs/ai/README.md` has the host, the translation from LangGraph's stream to AG-UI's events and the
+`libs/ai/README.md` has the host, the in-process client, the A2A middleware loop and the
 delegation.
 
 ## A fast model, and the web

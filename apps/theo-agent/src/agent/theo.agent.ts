@@ -1,11 +1,11 @@
 import type { AbstractAgent } from '@ag-ui/client';
+import { copilotkitMiddleware } from '@copilotkit/sdk-js/langgraph';
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { BaseCheckpointSaver, BaseStore } from '@langchain/langgraph';
 import { Inject, Injectable } from '@nestjs/common';
-import { A2aDelegationTool } from '@nestposts/ai/a2a/client/a2a-delegation.tool';
 import { RemoteA2aAgents } from '@nestposts/ai/a2a/client/remote-a2a-agents';
-import { AgUiMiddleware } from '@nestposts/ai/ag-ui/langchain/ag-ui.middleware';
-import { LangChainAgUiAgent } from '@nestposts/ai/ag-ui/langchain/langchain-ag-ui.agent';
+import { A2aMiddlewareAgent } from '@nestposts/ai/ag-ui/a2a/a2a-middleware.agent';
+import { InProcessLangGraphClient } from '@nestposts/ai/ag-ui/langgraph/in-process-langgraph.client';
 import { AgUiAgent } from '@nestposts/ai/ag-ui/server/ag-ui-agent.decorator';
 import { AgentRunContext } from '@nestposts/ai/agents/context/agent-run-context';
 import { ChatApi } from '@nestposts/ai/chats/chat-api';
@@ -45,32 +45,33 @@ export class TheoAgent implements AgUiAgent {
       AgentRunContext.bearerFetch(),
       { tenantOf: () => AgentRunContext.current()?.tenant ?? '' },
     );
-    return new LangChainAgUiAgent({
-      graph: createAgent({
-        model: this.model,
-        tools: [
-          A2aDelegationTool.create(specialists),
-          ...(this.webSearch ? [WebSearchTool.create(this.webSearch)] : []),
-        ],
-        systemPrompt: TheoInstructions.with(specialists.roster(), {
-          webSearch: this.webSearch !== null,
-        }),
-        middleware: [
-          AgUiMiddleware.create(),
-          ...(this.chats
-            ? [
-                ChatRecordingMiddleware.create({
-                  agentId: TheoAgent.AGENT_ID,
-                  chats: this.chats,
-                }),
-              ]
-            : []),
-          LongTermMemoryMiddleware.create({ recall: TheoAgent.RECALL }),
-        ],
-        checkpointer: this.checkpointer,
-        store: this.store,
+    const graph = createAgent({
+      model: this.model,
+      tools: this.webSearch ? [WebSearchTool.create(this.webSearch)] : [],
+      systemPrompt: TheoInstructions.with(specialists.roster(), {
+        webSearch: this.webSearch !== null,
       }),
-      traceName: 'theo',
+      middleware: [
+        copilotkitMiddleware,
+        ...(this.chats
+          ? [
+              ChatRecordingMiddleware.create({
+                agentId: TheoAgent.AGENT_ID,
+                chats: this.chats,
+              }),
+            ]
+          : []),
+        LongTermMemoryMiddleware.create({ recall: TheoAgent.RECALL }),
+      ],
+      checkpointer: this.checkpointer,
+      store: this.store,
+    });
+    return new A2aMiddlewareAgent({
+      orchestrator: InProcessLangGraphClient.agentOver(graph, {
+        graphId: TheoAgent.AGENT_ID,
+      }),
+      agents: specialists,
+      traceName: TheoAgent.AGENT_ID,
     });
   };
 }

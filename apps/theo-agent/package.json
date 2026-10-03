@@ -7,6 +7,8 @@
     "@ag-ui/client": "catalog:",
     "@ag-ui/core": "catalog:",
     "@ag-ui/encoder": "catalog:",
+    "@ag-ui/langgraph": "catalog:",
+    "@copilotkit/sdk-js": "catalog:",
     "@automapper/classes": "^9.0.2",
     "@aws-crypto/sha256-js": "^5.2.0",
     "@aws-sdk/client-bedrock-agentcore": "catalog:",

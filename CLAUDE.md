@@ -512,10 +512,11 @@ libs/ai                  the agents' runtime (being migrated in): what every age
                          A2A hosting with its extensions as classes (a2a/domain,
                          a2a/server, a2a/langchain) and on Amazon Bedrock AgentCore Runtime
                          (a2a/agentcore), AG-UI hosting (ag-ui/server, ag-ui/agentcore: POST
-                         /invocations on :8080) with LangChain over it (ag-ui/langchain:
-                         LangGraph's v3 stream → AG-UI events), the A2A client an agent delegates
-                         with (a2a/client: send_message_to_a2a_agent, the remote agent an AG-UI
-                         subagent of the call) — the files an agent works
+                         /invocations on :8080) with a LangGraph agent served as CopilotKit serves
+                         one (ag-ui/langgraph: @ag-ui/langgraph's LangGraphAgent over the graph in
+                         this process, copilotkitMiddleware in it) and CopilotKit's A2A middleware
+                         loop (ag-ui/a2a: send_message_to_a2a_agent as a client tool, each call to
+                         an A2A agent — a2a/client — an AG-UI subagent of it) — the files an agent works
                          with — analysis, AttachmentDrive over @nestjs/storage and the asset model,
                          the deepagents DriveBackend, the ingestion middleware that keeps base64 out
                          of the checkpoint (files/) — and ChannelResponseProcessor, whose Chatwoot
@@ -1496,11 +1497,12 @@ Their READMEs, `libs/ai/README.md` and `infra/aws/README.md` are the guides; the
   `(request) => Promise<AgentContext | undefined>`, as `GraphQLModule` takes one: each agent's
   `PlatformAgentContexts` resolves `libs/auth`'s request-scoped `IdentityResolver` for the request
   under a context id of its own (the gateway's way) and the tenant with `TenantOrganizations`, so
-  `libs/ai` knows neither MikroORM nor organizations. No context is a `401` before anything runs. The
-  context travels to the graph as LangGraph's runtime `context` (`context.agent`, never
-  checkpointed), and `AgentRunContext` carries it where no parameter can — LangChain's ambient config
-  drops `context` inside a nested runnable, and the MCP SDK asks its `OAuthClientProvider` from inside
-  the tool.
+  `libs/ai` knows neither MikroORM nor organizations. No context is a `401` before anything runs.
+  `AgentRunContext` carries it through the run — LangChain's ambient config drops `context` inside a
+  nested runnable, and the MCP SDK asks its `OAuthClientProvider` from inside the tool — and the
+  graph gets only who and where in its `configurable` (`thread_id`, `actor_id`, `tenant`,
+  `user_id`), never the credential. It is **not** the graph's runtime `context`: `copilotkitMiddleware`
+  writes that into the prompt as "App Context" whenever the state has none of its own.
 - **Everything acts as the caller.** One token, asked for with both resources
   (`resource=<agent>&resource=<mcp>`): AgentCore's JWT authorizers check it against the issuer's
   discovery document (served by the gateway), the agent reads it as the gateway reads a caller —
@@ -1534,11 +1536,14 @@ Their READMEs, `libs/ai/README.md` and `infra/aws/README.md` are the guides; the
 - **Theo is the same shape over AG-UI.** `@AgUiAgent` on a provider whose `agent` is a function built
   on the first run; `AgentCoreAgUiServer` serves AgentCore's AG-UI contract (`POST /invocations`,
   server-sent events; `GET /ping`) on the app `main.ts` created, with the same admission as the A2A
-  host (`AgentContexts.admits`);
-  `LangChainAgUiAgent` turns LangGraph's v3 stream into AG-UI events. Its tools are
-  `send_message_to_a2a_agent` (`libs/ai`'s `a2a/client`): the posts agent called over A2A with the
-  caller's token, its answer streamed to the client as an AG-UI subagent of the call, Theo's thread
-  its A2A context and AgentCore session — and `search_the_web` (`libs/ai`'s `web/`): AgentCore Web
+  host (`AgentContexts.admits`). It is served the way CopilotKit serves a LangGraph agent —
+  `@ag-ui/langgraph`'s `LangGraphAgent` over the graph in this process (`InProcessLangGraphClient`,
+  the SDK client it would use against a deployment), `copilotkitMiddleware` in the graph — inside an
+  `A2aMiddlewareAgent`, `@ag-ui/a2a-middleware`'s loop on `AbstractAgent` without the package:
+  `send_message_to_a2a_agent` is a client tool, the orchestrator's run ends at its call, the posts
+  agent is called over A2A with the caller's token, its answer streamed to the client as an AG-UI
+  subagent of the call, Theo's thread its A2A context and AgentCore session, and the orchestrator runs
+  again with the result — the client seeing one run. Its own tool is `search_the_web` (`libs/ai`'s `web/`): AgentCore Web
   Search, an AgentCore Gateway with the `web-search` connector (`infra/aws/agents/web-search.ts`),
   reached with `bedrock-agentcore`'s `WebSearchClient` signed as Theo's role. Theo's model is Nova 2
   Lite, chosen for speed: it routes, the posts agent writes. `apps/theo-agent/README.md` has the
@@ -2559,9 +2564,19 @@ DTOs count.
   answer `/.well-known/oauth-authorization-server` at its root.
 - **A tool a LangChain middleware adds in `wrapModelCall` needs a `wrapToolCall` of the same
   middleware**, or the run fails with `You have added a new tool in "wrapModelCall" hook … This is not
-  supported unless a middleware provides a "wrapToolCall" handler`. `AgUiMiddleware` adds the
-  frontend's tools that way and ends the run at their call; its `wrapToolCall` answers one that ever
-  reaches the tools node.
+  supported unless a middleware provides a "wrapToolCall" handler`. `copilotkitMiddleware` adds the
+  client's tools that way, and has one.
+- **LangChain names a streamed chunk after the model's callback has emitted it**, and
+  `@ag-ui/langgraph`'s `LangGraphAgent` names the AG-UI message by the chunk's id: over a deployment
+  the event is serialized later and carries `run-<run id>`, in process it carried none — every
+  `TEXT_MESSAGE_START` without a `messageId`, refused by `@ag-ui/client`, and no
+  `TEXT_MESSAGE_END`. `InProcessLangGraphClient` gives the chunk that id first, through `_updateId`:
+  setting `id` alone left `lc_kwargs.id` empty, `concat` built the message from `lc_kwargs`, and the
+  checkpoint kept AI messages with no id, which the next snapshot then failed on.
+- **`LangGraphAgent` answers a tool's result under a random message id**, never the checkpoint's, so
+  its closing `MESSAGES_SNAPSHOT` replaces the client's copy and the client appends the checkpoint's
+  after the messages it already held. The checkpoint's order is the model's; the client's is only
+  for display, and `/theo` groups by `toolCallId`.
 - **`@ag-ui/*` and `@copilotkit/*` pin `rxjs` to 7.8.1** and the workspace has 7.8.2: two copies, and an
   `Observable` of one is not an `Observable` of the other to TypeScript (they carry protected members).
   `pnpm-workspace.yaml` overrides `rxjs` to `^7.8.2`, one copy for everything.
@@ -2573,7 +2588,8 @@ DTOs count.
   posts agent works, because its answer reaches the client as it is written.
 - **`AbstractAgent.clone()` (`@ag-ui/client`) copies the base agent's fields only** — it is
   `Object.create(prototype)` — and the CopilotKit runtime clones agents. `HttpAgent` restores its
-  own; `LangChainAgUiAgent` and `LazyAgUiAgent` override `clone()` for theirs.
+  own; `A2aMiddlewareAgent` and `LazyAgUiAgent` override `clone()` for theirs, and `LangGraphAgent`
+  copies its own fields.
 - **An OAuth resource exists once `OAuthResourcesSeeder` has written it, and on AWS the seed runs
   only when its input changes.** `Seed`'s invocation is a digest of the seeders and of the
   configuration they read; `AUTH_OAUTH_RESOURCES` was not in it, so adding Theo's audience to

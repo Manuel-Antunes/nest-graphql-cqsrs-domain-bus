@@ -52,6 +52,8 @@
     "@ag-ui/client": "catalog:",
     "@ag-ui/core": "catalog:",
     "@ag-ui/encoder": "catalog:",
+    "@ag-ui/langgraph": "catalog:",
+    "@copilotkit/sdk-js": "catalog:",
     "rxjs": "^7.8.2",
     "@nestposts/organizations": "workspace:*",
     "@nestposts/langgraph-checkpoint-aws": "workspace:*"

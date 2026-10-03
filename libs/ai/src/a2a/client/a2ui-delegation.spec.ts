@@ -22,7 +22,8 @@ import { ScriptedModel } from '../langchain/testing/scripted-model';
 import { A2aModule } from '../server/a2a.module';
 import { A2aAgent } from '../server/a2a-agent.decorator';
 import type { A2aModuleOptions } from '../server/a2a-module.options';
-import { A2aDelegation } from './a2a-delegation.tool';
+import { A2aDelegation } from './a2a-delegation';
+import { A2uiCapabilities } from './a2ui-capabilities';
 import { RemoteA2aAgents } from './remote-a2a-agents';
 
 const TOKEN = 'the-callers-token';
@@ -138,19 +139,16 @@ afterAll(async () => {
 });
 
 const callerRendering = (catalogs: Record<string, unknown>[]) => ({
-  toolCall: { id: 'call-1', name: 'send_message_to_a2a_agent', args: {} },
-  configurable: { thread_id: '0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0' },
-  context: {
-    agUi: {
-      context: [
-        { description: 'Something else', value: 'not json' },
-        ...catalogs.map((catalog) => ({
-          description: 'A2UI Component Schema',
-          value: JSON.stringify(catalog),
-        })),
-      ],
-    },
-  },
+  toolCallId: 'call-1',
+  contextId: '0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0',
+  a2ui: A2uiCapabilities.of([
+    { description: 'Something else', value: 'not json' },
+    ...catalogs.map((catalog) => ({
+      description: 'A2UI Component Schema',
+      value: JSON.stringify(catalog),
+    })),
+  ]),
+  emit: () => undefined,
 });
 
 describe('delegating to an agent whose answer is an MCP App', () => {

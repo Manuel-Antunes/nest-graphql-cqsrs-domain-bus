@@ -7,23 +7,22 @@ import {
 } from '@a2a-js/sdk';
 import { withA2AExtensions } from '@a2a-js/sdk/client';
 import { type BaseEvent, EventType } from '@ag-ui/core';
-import type { StructuredToolInterface } from '@langchain/core/tools';
-import type { LangGraphRunnableConfig } from '@langchain/langgraph';
-import { tool } from 'langchain';
-import { z } from 'zod';
 
-import { AgUiEvents } from '../../ag-ui/langchain/ag-ui-events';
 import { A2aPart } from '../domain/a2a-part';
 import {
   type A2uiClientCapabilities,
   A2uiExtension,
 } from '../domain/extensions/a2ui.extension';
 import { A2uiCapabilities } from './a2ui-capabilities';
-import type { RemoteA2aAgent, RemoteA2aAgents } from './remote-a2a-agents';
+import type { RemoteA2aAgent } from './remote-a2a-agents';
 
-type DelegationConfig = LangGraphRunnableConfig & {
-  toolCall?: { id?: string };
-};
+export interface A2aDelegationOptions {
+  readonly toolCallId: string;
+  readonly contextId?: string;
+  readonly a2ui?: A2uiClientCapabilities;
+  readonly signal?: AbortSignal;
+  readonly emit: (event: BaseEvent) => void;
+}
 
 export class A2aDelegation {
   static readonly SESSION_HEADER =
@@ -31,8 +30,6 @@ export class A2aDelegation {
   private static readonly SESSION_MIN_LENGTH = 33;
   private static readonly A2UI = new A2uiExtension();
 
-  private readonly subagentRunId: string;
-  private readonly a2ui: A2uiClientCapabilities | undefined;
   private readonly surfaces = new Map<string, unknown>();
   private answerId?: string;
   private streamed = '';
@@ -41,10 +38,15 @@ export class A2aDelegation {
 
   constructor(
     private readonly agent: RemoteA2aAgent,
-    private readonly config: DelegationConfig,
-  ) {
-    this.subagentRunId = config.toolCall?.id ?? randomUUID();
-    this.a2ui = A2uiCapabilities.ofCaller(config);
+    private readonly options: A2aDelegationOptions,
+  ) {}
+
+  private get subagentRunId(): string {
+    return this.options.toolCallId;
+  }
+
+  private get a2ui(): A2uiClientCapabilities | undefined {
+    return this.options.a2ui;
   }
 
   async send(task: string): Promise<string> {
@@ -53,9 +55,7 @@ export class A2aDelegation {
       subagentRunId: this.subagentRunId,
       name: this.agent.name,
       description: this.agent.description,
-      ...(this.config.toolCall?.id
-        ? { parentToolCallId: this.config.toolCall.id }
-        : {}),
+      parentToolCallId: this.options.toolCallId,
     });
     try {
       const stream = this.agent.client.sendMessageStream(
@@ -66,7 +66,7 @@ export class A2aDelegation {
           metadata: undefined,
         },
         {
-          signal: this.config.signal,
+          signal: this.options.signal,
           serviceParameters: this.serviceParameters(),
         },
       );
@@ -207,12 +207,11 @@ export class A2aDelegation {
   }
 
   private contextId(): string | undefined {
-    const thread = this.config.configurable?.thread_id;
-    return typeof thread === 'string' && thread ? thread : undefined;
+    return this.options.contextId || undefined;
   }
 
   private emit(event: BaseEvent): void {
-    AgUiEvents.emit(this.config, event);
+    this.options.emit(event);
   }
 
   private static isFinal(state: TaskState): boolean {
@@ -223,40 +222,6 @@ export class A2aDelegation {
       state === TaskState.TASK_STATE_FAILED ||
       state === TaskState.TASK_STATE_REJECTED ||
       state === TaskState.TASK_STATE_CANCELED
-    );
-  }
-}
-
-export class A2aDelegationTool {
-  static readonly NAME = 'send_message_to_a2a_agent';
-
-  static create(agents: RemoteA2aAgents): StructuredToolInterface {
-    const [first, ...rest] = agents.names;
-    if (!first) {
-      throw new Error(
-        'A2aDelegationTool: there is no remote agent to delegate to.',
-      );
-    }
-    return tool(
-      async (
-        { agentName, task }: { agentName: string; task: string },
-        config: DelegationConfig,
-      ) => new A2aDelegation(await agents.reach(agentName), config).send(task),
-      {
-        name: A2aDelegationTool.NAME,
-        description:
-          'Sends a task to the remote agent named `agentName`, with the conversation context it needs and the goal, and answers with what that agent replied.',
-        schema: z.object({
-          agentName: z
-            .enum([first, ...rest])
-            .describe('The name of the agent to send the task to.'),
-          task: z
-            .string()
-            .describe(
-              'Everything the agent needs to act: the goal, and every detail from the conversation it depends on — the agent has not seen this conversation.',
-            ),
-        }),
-      },
     );
   }
 }

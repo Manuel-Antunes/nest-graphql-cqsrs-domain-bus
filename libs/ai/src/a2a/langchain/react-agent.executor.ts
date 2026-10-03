@@ -26,7 +26,6 @@ import { CallbackHandler } from '@langfuse/langchain';
 import { propagateAttributes, startActiveObservation } from '@langfuse/tracing';
 import type { AgentRunStream, ReactAgent } from 'langchain';
 
-import { AgentRunContext } from '../../agents/context/agent-run-context';
 import type { FileContentPart } from '../../files/domain/file-content-part';
 import { MediaKinds } from '../../files/domain/media-kind';
 import { A2aPart } from '../domain/a2a-part';
@@ -189,7 +188,6 @@ export class ReactAgentExecutor<T extends TurnAgent = ReactAgent>
                 publishToolEvents:
                   this.extensions.rendersToolEvents(requestContext),
                 context: {
-                  [AgentRunContext.KEY]: AgentRunContext.current(),
                   interruptOn: this.extensions.humanInTheLoop.interruptOnFor(
                     requestContext,
                     clientTools,

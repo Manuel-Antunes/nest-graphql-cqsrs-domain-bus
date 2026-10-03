@@ -11,8 +11,8 @@ import type { INestApplication } from '@nestjs/common';
 import { FastifyAdapter } from '@nestjs/platform-fastify';
 import { Test } from '@nestjs/testing';
 import { AgentCoreA2aServer } from '@nestposts/ai/a2a/agentcore/agentcore-a2a.server';
-import { A2aDelegationTool } from '@nestposts/ai/a2a/client/a2a-delegation.tool';
 import { ScriptedModel } from '@nestposts/ai/a2a/langchain/testing/scripted-model';
+import { A2aMiddlewareAgent } from '@nestposts/ai/ag-ui/a2a/a2a-middleware.agent';
 import { AgentCoreAgUiServer } from '@nestposts/ai/ag-ui/agentcore/agentcore-ag-ui.server';
 import type { AgentContext } from '@nestposts/ai/agents/context/agent-context';
 import { AgentRunContext } from '@nestposts/ai/agents/context/agent-run-context';
@@ -67,7 +67,7 @@ describe('Theo, an AG-UI agent on AgentCore Runtime that hands posts to the post
       toolCalls: [
         {
           id: 'call-1',
-          name: A2aDelegationTool.NAME,
+          name: A2aMiddlewareAgent.DELEGATION_TOOL,
           args: { agentName: 'Posts Manager', task: 'Tell me who I am.' },
         },
       ],
@@ -231,10 +231,14 @@ describe('Theo, an AG-UI agent on AgentCore Runtime that hands posts to the post
       { onEvent: ({ event }) => void events.push(event) },
     );
 
-    expect(events.map((event) => event.type)).toEqual([
+    const flow = events.filter(
+      (event) =>
+        event.type !== EventType.STEP_STARTED &&
+        event.type !== EventType.STEP_FINISHED,
+    );
+    expect(flow.map((event) => event.type)).toEqual([
       EventType.RUN_STARTED,
       EventType.TOOL_CALL_START,
-      EventType.TOOL_CALL_ARGS,
       EventType.TOOL_CALL_END,
       EventType.SUBAGENT_STARTED,
       EventType.TEXT_MESSAGE_START,
@@ -247,14 +251,15 @@ describe('Theo, an AG-UI agent on AgentCore Runtime that hands posts to the post
       EventType.TEXT_MESSAGE_CONTENT,
       EventType.TEXT_MESSAGE_CONTENT,
       EventType.TEXT_MESSAGE_END,
+      EventType.MESSAGES_SNAPSHOT,
       EventType.RUN_FINISHED,
     ]);
-    expect(events[4]).toMatchObject({
+    expect(flow[3]).toMatchObject({
       subagentRunId: 'call-1',
       name: 'Posts Manager',
       parentToolCallId: 'call-1',
     });
-    expect(events[10]).toMatchObject({
+    expect(flow[9]).toMatchObject({
       toolCallId: 'call-1',
       content: 'The caller is Ana.',
     });
@@ -268,7 +273,7 @@ describe('Theo, an AG-UI agent on AgentCore Runtime that hands posts to the post
       ]),
     ).toEqual(
       expect.arrayContaining([
-        ['assistant', undefined, undefined],
+        ['assistant', undefined, ''],
         ['assistant', 'call-1', 'The caller is Ana.'],
         ['tool', undefined, 'The caller is Ana.'],
         ['assistant', undefined, 'You are Ana.'],

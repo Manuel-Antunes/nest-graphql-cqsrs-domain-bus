@@ -15,9 +15,8 @@ export class ChatRecordingMiddleware {
     return createMiddleware({
       name: 'ChatRecording',
       beforeAgent: async (state) => {
-        const config = getConfig();
-        const caller = AgentRunContext.of(config);
-        const threadId = config.configurable?.thread_id;
+        const caller = AgentRunContext.current();
+        const threadId = getConfig().configurable?.thread_id;
         if (!caller?.credential || typeof threadId !== 'string') {
           return undefined;
         }

@@ -3,8 +3,6 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import type { AgentContext } from './agent-context';
 
 export class AgentRunContext {
-  static readonly KEY = 'agent';
-
   private static readonly storage = new AsyncLocalStorage<
     AgentContext | undefined
   >();
@@ -15,15 +13,6 @@ export class AgentRunContext {
 
   static current(): AgentContext | undefined {
     return AgentRunContext.storage.getStore();
-  }
-
-  static of(
-    runtime: { context?: unknown } | undefined,
-  ): AgentContext | undefined {
-    const context = runtime?.context as Record<string, unknown> | undefined;
-    return (
-      (context?.[AgentRunContext.KEY] as AgentContext | undefined) ?? undefined
-    );
   }
 
   static bearerFetch(base: typeof fetch = fetch): typeof fetch {

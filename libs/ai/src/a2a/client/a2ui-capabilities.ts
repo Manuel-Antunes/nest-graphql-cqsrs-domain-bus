@@ -10,10 +10,9 @@ type CatalogSchema = { catalogId: string; components: Record<string, unknown> };
 export class A2uiCapabilities {
   static readonly OPERATIONS_KEY = 'a2ui_operations';
 
-  static ofCaller(config: unknown): A2uiClientCapabilities | undefined {
-    const entries = (
-      config as { context?: { agUi?: { context?: readonly Context[] } } }
-    )?.context?.agUi?.context;
+  static of(
+    entries: readonly Context[] | undefined,
+  ): A2uiClientCapabilities | undefined {
     const catalogIds = (entries ?? [])
       .flatMap((entry) => A2uiCapabilities.catalogOf(entry.value))
       .filter(
