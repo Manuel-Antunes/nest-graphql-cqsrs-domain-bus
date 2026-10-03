@@ -19,3 +19,7 @@ router.route('/graphql', originOf(gateway.url), { readTimeout: '60 seconds' });
 router.route('/api/auth', originOf(streaming.url), {
   readTimeout: '60 seconds',
 });
+
+router.route('/.well-known/oauth-authorization-server', originOf(gateway.url));
+
+router.route('/.well-known/openid-configuration', originOf(gateway.url));

@@ -1,4 +1,5 @@
 /** biome-ignore-all lint/style/noNonNullAssertion: allow non null */
+import { readFileSync } from 'node:fs';
 import type { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { PostgreSqlContainer } from '@testcontainers/postgresql';
 import type { StartedNetwork, StartedTestContainer } from 'testcontainers';
@@ -14,6 +15,8 @@ import type {
   Endpoints,
   PostsSubscriptionSource,
 } from '../environment/run-environment';
+import { Workspace } from '../environment/workspace';
+import { PostsMcpApp } from '../infrastructure/agents/posts-mcp-app';
 import { Storage } from '../infrastructure/storage/storage';
 import { EmailSender } from '../model/email';
 import { Poll } from '../support/poll';
@@ -34,10 +37,18 @@ export interface ContainerStackOptions {
   readonly logs: (line: string) => void;
 }
 
+export interface PostsMcpOptions {
+  /** Chosen up front: the web is told where the MCP server is before the server starts. */
+  readonly mcpPort: number;
+  readonly webPort: number;
+  readonly webUrl: string;
+  readonly logs: (line: string) => void;
+}
+
 /**
  * **Everything but the web and Chatwoot, as containers on one network** — Postgres, Redis, MinIO, Mailpit, the
- * broker or the Inngest dev server, the migrator, and `posts-api`, `tagging`, `notificator` and the
- * `gateway`. Every one of them that holds Better Auth is given the same Redis, the web included: a
+ * broker or the Inngest dev server, the migrator, and `posts-api`, `tagging`, `notificator`, `chat-api`
+ * and the `gateway`. Every one of them that holds Better Auth is given the same Redis, the web included: a
  * session is kept there in front of its row, and a process reading only the row would disagree with
  * the others about which sessions are still valid.
  *
@@ -73,7 +84,9 @@ export class ContainerStack {
   private static readonly REDIS_PORT = 6379;
   private static readonly TAGGING_PORT = 3001;
   private static readonly NOTIFICATOR_PORT = 3002;
+  private static readonly CHAT_API_PORT = 3003;
   private static readonly GATEWAY_PORT = 4000;
+  private static readonly MCP_PORT = 8000;
 
   private static readonly POSTGRES_USER = 'nestposts';
   private static readonly POSTGRES_PASSWORD = 'nestposts';
@@ -89,7 +102,9 @@ export class ContainerStack {
   private postsApi?: StartedTestContainer;
   private tagging?: StartedTestContainer;
   private notificator?: StartedTestContainer;
+  private chatApi?: StartedTestContainer;
   private gateway?: StartedTestContainer;
+  private postsMcp?: StartedTestContainer;
 
   async up(options: ContainerStackOptions): Promise<Endpoints> {
     this.network = await new Network().start();
@@ -111,10 +126,12 @@ export class ContainerStack {
 
   async down(): Promise<void> {
     for (const container of [
+      this.postsMcp,
       this.gateway,
       this.postsApi,
       this.tagging,
       this.notificator,
+      this.chatApi,
       this.inngest,
       this.mailpit,
       this.rabbitmq,
@@ -275,6 +292,7 @@ export class ContainerStack {
       AUTH_SECRET: options.authSecret,
       WEB_URL: options.webUrl,
       GATEWAY_URL: this.gatewayUrl(options),
+      AUTH_OAUTH_RESOURCES: this.oauthResources(options),
       MIKRO_ORM_DEBUG: 'false',
       LOG_LEVEL: options.logLevel,
     };
@@ -313,6 +331,19 @@ export class ContainerStack {
       .withWaitStrategy(Wait.forLogMessage(/notificator is listening/))
       .withLogConsumer((stream) =>
         stream.on('data', (line) => options.logs(`notificator ${line}`)),
+      )
+      .start();
+
+    this.chatApi = await new GenericContainer('nestposts/chat-api:dev')
+      .withNetwork(this.network!)
+      .withNetworkAliases('chat-api')
+      .withEnvironment({
+        ...shared,
+        CHAT_API_PORT: String(ContainerStack.CHAT_API_PORT),
+      })
+      .withWaitStrategy(Wait.forLogMessage(/the chat subgraph is at/))
+      .withLogConsumer((stream) =>
+        stream.on('data', (line) => options.logs(`chat-api ${line}`)),
       )
       .start();
 
@@ -359,11 +390,13 @@ export class ContainerStack {
         POSTS_SUBGRAPH_URL: 'http://posts-api:3000/graphql',
         NOTIFICATIONS_SUBGRAPH_URL: `http://notificator:${ContainerStack.NOTIFICATOR_PORT}/graphql`,
         CHATWOOT_SUBGRAPH_URL: `http://host.testcontainers.internal:${options.chatwootPort}/graphql`,
+        CHAT_SUBGRAPH_URL: `http://chat-api:${ContainerStack.CHAT_API_PORT}/graphql`,
         POSTGRES_URL: this.internalPostgresUrl,
         REDIS_URL: this.internalRedisUrl,
         AUTH_SECRET: options.authSecret,
         WEB_URL: options.webUrl,
         AUTH_URL: `http://localhost:${options.apiPort}`,
+        AUTH_OAUTH_RESOURCES: this.oauthResources(options),
         MIKRO_ORM_DEBUG: 'false',
         LOG_LEVEL: options.logLevel,
       })
@@ -374,8 +407,57 @@ export class ContainerStack {
       .start();
   }
 
+  /**
+   * **The posts MCP server, from `apps/mcp`'s image: Apollo MCP Server and the posts MCP App behind
+   * Caddy**, calling the gateway as whoever's token it was given. It starts once the web answers,
+   * because the web is its authorization server: it validates every token against the web's
+   * discovery document and keys, and it checks that the document's issuer is the URL it asked. That
+   * URL is the web's own, `localhost` on the host, which inside the container is the container — so
+   * its Caddy gets one site more than the image's, forwarding the web's port to the host. The site
+   * the image serves on 8000, the rewrite of AgentCore's header into `?app=` included, is read from
+   * `apps/mcp/config/Caddyfile` as it is.
+   */
+  async startPostsMcp(options: PostsMcpOptions): Promise<void> {
+    await ContainerStack.exposeHostPort(options.webPort);
+    const caddyfile = [
+      readFileSync(Workspace.path('apps/mcp/config/Caddyfile'), 'utf8'),
+      `:${options.webPort} {`,
+      `\treverse_proxy host.testcontainers.internal:${options.webPort}`,
+      '}',
+      '',
+    ].join('\n');
+    this.postsMcp = await new GenericContainer('nestposts/mcp:dev')
+      .withNetwork(this.network!)
+      .withNetworkAliases('mcp')
+      .withExposedPorts({
+        container: ContainerStack.MCP_PORT,
+        host: options.mcpPort,
+      })
+      .withCopyContentToContainer([
+        { content: caddyfile, target: '/data/config/Caddyfile' },
+      ])
+      .withEnvironment({
+        POSTS_MCP_GRAPHQL_ENDPOINT: `http://gateway:${ContainerStack.GATEWAY_PORT}/graphql`,
+        AUTH_ISSUER: options.webUrl,
+        POSTS_MCP_RESOURCE: PostsMcpApp.RESOURCE,
+      })
+      .withWaitStrategy(Wait.forHttp('/health', ContainerStack.MCP_PORT))
+      .withLogConsumer((stream) =>
+        stream.on('data', (line) => options.logs(`mcp ${line}`)),
+      )
+      .start();
+  }
+
   private gatewayUrl(options: ContainerStackOptions): string {
     return `http://localhost:${options.gatewayPort}/graphql`;
+  }
+
+  /**
+   * The audiences a bearer may carry here: the gateway's, and the posts MCP server's, whose
+   * callers' tokens it passes to the gateway as they are.
+   */
+  private oauthResources(options: ContainerStackOptions): string {
+    return [this.gatewayUrl(options), PostsMcpApp.RESOURCE].join(',');
   }
 
   /**

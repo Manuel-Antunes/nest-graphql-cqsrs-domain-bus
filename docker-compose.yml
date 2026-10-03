@@ -231,6 +231,30 @@ services:
       migrator:
         condition: service_completed_successfully
 
+  # The chat subgraph: an agent's conversations, listed per person and tenant, and read back from the
+  # agent's AgentCore Memory when CHAT_AGENT_MEMORIES names one (`theo=<memory id>`) — with none, a
+  # chat's messages are an empty list.
+  chat-api:
+    profiles: ["apps"]
+    image: nestposts/chat-api:dev
+    build:
+      context: .
+      dockerfile: apps/chat-api/Dockerfile
+    container_name: nestposts-chat-api
+    environment:
+      POSTGRES_URL: postgresql://${POSTGRES_USER:-nestposts}:${POSTGRES_PASSWORD:-nestposts}@postgres:5432/${POSTGRES_DB:-nestposts}
+      CHAT_API_PORT: "3003"
+      AUTH_SECRET: ${AUTH_SECRET:-nestposts-compose-secret}
+      WEB_URL: http://localhost:${WEB_PORT:-4300}
+      GATEWAY_URL: http://localhost:${GATEWAY_PORT:-4000}/graphql
+      REDIS_URL: redis://redis:6379
+      CHAT_AGENT_MEMORIES: ${CHAT_AGENT_MEMORIES:-}
+    depends_on:
+      redis:
+        condition: service_healthy
+      migrator:
+        condition: service_completed_successfully
+
   # Every email sent locally lands here: SMTP on 1025, the inbox — a UI and a REST API — on 8025.
   # `apps/notificator` sends to it by default (`MAIL_SMTP_URL=smtp://localhost:1025`).
   mailpit:
@@ -288,6 +312,7 @@ services:
       GATEWAY_URL: http://localhost:${GATEWAY_PORT:-4000}/graphql
       POSTS_SUBGRAPH_URL: http://posts-api:3000/graphql
       NOTIFICATIONS_SUBGRAPH_URL: http://notificator:3002/graphql
+      CHAT_SUBGRAPH_URL: http://chat-api:3003/graphql
       POSTGRES_URL: postgresql://${POSTGRES_USER:-nestposts}:${POSTGRES_PASSWORD:-nestposts}@postgres:5432/${POSTGRES_DB:-nestposts}
       REDIS_URL: redis://redis:6379
       AUTH_SECRET: ${AUTH_SECRET:-nestposts-compose-secret}
@@ -301,6 +326,8 @@ services:
       posts-api:
         condition: service_started
       notificator:
+        condition: service_started
+      chat-api:
         condition: service_started
 
   # The Inngest dev server: the local default transport's broker-equivalent.

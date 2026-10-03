@@ -1,5 +1,6 @@
 export class Chatwoot {
   static readonly SUPPORT_PATH = '/atendimento';
+  static readonly DASHBOARD_PATH = '/app';
   static readonly PLATFORM_NAVIGATE = 'PLATFORM_NAVIGATE';
 
   static platformPathOf(message: unknown): string | null {
@@ -16,7 +17,7 @@ export class Chatwoot {
   }
 
   static frameUrlOf(url: string, path: string): string {
-    return `${url.replace(/\/$/, '')}${path}`;
+    return `${url.replace(/\/$/, '')}${path || Chatwoot.DASHBOARD_PATH}`;
   }
 
   static supportPathOf(dashboardPath: string): string {

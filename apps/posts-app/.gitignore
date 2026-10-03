@@ -1,0 +1,4 @@
+.apollo-client-ai-apps
+.application-manifest.json
+.application-manifest.d.json.ts
+src/graphql/__gen__/

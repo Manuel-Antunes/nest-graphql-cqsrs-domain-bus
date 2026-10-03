@@ -10,6 +10,8 @@ interface RedisStackArgs {
 // not part of ElastiCache's Redis OSS engine. `redis/redis-stack-server`
 // bundles RediSearch + RedisJSON, which is what LangGraph needs.
 export class RedisStack extends $util.ComponentResource {
+  static readonly __pulumiType = 'infra:aws:RedisStack';
+
   private cluster?: sst.aws.Cluster;
   private service?: sst.aws.Service;
   private data?: sst.aws.Efs;
@@ -26,7 +28,7 @@ export class RedisStack extends $util.ComponentResource {
     args: RedisStackArgs,
     opts?: $util.ComponentResourceOptions,
   ) {
-    super('infra:aws:RedisStack', name, args, opts);
+    super(RedisStack.__pulumiType, name, args, opts);
     this.componentName = name;
 
     if ($dev) {

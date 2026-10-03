@@ -55,6 +55,16 @@ describe('rendering skills into a filesystem', () => {
 
     expect(JSON.stringify(read)).toContain('handoff-to-human');
   });
+
+  it('mounts them where their directories say, beside an agent’s own files', async () => {
+    const handoff = skill('handoff-to-human');
+    const backend = SkillsBackend.mount([handoff]);
+
+    const read = await backend.read(SkillsBackend.pathOf(handoff));
+
+    expect(read.error).toBeUndefined();
+    expect(read.content).toContain('# handoff-to-human');
+  });
 });
 
 describe('collecting skills across an agent tree', () => {

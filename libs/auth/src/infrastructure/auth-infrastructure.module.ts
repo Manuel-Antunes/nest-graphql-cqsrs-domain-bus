@@ -7,6 +7,7 @@ import { AuthModule as NestBetterAuthModule } from '@thallesp/nestjs-better-auth
 import { PlatformAuthGuard } from '../guards/platform-auth.guard';
 import type { BetterAuthModuleOptions } from './better-auth/better-auth.module';
 import { BetterAuthModule } from './better-auth/better-auth.module';
+import { OAuthDiscoveryController } from './better-auth/discovery/oauth-discovery.controller';
 import type { BetterAuth } from './better-auth/init-auth';
 import { BETTER_AUTH } from './better-auth/tokens';
 
@@ -21,9 +22,11 @@ import { BETTER_AUTH } from './better-auth/tokens';
 export interface AuthInfrastructureModuleOptions
   extends BetterAuthModuleOptions {
   /**
-   * Whether this application SERVES `/api/auth/*`. On by default; a service that only needs to know
-   * who is calling — a subgraph behind the gateway — turns it off and keeps the global guard, which
-   * reads the session through the same Better Auth instance either way.
+   * Whether this application SERVES `/api/auth/*`, and the authorization server's discovery
+   * documents at the root (`/.well-known/oauth-authorization-server`, `/.well-known/openid-configuration`).
+   * On by default; a service that only needs to know who is calling — a subgraph behind the
+   * gateway — turns it off and keeps the global guard, which reads the session through the same
+   * Better Auth instance either way.
    */
   readonly routes?: boolean;
   /**
@@ -63,6 +66,7 @@ export class AuthInfrastructureModule {
           }),
         }),
       ],
+      controllers: routes ? [OAuthDiscoveryController] : [],
       providers: guard
         ? [{ provide: APP_GUARD, useClass: PlatformAuthGuard }]
         : [],

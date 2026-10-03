@@ -1,0 +1,20 @@
+query WhoAmI($first: Int = 10) {
+  me {
+    __typename
+    id
+    name
+    email
+    ... on Author {
+      posts(first: $first) {
+        totalCount
+        edges {
+          node {
+            id
+            title
+            createdAt
+          }
+        }
+      }
+    }
+  }
+}

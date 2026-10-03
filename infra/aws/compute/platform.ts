@@ -1,11 +1,13 @@
 /// <reference path="../../../.sst/platform/config.d.ts" />
 
+import { theoMemory } from '../agents/memories';
 import { email } from '../mail';
 import { vpc } from '../network';
 import { bucket } from '../storage';
 import type { LambdaPlatform } from '../support';
 import { build } from './build';
 import {
+  chatApiEnvironment,
   links,
   migratorEnvironment,
   notificatorEnvironment,
@@ -35,6 +37,15 @@ export const notificator: LambdaPlatform = {
   ...base,
   link: [...links, email],
   environment: notificatorEnvironment,
+};
+
+export const chatApi: LambdaPlatform = {
+  ...base,
+  link: [...links, theoMemory],
+  environment: {
+    ...chatApiEnvironment,
+    CHAT_AGENT_MEMORIES: $interpolate`theo=${theoMemory.id}`,
+  },
 };
 
 export const migrations: LambdaPlatform = {

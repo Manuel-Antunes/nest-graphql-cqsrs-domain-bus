@@ -1,0 +1,38 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "emitDeclarationOnly": false,
+    "customConditions": [],
+    "jsx": "react-jsx"
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/**/*.spec.ts"],
+  "references": [
+    {
+      "path": "../../libs/core/redis/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/organizations/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/core/observability/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/core/langgraph-checkpoint-aws/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/database/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/auth/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/ai/tsconfig.lib.json"
+    }
+  ]
+}

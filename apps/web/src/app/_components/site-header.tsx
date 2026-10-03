@@ -27,6 +27,7 @@ const routes = [
   { href: '/events', label: 'Eventos' },
   { href: '/clients', label: 'Clients' },
   { href: '/atendimento', label: 'Support' },
+  { href: '/theo', label: 'Theo' },
   { href: '/saga', label: 'Saga' },
   { href: '/live', label: 'Tempo real' },
   { href: '/me', label: 'Identidade' },

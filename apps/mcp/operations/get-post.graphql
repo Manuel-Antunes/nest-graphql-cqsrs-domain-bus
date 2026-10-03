@@ -1,0 +1,28 @@
+query GetPost($id: ID!) {
+  post(id: $id) {
+    id
+    title
+    content
+    createdAt
+    updatedAt
+    version
+    author {
+      id
+      name
+      email
+    }
+    tags(first: 20) {
+      edges {
+        node {
+          id
+          name
+        }
+      }
+    }
+    asset {
+      name
+      mimeType
+      url
+    }
+  }
+}

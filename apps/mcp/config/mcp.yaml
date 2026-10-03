@@ -1,0 +1,83 @@
+endpoint: ${env.POSTS_MCP_GRAPHQL_ENDPOINT:-http://localhost:4000/graphql}
+
+schema:
+  source: local
+  path: schema/api.graphql
+
+operations:
+  source: local
+  paths:
+    - operations
+
+introspection:
+  execute:
+    enabled: true
+    hint: >-
+      It is how the posts app on screen loads what it shows, and it only reads: to answer the person, use
+      the named tools.
+
+server_info:
+  name: nestposts-posts
+  title: Blog posts
+
+instructions: >-
+  Reads and writes the posts of the blog through the platform's GraphQL gateway, as the caller.
+  Every tool acts with the caller's own access token: anyone may read, only an author may publish,
+  and only a post's author may change or delete it.
+
+overrides:
+  mutation_mode: explicit
+  descriptions:
+    ListPosts: >-
+      Lists the blog's posts, oldest first, one page at a time, with each post's author and tags but not its
+      content. To read the next page, pass the previous page's pageInfo.endCursor as `after`.
+    GetPost: >-
+      Reads one post by its id: title, full content, author, tags and attached file. Answers null when no post
+      has that id.
+    WhoAmI: >-
+      Who the caller is. When the caller is an author it also lists their most recent posts, newest first; a
+      reader gets no posts field and cannot write.
+    CreatePost: >-
+      Publishes a new post signed by the caller, who must be an author. The title is at most 200 characters.
+      The post is tagged by the tagging service a moment later, so its tags may still be empty in the answer.
+    UpdatePost: >-
+      Changes a post's title, content, or both; a field left out keeps its current value. Only the post's
+      author may change it.
+    DeletePost: >-
+      Deletes a post and its attached file. Only the post's author may delete it, and it cannot be undone from
+      here: confirm with the person first.
+  required_scopes:
+    ListPosts: [read:posts]
+    GetPost: [read:posts]
+    CreatePost: [write:posts]
+    UpdatePost: [write:posts]
+    DeletePost: [write:posts]
+    execute: [read:posts]
+    ChoosePostToEdit: [read:posts]
+    EditPost: [read:posts]
+    PreviewPost: [read:posts]
+    SavePost: [write:posts]
+    PublishPost: [write:posts]
+
+transport:
+  type: streamable_http
+  address: ${env.POSTS_MCP_ADDRESS:-127.0.0.1}
+  port: ${env.POSTS_MCP_PORT:-8000}
+  stateful_mode: false
+  host_validation:
+    enabled: false
+  auth:
+    servers:
+      - ${env.AUTH_ISSUER:-http://localhost:4200}
+    issuers:
+      - ${env.AUTH_ISSUER:-http://localhost:4200}
+    audiences:
+      - ${env.POSTS_MCP_RESOURCE:-http://localhost:8000/mcp}
+    resource: ${env.POSTS_MCP_RESOURCE:-http://localhost:8000/mcp}
+    scopes:
+      - read:posts
+      - write:posts
+    scope_mode: require_any
+
+health_check:
+  enabled: true

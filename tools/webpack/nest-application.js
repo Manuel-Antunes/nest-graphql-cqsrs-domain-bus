@@ -29,16 +29,22 @@ const isPackageRequest = (request) =>
   !isAbsolute(request) &&
   !request.startsWith(WORKSPACE_SCOPE);
 
-const externalPackages = ({ request }, callback) =>
-  isPackageRequest(request)
-    ? callback(null, `commonjs ${request}`)
-    : callback();
+const isPackageIn = (packages, request) =>
+  packages.some((name) => request === name || request.startsWith(`${name}/`));
+
+const externalPackages =
+  (bundledPackages) =>
+  ({ request }, callback) =>
+    isPackageRequest(request) && !isPackageIn(bundledPackages, request)
+      ? callback(null, `commonjs ${request}`)
+      : callback();
 
 const nestApplication = ({
   projectRoot,
   entryPoints = [],
   assets = [],
   tenantMigrations = false,
+  bundledPackages = [],
 }) => ({
   output: {
     path: join(projectRoot, 'dist'),
@@ -48,8 +54,14 @@ const nestApplication = ({
       ? {}
       : { devtoolModuleFilenameTemplate: '[absolute-resource-path]' }),
   },
-  resolve: { conditionNames: ['@nestposts/source', '...'] },
-  externals: [externalPackages],
+  resolve: {
+    conditionNames: [
+      '@nestposts/source',
+      '...',
+      ...(bundledPackages.length ? ['import'] : []),
+    ],
+  },
+  externals: [externalPackages(bundledPackages)],
   plugins: [
     new NxAppWebpackPlugin({
       target: 'node',

@@ -23,6 +23,7 @@ const AppEnvSchema = z.object({
     .string()
     .min(1)
     .default('http://localhost:3100/graphql'),
+  CHAT_SUBGRAPH_URL: z.string().min(1).default('http://localhost:3003/graphql'),
   GATEWAY_CORS_ORIGINS: z.string().optional(),
   WEB_URL: z.string().min(1).default('http://localhost:4200'),
 });
@@ -46,6 +47,11 @@ export const appConfig = registerAs('app', () => {
       name: 'chatwoot',
       url: parsed.CHATWOOT_SUBGRAPH_URL,
       sdlDir: join(sdlRoot, 'chatwoot'),
+    },
+    {
+      name: 'chat',
+      url: parsed.CHAT_SUBGRAPH_URL,
+      sdlDir: join(sdlRoot, 'chat'),
     },
   ];
   return {

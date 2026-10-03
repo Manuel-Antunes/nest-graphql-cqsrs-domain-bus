@@ -1,16 +1,20 @@
 /// <reference path="../../../.sst/platform/config.d.ts" />
 
 import { errorReporting } from '../../sentry';
+import { postsMcp, theo } from '../agents';
 import { streaming } from '../compute';
 import {
   authGoogleId,
   authGoogleSecret,
   authSecret,
   gatewayUrl,
+  mcpResource,
   polarAccessToken,
   polarEnvironment,
   polarWebhookSecret,
+  postsAgentResource,
   sharedEnvironment,
+  theoResource,
 } from '../compute/environment';
 import { router } from '../edge';
 import { postEvents } from '../messaging';
@@ -31,6 +35,13 @@ import { COLLECTOR_CONFIG, COLLECTOR_LAYER } from '../support';
  * {@link NodeFunction}, so the layer and `collector.yaml` are attached here, through `transform`.
  * Without them `OTEL_EXPORTER_OTLP_ENDPOINT` would point at a `localhost` with nothing listening, and
  * the one application a person actually looks at would be the one missing from the traces.
+ *
+ * It is where a person talks to Theo (`infra/aws/agents`): its `/api/copilotkit` route runs the
+ * CopilotKit runtime, which calls Theo's AgentCore invocation URL with an access token this
+ * application's own Better Auth issues for the person, addressed to Theo, the posts agent and the
+ * posts MCP server. That route streams, so the server function streams: `apps/web/open-next.config.ts`
+ * picks OpenNext's streaming wrapper, which is what makes SST create the function URL in
+ * `RESPONSE_STREAM` mode. The runtime's telemetry is off.
  *
  * It PUBLISHES to the events topic, too: the emails its Better Auth asks for — verification, reset,
  * magic link, one-time codes, invitations — are notifications, and the notificator's queue is
@@ -86,6 +97,11 @@ export const web = new sst.aws.Nextjs('Web', {
     POLAR_ENVIRONMENT: polarEnvironment.value,
     POLAR_WEBHOOK_SECRET: polarWebhookSecret.value,
     CHATWOOT_URL: router.url,
+    THEO_AGENT_URL: theo.url,
+    THEO_AGENT_AUDIENCES: $interpolate`${theoResource},${postsAgentResource},${mcpResource},${gatewayUrl}`,
+    POSTS_MCP_URL: postsMcp.url,
+    POSTS_MCP_RESOURCE: mcpResource,
+    COPILOTKIT_TELEMETRY_DISABLED: 'true',
   },
 });
 

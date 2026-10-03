@@ -45,7 +45,8 @@ The only exceptions:
    `libs/core/transport-eventbus`, `libs/core/outbox-mikro-orm`, `libs/core/event-store-mikro-orm`,
    `libs/core/microservices-aws`,
    `libs/core/microservices-inngest`, `libs/core/microservices-memory`, `libs/core/mail`,
-   `libs/core/redis`, `libs/core/graphql-response-cache`, `libs/core/observability`, `libs/notifications`, `libs/asset`, `libs/auth` and
+   `libs/core/redis`, `libs/core/graphql-response-cache`, `libs/core/observability`,
+   `libs/core/langgraph-checkpoint-aws`, `libs/notifications`, `libs/asset`, `libs/auth` and
    `libs/organizations` — may
    carry **JSDoc**, and only JSDoc
    (`/** … */`), as usage documentation of their public API. These are
@@ -61,8 +62,9 @@ The only exceptions:
    Anything that changes that library's relationship to upstream belongs there.
    **`libs/core/mail/NOTICE.md`** does the same for the port of `@adonisjs/mail`'s class-based mail,
    **`libs/auth/NOTICE.md`** for the React Email components copied from better-auth-ui's registry
-   into `libs/auth` and `libs/organizations`, and **`libs/asset/NOTICE.md`** for the port of
-   `@jrmc/adonis-attachment`.
+   into `libs/auth` and `libs/organizations`, **`libs/asset/NOTICE.md`** for the port of
+   `@jrmc/adonis-attachment`, and **`libs/core/langgraph-checkpoint-aws/NOTICE.md`** for the port of
+   Python's `langgraph-checkpoint-aws` (its AgentCore saver and store).
 
 GraphQL `"""descriptions"""` in `apps/posts-api/src/graphql/*.graphql` are **not** comments — they are
 part of the schema and are served through introspection and GraphiQL. Keep them. SDL `#` comments are
@@ -232,6 +234,12 @@ npx nx run @chatwoot/chatwoot:serve        # Rails on 3100 (CHATWOOT_PORT) and V
 npx nx run @chatwoot/chatwoot:migrate      # a new Chatwoot migration, then chatwoot:mirror
 npx nx run @chatwoot/chatwoot:graphql:generate   # apps/chatwoot/schema.graphql, the SDL the gateway composes — after any change to apps/chatwoot/graphql
 node apps/migrator/dist/main.js chatwoot:mirror  # mirror into Chatwoot what it does not have yet; migrate() already ends with it
+npx nx serve @nestposts/mcp                # Apollo MCP Server on :8000/mcp, natively (APOLLO_MCP_SERVER or apollo-mcp-server on PATH), after copying the composed API schema and building the MCP App
+npx nx build @nestposts/posts-app          # the posts MCP App: codegen, then one HTML file and its manifest into apps/mcp/apps/posts
+npx nx serve @nestposts/posts-agent        # the posts agent on :9000 (A2A), with AWS credentials that can call Bedrock
+node apps/posts-agent/scripts/agent-console.mjs "Who am I?"   # sign in as a seeded user, get a token for the agent and the MCP server, talk A2A
+npx nx serve @nestposts/theo-agent         # Theo on :8080 (AG-UI), delegating to the posts agent over A2A
+node apps/theo-agent/scripts/theo-console.mjs "Who am I?"     # the same sign-in, a token for Theo, the posts agent and the MCP server, talk AG-UI
 
 docker compose up -d localstack   # SNS + SQS, with the topology docker/localstack/init creates
 docker compose up -d minio createbuckets   # the bucket a post keeps its file in, with its policies
@@ -241,6 +249,7 @@ docker compose --profile apps up -d --build   # the infrastructure AND the four 
 npx nx run @nestposts/posts-api:docker:build  # one image; `-t docker:build` builds all four
 npx sst deploy --stage <name>     # the topic, the queues and apps/tagging as a Lambda
 pnpm graph:stack <name>           # the DEPLOYED graph: sst state export → pulumi stack graph
+npx sst tunnel --stage <name>     # the stage's Postgres and Valkey through its bastion (not production; `sudo sst tunnel install` once)
 ```
 
 The system schema is **never** created by an application, and a tenant's only by its own first
@@ -302,6 +311,36 @@ gateway — reads **`GATEWAY_URL`** too
 a session, and the resource the migrator registers. `AUTH_ISSUER` (default `WEB_URL`) is the one
 `iss` they all sign and verify with. The notificator now reads `AUTH_SECRET`, `AUTH_URL` and
 `WEB_URL` as well: it authenticates the callers of its subgraph.
+
+`AUTH_OAUTH_RESOURCES` (default: `GATEWAY_URL` alone) is the list of audiences a Better Auth process
+accepts on a bearer token, and what the migrator registers as resources. With the agents, every
+process lists the posts MCP server's too — it forwards the caller's token, issued for it, to the
+gateway — and the migrator also the posts agent's (`.env.example`; on AWS `infra/aws/compute/environment.ts`).
+
+`apps/posts-agent` reads `POSTS_AGENT_PORT`/`POSTS_AGENT_HOST` (`9000`/`0.0.0.0`), `POSTS_AGENT_URL`
+(the URL its card advertises; on AgentCore, `AGENTCORE_RUNTIME_URL` wins), `POSTS_AGENT_RESOURCE` (the
+resource its card names), the auth, database and Redis variables of every Better Auth process —
+`AUTH_OAUTH_RESOURCES` being the audiences a caller's token may carry, its own alone on AWS —
+`AUTH_ISSUER`/`WEB_URL`, `POSTS_MCP_URL`, `POSTS_AGENT_MODEL_ID`
+(default `global.anthropic.claude-sonnet-5-5`), `POSTS_AGENT_TEMPERATURE` (sent only when set),
+`AWS_REGION` and `BEDROCK_AGENTCORE_MEMORY_ID`. `apps/mcp`'s config reads `AUTH_ISSUER`,
+`POSTS_MCP_RESOURCE`, `POSTS_MCP_GRAPHQL_ENDPOINT` and `POSTS_MCP_ADDRESS`.
+
+`apps/theo-agent` reads `THEO_AGENT_PORT`/`THEO_AGENT_HOST` (`8080`/`0.0.0.0`), `THEO_A2A_AGENTS` (the A2A
+agents it may delegate to, comma separated — the posts agent's URL), `THEO_AGENT_MODEL_ID`
+(default `us.amazon.nova-2-lite-v1:0`), `THEO_AGENT_TEMPERATURE`, `THEO_WEB_SEARCH_URL` (the AgentCore
+Gateway with the web search connector; unset, Theo has no search), `BEDROCK_AGENTCORE_MEMORY_ID`
+(Theo's AgentCore Memory: its checkpoints and its long-term memory; unset, both in the process),
+`CHAT_API_URL` (where it records each conversation as a chat — the gateway; unset, nothing is
+recorded), `AWS_REGION` and the auth, database and Redis variables of every Better Auth process.
+`apps/chat-api` reads `CHAT_API_PORT` (default `3003`), `CHAT_AGENT_MEMORIES` (`agentId=memoryId`,
+comma separated: whose AgentCore Memory a chat's messages are read from — `theo=<id>`), `AWS_REGION`
+and the database, Redis and auth variables of every subgraph; the gateway reaches it at
+`CHAT_SUBGRAPH_URL` (default `http://localhost:3003/graphql`). `apps/web` reads `THEO_AGENT_URL` (Theo's invocation URL, `http://localhost:8080/invocations`
+locally) and `THEO_AGENT_AUDIENCES` (what the token it issues for the person is addressed to: Theo, the
+posts agent, the MCP server), and is deployed with `COPILOTKIT_TELEMETRY_DISABLED=true`. It also reads
+`POSTS_MCP_URL` and `POSTS_MCP_RESOURCE` (both `http://localhost:8000/mcp` locally): where the MCP
+App's HTML and the app's buttons are proxied to, as the person.
 
 The gateway also reads `CHATWOOT_SUBGRAPH_URL` (default `http://localhost:3100/graphql`), and
 `apps/web` `CHATWOOT_URL` (default `http://localhost:3100`), the origin it embeds.
@@ -434,6 +473,11 @@ libs/core/redis          Redis as one Nest provider: RedisModule (global, node-r
                          failing the boot when unreachable, closed on shutdown — RedisCacheOptions
                          (the Nest cache on that client through Keyv) and ThrowawayRedis for specs.
                          It has a README
+libs/core/langgraph-checkpoint-aws  a TypeScript port of Python's langgraph-checkpoint-aws:
+                         AgentCoreMemorySaver (LangGraph checkpoints as AgentCore Memory events,
+                         legacy and snapshot formats) and AgentCoreMemoryStore (conversation put as
+                         events for the memory's strategies, long-term records searched by
+                         namespace), with FakeAgentCoreMemory for specs. README and NOTICE
 libs/core/graphql-response-cache  GraphQL response caching for a Yoga server, stored in the Nest
                          cache manager: @graphql-yoga/plugin-response-cache over a store that
                          invalidates by version, opt-in per type or field with @cacheControl in the
@@ -453,39 +497,78 @@ libs/tanstack-query-graphql  GraphQL over TanStack Query, with Apollo's InMemory
                          normalized store underneath: GqlRpc (option builders keyed
                          ['graph', document, variables]), GraphQueryCache/GraphMutationCache and
                          useSubscription. A SOURCE package like libs/ui; it has a README
+libs/chat                domain/chat: a person's conversation with an agent (the agent's thread as
+                         id, the owner, the agent, a title) + its ORM mapping and repository, wired
+                         by ChatsInfrastructureModule; a tenant table. What a chat SAYS is the
+                         agent's checkpoints. It has a README
 libs/clients             domain/client (a Client of the tenant's organization: CPF, kind, status,
                          address, the litigation flags) + its ORM mapping and repository, wired by
                          ClientsInfrastructureModule; a tenant table. Its application layer and the
                          `clients` GraphQL surface live in apps/posts-api; its Chatwoot contacts are
                          federated onto it by the `chatwoot` subgraph (see Chatwoot)
-libs/ai                  the agents' runtime (being migrated in): A2A hosting with its extensions as
-                         classes (a2a/domain, a2a/server, a2a/langchain), the files an agent works
+libs/ai                  the agents' runtime (being migrated in): what every agent shares whatever it
+                         speaks (agents/: AgentContext — who and where a run is for, which each
+                         application builds per request — AgentRunContext and AgentCoreHealth),
+                         A2A hosting with its extensions as classes (a2a/domain,
+                         a2a/server, a2a/langchain) and on Amazon Bedrock AgentCore Runtime
+                         (a2a/agentcore), AG-UI hosting (ag-ui/server, ag-ui/agentcore: POST
+                         /invocations on :8080) with a LangGraph agent served as CopilotKit serves
+                         one (ag-ui/langgraph: @ag-ui/langgraph's LangGraphAgent over the graph in
+                         this process, copilotkitMiddleware in it) and CopilotKit's A2A middleware
+                         loop (ag-ui/a2a: send_message_to_a2a_agent as a client tool, each call to
+                         an A2A agent — a2a/client — an AG-UI subagent of it) — the files an agent works
                          with — analysis, AttachmentDrive over @nestjs/storage and the asset model,
                          the deepagents DriveBackend, the ingestion middleware that keeps base64 out
                          of the checkpoint (files/) — and ChannelResponseProcessor, whose Chatwoot
-                         channel forwards the agent bot's platform token to the gateway. It has a
-                         README
+                         channel forwards the agent bot's platform token to the gateway — and every
+                         agent's memory (checkpoint/: AgentMemories, the AgentCore checkpointer and
+                         store; LongTermMemoryMiddleware), its tenancy (A2A's tenant held to the
+                         caller's organization, the actor tenant:user) and its chats (chats/:
+                         ChatRecordingMiddleware over the chat API). It has a README
 
-apps/gateway             the one GraphQL endpoint: composes the posts, notifications and chatwoot subgraphs
+apps/gateway             the one GraphQL endpoint: composes the posts, notifications, chat and chatwoot subgraphs
                          from their SDL, executes them with @graphql-tools/federation (subscriptions
                          over SSE, @interfaceObject), reads each caller's session through the same
                          Better Auth (Redis first, Postgres on a miss) and forwards every caller's
-                         cookie and bearer. The whole gateway lives here, not in a library. See
-                         "The gateway" below
+                         cookie and bearer. It also SERVES that Better Auth — /api/auth/* and the
+                         authorization server's discovery documents at the root. The whole gateway
+                         lives here, not in a library. See "The gateway" below
 apps/posts-api           application + interfaces (GraphQL, messaging), a HYBRID application:
                          HTTP (the `posts` subgraph, subscriptions over SSE) and a microservice
 apps/tagging             one step of the saga, a FULL microservice: no HTTP port at all
+apps/chat-api            the `chat` subgraph: a person's chats with the agents in the tenant
+                         (`chats`, `chat`, `recordChat`, `renameChat`, `deleteChat`, `IUser.chats`),
+                         and their messages read back from the agent's AgentCore Memory. README
 apps/notificator         delivers notifications — the database, email, push — through a command, and
                          serves the `notifications` subgraph: a HYBRID application (see
                          Notifications)
+apps/mcp                 the posts as MCP tools: Apollo MCP Server over the composed API schema, six
+                         operations, configured in config/mcp.yaml; authenticates every request and
+                         passes the caller's token to the gateway — and the posts MCP App, behind
+                         Caddy, which turns AgentCore's header into ?app=. On AgentCore Runtime. README
+apps/posts-app           the posts MCP App: React, @apollo/client-ai-apps and a memory router, five
+                         @tool operations (pick a post, edit it, preview a draft, and the app's own
+                         save and publish), built into apps/mcp/apps/posts. README
+apps/posts-agent         the posts manager, an A2A agent on Amazon Bedrock AgentCore Runtime: a Nest
+                         application context whose @A2aAgent runs LangChain over a Bedrock model and
+                         the MCP tools, as the caller, with AgentCore Memory. README
+apps/theo-agent          Theo, the platform's assistant: an AG-UI agent on AgentCore Runtime whose
+                         @AgUiAgent runs LangChain over a Bedrock model and hands what concerns posts
+                         to the posts agent over A2A, as the caller. The web's /theo talks to it
+                         through CopilotKit. README
 apps/migrator            the SYSTEM and the TENANT migrations and the seeders — the only thing that
                          writes system DDL, the author of every tenant migration, and the only thing
                          that seeds (see below)
 infra/aws                the deployed shape: the topic, the queues, the four functions, the bucket
                          and the router, in SST. `infra/aws/README.md` is the guide — read it before
-                         touching a filter policy or the bundling options
+                         touching a filter policy or the bundling options. Every custom component
+                         (NodeFunction, AgentRuntime, Neo4j) is linkable through `sst.Linkable.wrap`
+                         with the permissions a link grants, takes the `sst.aws.Vpc` itself, and has a
+                         `static get` where another stage may own it
 infra/sentry             the error tracker (a self-hosted GlitchTip): a project, a key and an alert
-                         per application, owned by the `dev` stage; every function gets its DSN
+                         per application, owned by the `dev` stage; every function gets its DSN.
+                         A removed `dev` keeps them (retainOnDelete): redeploying it adopts them with
+                         SENTRY_IMPORT_TEAM and SENTRY_IMPORT_PROJECTS
 apps/web-e2e             the whole system through a BROWSER: Playwright over three processes and a
                          real broker — authentication, authorization, the reading path and the saga
 apps/web                 a Next.js client of the GATEWAY (not part of the saga). It boots a Nest
@@ -1106,7 +1189,7 @@ are three kinds:
 |---|---|---|
 | `SYSTEM_SCHEMA` (`public`) | `public` | the users (`libs/users`' `User`, which Better Auth writes as `AuthUser`), Better Auth's tables and the organizations' — `libs/users`, `libs/auth`, `libs/organizations` |
 | `TRANSPORT_SCHEMA` (`libs/database`) | `transport` | the messaging's bookkeeping: the outbox and the inbox (`libs/core/outbox-mikro-orm`) and the event store's `event_log` (`libs/core/event-store-mikro-orm`) |
-| `TENANT_SCHEMA` (`*`, MikroORM's wildcard) | `tenant_<name>` | everything else: posts, tags, authors, calendar events, clients, notifications, devices |
+| `TENANT_SCHEMA` (`*`, MikroORM's wildcard) | `tenant_<name>` | everything else: posts, tags, authors, calendar events, clients, chats, notifications, devices |
 
 A wildcard table exists once per tenant, and which copy a query reaches is the schema of the entity
 manager it runs on. `tenant_root` is the root tenant's — whoever names no tenant, the visitor who never
@@ -1322,7 +1405,11 @@ last section is the design; the essentials:
 - **On AWS it is two Fargate services** (`infra/aws/chatwoot`, ported from `gmpa-monorepo-migrate`):
   Rails behind a load balancer and Sidekiq on the same image, **on the CloudFront router by path**
   (`/app`, `/vite`, `/cable`, `/api/v1`, … and `/chatwoot/graphql` for the gateway), so the session
-  cookie reaches it on the one origin with no domain. `infra/aws/README.md` has the rest.
+  cookie reaches it on the one origin with no domain. On that origin the root is the web's, so
+  `/atendimento` frames `/app` (`Chatwoot.DASHBOARD_PATH`), and Puma hears HTTP from the load
+  balancer, so production assumes TLS whenever `FRONTEND_URL` is https (`config.assume_ssl`) — or its
+  redirects say `http://` and the browser blocks the framed dashboard as mixed content, which `curl
+  -L` never notices. `infra/aws/README.md` has the rest.
   `db/seeds.rb`'s demo data (the `john@acme.inc` SuperAdmin, the Acme accounts) is development-only:
   the container's `db:chatwoot_prepare` seeds a production database with the installation config alone.
 - **The dashboard boots through Inertia, and its shell is `inertia/layouts/AppShell.vue`.** The Vue
@@ -1341,7 +1428,7 @@ last section is the design; the essentials:
   the `read:clients`/`write:clients` scopes. The web's `/clients` screen links and creates Chatwoot
   contacts through the gateway and opens them in `/atendimento`, the embedded dashboard.
 
-### The gateway: one endpoint, three subgraphs
+### The gateway: one endpoint, four subgraphs
 
 `apps/gateway` is the only GraphQL endpoint a client calls — `apps/web` included, through its
 `/api/graphql` proxy on the server and directly for SSE subscriptions in the browser.
@@ -1362,7 +1449,7 @@ last section is the design; the essentials:
 - **Credentials are forwarded, and decided by each subgraph.** Cookie, bearer and `x-tenant` go to
   every subgraph an operation reaches; each authenticates with its own Better Auth instance. The
   gateway reads the caller's session too — with a Better Auth instance of its own, on the same
-  Postgres and the same Redis (`AuthInfrastructureModule`, `routes: false`, `guard: false`) — only to
+  Postgres and the same Redis (`AuthInfrastructureModule`, `guard: false`) — only to
   know who it is for and which organization they are in: `libs/auth`'s `IdentityResolver`, the same
   one the subgraphs' tenant guard uses, so a cookie and an OAuth access token (`oauth-bearer-session`)
   read exactly as they do in a subgraph. `OrganizationSlugs` names the caller's active organization
@@ -1388,6 +1475,94 @@ last section is the design; the essentials:
 - **A request log never carries a credential.** `loggingModule` redacts `cookie`, `authorization` and
   `set-cookie`: a gateway forwards both on every request, and a record is a working session token in
   whatever stores it.
+
+### Agents: AG-UI, A2A and MCP on Amazon Bedrock AgentCore Runtime
+
+Theo (`apps/theo-agent`, AG-UI), the posts manager (`apps/posts-agent`, A2A) and the posts MCP server
+(`apps/mcp`) run on **AgentCore Runtime**, each an `aws.bedrock.AgentcoreAgentRuntime` built by `infra/aws/agents`'s `AgentRuntime`.
+Their READMEs, `libs/ai/README.md` and `infra/aws/README.md` are the guides; the essentials:
+
+- **An agent is defined once, and the AgentCore SDK serves it.** One `@A2aAgent` class: the
+  decorator holds the static card, the instance the card fields configuration decides, its skills —
+  `Skill` entities, which the card advertises without their bodies and the model reads on demand from
+  `/skills/` (`SkillsBackend.mount`, `SubAgentMiddleware.for`) — and an `executor` that may be a
+  function `libs/ai` builds on the first turn, inside the caller's context. The model is injected as
+  `@Inject('BASE_MODEL')`, a `useExisting` alias of the `ChatBedrockConverse` provider.
+  **`main.ts` creates the Nest application** (`NestFactory.create(AppModule, new FastifyAdapter())`)
+  and hands it to the protocol's host — `new AgentCoreA2aServer(app, { agent, url }).listen(port,
+  host)`, `new AgentCoreAgUiServer(app, { agent })` for Theo — which registers AgentCore's contract on
+  that app with `app.use` and never builds or picks an adapter. The A2A host serves the agent the
+  registry resolves with `@a2a-js/sdk`'s express handlers, 1.0 and 0.3 on `POST /`.
+- **Who calls is the application's to say.** `A2aModule` and `AgUiModule` take a `context` option,
+  `(request) => Promise<AgentContext | undefined>`, as `GraphQLModule` takes one: each agent's
+  `PlatformAgentContexts` resolves `libs/auth`'s request-scoped `IdentityResolver` for the request
+  under a context id of its own (the gateway's way) and the tenant with `TenantOrganizations`, so
+  `libs/ai` knows neither MikroORM nor organizations. No context is a `401` before anything runs.
+  `AgentRunContext` carries it through the run — LangChain's ambient config drops `context` inside a
+  nested runnable, and the MCP SDK asks its `OAuthClientProvider` from inside the tool — and the
+  graph gets only who and where in its `configurable` (`thread_id`, `actor_id`, `tenant`,
+  `user_id`), never the credential. It is **not** the graph's runtime `context`: `copilotkitMiddleware`
+  writes that into the prompt as "App Context" whenever the state has none of its own.
+- **Everything acts as the caller.** One token, asked for with both resources
+  (`resource=<agent>&resource=<mcp>`): AgentCore's JWT authorizers check it against the issuer's
+  discovery document (served by the gateway), the agent reads it as the gateway reads a caller —
+  `libs/auth`'s `IdentityResolver`, resolved for a request made of the invocation's headers, the
+  `Identity` it answers turned into the A2A `User` (`PlatformAgentContext`) — so the agent holds the same
+  Better Auth, on Postgres and Redis, and runs in the VPC; every turn runs in the
+  caller's context (`AgentRunContext`), and the MCP client reads the token there per request
+  (`CallerBearerAuthProvider`, an MCP SDK `OAuthClientProvider`), Apollo MCP
+  Server validates it and passes it to the gateway, and every Better Auth process accepts the MCP
+  server's audience. Nothing holds a credential of its own.
+- **The audiences are logical** (`<router>/mcp`, `<router>/a2a/posts`, `<router>/agui/theo`): a
+  runtime's authorizer cannot name the ARN its invocation URL is made of.
+- **Everything an agent keeps is the tenant's and the person's.** The token the web delegates carries
+  the person's active organization (`organization_id`), which `oauth-bearer-session` makes the
+  session's and `PlatformAgentContexts` resolves to the tenant; the actor of every memory is `tenant:user`.
+  The A2A agents are multi-tenant in A2A's own sense: the card served to a caller names their tenant,
+  `@a2a-js/sdk`'s client puts it on every request, and a request naming another is refused
+  (`TenantScopedCallContext`). AG-UI and AgentCore have no tenant field; it rides the caller.
+- **An agent has both of AgentCore Memory's halves**, as AWS's LangGraph guide wires them: the graph
+  is compiled with an `AgentCoreMemorySaver` (the thread's checkpoints, so a conversation resumes on
+  any microVM — Theo then feeds the graph only the messages it does not hold) and an
+  `AgentCoreMemoryStore` (`LongTermMemoryMiddleware` puts the conversation for the memory's
+  preference, fact and summary strategies and recalls what they extracted). `infra/aws/agents/memories.ts`
+  creates each memory with its strategies.
+- **A conversation with Theo is a chat**, listed by the `chat` subgraph (`apps/chat-api`): Theo
+  records each run's thread there (`recordChat`, as the person — the delegated token names the
+  gateway too), and the chat API reads its messages back from Theo's checkpoints. The web's `/theo`
+  lists them and reopens one as CopilotKit's thread; its CopilotKit runtime serves only `info`, `run`
+  and `stop`, because the default runtime's `/threads` and `connect` answer anybody who names a
+  thread.
+- **Theo is the same shape over AG-UI.** `@AgUiAgent` on a provider whose `agent` is a function built
+  on the first run; `AgentCoreAgUiServer` serves AgentCore's AG-UI contract (`POST /invocations`,
+  server-sent events; `GET /ping`) on the app `main.ts` created, with the same admission as the A2A
+  host (`AgentContexts.admits`). It is served the way CopilotKit serves a LangGraph agent —
+  `@ag-ui/langgraph`'s `LangGraphAgent` over the graph in this process (`InProcessLangGraphClient`,
+  the SDK client it would use against a deployment), `copilotkitMiddleware` in the graph — inside an
+  `A2aMiddlewareAgent`, `@ag-ui/a2a-middleware`'s loop on `AbstractAgent` without the package:
+  `send_message_to_a2a_agent` is a client tool, the orchestrator's run ends at its call, the posts
+  agent is called over A2A with the caller's token, its answer streamed to the client as an AG-UI
+  subagent of the call, Theo's thread its A2A context and AgentCore session, and the orchestrator runs
+  again with the result — the client seeing one run. Its own tool is `search_the_web` (`libs/ai`'s `web/`): AgentCore Web
+  Search, an AgentCore Gateway with the `web-search` connector (`infra/aws/agents/web-search.ts`),
+  reached with `bedrock-agentcore`'s `WebSearchClient` signed as Theo's role. Theo's model is Nova 2
+  Lite, chosen for speed: it routes, the posts agent writes. `apps/theo-agent/README.md` has the
+  measurements and what was not used for search.
+- **The web's `/theo` is CopilotKit v2's headless hooks drawn with `libs/ui`'s chat components**, over
+  the CopilotKit runtime at `/api/copilotkit`, whose `HttpAgent` calls Theo with an access token the
+  web's own Better Auth issues for the person signed in (`DelegatedAccessTokens`, `libs/auth`),
+  addressed to Theo, the posts agent and the MCP server. The browser never holds it.
+- **MCP Apps reach the person inside A2UI.** The posts agent opens the posts MCP App
+  (`apps/posts-app`) only on a turn whose A2A client declared, in the message metadata, an A2UI catalog
+  with `McpApp`: Theo forwards the catalogs the web's CopilotKit sends it. The app tool's result comes
+  back as an A2UI surface naming the server, the `ui://` resource, the tool, its input and its result —
+  never the HTML — Theo returns it as `{ a2ui_operations, answer }`, CopilotKit's A2UI middleware
+  renders it, and the web's `McpApp` is CopilotKit's MCP Apps host, whose reads and tool calls
+  `McpAppsProxy` sends to the MCP server as the person. Saving and publishing are the app's buttons
+  (`SavePost`, `PublishPost`), never the model's. `libs/ai/README.md` ("MCP Apps in A2UI"),
+  `apps/posts-app`, `apps/mcp` and `apps/web` have the rest.
+- **`agent-console`** is a seeded public OAuth client (PKCE, loopback redirect, no consent screen)
+  that `apps/posts-agent/scripts/agent-console.mjs` signs a person in with.
 
 ### Persistence: the domain carries no ORM decorator
 
@@ -2305,6 +2480,151 @@ DTOs count.
   the e2e's global setup) or being down makes the sign-up itself a `500`. The webhook endpoint stays
   this library's: `@polar-sh/sdk`'s
   `validateEvent` still base64-encodes a `whsec_` secret's text in 0.49.0.
+- **`bedrock-agentcore` cannot be `require()`d**: ESM-only, and its `exports` map has `import` and
+  `types` and nothing else, so `require('bedrock-agentcore/runtime/a2a')` is
+  `ERR_PACKAGE_PATH_NOT_EXPORTED` before Node's `require(esm)` gets a say. An application that uses
+  `libs/ai`'s `a2a/agentcore` bundles it (`bundledPackages: ['bedrock-agentcore']` in its
+  `webpack.config.js`); a `new Function('return import()')` loads it in Node and fails under Vitest
+  (`A dynamic import callback was not specified`).
+- **Newer Claude models on Bedrock refuse `temperature`** — `temperature is deprecated for this model`
+  from Sonnet 5.5 — so `POSTS_AGENT_TEMPERATURE` is sent only when it is set.
+- **A filtered install is the whole virtual store.** `pnpm install --prod --filter=<app>`, with or
+  without `{.}`, and `pnpm deploy --prod` all put the workspace's packages in the image — Next, the
+  SWC binaries, Playwright: the agent's image was 1.6 GB against AgentCore's 2 GB limit. Its
+  Dockerfile installs the lockfile `@nx/js:prune-lockfile` cuts to the app's own `dependencies`
+  instead (554 MB, 1.2 GB since it holds Better Auth, whose optional `next` peer the lockfile resolves),
+  which works because its bundle compiles every `@nestposts/*` library in and the
+  app declares every package the bundle requires.
+- **A tool called with no arguments is an invalid call when the model streams.** Bedrock's Converse
+  stream sends no input at all for such a call, and LangChain's streamed message — what an
+  `AgentExecutor` driving `streamEvents` gets — keeps it only as an `invalid_tool_call` content block
+  (`args: ""`, "Failed to parse tool call arguments as JSON"): no tool runs, the turn completes with no
+  text, and the next turn sends Bedrock a message with no content. `ListPosts`, whose arguments are
+  all optional, did exactly that on AgentCore while `invoke` answered correctly. `libs/ai`'s
+  `EmptyToolInputMiddleware` turns such a call into one with `{}`.
+- **Pulumi's `docker-build` parses a Dockerfile itself, and does not know `COPY --parents`**: the
+  repository's application Dockerfiles cannot be built by an SST/Pulumi image resource
+  (`dockerfile parse error … unknown flag: --parents`), while `docker build` takes them. The agent's
+  Dockerfile is built from the host's output instead — the bundle and the pruned lockfile `prune`
+  leaves in `dist`, its context the project's directory — which is also what keeps it small.
+- **Every token validation starts with the issuer's documents, and those are served by functions
+  that may be cold.** AgentCore's JWT authorizers fetch the discovery document on every runtime create
+  and update (and on a cold invocation), Apollo MCP Server in every new microVM — measured: `All
+  discovery URLs failed` while the gateway started, a valid token refused, and the posts agent's first
+  turn answering that the MCP server listed no tool. The discovery documents and the JWKS answer with
+  `DISCOVERY_CACHE_CONTROL` (`libs/auth`, stale-while-revalidate) so CloudFront keeps them, each
+  runtime warms them right before it is written (`<name>IssuerWarmup`), and `McpClientPool` lists
+  again within the turn when a listing comes back empty, logging why.
+- **AgentCore re-provisions an MCP session's microVM under the same `Mcp-Session-Id`, and the
+  calls that arrive meanwhile fail.** The posts agent's pooled MCP client keeps one session; on dev
+  its microVM was gone three minutes after it started, and the next `CreatePost` and the check after it
+  came back as errors about the runtime's health check (`UserErrors` on the MCP runtime, nothing in
+  any container log) until a new microVM answered the following turn. AgentCore's own guide calls
+  `Session operation in progress, please retry` transient and leaves the retry to an MCP client. The
+  call never reached the server, so `McpClientPool` calls the same tool again on the same session,
+  three times with backoff from `retryDelayMs`; anything else the tool answered is not repeated.
+- **AgentCore Runtime forwards neither the query string nor a sub-path to an MCP container**, and Apollo
+  MCP Server serves an MCP App only to a request whose URL says `?app=<name>`: measured on dev,
+  `…/invocations?qualifier=DEFAULT&app=posts` listed the plain tools, as if no app existed. What it does
+  forward is an allowlisted `X-Amzn-Bedrock-AgentCore-Runtime-Custom-*` header, so `apps/mcp`'s image
+  runs Caddy in front of the server to turn `X-Amzn-Bedrock-AgentCore-Runtime-Custom-Mcp-App` into the
+  parameters, and the runtime allowlists that header.
+- **Apollo MCP Server's app mode is a mode, not an addition, and it needs `appTarget=mcp`.** With
+  `?app=posts` the six operations are still listed and are `Tool … not found` when called, so the
+  posts agent keeps two connections. And a stateless server forgets the UI capability a client declared
+  at `initialize`: without `appTarget=mcp` it takes every request for the OpenAI target and refuses
+  `resources/read` (`no resource found for openai`), the app never loading.
+- **An MCP App's mutation is a tool of its own.** `@apollo/client-ai-apps` runs every operation through
+  the server's `execute`, which `mutation_mode: explicit` lets read only; `apps/posts-app`'s
+  `ServerToolLink` sends a manifest mutation to its own tool instead. The library's Vite plugin also
+  plucks only files containing `gql` — codegen's `gqlTagName: 'gql'` — and 0.7.5 imports one module
+  without its extension, which Node refuses: the app's Vitest inlines the package.
+- **LangGraph's v3 stream gives a tool call's content, not its artifact.** `run.toolCalls`' `output` for a
+  `content_and_artifact` tool is the content alone, so what a tool returns beside it — an MCP App's
+  placement — is read in the agent's `wrapToolCall` (`A2aMiddleware`), where the `ToolMessage` is whole.
+- **`@copilotkit/a2ui-renderer` reads a catalog's props through Zod 3's internals**, so its definitions
+  are `zod/v3`; Zod 4 ships that implementation but not its types, hence a cast at the boundary.
+- **Claude on Amazon Bedrock has no server tools**: Anthropic's `web_search`/`web_fetch` (LangChain's
+  `tools.webSearch_…`) work with `ChatAnthropic` against the Claude API or Claude Platform on AWS, not
+  through `ChatBedrockConverse`. And `ChatBedrockConverse` (1.4.6) passes through only Bedrock tools
+  carrying `toolSpec`, so a Bedrock `systemTool` (Nova's `nova_grounding`) cannot be bound either. Web
+  search is therefore a tool of its own over AgentCore Web Search.
+- **`bedrock-agentcore` is bundled, so its imports are the app's to declare.** Theo bundles it for
+  `bedrock-agentcore/web-search` (ESM-only), and what that module `require`s stays external: `@smithy/signature-v4`,
+  `@smithy/protocol-http`, `@aws-crypto/sha256-js`, `@aws-sdk/credential-providers` and
+  `@aws-sdk/util-endpoints` are in `apps/theo-agent/package.json` for that reason alone.
+- **`AbstractAgent.addMessage` pushes onto `agent.messages`** instead of replacing it, so anything
+  memoized on the array's identity misses a message an MCP App adds; runs do replace it, which is why
+  `/theo`'s memoized transcript only failed for that. And `showDevConsole` no longer hides the
+  CopilotKit Inspector in 1.76: `enableInspector={false}` does.
+- **Better Auth's OAuth client field is `requirePKCE`**, not `requirePkce`: written through the
+  adapter under the wrong name the column is simply `null`, with nothing failing.
+- **Apollo MCP Server checks that the discovery document's `issuer` equals the server it asked**, so
+  its `servers` is the issuer itself — the router on AWS, `apps/web` locally — and that origin must
+  answer `/.well-known/oauth-authorization-server` at its root.
+- **A tool a LangChain middleware adds in `wrapModelCall` needs a `wrapToolCall` of the same
+  middleware**, or the run fails with `You have added a new tool in "wrapModelCall" hook … This is not
+  supported unless a middleware provides a "wrapToolCall" handler`. `copilotkitMiddleware` adds the
+  client's tools that way, and has one.
+- **LangChain names a streamed chunk after the model's callback has emitted it**, and
+  `@ag-ui/langgraph`'s `LangGraphAgent` names the AG-UI message by the chunk's id: over a deployment
+  the event is serialized later and carries `run-<run id>`, in process it carried none — every
+  `TEXT_MESSAGE_START` without a `messageId`, refused by `@ag-ui/client`, and no
+  `TEXT_MESSAGE_END`. `InProcessLangGraphClient` gives the chunk that id first, through `_updateId`:
+  setting `id` alone left `lc_kwargs.id` empty, `concat` built the message from `lc_kwargs`, and the
+  checkpoint kept AI messages with no id, which the next snapshot then failed on.
+- **`LangGraphAgent` answers a tool's result under a random message id**, never the checkpoint's, so
+  its closing `MESSAGES_SNAPSHOT` replaces the client's copy and the client appends the checkpoint's
+  after the messages it already held. The checkpoint's order is the model's; the client's is only
+  for display, and `/theo` groups by `toolCallId`.
+- **`AgentCoreMemorySaver` answers, on read, every tool call it holds no result for** — upstream's
+  `patch_orphan_tool_calls`. Theo's run ends at `send_message_to_a2a_agent` by design and the A2A
+  middleware brings the result in the next run, so on AWS each delegation was read back answered
+  "interrupted before completion" and the real result became a second answer Bedrock refused; the
+  local specs, on `MemorySaver`, never saw it. Theo's checkpointer is built with
+  `AgentMemories.FOR_CLIENT_TOOLS` (`patchOrphanToolCalls: false`), and `a2a-middleware.agent.spec`
+  runs the loop over AgentCore Memory.
+- **An MCP request whose response stream drops is left pending for a minute.** The MCP SDK's
+  streamable HTTP client (1.30, and 1.32 alike) only reports `SSE stream disconnected` when the stream
+  answering a POST drops before the answer, and the request waits for its 60-second timeout. On CI a
+  `tools/call` through the MCP image's Caddy lost its stream a millisecond after its headers — the
+  web's `PublishPost` (the post was created, the app said "Publishing…" until the test gave up) and
+  the e2e stand-in's `PreviewPost` alike; reproduced locally about once in five thousand calls, the hop
+  not pinned down. `McpAppConnection` (`apps/web`) and the stand-in fail the request at once (the
+  stand-in, whose tools only read, tries again), every client request travels on a connection of its
+  own, and Caddy reaches the server without keep-alive; `mcp-apps-proxy.spec` drops a stream and
+  counts sockets.
+- **`@ag-ui/*` and `@copilotkit/*` pin `rxjs` to 7.8.1** and the workspace has 7.8.2: two copies, and an
+  `Observable` of one is not an `Observable` of the other to TypeScript (they carry protected members).
+  `pnpm-workspace.yaml` overrides `rxjs` to `^7.8.2`, one copy for everything.
+- **The web's server function did not stream.** OpenNext's default wrapper is `aws-lambda`, buffered
+  (`.open-next/open-next.output.json`: `"streaming": false`), so the chat's server-sent events would
+  have reached the browser all at once, after the run — and a run past CloudFront's 60-second read
+  timeout not at all. `apps/web/open-next.config.ts` picks `aws-lambda-streaming`, which makes SST
+  create the function URL in `RESPONSE_STREAM` mode; a delegation keeps the stream moving while the
+  posts agent works, because its answer reaches the client as it is written.
+- **`AbstractAgent.clone()` (`@ag-ui/client`) copies the base agent's fields only** — it is
+  `Object.create(prototype)` — and the CopilotKit runtime clones agents. `HttpAgent` restores its
+  own; `A2aMiddlewareAgent` and `LazyAgUiAgent` override `clone()` for theirs, and `LangGraphAgent`
+  copies its own fields.
+- **An OAuth resource exists once `OAuthResourcesSeeder` has written it, and on AWS the seed runs
+  only when its input changes.** `Seed`'s invocation is a digest of the seeders and of the
+  configuration they read; `AUTH_OAUTH_RESOURCES` was not in it, so adding Theo's audience to
+  `registeredResources` reached nothing — the authorization server refused the token request with
+  `invalid_target … is not configured`. It is in it now (`infra/aws/compute/migrations.ts`).
+- **One `class-validator`, or two Nests.** `@nestjs/common` takes it as an optional peer, so when
+  `@copilotkit/runtime` brought `class-validator@0.14` into the workspace beside `0.15`, pnpm resolved
+  some importers' `@nestjs/common` against each: two `@nestjs/core` in the agents' pruned installs, the
+  bundle requiring one and `nestjs-pino` the other, and both agents died at boot on AgentCore with
+  `Nest can't resolve dependencies of the LoggerModule (pino-params, ?) … ApplicationConfig` — while
+  every local suite, on the workspace's own `node_modules`, passed. `pnpm-workspace.yaml` overrides
+  `class-validator` to `^0.15.1`, and `apps/theo-agent/test/single-nest.spec.ts` fails when the
+  lockfile holds a second `@nestjs/core` or `@nestjs/common`.
+- **The AWS provider is pinned to 7.48.0** (`sst.config.ts`): SST 4.17.1's 7.20.0 refuses
+  `serverProtocol: 'AGUI'` on `AgentcoreAgentRuntime`.
+- **The CopilotKit runtime reports telemetry unless told not to**, and `@copilotkit/*` depends on
+  `@scarf/scarf`, an install-time analytics script. `COPILOTKIT_TELEMETRY_DISABLED=true` on the web, and
+  pnpm runs no install script it was not told to (`onlyBuiltDependencies`).
 
 ## `apps/web` holds its own Better Auth, in a Nest container
 

@@ -104,6 +104,21 @@
     },
     {
       "path": "./libs/ai"
+    },
+    {
+      "path": "./apps/posts-agent"
+    },
+    {
+      "path": "./apps/theo-agent"
+    },
+    {
+      "path": "./libs/core/langgraph-checkpoint-aws"
+    },
+    {
+      "path": "./libs/chat"
+    },
+    {
+      "path": "./apps/chat-api"
     }
   ]
 }

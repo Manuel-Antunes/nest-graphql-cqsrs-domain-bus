@@ -1,0 +1,103 @@
+{
+  "name": "@nestposts/posts-app",
+  "version": "0.1.0",
+  "description": "The blog's posts as an MCP App, served by apps/mcp's Apollo MCP Server.",
+  "private": true,
+  "type": "module",
+  "nx": {
+    "targets": {
+      "codegen": {
+        "executor": "nx:run-commands",
+        "cache": true,
+        "inputs": [
+          "{workspaceRoot}/apps/gateway/dist/supergraph/api.graphql",
+          "{projectRoot}/mcp-apps.graphql",
+          "{projectRoot}/codegen.ts",
+          "{projectRoot}/src/**/*.{ts,tsx}"
+        ],
+        "outputs": [
+          "{projectRoot}/src/graphql/__gen__"
+        ],
+        "options": {
+          "cwd": "{projectRoot}",
+          "command": "graphql-codegen --config codegen.ts"
+        },
+        "dependsOn": [
+          {
+            "projects": [
+              "@nestposts/gateway"
+            ],
+            "target": "supergraph"
+          }
+        ]
+      },
+      "build": {
+        "executor": "nx:run-commands",
+        "cache": true,
+        "dependsOn": [
+          "codegen"
+        ],
+        "inputs": [
+          "production",
+          "^production",
+          "{workspaceRoot}/apps/gateway/dist/supergraph/api.graphql"
+        ],
+        "outputs": [
+          "{workspaceRoot}/apps/mcp/apps/posts",
+          "{projectRoot}/.application-manifest.json",
+          "{projectRoot}/.application-manifest.d.json.ts",
+          "{projectRoot}/.apollo-client-ai-apps"
+        ],
+        "options": {
+          "cwd": "{projectRoot}",
+          "command": "vite build"
+        }
+      },
+      "typecheck": {
+        "executor": "nx:run-commands",
+        "cache": true,
+        "dependsOn": [
+          "build",
+          "^typecheck"
+        ],
+        "options": {
+          "cwd": "{projectRoot}",
+          "command": "tsc --noEmit"
+        }
+      },
+      "test": {
+        "dependsOn": [
+          "build"
+        ]
+      }
+    }
+  },
+  "dependencies": {
+    "@apollo/client": "^4.3.1",
+    "@apollo/client-ai-apps": "0.7.5",
+    "@graphql-typed-document-node/core": "^3.2.0",
+    "@modelcontextprotocol/ext-apps": "1.7.5",
+    "@nestposts/ui": "workspace:*",
+    "graphql": "^16.14.2",
+    "lucide-react": "^0.545.0",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "react-router": "^8.4.0",
+    "rxjs": "^7.8.2"
+  },
+  "devDependencies": {
+    "@graphql-codegen/cli": "^7.4.1",
+    "@graphql-codegen/client-preset": "^6.2.0",
+    "@tailwindcss/vite": "^4",
+    "@testing-library/react": "^16.3.3",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@vitejs/plugin-react": "^5.2.0",
+    "jsdom": "^30.1.0",
+    "shadcn": "^4.12.0",
+    "tailwindcss": "^4",
+    "tw-animate-css": "catalog:",
+    "vite": "^8.3.0",
+    "vite-plugin-singlefile": "^2.3.3"
+  }
+}

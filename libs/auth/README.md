@@ -275,6 +275,8 @@ so the global guard, `@CurrentIdentity()`, `IdentityResolver` and `AuthService` 
   understands. Anything that is not a signed token falls through to Better Auth's own lookup.
 - **The user is read, not trusted.** The token carries only `sub`; the row is loaded, and a user who
   no longer exists — or is banned — gets no session.
+- **Its organization is the session's.** An `organization_id` claim — what a delegated token
+  carries — is the session's `activeOrganizationId`; a token without one has none.
 - **Its custom claims travel.** Whatever the issuer added beyond the registered claims is put on the
   session as `claims`, and the `UserIdentity` keeps it as its `attributes`; the token's `jti` and expiry
   are its `credential`.
@@ -306,6 +308,50 @@ that, on AWS, with a valid session. It now answers `403 OAUTH_CLIENT_ADMIN_REQUI
 "Only an admin can create an OAuth client", which the UI shows as a permission error. Nothing seeds an
 `admin`: the deployed stages have one only when somebody sets `users.role` by hand, the way
 `apps/web-e2e` does for its own.
+
+### Discovery, at the issuer's root
+
+`AuthInfrastructureModule` with its routes on also serves `/.well-known/oauth-authorization-server`
+and `/.well-known/openid-configuration` at the root (`OAuthDiscoveryController`): the oauth provider
+plugin's own documents (`auth.api.getOAuthServerConfig`/`getOpenIdConfig`), which its handler answers
+only for a request that reaches it — under `/api/auth`. A resource server (an MCP server, an AgentCore
+JWT authorizer) finds the JWKS there, and checks that the `issuer` inside equals the origin it asked:
+so the origin that answers is the issuer's — the router on AWS, which sends both paths to the gateway,
+and `apps/web` locally, whose routes hand the request to the same handler.
+
+Both documents and the JWKS (`/api/auth/jwks`, which the jwt plugin is wrapped to mark —
+`cacheableJwt`) answer with `DISCOVERY_CACHE_CONTROL`: five minutes fresh, a day stale while a cache
+revalidates or the origin fails. Whoever validates a token fetches them first, and the functions that
+answer them may be cold: measured on AWS, Apollo MCP Server in a new microVM gave up on discovery
+while the gateway started (`All discovery URLs failed`) and refused a valid token, and AgentCore's
+authorizer refused runtime updates and first invocations the same way. CloudFront keeps them now, and
+answers from its copy while it refreshes.
+
+## A token the signed-in person delegates
+
+`DelegatedAccessTokens.issueFor(identity, { audiences, scopes, expiresIn })`
+(`infrastructure/better-auth/identity/delegated-access-tokens.ts`, provided and exported by
+`BetterAuthModule`) issues an access token for the person a process is serving, for a process of this
+deployment that must act for them where their cookie does not travel: `apps/web`, calling Theo on
+AgentCore Runtime, whose JWT authorizer reads a bearer and nothing else. It is the token the
+authorization code grant would have produced, without the round trip through the browser — the
+process asking holds the authorization server and the person's session — signed by the jwt plugin
+(`signJWT`) with this deployment's `iss`, the person as `sub`, the audiences asked for (every one the
+request will reach on their behalf) and a fresh `jti`, fifteen minutes by default. So it reads back as
+every OAuth access token does: `oauth-bearer-session` makes it the person's session in every process
+that accepts one of its audiences.
+
+- **Never more than its holder.** `scope` is what was asked for, less whatever the person does not
+  hold: a cookie of this system's holds every scope; a session that is itself a token holds what it
+  was granted.
+- **Only a person delegates.** A `ClientIdentity` is refused (`IdentityIsNotAUserException`): a client
+  asks the authorization server for its own token.
+- **It carries the organization it was delegated in.** The person's active organization travels as the
+  `organization_id` claim (`AccessTokens.ORGANIZATION_CLAIM`, the claim a client's own token is bound
+  by), and `oauth-bearer-session` makes it the session's `activeOrganizationId` — so an agent holding
+  the token knows the tenant it acts in, the gateway names it as `x-tenant` when nothing else does, and
+  every memory an agent keeps is scoped by it. It grants nothing: the tenant guard still lets only the
+  organization's members in.
 
 ## A client's own access token is a `ClientIdentity`
 

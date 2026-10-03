@@ -1,6 +1,6 @@
 # The same system, on Lambda
 
-Eight functions of ours plus the Next server — none of them on a schedule —, one FIFO topic, three
+Nine functions of ours plus the Next server — none of them on a schedule —, one FIFO topic, three
 FIFO queues (and their dead-letter queues), one Postgres, one Redis (Valkey, cluster mode off: Better
 Auth's sessions and the gateway's cache), one CloudFront router and one SES identity.
 The domain, application and presentation code is **unchanged**: what a handler here does is hand AWS's
@@ -10,7 +10,9 @@ calling convention to the same container `main.ts` starts.
   CloudFront ──────► Gateway   apps/gateway/dist/lambda/http — the supergraph, composed from baked SDL
   /graphql              │ reads the session (Redis, then Postgres); forwards cookie + bearer + x-tenant
        │                ├──────────────► NotificatorApi  apps/notificator/dist/lambda/http
-       │                ▼                (the notifications subgraph)
+       │                │                (the notifications subgraph)
+       │                ├──────────────► ChatApi  apps/chat-api/dist/lambda/http
+       │                ▼                (the chat subgraph; reads TheoMemory's checkpoints)
        │            ┌─────────────────────────────────────────────────────┐
   CloudFront ──────►│ PostsApi          apps/posts-api/dist/lambda/http   │
   /api/auth         │ Function URL, InvokeMode: RESPONSE_STREAM           │
@@ -151,6 +153,9 @@ infra/aws/
                      is the stage's own domain when BASE_DOMAIN names one (optional)
   web/               the Next application, on the same origin
   chatwoot/          Chatwoot's two Fargate services, and the router's paths to them
+  agents/            Bedrock AgentCore Runtime: the posts MCP server, the posts agent and Theo; the
+                     AgentCore Gateway Theo searches the web through
+    agent-runtime.ts   AgentRuntime: ECR repository, arm64 image, execution role, the runtime
 infra/lambda/
   collector.yaml     the collector extension's configuration, travelling beside every bundle
   otel-preload.cjs   the Lambda instrumentation, loaded through NODE_OPTIONS=--require before the handler
@@ -171,10 +176,27 @@ API's URL. Creating the router first and routing it afterwards is what unties th
 | `QueueWorker` (extends) | \+ the queue subscription, with `partialResponses` |
 | `Migrator` (extends) | \+ the `aws.lambda.Invocation` that runs the migration |
 | `StreamingFunction` (extends) | \+ the Function URL with `InvokeMode: RESPONSE_STREAM` |
+| `AgentRuntime` | the ECR repository, the arm64 image, the role and its policy, the issuer warm-up, the `aws.bedrock.AgentcoreAgentRuntime` |
+| `Neo4j` | the cluster, the Fargate service on EFS, the backup bucket, the password parameter |
 
 They buy a shared lifecycle, a URN of their own in Pulumi's state, and a deploy tree that describes
 the system. But the reason they exist here is narrower: **each one encodes a setting that fails
 silently when it is changed**, so that it cannot be forgotten by whoever adds the next function.
+
+**Every one of them is a citizen of SST, not a wrapper around it.** Each is linkable —
+`sst.Linkable.wrap(Component, …)` under the `__pulumiType` it is registered with, so SST also holds
+its name unique among linkables and writes its link ref — and its link carries what linking it should
+grant: a `NodeFunction` hands on its `sst.aws.Function`'s (its name, its URL, `lambda:InvokeFunction`),
+an `AgentRuntime` its id, ARN and invocation URL with `bedrock-agentcore:InvokeAgentRuntime`, `Neo4j`
+its Bolt connection. What one of them runs on is SST's too: it takes the `sst.aws.Vpc` itself — its
+`privateSubnets` and `securityGroups` are the ones every function uses — and `link` and `permissions`
+in the shape `sst.aws.Function` takes them, turning the links' `aws.permission` includes into its
+role's policy and their properties into `SST_RESOURCE_*` variables, as an SST container does. A
+component another stage may own has a `static get` that rebuilds it from what AWS already holds —
+`Neo4j.get(name, loadBalancerArn)`, `AgentRuntime.get(name, agentRuntimeId)`, the way
+`sst.aws.Redis.get` does. A Pulumi resource that is not ours becomes linkable the same way:
+`aws.bedrock.AgentcoreMemory` is wrapped in `agents/index.ts` with the data-plane actions on its
+events and records.
 
 ### One origin, and why the browser never leaves it
 
@@ -212,6 +234,14 @@ that path is the gateway's. The load balancer answers plain HTTP (there is no ce
 domain); the browser only ever sees CloudFront's HTTPS, and the router hands Rails the viewer's host
 as `x-forwarded-host`, which is what its absolute URLs are built from.
 
+Two things follow from sharing the origin. The root is the web's, so `/atendimento` frames the
+dashboard's entry, `/app` (`Chatwoot.DASHBOARD_PATH`, `apps/web/src/lib/chatwoot.ts`), never the bare
+`CHATWOOT_URL`. And Puma hears HTTP from the load balancer, so Rails would build its redirects with
+`http://`: production assumes TLS (`config.assume_ssl`) whenever `FRONTEND_URL` is https, which on a
+stage it is. Without it the browser blocks the framed dashboard as mixed content, while `curl -L`
+follows the same redirect happily — so `infra/scripts/e2e.sh`, step 14, reads the frame's address
+and the entry's redirect without following it.
+
 What a first deploy of a stage needs, beyond the `.env`: `sst secret set ChatwootSecretKeyBase
 $(openssl rand -hex 64)`. The order is the stack's to keep — the `Migrate` invocation waits for
 Chatwoot's web service (`Migrator`'s `after`), because `migrate()` ends by mirroring the platform's
@@ -241,6 +271,96 @@ Nothing is linked to it yet: no function runs `libs/ai`. The first one that does
 `graph.connectionInfo()` as `NEO4J_URI`, `NEO4J_USER`, `NEO4J_PASSWORD` and `NEO4J_DATABASE`, which is
 what `libs/ai`'s configuration reads. The specs never reach it: the ones that need a graph start a
 Neo4j of their own (`ThrowawayNeo4j`), as the Redis ones do.
+
+### Agents: three runtimes on Bedrock AgentCore
+
+**The AWS provider is pinned newer than SST's** (`sst.config.ts`: `aws: { version: '7.48.0' }`, where
+SST 4.17.1 pins 7.20.0): 7.20's `AgentcoreAgentRuntime` refuses `serverProtocol: 'AGUI'`
+(`Valid Values: [MCP HTTP A2A]`), which the AgentCore API takes. The bump changed no resource but
+Theo's: `sst diff` lists the web's resources as deleted while Theo's URL, which the web's
+environment holds, is still unknown — a preview that cannot build the site — and the deploy updates
+them.
+
+`agents/` runs the posts MCP server (`apps/mcp`), the posts agent (`apps/posts-agent`) and Theo
+(`apps/theo-agent`) on **Amazon
+Bedrock AgentCore Runtime**, each an `AgentRuntime` (`agents/agent-runtime.ts`): an ECR repository
+that keeps ten images, the image built for `linux/arm64` by `docker-build` (the provider SST builds its
+own containers with, registered in `sst.config.ts` and global as `dockerbuild`) and pushed by digest, an
+execution role (pull, logs, X-Ray, metrics, workload identity, plus whatever the runtime adds), and an
+`aws.bedrock.AgentcoreAgentRuntime` whose `containerUri` is `repository@digest`, so a new build is a
+new runtime version. The MCP server's network is `PUBLIC`: it reaches only the router. The agent's is
+the VPC (`vpc` on `AgentRuntime`: its private subnets and its security group), because it
+reads its callers the way the gateway does — through `libs/auth`'s `IdentityResolver`, on the RDS Proxy
+and the Valkey cache — with the same `AUTH_SECRET`, `AUTH_OAUTH_RESOURCES` naming its own audience
+alone. AgentCore places a runtime only in some zones (in `us-east-1`, `use1-az1`, `use1-az2` and
+`use1-az4`); the VPC's two private subnets are in the first two. The agent links what it uses — the
+MCP runtime, its memory, the database, the cache, the auth secret — so its role is granted what those
+links include, and `permissions` adds only what is nobody's resource: invoking Bedrock models.
+
+- **Both authenticate with the platform's tokens** — a custom JWT authorizer whose `discoveryUrl` is
+  `<router>/.well-known/openid-configuration`, which the router sends to the gateway — and both put
+  `Authorization` on the header allowlist, because both pass the caller's token on: the agent to the
+  MCP server, the MCP server to the gateway.
+- **The audiences are logical**: `<router>/mcp`, `<router>/a2a/posts` and `<router>/agui/theo`
+  (`compute/environment.ts`). A runtime's authorizer is part of the runtime, so it cannot name the
+  runtime's own ARN, which is what an invocation URL is made of. A caller asks for every one its
+  request will reach; every Better Auth function accepts the MCP server's (`acceptedResources`), and
+  the migrator registers all three (`registeredResources`).
+- **The MCP runtime speaks `MCP`** (stateless streamable HTTP on `:8000/mcp`); clients call
+  `…/runtimes/<arn>/invocations?qualifier=DEFAULT`. Its image needs the composed API schema and the
+  built MCP App, which `build-functions` produces (`@nestposts/mcp:prune`), so it depends on `build`.
+  AgentCore forwards no query string to the container, and Apollo MCP Server serves an MCP App only to
+  `?app=<name>&appTarget=mcp`: the runtime allowlists `X-Amzn-Bedrock-AgentCore-Runtime-Custom-Mcp-App`
+  beside `Authorization`, and Caddy, in the image, turns it into those parameters
+  (`apps/mcp/README.md`). The web reaches it too (`POSTS_MCP_URL`, `POSTS_MCP_RESOURCE`), for the
+  app's HTML and its buttons, with a token addressed to the MCP server alone.
+- **The agent runtime speaks `A2A`** (`:9000`, `POST /`); its card is at
+  `…/runtimes/<arn>/invocations/.well-known/agent-card.json` (the `agents.postsAgentCard` output) and
+  advertises `AGENTCORE_RUNTIME_URL`, which AgentCore injects. Its role may invoke Bedrock models and
+  inference profiles, and use `PostsAgentMemory`, the AgentCore Memory its conversations outlive a
+  microVM in (30 days).
+- **Every agent has an AgentCore Memory, with both halves** (`agents/memories.ts`): its LangGraph
+  checkpoints (short-term events, `AgentCoreMemorySaver`) and the long-term records three strategies
+  extract from what its store puts — `preferences` (`USER_PREFERENCE`, `/preferences/{actorId}`),
+  `facts` (`SEMANTIC`, `/facts/{actorId}`) and `summaries` (`SUMMARIZATION`,
+  `/summaries/{actorId}/{sessionId}`). The actor is `tenant:user`, so nothing is shared across
+  organizations. Linking a memory grants the events, the sessions and the records on it, deletion
+  included — the chat API deletes a chat's events with the chat. `TheoMemory` keeps 90 days; the chat
+  API links it as well, to read a conversation back (`CHAT_AGENT_MEMORIES=theo=<id>`).
+- **Theo speaks `AGUI`** (`:8080`, `POST /invocations` streaming server-sent events, `GET /ping`) at
+  `…/runtimes/<arn>/invocations?qualifier=DEFAULT` — the `agents.theo` output. It is in the VPC for the
+  same reason as the posts agent, and links it: `THEO_A2A_AGENTS` is the posts agent's invocation URL,
+  called over HTTPS with the caller's bearer, so the `InvokeAgentRuntime` the link grants is not what
+  it uses. The web (`web/`) calls it from `/api/copilotkit` with a token its Better Auth issues for the
+  person signed in, addressed to the three audiences and the gateway (`THEO_AGENT_AUDIENCES`) — Theo
+  records each conversation as a chat through the gateway (`CHAT_API_URL`) with that same token. Its
+  model is Nova 2 Lite (`theoModel`), which the role's Bedrock permissions already cover.
+- **Web search is an AgentCore Gateway, `WebSearch`** (`agents/web-search.ts`): MCP, `AWS_IAM`
+  inbound, and one target with the `web-search` connector pinned to `1.2.0` (the version with
+  per-request date filters), so the tool AgentCore Web Search serves is `web-search___WebSearch`. The
+  gateway assumes `WebSearchRole`, allowed `InvokeGateway` and `InvokeWebSearch` on the service's own
+  `arn:aws:bedrock-agentcore:<region>:aws:tool/web-search.v1`; Theo links the gateway, which grants it
+  `InvokeGateway` on that gateway alone, and reads its URL as `THEO_WEB_SEARCH_URL` (also the
+  `agents.webSearch` output). The connector exists in `us-east-1`, `eu-west-1` and `ap-northeast-1`.
+  A gateway's name is `([0-9a-zA-Z][-]?){1,48}` — hyphens, no underscores — so it is
+  `<app>-<stage>-web-search`, not `AgentRuntime.nameOf`.
+- **AgentCore fetches the authorizer's discovery document on every create and update**, and refuses
+  the change (`HTTP request failed against Discovery endpoint`) when it does not answer in time —
+  which a cold gateway, or a cold function behind `/api/auth/jwks`, does not. So each runtime warms
+  both right before it is written (`<name>IssuerWarmup`, after its image, run on every deploy): run
+  once at the start of a deploy, the warm-up was minutes stale by the time a 7-minute image build
+  had finished.
+- **A runtime's name is `[a-zA-Z][a-zA-Z0-9_]{0,47}`** and replaces the runtime when it changes:
+  `AgentRuntime.nameOf` derives it from the app and the stage.
+- **The images stay small on purpose**: AgentCore refuses an image over 2 GB, and the agent's ran to
+  1.6 GB with the workspace's dependencies in it — see its `Dockerfile` for the pruned one. It is
+  1.2 GB since it holds Better Auth: the pruned lockfile resolves `better-auth`'s optional `next` peer
+  (and its SWC binaries) as the workspace does, which the agent never loads.
+
+`node apps/posts-agent/scripts/agent-console.mjs --issuer <url> --agent <agents.postsAgent>
+--agent-resource <agents.postsAgentResource> --mcp-resource <agents.postsMcpResource> "…"` talks to
+the deployed agent as a seeded user, and `apps/theo-agent/scripts/theo-console.mjs` to Theo the same
+way (`--agent <agents.theo> --agent-resource <agents.theoResource>`, plus the other two resources).
 
 ### Files: one bucket, served by the same router
 
@@ -295,8 +415,11 @@ code that is correct. Re-run `sst deploy`; every deploy after the first has no r
 invocation's **input**. `Migrate` takes `Date.now()`, so it runs every time: migrations are a ledger,
 repeating costs one query, and a migration that fails should fail the deploy. Seeding writes rows a
 person can edit afterwards, so running it on every deploy is a deploy that quietly undoes their work.
-Its input is a **digest of `apps/migrator/src/seeders`**, so Pulumi re-runs it when those sources
-change and leaves it alone when they do not.
+Its input is a **digest of `apps/migrator/src/seeders`** and of the configuration they read — the
+`SEED_*` variables and the OAuth resources `OAuthResourcesSeeder` registers (`registeredResources`) —
+so Pulumi re-runs it when either changes and leaves it alone when neither does. The resources were
+not in it at first, and adding Theo's audience to the list reached nothing: the seed did not run, and
+the authorization server refused a token for it as `invalid_target … is not configured`.
 
 What it seeds is `DatabaseSeeder` (the default tag, a domain fact) plus `TestUsersSeeder` — the
 accounts a deployed stage should have, created **through Better Auth itself**, which is why they come
@@ -305,13 +428,32 @@ up. `SEED_AUTHOR_EMAIL`, `SEED_AUTHOR_PASSWORD` and their `SEED_READER_` twins c
 without touching code. They are ordinary credentials in a deployed database: for anything but a demo
 stage, set them.
 
-### The functions, from five builds
+### Reaching the database: the bastion
+
+Postgres and Valkey answer only inside the VPC, so outside production the VPC carries SST's bastion —
+a `t4g.nano` in a public subnet, SSH open to the internet with a key SST generates and keeps in SSM
+(`/sst/vpc/<vpc id>/private-key-value`). `sst tunnel --stage <name>` routes the VPC's subnets through
+it, once `sudo sst tunnel install` has created its network interface. Without `sudo`, an SSH forward
+with that key does the same for one port at a time: the RDS proxy speaks plain TCP, and Valkey TLS
+whose certificate names the cache's host, so a client keeps that name and has it resolve to the
+loopback rather than connecting to `localhost`.
+
+A person's roles are changed through Better Auth — `IdentityProvider.addRole` on the migrator's
+container, with the stage's `POSTGRES_URL`, `REDIS_URL` and `AUTH_*` — never with an `update users`:
+every session in Valkey keeps a copy of its user, and only Better Auth's own write refreshes them.
+
+`sst deploy --target Vpc` is not the VPC alone: everything that sits in it — the functions, the
+agent runtimes — is a dependent, and is deployed with it from the `dist` already on disk. The site's
+`next build` runs whatever the target.
+
+### The functions, from six builds
 
 | function | handler | what triggers it |
 |---|---|---|
 | `Gateway` | `apps/gateway/dist/lambda/http.handler` | the Function URL, behind the router at `/graphql` |
 | `PostsApi` | `apps/posts-api/dist/lambda/http.handler` | the Function URL: the router at `/api/auth`, and the gateway |
 | `NotificatorApi` | `apps/notificator/dist/lambda/http.handler` | the Function URL, called by the gateway |
+| `ChatApi` | `apps/chat-api/dist/lambda/http.handler` | the Function URL, called by the gateway |
 | `PostsApiInbox` | `apps/posts-api/dist/lambda/sqs.handler` | the `PostsApiCompleted` queue |
 | `Tagging` | `apps/tagging/dist/lambda/sqs.handler` | the `TaggingPostEvents` queue |
 | `Notificator` | `apps/notificator/dist/lambda/sqs.handler` | the `NotificatorNotifications` queue |
@@ -498,7 +640,7 @@ installed.
 ### The tenant migrations travel beside the bundle
 
 A tenant's schema is migrated by the first function that serves it (see the root `CLAUDE.md`), from
-`join(__dirname, 'migrations', 'tenant')`. Every function of posts-api, tagging and the notificator
+`join(__dirname, 'migrations', 'tenant')`. Every function of posts-api, tagging, the notificator and the chat API
 therefore has `copyFiles: tenantMigrationsOf('<app>')` — `apps/<app>/dist/migrations` to
 `migrations`, beside the bundle — and each of those files `require`s `@mikro-orm/migrations`, which
 is why that package is on `INSTALLED_PACKAGES`: the bundle's `Migrator` and the migration files must
@@ -612,7 +754,7 @@ Two colours, both Pulumi's own. **`#AA6639`** is a parent edge, which is the com
 group. **`#246C60`** is a dependency, and that is the one worth reading: it is the order the engine
 computed, and the edge carries the property that created it (`secretId`, `secretString`). `Build` is
 the node to look for, because **every** function built from the applications hangs off it —
-`Gateway`, `Migrate`, `PostsApi`, `PostsApiInbox`, `Seed`, `Tagging` and the notificator's two —
+`ChatApi`, `Gateway`, `Migrate`, `PostsApi`, `PostsApiInbox`, `Seed`, `Tagging` and the notificator's two —
 which is `dependsOn: [build]` in `compute/platform.ts` and the whole reason that resource exists.
 
 The SVG is rendered `rankdir=LR`: top to bottom, a stack this size comes out a strip twenty times
@@ -623,7 +765,8 @@ like.
 
 **Two** NAT gateways — SST puts one per availability zone — a `t4g.micro` Postgres and a `t4g.micro`
 Valkey (about US$ 9 a month of it), on the order of **US$ 0.12/hour**, running whether anything is
-invoked or not. Chatwoot adds a load balancer and two Fargate tasks of 0.5 vCPU / 1 GB each (Spot
+invoked or not. Outside production the bastion adds a `t4g.nano` and its public address, about
+**US$ 0.01/hour**. Chatwoot adds a load balancer and two Fargate tasks of 0.5 vCPU / 1 GB each (Spot
 outside production), roughly another **US$ 0.05/hour**. The functions themselves are billed per invocation and round to nothing at this
 scale. `sst remove` is not optional.
 

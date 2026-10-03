@@ -110,6 +110,10 @@ export class RunEnvironment {
     return this.variables.E2E_CHATWOOT_URL ?? 'http://localhost:3100';
   }
 
+  get theoUrl(): string {
+    return this.variables.E2E_THEO_URL ?? 'http://localhost:8080';
+  }
+
   get logLevel(): string {
     return this.variables.E2E_LOG_LEVEL ?? 'info';
   }
@@ -122,6 +126,10 @@ export class RunEnvironment {
 
   get keepsStack(): boolean {
     return this.variables.E2E_KEEP_STACK === '1';
+  }
+
+  publishTheo(url: string): void {
+    this.variables.E2E_THEO_URL = url;
   }
 
   publish(endpoints: Endpoints): void {

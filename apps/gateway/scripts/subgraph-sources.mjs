@@ -9,4 +9,5 @@ export const subgraphSources = [
     sdlDir: `${repository}apps/notificator/src/graphql`,
   },
   { name: 'chatwoot', sdlDir: `${repository}apps/chatwoot` },
+  { name: 'chat', sdlDir: `${repository}apps/chat-api/src/graphql` },
 ];

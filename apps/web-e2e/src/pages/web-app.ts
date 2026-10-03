@@ -26,6 +26,7 @@ import { BillingSettingsPage } from './settings/billing-settings.page';
 import { OrganizationSettingsPage } from './settings/organization-settings.page';
 import { SecuritySettingsPage } from './settings/security-settings.page';
 import { SupportPage } from './support.page';
+import { TheoPage } from './theo.page';
 
 export class WebApp {
   readonly header: AppHeader;
@@ -47,6 +48,7 @@ export class WebApp {
   readonly federation: FederationPage;
   readonly clients: ClientsPage;
   readonly support: SupportPage;
+  readonly theo: TheoPage;
 
   readonly accountSettings: AccountSettingsPage;
   readonly securitySettings: SecuritySettingsPage;
@@ -77,6 +79,7 @@ export class WebApp {
     this.federation = new FederationPage(page);
     this.clients = new ClientsPage(page);
     this.support = new SupportPage(page);
+    this.theo = new TheoPage(page);
 
     this.accountSettings = new AccountSettingsPage(page);
     this.securitySettings = new SecuritySettingsPage(page);

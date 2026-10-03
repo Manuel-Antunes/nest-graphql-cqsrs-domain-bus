@@ -1,0 +1,287 @@
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
+import { type AgentCard, Role } from '@a2a-js/sdk';
+import {
+  ClientFactory,
+  ClientFactoryOptions,
+  DefaultAgentCardResolver,
+  JsonRpcTransportFactory,
+} from '@a2a-js/sdk/client';
+import {
+  AgentEvent,
+  type AgentExecutor,
+  InMemoryTaskStore,
+  type RequestContext,
+} from '@a2a-js/sdk/server';
+import type { INestApplication } from '@nestjs/common';
+import { FastifyAdapter } from '@nestjs/platform-fastify';
+import { Test } from '@nestjs/testing';
+import { afterEach, describe, expect, it } from 'vitest';
+
+import type { AgentContext } from '../../agents/context/agent-context';
+import { A2aModule } from '../server/a2a.module';
+import { A2aAgent } from '../server/a2a-agent.decorator';
+import type { A2aModuleOptions } from '../server/a2a-module.options';
+import { AgentCoreA2aServer } from './agentcore-a2a.server';
+
+const TOKEN = 'a-verified-token';
+const ACME_TOKEN = 'a-token-of-acme';
+
+const contextOf = (
+  userName: string,
+  tenant: string,
+  credential: string,
+): AgentContext => ({
+  isAuthenticated: true,
+  userName,
+  tenant,
+  actorId: tenant ? `${tenant}:${userName}` : userName,
+  credential,
+});
+
+class EchoExecutor implements AgentExecutor {
+  readonly callers: (string | undefined)[] = [];
+  readonly tenants: (string | undefined)[] = [];
+
+  async execute(
+    context: RequestContext,
+    bus: Parameters<AgentExecutor['execute']>[1],
+  ): Promise<void> {
+    this.callers.push(context.context?.user?.userName);
+    this.tenants.push(context.context?.tenant);
+    bus.publish(
+      AgentEvent.message({
+        messageId: 'reply',
+        contextId: context.contextId,
+        taskId: '',
+        role: Role.ROLE_AGENT,
+        parts: [
+          {
+            content: { $case: 'text', value: 'pong' },
+            metadata: undefined,
+            filename: '',
+            mediaType: 'text/plain',
+          },
+        ],
+        metadata: undefined,
+        extensions: [],
+        referenceTaskIds: [],
+      }),
+    );
+    bus.finished();
+  }
+
+  async cancelTask(): Promise<void> {}
+}
+
+const executor = new EchoExecutor();
+
+@A2aAgent({
+  id: 'echo',
+  skills: [{ id: 'echo', name: 'Echo', description: 'Answers pong.' }],
+})
+class EchoAgent implements A2aAgent {
+  readonly executor = executor;
+  readonly taskStore = new InMemoryTaskStore();
+}
+
+const SECURITY = {
+  securitySchemes: {
+    bearer: {
+      scheme: {
+        $case: 'httpAuthSecurityScheme',
+        value: { description: '', scheme: 'Bearer', bearerFormat: 'JWT' },
+      },
+    },
+  },
+  securityRequirements: [{ schemes: { bearer: { list: [] } } }],
+};
+
+let agentCore: INestApplication | undefined;
+
+afterEach(async () => {
+  await agentCore?.close();
+  agentCore = undefined;
+  executor.callers.length = 0;
+  executor.tenants.length = 0;
+});
+
+async function freePort(): Promise<number> {
+  const probe = createServer();
+  await new Promise<void>((resolve) => probe.listen(0, '127.0.0.1', resolve));
+  const { port } = probe.address() as AddressInfo;
+  await new Promise<void>((resolve) => probe.close(() => resolve()));
+  return port;
+}
+
+async function listening(): Promise<string> {
+  const port = await freePort();
+  const base = `http://127.0.0.1:${port}`;
+  const options = {
+    baseUrl: 'https://agent.test',
+    agentProviders: [EchoAgent],
+    context: async ({ headers }) =>
+      headers.authorization === `Bearer ${TOKEN}`
+        ? contextOf('user-1', '', TOKEN)
+        : headers.authorization === `Bearer ${ACME_TOKEN}`
+          ? contextOf('user-2', 'acme', ACME_TOKEN)
+          : undefined,
+    card: {
+      name: 'Echo',
+      description: 'An agent under test.',
+      version: '1.0.0',
+      defaultInputModes: ['text'],
+      defaultOutputModes: ['text'],
+      ...SECURITY,
+    },
+  } as A2aModuleOptions;
+  const testing = await Test.createTestingModule({
+    imports: [A2aModule.register(options)],
+  }).compile();
+  agentCore = testing.createNestApplication(new FastifyAdapter(), {
+    logger: false,
+  });
+  await new AgentCoreA2aServer(agentCore, {
+    agent: EchoAgent,
+    url: `${base}/`,
+  }).listen(port, '127.0.0.1');
+  return base;
+}
+
+const fetchAs =
+  (token?: string): typeof fetch =>
+  (input, init) =>
+    fetch(input, {
+      ...init,
+      headers: {
+        ...Object.fromEntries(new Headers(init?.headers)),
+        ...(token ? { authorization: `Bearer ${token}` } : {}),
+      },
+    });
+
+const clientFor = (base: string, token?: string) =>
+  new ClientFactory(
+    ClientFactoryOptions.createFrom(ClientFactoryOptions.default, {
+      transports: [new JsonRpcTransportFactory({ fetchImpl: fetchAs(token) })],
+      cardResolver: new DefaultAgentCardResolver({ fetchImpl: fetchAs(token) }),
+    }),
+  ).createFromUrl(base);
+
+const ping = {
+  message: {
+    messageId: 'm-1',
+    contextId: 'c-1',
+    taskId: '',
+    role: Role.ROLE_USER,
+    parts: [
+      {
+        content: { $case: 'text' as const, value: 'ping' },
+        metadata: undefined,
+        filename: '',
+        mediaType: 'text/plain',
+      },
+    ],
+    metadata: undefined,
+    extensions: [],
+    referenceTaskIds: [],
+  },
+  configuration: undefined,
+  metadata: undefined,
+  tenant: '',
+};
+
+describe('an agent hosted on the AgentCore Runtime contract', () => {
+  it('publishes the registry card at the well-known path, JSON-RPC at the runtime URL in both protocol versions', async () => {
+    const base = await listening();
+
+    const response = await fetch(`${base}/.well-known/agent-card.json`, {
+      headers: { 'A2A-Version': '1.0' },
+    });
+    const card = (await response.json()) as AgentCard;
+
+    expect(response.status).toBe(200);
+    expect(card.name).toBe('Echo');
+    expect(
+      card.supportedInterfaces.map(
+        (iface) =>
+          `${iface.protocolBinding} ${iface.protocolVersion} ${iface.url}`,
+      ),
+    ).toEqual([`JSONRPC 1.0 ${base}/`, `JSONRPC 0.3 ${base}/`]);
+    expect(card.capabilities?.extensions?.length).toBeGreaterThan(0);
+  });
+
+  it('answers the runtime health check', async () => {
+    const base = await listening();
+
+    const response = await fetch(`${base}/ping`);
+
+    expect(await response.json()).toEqual({ status: 'Healthy' });
+  });
+
+  it('refuses an invocation without a credential before the executor runs', async () => {
+    const base = await listening();
+
+    const response = await fetch(`${base}/`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'A2A-Version': '1.0' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'SendMessage',
+        params: {},
+      }),
+    });
+
+    expect(response.status).toBe(401);
+    expect(response.headers.get('www-authenticate')).toBe('Bearer');
+    expect(executor.callers).toEqual([]);
+  });
+
+  it('runs the turn as the caller the credential names', async () => {
+    const base = await listening();
+    const client = await clientFor(base, TOKEN);
+
+    const result = await client.sendMessage(ping);
+
+    expect(JSON.stringify(result)).toContain('pong');
+    expect(executor.callers).toEqual(['user-1']);
+  });
+
+  it('serves each caller a card naming their tenant, which their client then sends on every request', async () => {
+    const base = await listening();
+
+    const card = (await (
+      await fetchAs(ACME_TOKEN)(`${base}/.well-known/agent-card.json`, {
+        headers: { 'A2A-Version': '1.0' },
+      })
+    ).json()) as AgentCard;
+    const anonymous = (await (
+      await fetch(`${base}/.well-known/agent-card.json`, {
+        headers: { 'A2A-Version': '1.0' },
+      })
+    ).json()) as AgentCard;
+    await (await clientFor(base, ACME_TOKEN)).sendMessage(ping);
+
+    expect(card.supportedInterfaces[0].tenant).toBe('acme');
+    expect(anonymous.supportedInterfaces[0].tenant ?? '').toBe('');
+    expect(executor.tenants).toEqual(['acme']);
+  });
+
+  it("refuses a request that names a tenant the caller's token does not act in", async () => {
+    const base = await listening();
+    const client = await clientFor(base, ACME_TOKEN);
+
+    await expect(
+      client.sendMessage({ ...ping, tenant: 'globex' }),
+    ).rejects.toThrow(/globex/);
+    expect(executor.callers).toEqual([]);
+  });
+
+  it('refuses a credential the resolver does not recognise', async () => {
+    const base = await listening();
+    const client = await clientFor(base, 'forged');
+
+    await expect(client.sendMessage(ping)).rejects.toThrow();
+    expect(executor.callers).toEqual([]);
+  });
+});

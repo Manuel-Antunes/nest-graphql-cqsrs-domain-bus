@@ -103,6 +103,28 @@ export const sharedEnvironment = {
  */
 export const gatewayUrl = $interpolate`${router.url}/graphql`;
 
+/**
+ * **The audiences of the Bedrock AgentCore runtimes** (`infra/aws/agents`): the posts MCP server,
+ * the posts agent and Theo. Logical identifiers under the router's origin, not the runtimes' invocation
+ * URLs: a runtime's JWT authorizer is part of the runtime, so it cannot name an ARN that only exists
+ * once the runtime does.
+ */
+export const mcpResource = $interpolate`${router.url}/mcp`;
+
+export const postsAgentResource = $interpolate`${router.url}/a2a/posts`;
+
+export const theoResource = $interpolate`${router.url}/agui/theo`;
+
+/**
+ * **The audiences a Better Auth instance accepts on a bearer token.** The gateway's, and the MCP
+ * server's, because the MCP server forwards the caller's token — issued for it — to the gateway,
+ * which forwards it to every subgraph.
+ */
+export const acceptedResources = $interpolate`${gatewayUrl},${mcpResource}`;
+
+/** **The resources a client may ask a token for**, which the migrator registers. */
+export const registeredResources = $interpolate`${acceptedResources},${postsAgentResource},${theoResource}`;
+
 export const postsEnvironment = {
   ...sharedEnvironment,
   OTEL_SERVICE_NAME: 'posts-api',
@@ -137,6 +159,7 @@ export const postsEnvironment = {
   AUTH_GOOGLE_ID: authGoogleId.value,
   AUTH_GOOGLE_SECRET: authGoogleSecret.value,
   GATEWAY_URL: gatewayUrl,
+  AUTH_OAUTH_RESOURCES: acceptedResources,
   DRIVE_BUCKET: bucket.name,
   DRIVE_CDN_URL: filesUrl,
 };
@@ -167,8 +190,25 @@ export const notificatorEnvironment = {
   AUTH_URL: router.url,
   WEB_URL: router.url,
   GATEWAY_URL: gatewayUrl,
+  AUTH_OAUTH_RESOURCES: acceptedResources,
   MAIL_TRANSPORT: 'ses',
   MAIL_FROM: mailFrom,
+};
+
+/**
+ * **The chat API keeps the tenant's chats and serves the conversations the agents kept** — a chat is
+ * a row in the tenant's schema, its messages the agent's checkpoints in that agent's AgentCore Memory,
+ * named here as `agentId=memoryId` pairs by `agents/memories.ts` through `platform.ts`.
+ */
+export const chatApiEnvironment = {
+  ...sharedEnvironment,
+  OTEL_SERVICE_NAME: 'chat-api',
+  ...errorReporting('chat-api'),
+  AUTH_SECRET: authSecret.value,
+  AUTH_URL: router.url,
+  WEB_URL: router.url,
+  GATEWAY_URL: gatewayUrl,
+  AUTH_OAUTH_RESOURCES: acceptedResources,
 };
 
 /**
@@ -196,6 +236,7 @@ export const migratorEnvironment = {
   AUTH_URL: router.url,
   WEB_URL: router.url,
   GATEWAY_URL: gatewayUrl,
+  AUTH_OAUTH_RESOURCES: registeredResources,
   ...seedEnvironment,
 };
 
@@ -211,6 +252,7 @@ export const gatewayEnvironment = {
   ...errorReporting('gateway'),
   AUTH_SECRET: authSecret.value,
   GATEWAY_URL: gatewayUrl,
+  AUTH_OAUTH_RESOURCES: acceptedResources,
   WEB_URL: router.url,
   AUTH_URL: router.url,
   /** Chatwoot's GraphQL, through the router — `chatwoot/index.ts` routes and rewrites it. */

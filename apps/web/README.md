@@ -181,6 +181,109 @@ here. Both scopes are on — personal and organization — because `libs/billing
 `referenceId` the Polar plugin would otherwise take on trust. On the server, `WebAuth.billing()`
 resolves the request-scoped `BillingService`, the same endpoints through `auth.api`.
 
+## Theo: CopilotKit over the components this design system already has
+
+`/theo` is a chat with Theo, the AG-UI agent on AgentCore (`apps/theo-agent`). The page is
+CopilotKit v2's **headless** hooks — `useAgent({ agentId: 'theo' })` for the conversation and its run
+status, `useCopilotKit().copilotkit.runAgent`/`stopAgent` to send and stop — drawn with `libs/ui`'s own
+chat components (`MessageScroller`, `Message`, `Bubble`, `Marker`, `ChatComposer`), not CopilotKit's
+styled ones. `TheoTranscript` reads the AG-UI messages the agent keeps into what the page shows: a
+`send_message_to_a2a_agent` call is a **delegation card** ("Theo asked Posts Manager, over A2A"), and
+the messages the posts agent said as an AG-UI subagent of that call (`subagentRunId` = the call's id)
+are shown inside it, not as Theo's.
+
+The provider talks to `/api/copilotkit`, where the **CopilotKit runtime** (`@copilotkit/runtime/v2`,
+`createCopilotRuntimeHandler`) runs: for a signed-in person only — anyone else is a `401` before the
+runtime is reached — with an agents factory that builds, per request, an `@ag-ui/client` `HttpAgent`
+for Theo (`lib/agents/theo-agent.server.ts`). Its `fetch` adds what AgentCore needs and the browser
+must never hold: an access token for the person, issued here by `WebAuth.delegatedToken` —
+`libs/auth`'s `DelegatedAccessTokens`, this application being the authorization server — addressed to
+Theo, the posts agent and the MCP server (`THEO_AGENT_AUDIENCES`), with the posts scopes the person
+holds, and the thread as AgentCore's session id. The token is minted when a run is sent, not when the
+runtime lists its agents. `COPILOTKIT_TELEMETRY_DISABLED=true` keeps the runtime from reporting to
+CopilotKit, and pnpm runs no install script of `@scarf/scarf`.
+
+The route streams, so on AWS the server function streams: `open-next.config.ts` picks OpenNext's
+`aws-lambda-streaming` wrapper (see `infra/aws/web`).
+
+### Conversations: listed by the chat API, held by Theo
+
+The page lists the person's conversations with Theo beside the chat (`TheoThreadList`): the `chats`
+query of the gateway's `chat` subgraph (`apps/chat-api`), prefetched on the server like every other
+screen. The web records nothing — Theo records each run's thread as a chat (`recordChat`, as the
+person, which is why `THEO_AGENT_AUDIENCES` names the gateway too) and keeps the conversation in its
+own checkpoints. Picking a conversation makes its id CopilotKit's thread (`setActiveThreadId`), reads
+its messages from the chat API (`chat { messages }`, which reads them from Theo's AgentCore Memory) into
+the agent (`TheoHistory`), and the next run goes on in the same thread; Theo resumes from its
+checkpoints and ignores the messages it already has. "New conversation" is `startNewThread()`. A
+reopened conversation shows Theo's words, its calls and their results; a delegate's streamed words and
+an MCP App's surface are not replayed, the call's result is.
+
+**The runtime serves only what the page uses**: `GET /info`, `POST /agent/:id/run` and
+`POST /agent/:id/stop/:threadId` (`CopilotKitRoutes`). Everything else is a `404` before any
+authentication — the default runtime's `/threads` lists every conversation it ran, whoever had it, and
+`/agent/:id/connect` replays one to whoever names its thread (`copilotkit-routes.spec.ts` shows both),
+and neither knows who is asking.
+
+### Theo's web searches
+
+When Theo searches the web (`search_the_web`), the transcript shows it in its place —
+`TheoTranscript` reads the call's query and, once the result arrives, the sources it listed
+(`sourcesOf`: each `[n] title` followed by its URL) — and `WebSearchLine` draws "Theo searched the web
+for …" with a link to every source, opened in a new tab. AWS's terms for AgentCore Web Search ask for
+exactly that: the citations of a search reach whoever reads what came from it.
+
+### A2UI, and the MCP Apps it carries
+
+The provider has an **A2UI catalog** (`theo/_a2ui`: CopilotKit's basic components plus `McpApp`, id
+`nestposts://a2ui/catalogs/theo/v1`), which is all it takes for CopilotKit to turn A2UI on: every
+run tells the runtime so, the runtime's A2UI middleware hands Theo a `render_a2ui` tool and the
+catalog's schema as context (Theo may draw a view of its own — the dynamic schema), and turns any tool
+result shaped `{ a2ui_operations }` into an `a2ui-surface` activity. `TheoTranscript` places
+activities where they arrived and the page draws them with `useRenderActivityMessage`, inside a
+`CopilotChatConfigurationProvider` naming Theo, which is what tells the renderers whose agent to run.
+
+`McpApp` is how the posts agent's **MCP App** (`apps/posts-app`) gets on screen: the delegation's
+result carries an A2UI surface whose root names the server, the `ui://` resource, the tool, its input
+and its result (`libs/ai/README.md`, "MCP Apps in A2UI"), and the renderer is CopilotKit's own MCP
+Apps host, `MCPAppsActivityRenderer`: the sandbox iframes, the ext-apps `AppBridge`, the tool
+input and result handed to the app, its `ui/message` and `ui/open-link`. Whatever the app asks of
+the server — `resources/read` for its HTML, `tools/call` for its queries (`execute`) and its
+buttons — the host sends to `/api/copilotkit` as a run of Theo's carrying
+`__proxiedMCPRequest`, and `McpAppsProxy` (`lib/agents/mcp-apps-proxy.ts`), the first middleware on
+Theo's per-request agent, answers it against the posts MCP server, as the person (`PostsMcpApp`
+issues the token: `POSTS_MCP_RESOURCE`, the posts scopes) and in app mode
+(`?app=posts&appTarget=mcp`, and the AgentCore header that stands for it). Every other run reaches
+Theo untouched: CopilotKit's `MCPAppsMiddleware` would otherwise list the server's tools on every run
+and offer them to Theo itself, which is the posts agent's job. Its methods are that middleware's
+allowlist (`tools/call`, `resources/read`, `ping`, `notifications/message`), and what the server lets
+an app call is the server's: the app's tools and a read-only `execute`.
+
+`McpAppConnection` sends each request on an MCP client of its own, with the MCP SDK, as the
+middleware does — and two things the middleware does not:
+
+- **A stream that drops is a failure at once.** The server answers a request over server-sent
+  events; when that stream drops before the answer, the SDK only reports it (`SSE stream
+  disconnected`) and leaves the request pending for its 60-second timeout, so the app's button said
+  "Publishing…" for a minute. The connection fails the request with that cause, logged on the server,
+  and the app hears `MCP request failed`. Measured on CI: the stream of a `PublishPost` dropped a
+  millisecond after its headers, the post was created all the same, and the app never heard it.
+- **Every request travels on a connection of its own** (`connection: close`), and the MCP image's Caddy
+  reaches the server the same way (`apps/mcp/README.md`). Which hop drops the stream was not pinned
+  down — the drop hit the web and `apps/web-e2e`'s stand-in alike, through Caddy — so no connection
+  outlives the request that opened it; a handshake per request is what an app's button can afford.
+
+- **CopilotKit's sandbox is `allow-scripts allow-same-origin`, twice, on `srcdoc`**, so the app runs
+  with the web's own origin — fine for an app this repository builds and serves, and the reason not to
+  put a third party's MCP App behind `McpApp`.
+- **A message the app adds does not replace `agent.messages`**: `addMessage` pushes onto the same
+  array, so the transcript is derived on every render rather than memoized on the array's identity
+  — memoized, a person's save reached the page only with the next run.
+- **The catalog's schemas are `zod/v3`.** `@copilotkit/a2ui-renderer` reads a component's props
+  through Zod 3's internals (`_def.typeName`) and converts them with `zod-to-json-schema`; Zod 4's
+  `zod/v3` is that implementation, but its types are not the renderer's, so the props are cast at the
+  boundary and typed by hand (`McpAppProps`).
+
 ## Federação
 
 `apps/posts-api` é um **subgraph** — driver `YogaFederationDriver` —, e `/federation` é a única tela

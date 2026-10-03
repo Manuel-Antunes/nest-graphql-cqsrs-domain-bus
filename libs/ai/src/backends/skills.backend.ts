@@ -1,4 +1,9 @@
-import type { CompiledSubAgent, SubAgent } from 'deepagents';
+import {
+  type CompiledSubAgent,
+  CompositeBackend,
+  StateBackend,
+  type SubAgent,
+} from 'deepagents';
 
 import type { IWithSkills } from '../domain/interfaces/agent.interface';
 import type { Skill } from '../domain/skill.entity';
@@ -14,6 +19,12 @@ export class SkillsBackend extends StaticFilesBackend {
 
   constructor(skills: readonly Skill[]) {
     super(SkillsBackend.filesOf(skills));
+  }
+
+  static mount(skills: readonly Skill[]): CompositeBackend {
+    return new CompositeBackend(new StateBackend(), {
+      [SkillsBackend.ROUTE]: new SkillsBackend(skills),
+    });
   }
 
   static directoryOf(skill: Skill): string {

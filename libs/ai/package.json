@@ -46,9 +46,20 @@
     "@nestposts/auth": "workspace:*",
     "mikro-orm-neo4j": "catalog:",
     "@google/genai": "catalog:",
-    "openai": "catalog:"
+    "openai": "catalog:",
+    "bedrock-agentcore": "catalog:",
+    "express": "catalog:",
+    "@ag-ui/client": "catalog:",
+    "@ag-ui/core": "catalog:",
+    "@ag-ui/encoder": "catalog:",
+    "@ag-ui/langgraph": "catalog:",
+    "@copilotkit/sdk-js": "catalog:",
+    "rxjs": "^7.8.2",
+    "@nestposts/organizations": "workspace:*",
+    "@nestposts/langgraph-checkpoint-aws": "workspace:*"
   },
   "devDependencies": {
-    "@types/mime-types": "catalog:"
+    "@types/mime-types": "catalog:",
+    "@types/express": "^5.0.6"
   }
 }

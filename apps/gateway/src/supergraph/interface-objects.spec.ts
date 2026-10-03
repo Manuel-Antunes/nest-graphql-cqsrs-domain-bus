@@ -55,6 +55,27 @@ const NOTIFICATIONS_SDL = /* GraphQL */ `
   }
 `;
 
+const CHATS_SDL = /* GraphQL */ `
+  extend schema
+    @link(
+      url: "https://specs.apollo.dev/federation/v2.3"
+      import: ["@key", "@interfaceObject"]
+    )
+
+  type IUser @key(fields: "id") @interfaceObject {
+    id: ID!
+    chats: [Chat!]!
+  }
+
+  type Chat {
+    id: ID!
+  }
+
+  type Query {
+    chatCount: Int!
+  }
+`;
+
 const AUTHORS: Record<string, { id: string; name: string }> = {
   'u-1': { id: 'u-1', name: 'Ana' },
 };
@@ -276,6 +297,77 @@ describe('@interfaceObject', () => {
     expect(representations).toEqual([
       { __typename: 'IUser', id: 'u-1', name: 'Ana' },
     ]);
+  });
+
+  it('resolves the fields two subgraphs contribute to the same interface, in one query', async () => {
+    const chats = await Listening.on(
+      createYoga({
+        schema: createSchema({
+          typeDefs: /* GraphQL */ `
+            type Chat {
+              id: ID!
+            }
+            type IUser {
+              id: ID!
+              chats: [Chat!]!
+            }
+            scalar _Any
+            union _Entity = IUser
+            type Query {
+              chatCount: Int!
+              _entities(representations: [_Any!]!): [_Entity]!
+            }
+          `,
+          resolvers: {
+            Query: {
+              chatCount: () => 1,
+              _entities: (
+                _: unknown,
+                {
+                  representations: wanted,
+                }: { representations: Array<{ id: string }> },
+              ) =>
+                wanted.map(({ id }) => ({
+                  id,
+                  chats: id === 'u-1' ? [{ id: 'thread-1' }] : [],
+                })),
+            },
+            _Entity: { __resolveType: () => 'IUser' },
+          },
+        }),
+        logging: false,
+      }),
+    );
+    const withChats = await Listening.on(
+      createYoga({
+        schema: FederatedSchemaFactory.of(
+          Supergraph.compose([
+            { name: 'posts', url: posts.url, sdl: POSTS_SDL },
+            {
+              name: 'notifications',
+              url: notifications.url,
+              sdl: NOTIFICATIONS_SDL,
+            },
+            { name: 'chat', url: chats.url, sdl: CHATS_SDL },
+          ]),
+        ),
+        logging: false,
+      }),
+    );
+    servers.push(chats, withChats);
+
+    const body = await query(
+      '{ someone(id: "u-1") { __typename id notifications { id } chats { id } } }',
+      withChats,
+    );
+
+    expect(body.errors).toBeUndefined();
+    expect(body.data?.someone).toEqual({
+      __typename: 'Author',
+      id: 'u-1',
+      notifications: [{ id: 'n-9' }],
+      chats: [{ id: 'thread-1' }],
+    });
   });
 
   it('leaves the rest of the object working', async () => {

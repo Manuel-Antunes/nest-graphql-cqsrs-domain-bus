@@ -228,7 +228,7 @@ const PRELOADED_NODE_OPTIONS = `${BASE_NODE_OPTIONS} --require /var/task/otel-pr
 /** Where every function of this system lives, what it is allowed to reach, and what it waits for. */
 export interface LambdaPlatform {
   readonly vpc: sst.aws.Vpc;
-  readonly link: unknown[];
+  readonly link: sst.aws.FunctionArgs['link'];
   readonly environment: Record<string, $util.Input<string>>;
   /** The build that produces the `dist/` these handlers point at — see `compute/build.ts`. */
   readonly dependsOn?: $util.Resource[];
@@ -268,6 +268,8 @@ export interface NodeFunctionArgs {
  * - **`install`**, above.
  */
 export class NodeFunction extends $util.ComponentResource {
+  static readonly __pulumiType = 'nestposts:aws:NodeFunction';
+
   readonly fn: sst.aws.Function;
 
   constructor(
@@ -278,7 +280,7 @@ export class NodeFunction extends $util.ComponentResource {
     },
     opts?: $util.ComponentResourceOptions,
   ) {
-    super('nestposts:aws:NodeFunction', name, {}, opts);
+    super(NodeFunction.__pulumiType, name, {}, opts);
 
     this.fn = new sst.aws.Function(
       name,
@@ -289,7 +291,7 @@ export class NodeFunction extends $util.ComponentResource {
         timeout: args.timeout ?? '30 seconds',
         memory: args.memory ?? '1024 MB',
         vpc: args.platform.vpc,
-        link: args.platform.link as never[],
+        link: args.platform.link,
         layers: [COLLECTOR_LAYER],
         url: args.url,
         streaming: args.streaming,
@@ -482,16 +484,19 @@ class Fingerprint {
  * anyway — `TestUsersSeeder` skips an e-mail that already exists — because "changed" includes
  * changing one seeder in a file that holds three.
  *
- * `configuration` is the rest of what decides the rows — the `SEED_*` variables — and it enters the
- * input as a digest, so changing who is seeded runs the seeders again without a password landing in
- * the state in the clear.
+ * `configuration` is the rest of what decides the rows — the `SEED_*` variables, and the OAuth
+ * resources `OAuthResourcesSeeder` registers — and it enters the input as a digest, so changing who
+ * is seeded, or which resources exist, runs the seeders again without a password landing in the
+ * state in the clear. A resource added to the list once reached nothing: Theo's audience was refused
+ * as `invalid_target … is not configured` by the authorization server, because the seeders' sources
+ * had not changed and so the seed never ran.
  */
 export class Seeder extends NodeFunction {
   constructor(
     name: string,
     args: NodeFunctionArgs & {
       readonly seeds: readonly string[];
-      readonly configuration?: Readonly<Record<string, string>>;
+      readonly configuration?: Readonly<Record<string, $util.Input<string>>>;
       readonly after?: Migrator;
     },
     opts?: $util.ComponentResourceOptions,
@@ -503,11 +508,13 @@ export class Seeder extends NodeFunction {
         `${name}Invocation`,
         {
           functionName: this.fn.name,
-          input: JSON.stringify({
-            command: 'seed',
-            seeders: Fingerprint.of(args.seeds),
-            configuration: Fingerprint.ofValues(args.configuration ?? {}),
-          }),
+          input: $output(args.configuration ?? {}).apply((configuration) =>
+            JSON.stringify({
+              command: 'seed',
+              seeders: Fingerprint.of(args.seeds),
+              configuration: Fingerprint.ofValues(configuration),
+            }),
+          ),
         },
         {
           parent: this,
@@ -550,3 +557,5 @@ export class StreamingFunction extends NodeFunction {
     return this.fn.url as unknown as $util.Output<string>;
   }
 }
+
+sst.Linkable.wrap(NodeFunction, (node) => node.fn.getSSTLink());

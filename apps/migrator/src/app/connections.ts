@@ -1,6 +1,7 @@
 import { join } from 'node:path';
 import { Migrator } from '@mikro-orm/migrations';
 import { SeedManager } from '@mikro-orm/seeder';
+import { chatEntities } from '@nestposts/chat/infrastructure/chats-infrastructure.module';
 import { clientsEntities } from '@nestposts/clients/infrastructure/clients-infrastructure.module';
 import type { DatabaseEntities, PostgresOptions } from '@nestposts/database';
 import { eventStoreEntities } from '@nestposts/event-store-mikro-orm/event-store.entities';
@@ -13,6 +14,7 @@ import { usersEntities } from '@nestposts/users/infrastructure/users-infrastruct
 
 import { systemMigrations } from '../migrations/system';
 import { tenantMigrations } from '../migrations/tenant';
+import { AgentConsoleClientSeeder } from '../seeders/agent-console-client.seeder';
 import { DatabaseSeeder } from '../seeders/database.seeder';
 import { OAuthResourcesSeeder } from '../seeders/oauth-resources.seeder';
 import { TestUsersSeeder } from '../seeders/test-users.seeder';
@@ -34,6 +36,7 @@ export const migratorTables = (): DatabaseEntities => [
   ...usersEntities,
   ...eventsEntities,
   ...clientsEntities,
+  ...chatEntities,
   ...notificationsEntities,
   ...outboxEntities,
   ...eventStoreEntities,
@@ -45,7 +48,12 @@ export const systemConnection = (): PostgresOptions => ({
   extensions: [Migrator, SeedManager],
   migrations: migrationFiles('system'),
   seeder: {
-    seedersList: [DatabaseSeeder, OAuthResourcesSeeder, TestUsersSeeder],
+    seedersList: [
+      DatabaseSeeder,
+      OAuthResourcesSeeder,
+      AgentConsoleClientSeeder,
+      TestUsersSeeder,
+    ],
     defaultSeeder: 'DatabaseSeeder',
     emit: 'ts',
   },

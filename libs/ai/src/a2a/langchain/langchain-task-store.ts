@@ -16,6 +16,7 @@ import type { BaseCheckpointSaver, BaseStore } from '@langchain/langgraph';
 import { foldLangChainMessages } from '../../checkpoint/fold-langchain-messages';
 import { toParts } from '../../domain/messages/langchain-message-parts';
 import { ChatMessageEncoder } from '../domain/chat-message-encoder';
+import { A2aTenancy } from '../server/a2a-tenancy';
 
 const DEFAULT_PAGE_SIZE = 50;
 const MAX_PAGE_SIZE = 100;
@@ -63,8 +64,7 @@ export class LangChainTaskStore implements TaskStore {
   }
 
   private ownerOf(context: ServerCallContext): string | null {
-    const user = context.user;
-    return user?.isAuthenticated ? user.userName : null;
+    return A2aTenancy.actorOf(context.tenant, context.user) ?? null;
   }
 
   async save(task: Task, context: ServerCallContext): Promise<void> {
@@ -91,7 +91,8 @@ export class LangChainTaskStore implements TaskStore {
       })),
       metadata: task.metadata as Record<string, unknown> | undefined,
       historyStart:
-        existing?.historyStart ?? (await this.announcementWatermark(task)),
+        existing?.historyStart ??
+        (await this.announcementWatermark(task, userId)),
       createdAt: existing?.createdAt ?? new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -226,16 +227,22 @@ export class LangChainTaskStore implements TaskStore {
     return this.searchExact(['a2a', userId ?? '_anon', 'tasks']);
   }
 
-  private async readMessages(contextId: string): Promise<BaseMessage[]> {
+  private async readMessages(
+    contextId: string,
+    owner: string | null,
+  ): Promise<BaseMessage[]> {
     const tuple = await this.checkpointer.getTuple({
-      configurable: { thread_id: contextId },
+      configurable: { thread_id: contextId, actor_id: owner ?? '_anon' },
     });
     const messages = tuple?.checkpoint?.channel_values?.messages;
     return Array.isArray(messages) ? (messages as BaseMessage[]) : [];
   }
 
-  private async announcementWatermark(task: Task): Promise<number> {
-    const raw = await this.readMessages(task.contextId);
+  private async announcementWatermark(
+    task: Task,
+    owner: string | null,
+  ): Promise<number> {
+    const raw = await this.readMessages(task.contextId, owner);
 
     const opensWith = task.history?.[0]?.messageId;
     if (opensWith) {
@@ -253,7 +260,10 @@ export class LangChainTaskStore implements TaskStore {
   ): Promise<Message[]> {
     if (historyLength === 0) return [];
 
-    const messages = await this.readMessages(envelope.contextId);
+    const messages = await this.readMessages(
+      envelope.contextId,
+      envelope.userId,
+    );
 
     const nextStart = siblings
       .map((sibling) => sibling.historyStart)

@@ -7,6 +7,8 @@ import {
 } from 'langchain';
 import z, { fromJSONSchema } from 'zod';
 
+import { McpAppSurface } from '../../mcp/apps/mcp-app-surface';
+import { McpAppTools } from '../../mcp/apps/mcp-app-tools';
 import { SystemGuidance } from '../../middleware/system-guidance';
 import { AgentExtensions } from '../domain/agent-extensions';
 import type { BrowserContextPayload } from '../domain/extensions/browser-context.extension';
@@ -15,12 +17,18 @@ import {
   ClientToolsExtension,
 } from '../domain/extensions/client-tools.extension';
 
+export type A2uiTurn = {
+  readonly catalogId: string;
+  readonly messages: unknown[];
+};
+
 export type A2aRuntimeContext = {
   clientTools?: Omit<ClientToolDeclaration, 'review'>[];
   clientInstructions?: string;
   browserContext?: BrowserContextPayload;
   activatedExtensions?: string[];
   clientToolNames?: Set<string>;
+  a2ui?: A2uiTurn;
 };
 
 type RewritableToolCall = {
@@ -46,6 +54,7 @@ export class A2aMiddleware {
       browserContext: z.custom<BrowserContextPayload>().optional(),
       activatedExtensions: z.array(z.string()).optional(),
       clientToolNames: z.custom<Set<string>>().optional(),
+      a2ui: z.custom<A2uiTurn>().optional(),
     }),
   });
 
@@ -68,11 +77,14 @@ export class A2aMiddleware {
         );
 
         const declared = clientToolsActive ? (context.clientTools ?? []) : [];
-        const serverToolNames = new Set(request.tools.map((t) => t.name));
+        const offered = request.tools.filter(
+          (candidate) => context.a2ui || !McpAppTools.isApp(candidate),
+        );
+        const serverToolNames = new Set(offered.map((t) => t.name));
         const pageTools = declared
           .filter((declaration) => !serverToolNames.has(declaration.name))
           .map((declaration) => A2aMiddleware.pageTool(declaration));
-        const tools = [...request.tools, ...pageTools].filter(
+        const tools = [...offered, ...pageTools].filter(
           (t) =>
             declared.length > 0 ||
             t.name !== ClientToolsExtension.ENVELOPE_TOOL,
@@ -102,7 +114,9 @@ export class A2aMiddleware {
       },
       wrapToolCall: async (request, handler) => {
         try {
-          return await handler(request);
+          const result = await handler(request);
+          A2aMiddleware.collectSurface(A2aMiddleware.a2uiOf(request), result);
+          return result;
         } catch (error) {
           if (isGraphBubbleUp(error)) throw error;
           if (error instanceof Error && error.name === 'AbortError')
@@ -116,6 +130,23 @@ export class A2aMiddleware {
         }
       },
     });
+  }
+
+  private static a2uiOf(request: unknown): A2uiTurn | undefined {
+    const runtime = (request as { runtime?: { context?: { a2a?: unknown } } })
+      .runtime;
+    return (runtime?.context?.a2a as A2aRuntimeContext | undefined)?.a2ui;
+  }
+
+  private static collectSurface(
+    a2ui: A2uiTurn | undefined,
+    result: unknown,
+  ): void {
+    const placement = McpAppTools.placementOf(result);
+    if (!a2ui || !placement) return;
+    a2ui.messages.push(
+      ...McpAppSurface.messages({ ...placement, catalogId: a2ui.catalogId }),
+    );
   }
 
   private static envelopeTool() {

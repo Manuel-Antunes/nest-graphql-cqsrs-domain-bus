@@ -1,0 +1,134 @@
+"""
+A conversation a person had with an agent, in the tenant it was had in. Its id is the agent's thread:
+the agent keeps the conversation itself, as the checkpoints of that thread in AgentCore Memory, and
+records the chat as it goes
+"""
+type Chat @key(fields: "id") {
+  id: ID!
+
+  """
+  The agent the conversation is held with, such as theo
+  """
+  agentId: String!
+
+  """
+  What the conversation is about; the first thing the person asked, until renamed
+  """
+  title: String
+  createdAt: DateTime!
+
+  """
+  When the conversation last moved
+  """
+  updatedAt: DateTime!
+
+  """
+  The conversation as the agent kept it, oldest first
+  """
+  messages: [ChatMessage!]!
+}
+
+"""
+Who said a message
+"""
+enum ChatMessageRole {
+  USER
+  ASSISTANT
+  TOOL
+}
+
+"""
+One message of a conversation
+"""
+type ChatMessage {
+  id: ID!
+  role: ChatMessageRole!
+
+  """
+  What it says; a tool's result, for a TOOL message
+  """
+  content: String!
+
+  """
+  The tools an ASSISTANT message called
+  """
+  toolCalls: [ChatToolCall!]!
+
+  """
+  The call a TOOL message answers
+  """
+  toolCallId: ID
+}
+
+"""
+A tool an agent called
+"""
+type ChatToolCall {
+  id: ID!
+  name: String!
+
+  """
+  Its arguments, as JSON
+  """
+  arguments: String!
+}
+
+"""
+A user, as the chat subgraph knows one: by id alone
+"""
+type IUser @key(fields: "id") @interfaceObject {
+  id: ID!
+
+  """
+  The user's conversations in the current tenant, the one that moved last first; empty to anybody but
+  that user
+  """
+  chats(agentId: String, first: Int = 30): [Chat!]!
+}
+
+input RecordChatInput {
+  """
+  The agent's thread
+  """
+  id: ID!
+  agentId: String!
+
+  """
+  The title a chat that has none takes
+  """
+  title: String
+}
+
+input RenameChatInput {
+  id: ID!
+  title: String!
+}
+
+extend type Query {
+  """
+  The signed-in user's conversations in the current tenant, the one that moved last first
+  """
+  chats(agentId: String, first: Int = 30): [Chat!]!
+
+  """
+  One of the signed-in user's conversations; null when it is not theirs
+  """
+  chat(id: ID!): Chat
+}
+
+extend type Mutation {
+  """
+  The agent records the conversation it is having with the signed-in user: starts the chat, or moves it
+  """
+  recordChat(input: RecordChatInput!): Chat!
+
+  """
+  Renames one of the signed-in user's conversations
+  """
+  renameChat(input: RenameChatInput!): Chat!
+
+  """
+  Deletes one of the signed-in user's conversations, and what the agent kept of it
+  """
+  deleteChat(id: ID!): ID!
+}

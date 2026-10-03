@@ -50,6 +50,8 @@ const DATABASE = 'neo4j';
 const PASSWORD_PARAMETER_TAG = 'vaz:lookup:password-parameter';
 
 export class Neo4j extends $util.ComponentResource {
+  static readonly __pulumiType = 'infra:aws:Neo4j';
+
   private service?: sst.aws.Service;
   private auth?: Neo4jAuth;
   private cluster?: sst.aws.Cluster;
@@ -75,7 +77,7 @@ export class Neo4j extends $util.ComponentResource {
     args: Neo4jArgs | Neo4jRefArgs,
     opts?: $util.ComponentResourceOptions,
   ) {
-    super('infra:aws:Neo4j', name, args, opts);
+    super(Neo4j.__pulumiType, name, args, opts);
     this.componentName = name;
 
     if ('ref' in args) {

@@ -1,0 +1,16 @@
+{
+	admin off
+	auto_https off
+	persist_config off
+}
+
+:8000 {
+	@app header_regexp app X-Amzn-Bedrock-AgentCore-Runtime-Custom-Mcp-App ^([a-z][a-z0-9-]*)$
+	rewrite @app {path}?{query}&app={re.app.1}&appTarget=mcp
+	reverse_proxy 127.0.0.1:8001 {
+		flush_interval -1
+		transport http {
+			keepalive off
+		}
+	}
+}

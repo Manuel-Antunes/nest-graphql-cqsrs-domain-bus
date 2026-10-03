@@ -1,0 +1,28 @@
+"""
+Declares an operation as an MCP tool of the app. Read by @apollo/client-ai-apps at build time and
+written into the manifest Apollo MCP Server publishes; it never reaches the gateway.
+"""
+directive @tool(
+  name: String
+  description: String
+  extraInputs: [ToolExtraInput!]
+) repeatable on QUERY | MUTATION
+
+"""
+Runs the operation with every tool call of the app, its result handed to the app beside the tool's.
+"""
+directive @prefetch on QUERY
+
+"""
+Keeps a field out of what the model reads; the app still receives it.
+"""
+directive @private on FIELD
+
+"""
+A tool input that is not a variable of the operation: the app reads it, the gateway never sees it.
+"""
+input ToolExtraInput {
+  name: String!
+  description: String!
+  type: String!
+}

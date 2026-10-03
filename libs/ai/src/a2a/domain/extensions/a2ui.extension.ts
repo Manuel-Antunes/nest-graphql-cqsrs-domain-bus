@@ -1,5 +1,5 @@
 import type { Message, Part } from '@a2a-js/sdk';
-import type { AgentExecutionEvent } from '@a2a-js/sdk/server';
+import type { AgentExecutionEvent, RequestContext } from '@a2a-js/sdk/server';
 
 import { BaseExtension } from '../extension';
 
@@ -26,14 +26,12 @@ export class A2uiExtension extends BaseExtension<
   static readonly MIME_TYPE_KEY = 'mimeType';
   static readonly MIME_TYPE = 'application/json+a2ui';
   static readonly CLIENT_CAPABILITIES_KEY = 'a2uiClientCapabilities';
-  static readonly STANDARD_CATALOG_ID =
-    'https://a2ui.org/specification/v0_8/standard_catalog_definition.json';
-  static readonly MCP_APP_CATALOG_ID =
-    'a2ui.org:a2ui/v0.8/mcp_app_catalog.json';
+  static readonly BASIC_CATALOG_ID =
+    'https://a2ui.org/specification/v0_9/basic_catalog.json';
   static readonly MCP_APP_COMPONENT = 'McpApp';
 
   readonly name = 'a2ui';
-  readonly version = 'v0.8';
+  readonly version = 'v0.9';
   readonly description = 'Provides agent driven UI using the A2UI JSON format.';
   override readonly params: A2uiParams;
   protected override readonly baseUri = 'https://a2ui.org/a2a-extension';
@@ -77,11 +75,15 @@ export class A2uiExtension extends BaseExtension<
       : undefined;
   }
 
+  messagesIn(parts: readonly Part[]): unknown[] {
+    return parts.flatMap((part) => {
+      const data = this.dataOf(part);
+      return data === undefined ? [] : [data];
+    });
+  }
+
   clientCapabilities(
-    supportedCatalogIds: string[] = [
-      A2uiExtension.STANDARD_CATALOG_ID,
-      A2uiExtension.MCP_APP_CATALOG_ID,
-    ],
+    supportedCatalogIds: string[] = [A2uiExtension.BASIC_CATALOG_ID],
   ): A2uiClientCapabilities {
     return { supportedCatalogIds };
   }
@@ -104,5 +106,14 @@ export class A2uiExtension extends BaseExtension<
     return value && typeof value === 'object' && 'supportedCatalogIds' in value
       ? (value as A2uiClientCapabilities)
       : undefined;
+  }
+
+  catalogIdsFor(request: Pick<RequestContext, 'userMessage'>): string[] {
+    const ids = this.clientCapabilitiesOf(
+      request.userMessage,
+    )?.supportedCatalogIds;
+    return Array.isArray(ids)
+      ? ids.filter((id): id is string => typeof id === 'string' && id !== '')
+      : [];
   }
 }

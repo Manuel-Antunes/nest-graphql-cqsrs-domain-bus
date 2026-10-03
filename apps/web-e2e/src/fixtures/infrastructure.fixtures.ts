@@ -1,3 +1,5 @@
+import { TheoRecords } from '../infrastructure/agents/theo-records';
+import { TheoScript } from '../infrastructure/agents/theo-script';
 import { OAuthProvider } from '../infrastructure/auth/oauth-provider';
 import { ChatwootApi } from '../infrastructure/chatwoot/chatwoot-api';
 import { AppendFaults } from '../infrastructure/database/append-faults';
@@ -43,6 +45,10 @@ export interface InfrastructureFixtures {
   /** Polar's sandbox and this run's webhook endpoint — `null` when the run has no billing. */
   billing: BillingRun | null;
   billingWebhooks: BillingWebhooks;
+  /** What the agent behind the web's /theo was asked, and with which token. */
+  theoRecords: TheoRecords;
+  /** Which question makes the agent behind /theo open the posts MCP App, and on which tool. */
+  theoScript: TheoScript;
 }
 
 /**
@@ -137,5 +143,13 @@ export const test = environment.extend<InfrastructureFixtures>({
 
   billingWebhooks: async ({ environment }, use) => {
     await use(new BillingWebhooks(environment.webUrl));
+  },
+
+  theoRecords: async ({ environment }, use) => {
+    await use(new TheoRecords(environment.theoUrl));
+  },
+
+  theoScript: async ({ environment }, use) => {
+    await use(new TheoScript(environment.theoUrl));
   },
 });

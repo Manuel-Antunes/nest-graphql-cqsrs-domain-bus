@@ -17,6 +17,7 @@ import { migrationFiles } from './app/connections';
 import { ChatwootMirror } from './chatwoot/chatwoot-mirror';
 import type { OutboxConfig } from './config/outbox.config';
 import { outboxConfig } from './config/outbox.config';
+import { AgentConsoleClientSeeder } from './seeders/agent-console-client.seeder';
 import { withSeederContainer } from './seeders/container';
 import { DatabaseSeeder } from './seeders/database.seeder';
 import { OAuthResourcesSeeder } from './seeders/oauth-resources.seeder';
@@ -120,12 +121,13 @@ export const fresh = async (): Promise<void> => {
 
 export async function setup(): Promise<void> {
   await migrate();
-  await seed([OAuthResourcesSeeder]);
+  await seed([OAuthResourcesSeeder, AgentConsoleClientSeeder]);
 }
 
 export { bootstrap, withMigrator } from './app/bootstrap';
 export { MigratorModule } from './app/migrator.module';
 export { seedConfig } from './config/seed.config';
+export { AgentConsoleClientSeeder } from './seeders/agent-console-client.seeder';
 export { DatabaseSeeder } from './seeders/database.seeder';
 export { OAuthResourcesSeeder } from './seeders/oauth-resources.seeder';
 export { TestUsersSeeder } from './seeders/test-users.seeder';

@@ -1,11 +1,12 @@
 # `apps/gateway`
 
-The one GraphQL endpoint a client talks to. It federates three subgraphs:
+The one GraphQL endpoint a client talks to. It federates four subgraphs:
 
 | subgraph | served by | what it owns |
 |---|---|---|
 | `posts` | `apps/posts-api` | posts, tags, users and their subscriptions (`onPostCreated`, `onPostUpdated`, …) |
 | `notifications` | `apps/notificator` | notifications and devices, and `IUser.notifications` / `IUser.unreadNotificationCount` through `@interfaceObject` |
+| `chat` | `apps/chat-api` | the conversations people had with the agents — `chats`, `chat { messages }`, `recordChat`, `renameChat`, `deleteChat` — and `IUser.chats` through `@interfaceObject` |
 | `chatwoot` | `apps/chatwoot` (Rails) | contacts, conversations, inboxes and agents of the organization's support account, and `Client.contacts`, `Team.workingHours` / `Team.supportTeam` on the entities `posts` owns; its SDL is the dump `apps/chatwoot/schema.graphql` |
 
 It composes the supergraph from the subgraphs' SDL, executes it — queries, mutations **and
@@ -159,13 +160,32 @@ Whatever does not hold up is forwarded as it came, and Chatwoot answers it as no
 token is a Chatwoot credential that does not expire, and while cached it sits in the Redis every
 process shares.
 
+### The gateway is an authorization server's origin too
+
+`AuthInfrastructureModule` is installed with its routes: the gateway serves Better Auth's `/api/auth/*`
+— the same instance, the same Postgres and Redis as every other process — and the authorization
+server's discovery documents at the root, `/.well-known/oauth-authorization-server` and
+`/.well-known/openid-configuration` (`OAuthDiscoveryController`, `libs/auth`: the plugin's own
+documents, served where a client looks for them, since its handler only sees `/api/auth`). On AWS the
+router sends both paths to the gateway, so the issuer's origin answers them; that is what the posts MCP
+server (`apps/mcp`, Apollo MCP Server) and AgentCore's JWT authorizers discover the JWKS through.
+Both bootstraps create the Fastify app with `bodyParser: false`, as posts-api does, so Better Auth
+reads its own bodies. Emails it is asked for are only logged here — the gateway has no transport —
+which is why the router keeps `/api/auth` itself on posts-api.
+
+The MCP server forwards the caller's token, issued for it, to this gateway: every Better Auth process
+lists the MCP server's resource in `AUTH_OAUTH_RESOURCES`, so its audience reads as a session here and
+in every subgraph. `test/session-resolution.spec.ts` checks the discovery documents and a sign-in
+through these routes; `test/mcp-operations.spec.ts` validates every MCP tool's operation against the
+API schema this gateway composes.
+
 ### Why the identity is resolved in the context, and not by a guard
 
 **No Nest guard runs on `/graphql` in this application.** `YogaDriver` registers its route directly on
 Fastify (`app.all(path, …)`), not through Nest's router, and the stitched schema has no `@Resolver`
 classes, so `@nestjs/graphql` has nothing to wrap with guards, interceptors or pipes. An `APP_GUARD`
 here would guard `GET /graphql/schema.graphql` and nothing else — which is why `AuthInfrastructureModule`
-is installed with `routes: false` and `guard: false`. What does run for every operation is Yoga's
+is installed with `guard: false`. What does run for every operation is Yoga's
 context function, so that is where the caller is resolved — with the same `IdentityResolver` the
 subgraphs' tenant guard uses.
 
@@ -255,6 +275,7 @@ above it.
 | `GATEWAY_URL` | `http://localhost:4000/graphql` | this gateway as a resource — the audience an OAuth access token must carry |
 | `POSTS_SUBGRAPH_URL` | `http://localhost:3000/graphql` | |
 | `NOTIFICATIONS_SUBGRAPH_URL` | `http://localhost:3002/graphql` | |
+| `CHAT_SUBGRAPH_URL` | `http://localhost:3003/graphql` | |
 | `CHATWOOT_SUBGRAPH_URL` | `http://localhost:3100/graphql` | |
 | `GATEWAY_SUBGRAPHS_DIR` | `dist/subgraphs` beside `main.js` | where the baked SDL is read from |
 | `GATEWAY_CORS_ORIGINS` | `WEB_URL`, then `http://localhost:4200` | the browser calls the gateway cross-origin for SSE |

@@ -8,8 +8,12 @@
  * route points at a function's URL, and `web/` last because it is the only thing that wants all
  * three.
  */
+import { postsAgent, postsMcp, theo } from './agents';
+import { postsAgentMemory, theoMemory } from './agents/memories';
+import { webSearch } from './agents/web-search';
 import { chatwoot } from './chatwoot';
 import {
+  chatSubgraph,
   gateway,
   migrator,
   notificationsSubgraph,
@@ -19,6 +23,11 @@ import {
   streaming,
   taggingWorker,
 } from './compute';
+import {
+  mcpResource,
+  postsAgentResource,
+  theoResource,
+} from './compute/environment';
 import { database, graph } from './data';
 import { router } from './edge';
 import { mailSender } from './mail';
@@ -41,6 +50,7 @@ export const outputs = {
   gateway: gateway.url,
 
   notificationsSubgraph: notificationsSubgraph.url,
+  chatSubgraph: chatSubgraph.url,
 
   web: web.url,
 
@@ -73,4 +83,17 @@ export const outputs = {
   neo4j: graph.uri,
 
   chatwoot: chatwoot.url,
+
+  agents: {
+    postsMcp: postsMcp.url,
+    postsMcpResource: mcpResource,
+    postsAgent: postsAgent.url,
+    postsAgentCard: $interpolate`${postsAgent.url}.well-known/agent-card.json`,
+    postsAgentResource,
+    postsAgentMemory: postsAgentMemory.id,
+    theo: theo.url,
+    theoResource,
+    theoMemory: theoMemory.id,
+    webSearch: webSearch.gatewayUrl,
+  },
 };

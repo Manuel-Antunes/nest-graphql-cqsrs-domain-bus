@@ -72,6 +72,7 @@ export interface TurnInput {
   taskId?: string;
   text?: string;
   parts?: Part[];
+  metadata?: Record<string, unknown>;
   extensions?: string[];
   onStart?: (handle: {
     executor: ReactAgentExecutor<ReactAgent>;
@@ -116,7 +117,7 @@ export class TurnHarness {
           : []),
         ...(input.parts ?? []),
       ],
-      metadata: undefined,
+      metadata: input.metadata,
       extensions: [],
       referenceTaskIds: [],
     };

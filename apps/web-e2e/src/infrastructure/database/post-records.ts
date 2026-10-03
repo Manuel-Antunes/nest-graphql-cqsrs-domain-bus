@@ -2,8 +2,14 @@ import { Poll } from '../../support/poll';
 import type { Database } from './database';
 
 export interface StoredPost {
+  title: string;
   version: number;
   published_at: Date | null;
+}
+
+export interface AuthoredPost extends StoredPost {
+  id: string;
+  author_id: string;
 }
 
 export interface StoredAttachment {
@@ -23,8 +29,16 @@ export class PostRecords {
 
   async find(id: string): Promise<StoredPost | undefined> {
     const [row] = await this.database.query<StoredPost>(
-      'select version, published_at from posts where id = ?',
+      'select title, version, published_at from posts where id = ?',
       id,
+    );
+    return row;
+  }
+
+  async titled(title: string): Promise<AuthoredPost | undefined> {
+    const [row] = await this.database.query<AuthoredPost>(
+      'select id, author_id, title, version, published_at from posts where title = ?',
+      title,
     );
     return row;
   }

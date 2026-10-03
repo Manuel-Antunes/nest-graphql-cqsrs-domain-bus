@@ -13,6 +13,7 @@ export class SkillProps {
   scripts: SkillFile[];
   assets: SkillFile[];
   tags: string[];
+  examples: string[];
 
   constructor(props: {
     name: string;
@@ -22,6 +23,7 @@ export class SkillProps {
     scripts?: SkillFile[];
     assets?: SkillFile[];
     tags?: string[];
+    examples?: string[];
   }) {
     this.name = props.name;
     this.description = props.description;
@@ -30,6 +32,7 @@ export class SkillProps {
     this.scripts = props.scripts ?? [];
     this.assets = props.assets ?? [];
     this.tags = props.tags ?? [];
+    this.examples = props.examples ?? [];
   }
 }
 
@@ -97,6 +100,14 @@ export class Skill {
 
   set tags(value: string[]) {
     this.props.tags = value;
+  }
+
+  get examples(): string[] {
+    return this.props.examples;
+  }
+
+  set examples(value: string[]) {
+    this.props.examples = value;
   }
 
   /**

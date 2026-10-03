@@ -1,0 +1,47 @@
+import {
+  CopilotRuntime,
+  createCopilotRuntimeHandler,
+} from '@copilotkit/runtime/v2';
+
+import { CopilotKitRoutes } from '@/lib/agents/copilotkit-routes';
+import { PostsMcpApp } from '@/lib/agents/posts-mcp-app.server';
+import { TheoAgent } from '@/lib/agents/theo-agent.server';
+import { WebAuth } from '@/lib/auth/server';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
+const BASE_PATH = '/api/copilotkit';
+
+const copilotRuntime = createCopilotRuntimeHandler({
+  runtime: new CopilotRuntime({
+    agents: async () => {
+      const identity = await WebAuth.identity();
+      if (!identity) throw new Error('Nobody is signed in to talk to Theo.');
+      return {
+        [TheoAgent.ID]: TheoAgent.for(identity).use(
+          PostsMcpApp.proxyFor(identity),
+        ),
+      };
+    },
+  }),
+  basePath: BASE_PATH,
+});
+
+async function handle(request: Request): Promise<Response> {
+  if (!CopilotKitRoutes.isServed(request, BASE_PATH)) {
+    return Response.json(
+      { error: "Theo's conversations are served by the chat API." },
+      { status: 404 },
+    );
+  }
+  if (!(await WebAuth.identity())) {
+    return Response.json(
+      { error: 'Sign in to talk to Theo.' },
+      { status: 401 },
+    );
+  }
+  return copilotRuntime(request);
+}
+
+export { handle as DELETE, handle as GET, handle as PATCH, handle as POST };

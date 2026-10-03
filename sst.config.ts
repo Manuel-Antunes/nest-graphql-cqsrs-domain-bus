@@ -25,7 +25,13 @@ export default $config({
        * successfully.
        */
       providers: {
+        /**
+         * Newer than the one SST pins (7.20.0), whose `AgentcoreAgentRuntime` refuses
+         * `serverProtocol: 'AGUI'` — Theo's (`infra/aws/agents`).
+         */
+        aws: { version: '7.48.0' },
         command: '1.2.1',
+        'docker-build': '0.0.14',
         sentry: {
           package: '@pulumiverse/sentry',
           version: '0.0.9',

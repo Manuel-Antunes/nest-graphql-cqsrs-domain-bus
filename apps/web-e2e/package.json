@@ -8,8 +8,10 @@
     "@graphql-codegen/cli": "^7.4.1",
     "@graphql-codegen/client-preset": "^6.2.0",
     "@graphql-typed-document-node/core": "^3.2.0",
+    "@modelcontextprotocol/sdk": "catalog:",
     "@polar-sh/sdk": "catalog:",
-    "graphql": "^16.14.2"
+    "graphql": "^16.14.2",
+    "jose": "^6.2.12"
   },
   "nx": {
     "implicitDependencies": [
@@ -64,7 +66,9 @@
               "@nestposts/posts-api",
               "@nestposts/tagging",
               "@nestposts/notificator",
-              "@nestposts/gateway"
+              "@nestposts/chat-api",
+              "@nestposts/gateway",
+              "@nestposts/mcp"
             ],
             "target": "docker:build"
           },

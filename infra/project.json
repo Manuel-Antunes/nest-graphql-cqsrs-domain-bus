@@ -5,9 +5,13 @@
   "sourceRoot": "infra/aws",
   "implicitDependencies": [
     "@nestposts/gateway",
+    "@nestposts/mcp",
+    "@nestposts/posts-agent",
+    "@nestposts/theo-agent",
     "@nestposts/posts-api",
     "@nestposts/tagging",
     "@nestposts/notificator",
+    "@nestposts/chat-api",
     "@nestposts/migrator",
     "@nestposts/web",
     "@chatwoot/chatwoot"
