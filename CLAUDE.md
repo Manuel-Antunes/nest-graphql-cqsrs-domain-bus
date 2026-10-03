@@ -2577,6 +2577,13 @@ DTOs count.
   its closing `MESSAGES_SNAPSHOT` replaces the client's copy and the client appends the checkpoint's
   after the messages it already held. The checkpoint's order is the model's; the client's is only
   for display, and `/theo` groups by `toolCallId`.
+- **`AgentCoreMemorySaver` answers, on read, every tool call it holds no result for** — upstream's
+  `patch_orphan_tool_calls`. Theo's run ends at `send_message_to_a2a_agent` by design and the A2A
+  middleware brings the result in the next run, so on AWS each delegation was read back answered
+  "interrupted before completion" and the real result became a second answer Bedrock refused; the
+  local specs, on `MemorySaver`, never saw it. Theo's checkpointer is built with
+  `AgentMemories.FOR_CLIENT_TOOLS` (`patchOrphanToolCalls: false`), and `a2a-middleware.agent.spec`
+  runs the loop over AgentCore Memory.
 - **An MCP request whose response stream drops is left pending for a minute.** The MCP SDK's
   streamable HTTP client (1.30, and 1.32 alike) only reports `SSE stream disconnected` when the stream
   answering a POST drops before the answer, and the request waits for its 60-second timeout. On CI a
