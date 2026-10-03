@@ -111,7 +111,7 @@ const middlewareWith = (
     checkpointer: new MemorySaver(),
   });
   const agent = new A2aMiddlewareAgent({
-    orchestrator: InProcessLangGraphClient.agentOver(graph, {
+    orchestrationAgent: InProcessLangGraphClient.agentOver(graph, {
       graphId: 'theo',
     }),
     agents,

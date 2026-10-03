@@ -24,7 +24,7 @@ import { AgentRunContext } from '../../agents/context/agent-run-context';
 import { DelegatedMessages } from './delegated-messages';
 
 export interface A2aMiddlewareRunConfig {
-  readonly orchestrator: AbstractAgent;
+  readonly orchestrationAgent: AbstractAgent;
   readonly agents: Pick<RemoteA2aAgents, 'names' | 'reach'>;
   readonly delegationTool: Tool | undefined;
   readonly traceName: string;
@@ -122,7 +122,7 @@ export class A2aMiddlewareRun {
   }
 
   private round(messages: Message[]): Promise<Round> {
-    const orchestrator = this.config.orchestrator.clone();
+    const orchestrator = this.config.orchestrationAgent.clone();
     this.orchestrator = orchestrator;
     const started = new Map<string, string>();
     const answered = new Set<string>();

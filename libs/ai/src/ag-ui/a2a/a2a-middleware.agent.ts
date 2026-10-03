@@ -11,7 +11,7 @@ import type { RemoteA2aAgents } from '../../a2a/client/remote-a2a-agents';
 import { A2aMiddlewareRun } from './a2a-middleware.run';
 
 export interface A2aMiddlewareAgentConfig extends AgentConfig {
-  readonly orchestrator: AbstractAgent;
+  readonly orchestrationAgent: AbstractAgent;
   readonly agents: Pick<RemoteA2aAgents, 'names' | 'reach'>;
   readonly traceName?: string;
   readonly maxRounds?: number;
@@ -32,7 +32,7 @@ export class A2aMiddlewareAgent extends AbstractAgent {
     return new Observable<BaseEvent>((subscriber) => {
       const run = new A2aMiddlewareRun(
         {
-          orchestrator: this.middleware.orchestrator,
+          orchestrationAgent: this.middleware.orchestrationAgent,
           agents: this.middleware.agents,
           delegationTool: A2aMiddlewareAgent.delegationTool(
             this.middleware.agents,

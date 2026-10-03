@@ -67,7 +67,7 @@ export class TheoAgent implements AgUiAgent {
       store: this.store,
     });
     return new A2aMiddlewareAgent({
-      orchestrator: InProcessLangGraphClient.agentOver(graph, {
+      orchestrationAgent: InProcessLangGraphClient.agentOver(graph, {
         graphId: TheoAgent.AGENT_ID,
       }),
       agents: specialists,
