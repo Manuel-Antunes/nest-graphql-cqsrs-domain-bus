@@ -268,10 +268,10 @@ middleware does — and two things the middleware does not:
   "Publishing…" for a minute. The connection fails the request with that cause, logged on the server,
   and the app hears `MCP request failed`. Measured on CI: the stream of a `PublishPost` dropped a
   millisecond after its headers, the post was created all the same, and the app never heard it.
-- **Every request travels on a connection of its own** (`connection: close`). The only call that
-  dropped was the one made a second and a half after the previous app request's client had closed —
-  inside Node's keep-alive window, on a socket that request had left in the pool. A connection per
-  request costs a handshake per request, which an app's button can afford.
+- **Every request travels on a connection of its own** (`connection: close`), and the MCP image's Caddy
+  reaches the server the same way (`apps/mcp/README.md`). Which hop drops the stream was not pinned
+  down — the drop hit the web and `apps/web-e2e`'s stand-in alike, through Caddy — so no connection
+  outlives the request that opened it; a handshake per request is what an app's button can afford.
 
 - **CopilotKit's sandbox is `allow-scripts allow-same-origin`, twice, on `srcdoc`**, so the app runs
   with the web's own origin — fine for an app this repository builds and serves, and the reason not to

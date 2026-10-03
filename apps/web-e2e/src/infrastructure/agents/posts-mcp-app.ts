@@ -32,51 +32,89 @@ export class PostsMcpApp {
   static readonly RESOURCE = 'http://mcp.e2e/';
   static readonly AGENTCORE_HEADER =
     'X-Amzn-Bedrock-AgentCore-Runtime-Custom-Mcp-App';
+  static readonly DROPPED_STREAM = 'SSE stream disconnected';
+  static readonly ATTEMPTS = 2;
 
   constructor(private readonly url: string) {}
 
   async open(
+    opening: PostsAppOpening,
+    accessToken: string,
+  ): Promise<OpenedPostsApp> {
+    for (let attempt = 1; ; attempt++) {
+      try {
+        return await this.openOnce(opening, accessToken);
+      } catch (error) {
+        const dropped = (error as Error).message.startsWith(
+          PostsMcpApp.DROPPED_STREAM,
+        );
+        if (!dropped || attempt >= PostsMcpApp.ATTEMPTS) throw error;
+      }
+    }
+  }
+
+  private async openOnce(
     { tool, input }: PostsAppOpening,
     accessToken: string,
   ): Promise<OpenedPostsApp> {
     const client = new Client({ name: 'theo-stand-in', version: '1.0.0' });
+    const dropped = new Promise<never>((_, reject) => {
+      client.onerror = (error) => {
+        if (error.message.startsWith(PostsMcpApp.DROPPED_STREAM)) {
+          reject(error);
+        }
+      };
+    });
+    try {
+      return await Promise.race([
+        this.opened(client, tool, input, accessToken),
+        dropped,
+      ]);
+    } finally {
+      await client.close();
+    }
+  }
+
+  private async opened(
+    client: Client,
+    tool: PostsAppTool,
+    input: Record<string, unknown>,
+    accessToken: string,
+  ): Promise<OpenedPostsApp> {
     await client.connect(
       new StreamableHTTPClientTransport(this.appUrl(), {
         requestInit: {
           headers: {
             authorization: `Bearer ${accessToken}`,
             [PostsMcpApp.AGENTCORE_HEADER]: PostsMcpApp.NAME,
+            connection: 'close',
           },
         },
       }),
     );
-    try {
-      const { tools } = await client.listTools();
-      const resourceUri = PostsMcpApp.resourceUriOf(
-        tools.find((listed) => listed.name === tool)?._meta,
+    const { tools } = await client.listTools();
+    const resourceUri = PostsMcpApp.resourceUriOf(
+      tools.find((listed) => listed.name === tool)?._meta,
+    );
+    if (!resourceUri) {
+      throw new Error(
+        `${tool} is not a tool of the ${PostsMcpApp.NAME} app at ${this.url}`,
       );
-      if (!resourceUri) {
-        throw new Error(
-          `${tool} is not a tool of the ${PostsMcpApp.NAME} app at ${this.url}`,
-        );
-      }
-      const result = await client.callTool({ name: tool, arguments: input });
-      return {
-        resourceUri,
-        toolName: tool,
-        toolInput: input,
-        toolResult: {
-          content: [],
-          ...(result.structuredContent === undefined
-            ? {}
-            : { structuredContent: result.structuredContent }),
-          ...(result._meta ? { _meta: result._meta } : {}),
-          ...(result.isError ? { isError: true as const } : {}),
-        },
-      };
-    } finally {
-      await client.close();
     }
+    const result = await client.callTool({ name: tool, arguments: input });
+    return {
+      resourceUri,
+      toolName: tool,
+      toolInput: input,
+      toolResult: {
+        content: [],
+        ...(result.structuredContent === undefined
+          ? {}
+          : { structuredContent: result.structuredContent }),
+        ...(result._meta ? { _meta: result._meta } : {}),
+        ...(result.isError ? { isError: true as const } : {}),
+      },
+    };
   }
 
   private appUrl(): URL {

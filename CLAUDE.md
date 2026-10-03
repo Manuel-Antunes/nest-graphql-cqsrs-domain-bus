@@ -2587,11 +2587,13 @@ DTOs count.
 - **An MCP request whose response stream drops is left pending for a minute.** The MCP SDK's
   streamable HTTP client (1.30, and 1.32 alike) only reports `SSE stream disconnected` when the stream
   answering a POST drops before the answer, and the request waits for its 60-second timeout. On CI a
-  `PublishPost` from the posts MCP App lost its stream a millisecond after its headers — on a socket
-  an earlier app request had left in Node's keep-alive pool — the post was created, and the app said
-  "Publishing…" until the test gave up. `McpAppConnection` (`apps/web`) fails the request at once and
-  sends every app request on a connection of its own; `mcp-apps-proxy.spec` drops a stream and counts
-  sockets.
+  `tools/call` through the MCP image's Caddy lost its stream a millisecond after its headers — the
+  web's `PublishPost` (the post was created, the app said "Publishing…" until the test gave up) and
+  the e2e stand-in's `PreviewPost` alike; reproduced locally about once in five thousand calls, the hop
+  not pinned down. `McpAppConnection` (`apps/web`) and the stand-in fail the request at once (the
+  stand-in, whose tools only read, tries again), every client request travels on a connection of its
+  own, and Caddy reaches the server without keep-alive; `mcp-apps-proxy.spec` drops a stream and
+  counts sockets.
 - **`@ag-ui/*` and `@copilotkit/*` pin `rxjs` to 7.8.1** and the workspace has 7.8.2: two copies, and an
   `Observable` of one is not an `Observable` of the other to TypeScript (they carry protected members).
   `pnpm-workspace.yaml` overrides `rxjs` to `^7.8.2`, one copy for everything.

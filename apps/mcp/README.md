@@ -55,45 +55,15 @@ tools are `ChoosePostToEdit`, `EditPost`, `PreviewPost`, `SavePost` and `Publish
   of the server on `127.0.0.1:8001`** (`config/Caddyfile`): a request carrying
   `X-Amzn-Bedrock-AgentCore-Runtime-Custom-Mcp-App: posts` reaches the server as
   `?app=posts&appTarget=mcp`; any other passes unchanged. The value must be an app name
-  (`^[a-z][a-z0-9-]*# @nestposts/mcp
-
-The blog's posts as **MCP tools**: [Apollo MCP Server](https://www.apollographql.com/docs/apollo-mcp-server/)
-over the gateway's composed API schema, one tool per operation in `operations/`. It is configured,
-not written: `config/mcp.yaml` is the whole server.
-
-| tool | operation | scope |
-|---|---|---|
-| `ListPosts` | `posts(first, after)` with authors and tags | `read:posts` |
-| `GetPost` | `post(id)` in full | `read:posts` |
-| `WhoAmI` | `me`, and an author's latest posts | — |
-| `CreatePost` | `createPost` | `write:posts` |
-| `UpdatePost` | `updatePost` | `write:posts` |
-| `DeletePost` | `deletePost` | `write:posts` |
-
-It also serves an **MCP App**, `posts` — `apps/posts-app`, built into `apps/` (see below) — whose
-tools are `ChoosePostToEdit`, `EditPost`, `PreviewPost`, `SavePost` and `PublishPost`.
-
-- **The tool descriptions are in the config** (`overrides.descriptions`), not in `#` comments above
-  each operation: an SDL comment is a comment, and this repository writes none.
-- **`mutation_mode: explicit`**: the six operations and the app's tools are the surface; the
-  `execute` tool is on, because the app's Apollo Client runs its queries through it, and under this
-  mode it refuses a mutation — what it runs, it runs as the caller. Its hint says it is the app's, and
-  the posts agent leaves it out of what it offers its model.
-- **It authenticates every request** (`transport.auth`): a signed JWT from the platform's issuer —
-  whose discovery document the gateway serves at the issuer's root, and whose `issuer` must equal
-  `servers` exactly — addressed to this server (`POSTS_MCP_RESOURCE`), carrying `read:posts` or
-  `write:posts`; each tool also requires its own scope. The **validated token is passed through** to
-  the gateway, which is why every Better Auth process accepts this server's audience.
-- **Stateless streamable HTTP on `:8000/mcp`**, which is AgentCore Runtime's MCP contract;
-  `host_validation` is off because AgentCore proxies the request.
-- **The schema is not committed.** `prune` copies `apps/gateway/dist/supergraph/api.graphql` (the
-  gateway's `supergraph` target) into `schema/`, and `docker:build`, `serve` and the deploy's
-  `build-functions` depend on it. `apps/gateway/test/mcp-operations.spec.ts` validates every
-  operation against the composed schema, so a subgraph change that breaks a tool fails a test, not a
-  conversation.
-
-), so the header cannot smuggle other parameters. A client sends the query
+  (`^[a-z][a-z0-9-]*$`), so the header cannot smuggle other parameters. A client sends the query
   and the header both: locally the binary reads the first, on AWS Caddy reads the second.
+- **Caddy reaches the server on a new connection for every request** (`transport http { keepalive
+  off }`). On CI the stream answering a `tools/call` dropped a millisecond after its headers: Caddy's
+  read of the server failed with `use of closed network connection`, the server logged `failed to send
+  pending response during drain` for the answer it had computed, and the MCP client waited a minute
+  for it. Reproduced through the image's published port about once in five thousand calls, never in
+  eighteen hundred straight to the server; the hop that drops it was not pinned down, and a
+  connection per request on the loopback costs nothing measurable.
 - **The base is `gcr.io/distroless/cc-debian12:debug`**, what Apollo's image runs on plus a busybox
   shell to start the two processes; Apollo runs in the foreground, so the container stops with it.
 

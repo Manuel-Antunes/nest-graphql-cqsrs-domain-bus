@@ -9,5 +9,8 @@
 	rewrite @app {path}?{query}&app={re.app.1}&appTarget=mcp
 	reverse_proxy 127.0.0.1:8001 {
 		flush_interval -1
+		transport http {
+			keepalive off
+		}
 	}
 }
